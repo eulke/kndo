@@ -124,12 +124,13 @@ impl AdapterSpecBuilder {
 }
 
 /// A package one manifest declares: the name the ecosystem imports it by, the file
-/// that bare specifier resolves to, and the directory subpaths resolve against —
-/// how workspace-internal imports link without leaving the project.
+/// its bare specifier resolves to — `None` for ecosystems whose packages have no
+/// entry file (a Go module maps import prefixes to directories) — and the directory
+/// subpaths resolve against.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PackageEntry {
     pub name: SmolStr,
-    pub entry: ProjectPath,
+    pub entry: Option<ProjectPath>,
     /// `/`-separated directory of the declaring manifest; empty at the project root.
     pub dir: SmolStr,
 }
@@ -169,6 +170,22 @@ impl<'a> ResolveContext<'a> {
         self.packages?.get(name)
     }
 
+    /// The package whose directory contains `path` — the innermost one, when
+    /// manifests nest. How an adapter answers "which crate/module does the file I am
+    /// resolving from belong to" (`crate::` paths, module-relative imports).
+    pub fn package_of(&self, path: &ProjectPath) -> Option<&PackageEntry> {
+        self.packages?
+            .values()
+            .filter(|p| {
+                p.dir.is_empty() || {
+                    path.as_str()
+                        .strip_prefix(p.dir.as_str())
+                        .is_some_and(|rest| rest.starts_with('/'))
+                }
+            })
+            .max_by_key(|p| p.dir.len())
+    }
+
     /// Known files whose path starts with `prefix`, in path order — what a manifest's
     /// wildcard entry (`"./types/*"`) expands against.
     pub fn files_with_prefix<'p>(
@@ -187,6 +204,10 @@ impl<'a> ResolveContext<'a> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Resolution {
     File(ProjectPath),
+    /// One import, several files — the unit some ecosystems import is a directory
+    /// (a Go package is every file in its dir). The adapter names the exact set;
+    /// the engine draws one edge per file.
+    Files(Vec<ProjectPath>),
     Unresolved,
 }
 

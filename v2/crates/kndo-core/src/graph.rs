@@ -21,7 +21,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Bump when the SAME evidence assembles into a DIFFERENT graph — resolution
 /// candidate changes, reachability semantics, new assembled fields. Folded into the
 /// graph cache key beside the contract fingerprint and the adapter set.
-pub const GRAPH_SEMANTICS_VERSION: u32 = 1;
+pub const GRAPH_SEMANTICS_VERSION: u32 = 2;
 
 #[derive(Serialize, Deserialize)]
 pub struct GraphFile {
@@ -35,10 +35,11 @@ pub struct GraphFile {
     pub anchored: Vec<Root>,
     /// Resolved import targets, as indices into `Graph::files`; sorted, deduplicated.
     pub imports: Vec<u32>,
-    /// Parallel to `evidence.imports`: where each import resolved, so bindings apply
-    /// to THEIR target only. `None` is keep-alive — an external package or an
-    /// unresolvable specifier, never an accusation.
-    pub import_targets: Vec<Option<u32>>,
+    /// Parallel to `evidence.imports`: the file(s) each import resolved to, so
+    /// bindings apply to THEIR targets only. Usually one; several when the imported
+    /// unit is a directory (a Go package); empty is keep-alive — an external package
+    /// or an unresolvable specifier, never an accusation.
+    pub import_targets: Vec<Vec<u32>>,
     pub unresolved_imports: u32,
 }
 
@@ -96,8 +97,7 @@ pub fn assemble(
 
     // Resolution as a second phase over fixed ids.
     let sorted_paths: Vec<ProjectPath> = graph_files.iter().map(|g| g.path.clone()).collect();
-    let mut resolved: Vec<(Vec<u32>, Vec<Option<u32>>, u32)> =
-        Vec::with_capacity(graph_files.len());
+    let mut resolved: Vec<(Vec<u32>, Vec<Vec<u32>>, u32)> = Vec::with_capacity(graph_files.len());
     for gf in &graph_files {
         let adapter = adapter_by_id(adapters, &gf.adapter);
         resolved.push(resolve_file(
@@ -159,10 +159,10 @@ fn resolve_file(
     adapter: &dyn LanguageAdapter,
     cx: &ResolveContext<'_>,
     sorted_paths: &[ProjectPath],
-) -> (Vec<u32>, Vec<Option<u32>>, u32) {
+) -> (Vec<u32>, Vec<Vec<u32>>, u32) {
     let index_of = |p: &ProjectPath| sorted_paths.binary_search(p).ok().map(|i| i as u32);
     let mut targets = BTreeSet::new();
-    let mut per_import = Vec::with_capacity(evidence.imports.len());
+    let mut per_import: Vec<Vec<u32>> = Vec::with_capacity(evidence.imports.len());
     let mut unresolved = 0u32;
     for import in &evidence.imports {
         let (specifier, relative) = match &import.target {
@@ -170,31 +170,31 @@ fn resolve_file(
             ImportTarget::Package(s) => (s, false),
             // An unknown target kind keeps its import alive, unresolved-silently.
             _ => {
-                per_import.push(None);
+                per_import.push(Vec::new());
                 continue;
             }
         };
-        match adapter.resolve(from, specifier, cx) {
-            Resolution::File(p) => match index_of(&p) {
-                Some(ix) => {
-                    targets.insert(ix);
-                    per_import.push(Some(ix));
-                }
-                None => {
-                    per_import.push(None);
-                    unresolved += 1;
-                }
-            },
-            _ => {
-                per_import.push(None);
-                // A relative specifier that resolves nowhere is a broken edge worth
-                // counting; an unmatched bare specifier is an external package,
-                // which is normal.
-                if relative {
-                    unresolved += 1;
-                }
+        let resolved: Vec<u32> = match adapter.resolve(from, specifier, cx) {
+            Resolution::File(p) => index_of(&p).into_iter().collect(),
+            Resolution::Files(paths) => {
+                let mut ixs: Vec<u32> = paths.iter().filter_map(&index_of).collect();
+                ixs.sort_unstable();
+                ixs.dedup();
+                ixs
             }
+            _ => Vec::new(),
+        };
+        if resolved.is_empty() {
+            // A relative specifier that resolves nowhere is a broken edge worth
+            // counting; an unmatched bare specifier is an external package, which
+            // is normal.
+            if relative {
+                unresolved += 1;
+            }
+        } else {
+            targets.extend(resolved.iter().copied());
         }
+        per_import.push(resolved);
     }
     (targets.into_iter().collect(), per_import, unresolved)
 }

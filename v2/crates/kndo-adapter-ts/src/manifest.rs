@@ -147,7 +147,7 @@ pub fn packages(
     match entry {
         Some(entry) => vec![PackageEntry {
             name: SmolStr::new(name),
-            entry,
+            entry: Some(entry),
             dir: SmolStr::new(dir),
         }],
         None => Vec::new(),

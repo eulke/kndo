@@ -192,6 +192,9 @@ pub enum ImportShape {
     /// cannot see through it, so it keeps that surface alive.
     ReexportAll,
     TypeOnly(Vec<ImportBinding>),
+    /// Everything the target exports, imported unbound (`use x::*`): nothing names
+    /// what was taken, so the whole surface stays alive.
+    Glob,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ContractFingerprint)]

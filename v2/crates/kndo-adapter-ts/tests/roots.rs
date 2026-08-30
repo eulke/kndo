@@ -114,7 +114,10 @@ fn manifest_declares_its_package() {
     );
     assert_eq!(pkgs.len(), 1);
     assert_eq!(pkgs[0].name, "@demo/core");
-    assert_eq!(pkgs[0].entry.as_str(), "packages/core/src/index.ts");
+    assert_eq!(
+        pkgs[0].entry.as_ref().map(|p| p.as_str()),
+        Some("packages/core/src/index.ts")
+    );
     assert_eq!(pkgs[0].dir, "packages/core");
 }
 

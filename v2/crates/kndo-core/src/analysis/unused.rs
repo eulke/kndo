@@ -3,7 +3,7 @@
 //! always `Certain` — color outranks confidence.
 
 use super::{AbstentionReason, Analysis, AnalysisContext, RunContext};
-use kndo_contract::evidence::{ImportShape, Reach, RootTarget};
+use kndo_contract::evidence::{ImportShape, Reach, RootTarget, SymbolKind};
 use kndo_contract::finding::{Finding, Severity};
 use kndo_contract::subject::{Subject, SymbolSelector};
 use kndo_contract::vocab::{Category, Confidence};
@@ -45,17 +45,18 @@ impl Analysis for Unused {
             for r in &f.evidence.references {
                 member_referenced.insert(r.name.as_str());
             }
-            for (import, target) in f.evidence.imports.iter().zip(&f.import_targets) {
-                let Some(t) = *target else { continue };
-                match &import.shape {
-                    ImportShape::Bindings(bs)
-                    | ImportShape::Reexport(bs)
-                    | ImportShape::TypeOnly(bs) => {
-                        for b in bs {
-                            bound.insert((t, b.imported.as_str()));
+            for (import, targets) in f.evidence.imports.iter().zip(&f.import_targets) {
+                for &t in targets {
+                    match &import.shape {
+                        ImportShape::Bindings(bs)
+                        | ImportShape::Reexport(bs)
+                        | ImportShape::TypeOnly(bs) => {
+                            for b in bs {
+                                bound.insert((t, b.imported.as_str()));
+                            }
                         }
+                        _ => surface_kept[t as usize] = true,
                     }
-                    _ => surface_kept[t as usize] = true,
                 }
             }
         }
@@ -104,17 +105,23 @@ impl Analysis for Unused {
                     .any(|r| matches!(r.target, RootTarget::WholeFile));
             for (d_ix, d) in f.evidence.declarations.iter().enumerate() {
                 let exported = d.reach == Reach::Exported;
-                let kept = if let Some(owner) = d.owner {
+                // Method-kind declarations are members even without an owner in this
+                // file — receivers can name a type declared elsewhere — so they share
+                // the member pool and lean on their own reach for the surface rule.
+                let member = d.owner.is_some() || d.kind == SymbolKind::Method;
+                let kept = if member {
                     // A member: kept by any reference to its name anywhere reachable
                     // (dispatch is not lexical), by a root, or by its owner's whole
                     // surface being kept from outside.
-                    let owner_exported =
-                        f.evidence.declarations[owner.index()].reach == Reach::Exported;
+                    let surface_reach = match d.owner {
+                        Some(owner) => f.evidence.declarations[owner.index()].reach,
+                        None => d.reach,
+                    };
                     member_referenced.contains(d.name.as_str())
                         || rooted.contains(&d_ix)
-                        || rooted.contains(&owner.index())
+                        || d.owner.is_some_and(|o| rooted.contains(&o.index()))
                         || surface_kept[i]
-                        || (entry_surface && owner_exported)
+                        || (entry_surface && surface_reach == Reach::Exported)
                 } else {
                     // Importers bind the module-system name: the local one, or the
                     // exported alias when the declaration carries one.

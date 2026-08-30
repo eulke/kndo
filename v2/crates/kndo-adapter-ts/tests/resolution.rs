@@ -88,7 +88,7 @@ fn workspace_bare_specifiers_link_to_their_package() {
         SmolStr::new("@demo/core"),
         PackageEntry {
             name: SmolStr::new("@demo/core"),
-            entry: ProjectPath::new("packages/core/src/index.ts"),
+            entry: Some(ProjectPath::new("packages/core/src/index.ts")),
             dir: SmolStr::new("packages/core"),
         },
     );

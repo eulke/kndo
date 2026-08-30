@@ -37,7 +37,10 @@ fn resolve_bare(specifier: &str, cx: &ResolveContext<'_>, exts: &[String]) -> Re
         return Resolution::Unresolved;
     };
     match subpath {
-        None => Resolution::File(pkg.entry.clone()),
+        None => match &pkg.entry {
+            Some(entry) => Resolution::File(entry.clone()),
+            None => Resolution::Unresolved,
+        },
         Some(sub) => match resolve_in_dir(&pkg.dir, sub, cx, exts) {
             Some(path) => Resolution::File(path),
             None => Resolution::Unresolved,
