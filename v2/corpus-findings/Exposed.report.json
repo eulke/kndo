@@ -16,6 +16,16 @@
       "category": "unused",
       "reason": "no-roots-anywhere",
       "scope": "whole-run"
+    },
+    {
+      "category": "test-only",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    },
+    {
+      "category": "untested",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
     }
   ],
   "diagnostics": []

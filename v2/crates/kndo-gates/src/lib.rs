@@ -46,6 +46,10 @@ pub const GATES: &[Gate] = &[
         name: "adapter_conformance_fixtures_are_byte_identical",
         invariant: "the harvested fixture corpus replays to its pinned reports",
     },
+    Gate {
+        name: "dogfood_zero_means_measured",
+        invariant: "every dogfood abstention is accepted in writing — zero cannot cheapen",
+    },
 ];
 
 /// Repo-relative location of the generated workflow.

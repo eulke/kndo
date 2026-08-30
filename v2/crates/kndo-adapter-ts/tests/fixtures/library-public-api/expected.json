@@ -30,6 +30,17 @@
       "message": "nothing references, roots, or imports this declaration"
     }
   ],
-  "abstained": [],
+  "abstained": [
+    {
+      "category": "test-only",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    },
+    {
+      "category": "untested",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    }
+  ],
   "diagnostics": []
 }

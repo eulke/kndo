@@ -45,6 +45,17 @@
       "message": "no root anchors this file and no reachable file imports it"
     }
   ],
-  "abstained": [],
+  "abstained": [
+    {
+      "category": "test-only",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    },
+    {
+      "category": "untested",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    }
+  ],
   "diagnostics": []
 }

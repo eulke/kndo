@@ -84,6 +84,44 @@ fn dogfood_kndo_reports_nothing_on_itself() {
 }
 
 #[test]
+fn dogfood_zero_means_measured() {
+    // The dogfood's second lock: zero findings must mean MEASURED, not un-judged.
+    // Every abstention on the repo run is listed here with its written reason; the
+    // set must match EXACTLY — a change that silently makes an analysis abstain
+    // (cheapening the zero) fails, and so does one that silently starts judging
+    // (the accepted entry must be retired deliberately).
+    //
+    // Accepted abstentions, one shared cause: the repo's only claimed JS today is
+    // v1's `action/render.mjs`, whose root is `action.yml` — a file no v2 adapter
+    // reads. No roots ⇒ no reachability evidence and no test evidence. These retire
+    // with the root swap or a manifest adapter that reads workflow files.
+    const ACCEPTED: &[(&str, &str)] = &[
+        ("unused", "no root anchors any file in this graph"),
+        ("test-only", "no test root anchors any file in this graph"),
+        ("untested", "no test root anchors any file in this graph"),
+    ];
+
+    let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let session = kndo::open(repo_root, Config::default()).expect("open repo");
+    let snap = session.analyze(RunMode::Full).expect("analyze repo");
+    let actual: Vec<(String, String)> = snap
+        .abstained
+        .iter()
+        .map(|a| (a.category.as_str().to_string(), a.reason.to_string()))
+        .collect();
+    let expected: Vec<(String, String)> = ACCEPTED
+        .iter()
+        .map(|(c, r)| (c.to_string(), r.to_string()))
+        .collect();
+    assert_eq!(
+        actual, expected,
+        "\nthe dogfood abstention set moved. If deliberate, update ACCEPTED with a \
+         written reason in the same commit; if not, an analysis started abstaining \
+         (or judging) on this repository without you meaning it to.\n"
+    );
+}
+
+#[test]
 fn warm_and_cold_runs_are_byte_identical() {
     let p = fixture();
     let cold = serialized(&run(p.root(), true, Threads::Auto));

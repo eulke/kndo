@@ -22,9 +22,20 @@ fn package_json_turns_judgment_on() {
     let session = kndo::open(p.root(), Config::default()).expect("open");
     let snap = session.analyze(RunMode::Full).expect("analyze");
 
+    // Production roots exist, so `unused` judges; the fixture has no test roots, so
+    // the test-evidence analyses abstain — and say so, rather than accusing.
     assert!(
-        snap.abstained.is_empty(),
-        "roots exist — no abstention: {:#?}",
+        !snap
+            .abstained
+            .iter()
+            .any(|a| a.category == kndo::Category::UNUSED),
+        "unused judges when roots exist: {:#?}",
+        snap.abstained
+    );
+    assert_eq!(
+        snap.abstained.len(),
+        2,
+        "test-only and untested abstain without test roots: {:#?}",
         snap.abstained
     );
     let subjects: Vec<String> = snap

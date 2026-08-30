@@ -7904,6 +7904,1798 @@
         "path": "scripts/releaseUtils.ts"
       },
       "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-457a492c5cff",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/plugin-legacy/src/index.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-4a9b388941e0",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/plugin-legacy/src/snippets.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-dbd53a185202",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/plugin-legacy/src/types.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-d32eecc129da",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/module-runner/constants.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-270d660e35eb",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/module-runner/createImportMeta.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-4ce3581a2cb2",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/module-runner/esmEvaluator.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-98a16c1d0720",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/module-runner/evaluatedModules.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-7937186a5eb6",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/module-runner/hmrHandler.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-c461e76c86a1",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/module-runner/hmrLogger.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-4d2142754d59",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/module-runner/importMetaResolver.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-06b784535e7b",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/module-runner/index.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-2e9ec9e03908",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/module-runner/runner.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-213b984be12b",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/module-runner/sourcemap/decoder.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-528bb4a2c278",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/module-runner/sourcemap/index.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-7d2d4084bc4f",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/module-runner/sourcemap/interceptor.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-fa9e57f86f43",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/module-runner/types.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-fd6395f1538c",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/module-runner/utils.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-9e5fdf70e27b",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/assetSource.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-d56d242b066f",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/baseEnvironment.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-0cd5c6da3f02",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/build.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-2ba12ba38591",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/config.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-02355765a95c",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/constants.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-7618ec141741",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/deprecations.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-b06b5f2a1eb8",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/env.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-39cdc9ff1e42",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/environment.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-a3b30c3b8765",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/external.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-f2a5fac7cd61",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/http.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-2b60a7f64e35",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/idResolver.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-01783139ca24",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/index.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-33bcf524f50c",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/logger.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-94650a7a7428",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/nativeConfigCompat.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-a985fb7ff407",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/nodeResolve.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-7a378bcfd584",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/optimizer/index.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-32a94f1e2052",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/optimizer/optimizer.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-4aae7afbd967",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/optimizer/pluginConverter.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-8cc66fc01e49",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/optimizer/resolve.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-cfa98d8b298c",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/optimizer/rolldownDepPlugin.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-c3de3f4171c6",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/optimizer/scan.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-643932da4476",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/packages.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-20494f29489e",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/plugin.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-dff97b9a56a2",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/plugins/asset.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-f9af7ab0cb30",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/plugins/assetImportMetaUrl.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-c4019d966f33",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/plugins/clientInjections.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-2b49a5bb31bd",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/plugins/css.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-0d98d7e9652e",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/plugins/define.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-8c705a74f7a1",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/plugins/dynamicImportVars.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-0d677a9828d1",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/plugins/esbuild.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-19d5187869db",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/plugins/esbuildBannerFooterCompatPlugin.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-245542a8d703",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/plugins/forwardConsole.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-b352b61cef4b",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/plugins/html.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-f486787032ac",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/plugins/importAnalysis.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-234f4c0c01f4",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/plugins/importAnalysisBuild.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-2166cf2c31f6",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/plugins/importMetaGlob.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-f0aac9cf0df5",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/plugins/index.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-62b00aac4bf6",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/plugins/json.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-27dec86d412d",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/plugins/license.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-dc5e57dcf001",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/plugins/manifest.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-362f223b1976",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/plugins/modulePreloadPolyfill.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-47427e28ba77",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/plugins/optimizedDeps.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-12f06463d3a0",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/plugins/oxc.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-25e2cd1876ab",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/plugins/pluginFilter.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-8eab6c96d32c",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/plugins/preAlias.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-1e4518132ff5",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/plugins/prepareOutDir.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-1fc793cc0311",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/plugins/reporter.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-4ed951d2708d",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/plugins/resolve.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-e6b9ac296786",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/plugins/terser.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-f6bae78a3679",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/plugins/wasm.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-a95245d12104",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/plugins/worker.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-a4fe4194ce75",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/plugins/workerImportMetaUrl.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-7acd82c267db",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/preview.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-9f7da10dd084",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/publicDir.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-d19c9ac064a8",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/server/bundledDev.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-2a99d5afeb89",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/server/environment.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-6522cabd650e",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/server/environments/fetchableEnvironments.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-f10f17e47f51",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/server/environments/runnableEnvironment.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-e430389084a3",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/server/hmr.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-380d4c4d7d0b",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/server/index.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-aeb8e6254719",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/server/middlewares/base.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-e2e2a7cc49ea",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/server/middlewares/error.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-491213a98c0f",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/server/middlewares/hostCheck.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-f23004122cad",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/server/middlewares/htmlFallback.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-8d7bac62c5d0",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/server/middlewares/indexHtml.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-01af2ac6875f",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/server/middlewares/memoryFiles.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-f741ceae83c4",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/server/middlewares/notFound.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-2e6f23aff58f",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/server/middlewares/proxy.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-851f555dc992",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/server/middlewares/rejectInvalidRequest.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-d4f5b1d8a7a6",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/server/middlewares/static.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-dcca8049138e",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/server/middlewares/time.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-0d30d5df8ed4",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/server/middlewares/transform.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-5a15c64ba5f2",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/server/middlewares/triggerLazyBundling.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-b7225e6bce65",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/server/mixedModuleGraph.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-6c60f9387b42",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/server/moduleGraph.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-1c3c22a0d2f6",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/server/openBrowser.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-a31c7dd377dd",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/server/pluginContainer.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-5bf64a014d70",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/server/searchRoot.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-76acd52b6229",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/server/send.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-434b8c5be944",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/server/sourcemap.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-c5a908e8f8e0",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/server/transformRequest.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-b4be1b6c5ab0",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/server/warmup.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-4c2d5728b73a",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/server/ws.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-038efa9db4dc",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/shortcuts.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-98cfd0e997db",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/ssr/fetchModule.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-087fc0208712",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/ssr/index.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-00789f8f1b5d",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/ssr/runnerImport.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-521817561ee7",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/ssr/runtime/serverModuleRunner.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-8b449eab621e",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/ssr/ssrManifestPlugin.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-a1fbf32b0820",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/ssr/ssrModuleLoader.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-ab6e24e0e12b",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/ssr/ssrStacktrace.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-448ca3234787",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/ssr/ssrTransform.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-880dc95765ca",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/typeUtils.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-9053c83cb2d0",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/utils.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-7b3f8e3c2d64",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/watch.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-8f45a1faeeae",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/shared/builtin.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-7b3bb1a15beb",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/shared/constants.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-e2e176a49b70",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/shared/forwardConsole.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-020419bdff62",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/shared/hmr.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-1a70367d8789",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/shared/hmrHandler.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-ac726d361e9e",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/shared/invokeMethods.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-d1de6049a220",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/shared/moduleRunnerTransport.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-8f9829ba6b87",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/shared/ssrTransform.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-7fc327f6c429",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/shared/utils.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-2cdcd3428bd5",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "playground/optimize-missing-deps/__test__/serve.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-34a22a136658",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "playground/dynamic-import/alias/hi.js",
+        "selector": {
+          "Free": "hi"
+        },
+        "span": {
+          "start": 7,
+          "end": 38
+        }
+      },
+      "message": "no test references this function"
+    },
+    {
+      "id": "kndo-c027f5a7c293",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "playground/forward-console/fixtures/throw-dep/index.js",
+        "selector": {
+          "Free": "throwDepError"
+        },
+        "span": {
+          "start": 7,
+          "end": 86
+        }
+      },
+      "message": "no test references this function"
+    },
+    {
+      "id": "kndo-05e55bf9a70d",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "playground/nested-deps/test-package-e/test-package-e-excluded/index.js",
+        "selector": {
+          "Free": "testExcluded"
+        },
+        "span": {
+          "start": 116,
+          "end": 164
+        }
+      },
+      "message": "no test references this function"
+    },
+    {
+      "id": "kndo-ccc4512afe9f",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "playground/nested-deps/test-package-e/test-package-e-included/index.js",
+        "selector": {
+          "Free": "testIncluded"
+        },
+        "span": {
+          "start": 71,
+          "end": 122
+        }
+      },
+      "message": "no test references this function"
+    },
+    {
+      "id": "kndo-4399ee34874f",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "playground/optimize-deps/dep-cjs-external-package-omit-js-suffix/test.astro.js",
+        "selector": {
+          "Free": "astro"
+        },
+        "span": {
+          "start": 0,
+          "end": 37
+        }
+      },
+      "message": "no test references this function"
+    },
+    {
+      "id": "kndo-b6b62b8f7937",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "playground/optimize-deps/dep-cjs-external-package-omit-js-suffix/test.okay.js",
+        "selector": {
+          "Free": "okay"
+        },
+        "span": {
+          "start": 0,
+          "end": 35
+        }
+      },
+      "message": "no test references this function"
+    },
+    {
+      "id": "kndo-2fe19eb05985",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "playground/optimize-deps/dep-cjs-external-package-omit-js-suffix/test.scss.js",
+        "selector": {
+          "Free": "scss"
+        },
+        "span": {
+          "start": 0,
+          "end": 35
+        }
+      },
+      "message": "no test references this function"
+    },
+    {
+      "id": "kndo-420655e2ac16",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "playground/optimize-deps/dep-cjs-external-package-omit-js-suffix/test.tsx.js",
+        "selector": {
+          "Free": "tsx"
+        },
+        "span": {
+          "start": 0,
+          "end": 33
+        }
+      },
+      "message": "no test references this function"
+    },
+    {
+      "id": "kndo-c29b4665fad9",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "playground/optimize-deps/dep-linked-include/index.mjs",
+        "selector": {
+          "Free": "useCount"
+        },
+        "span": {
+          "start": 132,
+          "end": 176
+        }
+      },
+      "message": "no test references this function"
+    },
+    {
+      "id": "kndo-be1702fa3f09",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "playground/optimize-deps/dep-lodash-clonedeep/index.js",
+        "selector": {
+          "Free": "cloneDeep"
+        },
+        "span": {
+          "start": 62,
+          "end": 386
+        }
+      },
+      "message": "no test references this function"
+    },
+    {
+      "id": "kndo-b1ee48fd20ea",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "playground/optimize-deps/dep-lodash-es/camelCase.js",
+        "selector": {
+          "Free": "camelCase"
+        },
+        "span": {
+          "start": 63,
+          "end": 227
+        }
+      },
+      "message": "no test references this function"
+    },
+    {
+      "id": "kndo-9263c08fd9c2",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "playground/optimize-deps/dep-lodash/cloneDeep.js",
+        "selector": {
+          "Free": "cloneDeep"
+        },
+        "span": {
+          "start": 62,
+          "end": 386
+        }
+      },
+      "message": "no test references this function"
+    },
+    {
+      "id": "kndo-41981f81922c",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "playground/optimize-deps/dep-with-assets/index.js",
+        "selector": {
+          "Free": "getAssetUrl"
+        },
+        "span": {
+          "start": 221,
+          "end": 300
+        }
+      },
+      "message": "no test references this function"
+    },
+    {
+      "id": "kndo-c07764c8c8e1",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "playground/optimize-deps/dep-with-assets/index.js",
+        "selector": {
+          "Free": "urlImportWorker"
+        },
+        "span": {
+          "start": 7,
+          "end": 212
+        }
+      },
+      "message": "no test references this function"
+    },
+    {
+      "id": "kndo-4a1dfc936afe",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "playground/optimize-deps/dep-with-assets/nested/index.js",
+        "selector": {
+          "Free": "urlImportWorker"
+        },
+        "span": {
+          "start": 7,
+          "end": 249
+        }
+      },
+      "message": "no test references this function"
+    },
+    {
+      "id": "kndo-b3ce0607a358",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "playground/optimize-deps/dep-with-builtin-module-esm/index.js",
+        "selector": {
+          "Free": "read"
+        },
+        "span": {
+          "start": 458,
+          "end": 507
+        }
+      },
+      "message": "no test references this function"
+    },
+    {
+      "id": "kndo-d4e242cfc688",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "playground/optimize-deps/dep-with-injected-import/index.js",
+        "selector": {
+          "Free": "getInjectedMsg"
+        },
+        "span": {
+          "start": 155,
+          "end": 205
+        }
+      },
+      "message": "no test references this function"
+    },
+    {
+      "id": "kndo-02fa5e9717c0",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "playground/optimize-deps/dep-with-optional-peer-dep-submodule/index.js",
+        "selector": {
+          "Free": "callItself"
+        },
+        "span": {
+          "start": 7,
+          "end": 53
+        }
+      },
+      "message": "no test references this function"
+    },
+    {
+      "id": "kndo-b27db1e153b4",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "playground/optimize-deps/dep-with-optional-peer-dep-submodule/index.js",
+        "selector": {
+          "Free": "callPeerDepSubmodule"
+        },
+        "span": {
+          "start": 62,
+          "end": 139
+        }
+      },
+      "message": "no test references this function"
+    },
+    {
+      "id": "kndo-6b11084c8d69",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "playground/optimize-deps/dep-with-optional-peer-dep/index.js",
+        "selector": {
+          "Free": "callPeerDep"
+        },
+        "span": {
+          "start": 62,
+          "end": 126
+        }
+      },
+      "message": "no test references this function"
+    },
+    {
+      "id": "kndo-94486f129fa4",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "playground/optimize-deps/dep-with-optional-peer-dep/index.js",
+        "selector": {
+          "Free": "callItself"
+        },
+        "span": {
+          "start": 7,
+          "end": 53
+        }
+      },
+      "message": "no test references this function"
+    },
+    {
+      "id": "kndo-97908f72423c",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "playground/optimize-missing-deps/missing-dep/index.js",
+        "selector": {
+          "Free": "sayName"
+        },
+        "span": {
+          "start": 60,
+          "end": 96
+        }
+      },
+      "message": "no test references this function"
+    },
+    {
+      "id": "kndo-07cc29f1e1b9",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "playground/ssr-deps/external-entry/entry.js",
+        "selector": {
+          "Free": "setMessage"
+        },
+        "span": {
+          "start": 120,
+          "end": 176
+        }
+      },
+      "message": "no test references this function"
+    },
+    {
+      "id": "kndo-c74c74243b25",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "playground/ssr-deps/nested-external/index.js",
+        "selector": {
+          "Free": "setMessage"
+        },
+        "span": {
+          "start": 120,
+          "end": 176
+        }
+      },
+      "message": "no test references this function"
+    },
+    {
+      "id": "kndo-7f1c681fab1a",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "playground/worker/dep-self-reference-url-worker/index.js",
+        "selector": {
+          "Free": "startWorker"
+        },
+        "span": {
+          "start": 7,
+          "end": 231
+        }
+      },
+      "message": "no test references this function"
     }
   ],
   "abstained": [],
