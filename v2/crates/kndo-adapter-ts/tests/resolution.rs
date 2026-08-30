@@ -11,9 +11,7 @@ fn project(files: &[&str]) -> BTreeSet<ProjectPath> {
 }
 
 fn resolve(files: &[&str], from: &str, spec: &str) -> Resolution {
-    let known = project(files);
-    let cx = ResolveContext::new(&known);
-    TypeScriptAdapter::new().resolve(&ProjectPath::new(from), spec, &cx)
+    kndo_testkit::resolve_in(&TypeScriptAdapter::new(), files, from, spec)
 }
 
 fn file(path: &str) -> Resolution {

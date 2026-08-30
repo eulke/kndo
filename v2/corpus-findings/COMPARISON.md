@@ -115,3 +115,61 @@ playground app files with no tests — true positives. Keep-alive direction;
 the count grows as production reachability does. On the abstainers
 (guava/Exposed/Alamofire JS slices) untested and test-only abstain for want of
 test evidence, and duplicate now judges everywhere Metrics are declared.
+
+## M4 — Rust arrives, and the dogfood turns on
+
+**ripgrep — v2: 143 (unused 3 · duplicate 135 · test-only 3 · untested 2); v1: 149
+(internal-only 59 · untested 49 · duplicate 16 · unused 11 · version-skew 10 ·
+private-type-leak 4).** The totals are near, the compositions are not, and both
+facts are informative:
+
+**unused — v2: 3, all verified true.** `Index::read_write`/`read_write_mut`
+(declared, never called at the pinned revision) and `SHERLOCK_CRLF` (a test
+constant nothing references). Zero false positives across 110 files — the number
+that matters most for trust. Getting here forced four real mechanisms, each now a
+conformance case: `#[path]`-redirected mods (and `use` paths riding their alias),
+the crate root found by ancestor scan (ripgrep's `[[bin]] path =
+"crates/core/main.rs"` in a lib-less root package broke every `crate::` under it),
+private items kept by name-bindings (Rust's privacy unit is the module tree —
+`super::ENCODINGS` from a child is legal), and `pub mod` as a reexport-all (a
+lib's pub-mod tree IS its published surface; `published-lib-surface` pins it).
+
+**duplicate — v2: 135; v1: 16.** Dominated by one file: `flags/defs.rs`, whose
+per-flag `test_*` functions are genuine Type-2 clones of the same
+parse-then-assert scaffold at the corpus-measured 60-token floor. The findings are
+true and Info; whether a frontend rolls a 100-clone battery into one line is a
+presentation question, recorded here rather than solved by raising the floor.
+
+**untested — v2: 2; v1: 49.** M4 changed the graph heuristic to v1's own
+semantics: where coverage is silent, a file counts as exercised when ANY test
+reaches it through imports, however indirectly (the name-reference heuristic
+over-accused transitively-tested code, against its own "under-accuse" charter),
+and the finding lands at file granularity because that is the evidence's
+granularity. Manifest-anchored Production entries are wiring the heuristic skips —
+a binary's main can never be imported by a test — while ingested coverage still
+judges every function, `Certain`, wiring included. On vite this took untested from
+25 symbol findings to 6 file findings (same playground truths, coarser subjects);
+on ripgrep the 2 are the `index/` implementation files only integration tests
+(which spawn the binary — invisible statically) exercise. The gap to v1's 49 is
+mostly ripgrep's core being tested end-to-end through the binary: static graphs
+cannot see that, and lcov ingestion is the honest answer, not a looser heuristic.
+
+**test-only — v2: 3** — `tests/index/*.rs`, modules of the integration-test crate
+itself: mechanically true, tautologically unhelpful. v1's symbol-level test-only
+(`build_fixture` in `test-only-and-cycle`) needs per-symbol reach propagation v2
+does not have yet; the fixture records the gap. One more deliberate over-keep is
+pinned there too: `use crate::pong;` keeps pong's whole exported surface (the
+namespace record is what survives alias hops the resolver cannot follow), so
+`rally` — which v1's per-symbol precision accused — stays unaccused until that
+precision exists. Both belong to the same future work as the visibility ladder.
+
+**The dogfood flipped from exclusion to subject.** The root `.ignore` now quarries
+v1 (and the frozen spikes) and v2 analyzes itself with every analysis judging —
+the gate's ACCEPTED abstention list emptied. First contact reported 33 findings on
+our own code and every one earned a fix or a lesson: a real duplicated
+`line_starts` in core (deduped), the two adapters' cloned test harnesses (promoted
+to `kndo-testkit`, the second-copy rule applied to ourselves), `RunOutcome::
+exit_code` unreachable because the member rule ignored re-export chains (the rule
+grew `owner_bound`, which `published-lib-surface` also demanded), and pragma prose
+in doc comments parsing as pragmas (a pragma now STARTS its comment). Zero stands,
+measured.

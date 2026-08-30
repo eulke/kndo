@@ -2,31 +2,16 @@
 //! members, reference exclusions, comments, and degradation on broken input.
 
 use kndo_adapter_ts::TypeScriptAdapter;
-use kndo_contract::adapter::{LanguageAdapter, SourceFile};
 use kndo_contract::evidence::{
-    EvidenceSink, FileEvidence, ImportShape, ImportTarget, Reach, RefKind, SymbolKind,
+    FileEvidence, ImportShape, ImportTarget, Reach, RefKind, SymbolKind,
 };
-use kndo_contract::vocab::ProjectPath;
 
 fn extract(path: &str, source: &str) -> FileEvidence {
-    let adapter = TypeScriptAdapter::new();
-    let path = ProjectPath::new(path);
-    let mut sink = EvidenceSink::new(source.len() as u32, adapter.spec().emits().clone());
-    adapter.extract(
-        &SourceFile {
-            path: &path,
-            content: source.as_bytes(),
-        },
-        &mut sink,
-    );
-    sink.finish()
+    kndo_testkit::extract_evidence(&TypeScriptAdapter::new(), path, source)
 }
 
 fn decl<'e>(ev: &'e FileEvidence, name: &str) -> &'e kndo_contract::evidence::Declaration {
-    ev.declarations
-        .iter()
-        .find(|d| d.name == name)
-        .unwrap_or_else(|| panic!("declaration {name} missing: {:#?}", ev.declarations))
+    kndo_testkit::declaration_named(ev, name)
 }
 
 #[test]

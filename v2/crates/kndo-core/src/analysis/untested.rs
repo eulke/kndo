@@ -1,15 +1,16 @@
-//! Production-reachable functions no test exercises. Two strengths of evidence:
-//! ingested coverage measures execution (uncovered ⇒ `Certain`), and where coverage
-//! is absent or silent about a declaration, the graph heuristic applies — a
-//! reference from a file that carries a Test root, name-level, so a same-named
-//! reference keeps a function (`Probable`, under-accusing, never over).
+//! Production-reachable code no test exercises. Two strengths of evidence, each at
+//! its own granularity: ingested coverage measures execution per function
+//! (uncovered ⇒ `Certain`, on the function), and where coverage is absent or silent
+//! the graph decides per FILE — production-reachable but reachable from no Test
+//! root (`Probable`, on the file). Anything a test imports, however indirectly,
+//! counts as exercised: transitive execution without a name is still execution, so
+//! the heuristic under-accuses, never over.
 
 use super::{AbstentionReason, Analysis, AnalysisContext, RunContext, has_root_of};
 use kndo_contract::evidence::{RootKind, SymbolKind};
 use kndo_contract::finding::{Finding, Severity};
 use kndo_contract::subject::{Subject, SymbolSelector};
 use kndo_contract::vocab::{Category, Confidence};
-use std::collections::BTreeSet;
 
 pub struct Untested;
 
@@ -34,18 +35,6 @@ impl Analysis for Untested {
         let g = cx.graph();
         let reach = &cx.run.reach;
 
-        // What tests reach, by name: every reference made inside a file that carries
-        // a Test root. Coarse and keep-alive — a same-named reference anywhere in the
-        // test surface counts.
-        let mut tested: BTreeSet<&str> = BTreeSet::new();
-        for (i, f) in g.files.iter().enumerate() {
-            if has_root_of(g, i, RootKind::Test) {
-                for r in &f.evidence.references {
-                    tested.insert(r.name.as_str());
-                }
-            }
-        }
-
         let mut out = Vec::new();
         for (i, f) in g.files.iter().enumerate() {
             if !cx.measured[i] {
@@ -58,25 +47,16 @@ impl Analysis for Untested {
                 continue;
             }
             let file_coverage = cx.run.coverage.as_ref().and_then(|c| c.files.get(&f.path));
+            let mut coverage_spoke = false;
             for d in &f.evidence.declarations {
                 if !matches!(d.kind, SymbolKind::Function | SymbolKind::Method) {
                     continue;
                 }
-                // Coverage speaks first; where it is silent about this declaration,
-                // the graph heuristic decides.
-                let (untested, confidence, message) =
-                    match file_coverage.and_then(|fc| fc.function_untested(d.span)) {
-                        Some(untested) => (
-                            untested,
-                            Confidence::Certain,
-                            "no test executes this function",
-                        ),
-                        None => (
-                            !tested.contains(d.name.as_str()),
-                            Confidence::Probable,
-                            "no test references this function",
-                        ),
-                    };
+                let Some(untested) = file_coverage.and_then(|fc| fc.function_untested(d.span))
+                else {
+                    continue;
+                };
+                coverage_spoke = true;
                 if !untested {
                     continue;
                 }
@@ -90,14 +70,38 @@ impl Analysis for Untested {
                 out.push(Finding::new(
                     Category::UNTESTED,
                     Severity::Info,
-                    confidence,
+                    Confidence::Certain,
                     Subject::Symbol {
                         path: f.path.clone(),
                         selector,
                         span: d.span,
                     },
                     "",
-                    message,
+                    "no test executes this function",
+                ));
+            }
+            // Where coverage said nothing about this file, the graph decides, at the
+            // file's own granularity. A file the manifest itself anchors as
+            // Production is declared wiring — an entry point or a binary main, which
+            // nothing can import — so the heuristic asks the question of what it
+            // leads to instead; measured coverage above still judges it.
+            if !coverage_spoke
+                && !reach.by(RootKind::Test)[i]
+                && !f.anchored.iter().any(|r| r.kind == RootKind::Production)
+                && f.evidence
+                    .declarations
+                    .iter()
+                    .any(|d| matches!(d.kind, SymbolKind::Function | SymbolKind::Method))
+            {
+                out.push(Finding::new(
+                    Category::UNTESTED,
+                    Severity::Info,
+                    Confidence::Probable,
+                    Subject::File {
+                        path: f.path.clone(),
+                    },
+                    "",
+                    "production-reachable, but no test reaches this file",
                 ));
             }
         }

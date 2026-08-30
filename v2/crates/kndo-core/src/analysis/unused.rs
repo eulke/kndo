@@ -112,26 +112,43 @@ impl Analysis for Unused {
                 let kept = if member {
                     // A member: kept by any reference to its name anywhere reachable
                     // (dispatch is not lexical), by a root, or by its owner's whole
-                    // surface being kept from outside.
+                    // surface being kept from outside — the entry handing it out, or
+                    // an importer binding the owner by name (a re-export chain makes
+                    // the owner's exported members published surface).
                     let surface_reach = match d.owner {
                         Some(owner) => f.evidence.declarations[owner.index()].reach,
                         None => d.reach,
                     };
+                    let owner_bound = d.owner.is_some_and(|o| {
+                        let od = &f.evidence.declarations[o.index()];
+                        od.reach == Reach::Exported
+                            && (bound.contains(&(i as u32, od.name.as_str()))
+                                || od
+                                    .exported_as
+                                    .as_ref()
+                                    .is_some_and(|a| bound.contains(&(i as u32, a.as_str()))))
+                    });
                     member_referenced.contains(d.name.as_str())
                         || rooted.contains(&d_ix)
                         || d.owner.is_some_and(|o| rooted.contains(&o.index()))
                         || surface_kept[i]
                         || (entry_surface && surface_reach == Reach::Exported)
+                        || (exported && owner_bound)
                 } else {
                     // Importers bind the module-system name: the local one, or the
-                    // exported alias when the declaration carries one.
+                    // exported alias when the declaration carries one. A binding
+                    // keeps its declaration whatever the reach — the adapter
+                    // resolved that edge as legal (some module systems let a child
+                    // bind its parent's private), and a binding into genuinely
+                    // unreachable code is broken code, never license to accuse.
                     let bound_by_name = bound.contains(&(i as u32, d.name.as_str()))
                         || d.exported_as
                             .as_ref()
                             .is_some_and(|a| bound.contains(&(i as u32, a.as_str())));
                     referenced.contains(d.name.as_str())
                         || rooted.contains(&d_ix)
-                        || (exported && (surface_kept[i] || bound_by_name || entry_surface))
+                        || bound_by_name
+                        || (exported && (surface_kept[i] || entry_surface))
                 };
                 if !kept {
                     let selector = match d.owner {

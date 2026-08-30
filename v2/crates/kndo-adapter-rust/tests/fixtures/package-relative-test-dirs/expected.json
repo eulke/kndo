@@ -1,0 +1,34 @@
+{
+  "run": {
+    "schema": "kndo-v2/m3",
+    "files_discovered": 6,
+    "files_claimed": 4,
+    "adapters": [
+      {
+        "id": "rust",
+        "files": 4
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "kndo-7b30f73a06ad",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "src/work.rs"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    }
+  ],
+  "fixed": [],
+  "baselined": 0,
+  "abstained": [],
+  "suppressed": {
+    "total": 0,
+    "by_category": []
+  },
+  "diagnostics": []
+}

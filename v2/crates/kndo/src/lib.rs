@@ -13,11 +13,15 @@ pub use kndo_core::{
     Refusal, Report, RunMode, RunOutcome, Session, Snapshot, SuppressedSummary, Threads,
 };
 
+use kndo_adapter_rust::RustAdapter;
 use kndo_adapter_ts::TypeScriptAdapter;
 
 /// Every language a stock run speaks, in deterministic registration order.
 pub fn default_adapters() -> Vec<Box<dyn LanguageAdapter>> {
-    vec![Box::new(TypeScriptAdapter::new())]
+    vec![
+        Box::new(TypeScriptAdapter::new()),
+        Box::new(RustAdapter::new()),
+    ]
 }
 
 /// A session over `root` with the default adapter set — the one-call entry frontends

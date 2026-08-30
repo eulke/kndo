@@ -349,3 +349,76 @@ the list — the ~20 false Warn diagnostics the repo's own pragmas produced are 
 and the dogfood gate now asserts a diagnostics-clean run so the class cannot
 return); and `import_targets` carries debug asserts for its index-parallel
 invariant at both write sites.
+
+## 2026-08-30 — M4.b: the Rust adapter, and what the dogfood forced
+
+Rust lands as the third language (`rust`, v1's id, tree-sitter-rust 0.24) on the
+M4.a growth pack, and turning it on made the repository itself the dogfood subject:
+the root `.ignore` now quarries v1 (`/crates/`, `/xtask/`, `/action/`, `/examples/`,
+`/spikes/`, plus v2's frozen M-1 spike) and the gate's ACCEPTED abstention list is
+EMPTY — every analysis judges kndo's own code, and zero findings is fully measured.
+First contact reported 33 findings on ourselves; each one became a fix, a rule, or
+a recorded gap, never an allowlist entry.
+
+Decisions the corpus and fixtures settled, in the order the measurements forced
+them:
+
+- **untested's graph heuristic is test REACHABILITY at file granularity** (v1
+  parity). The name-reference heuristic accused transitively-tested code —
+  violating its own "under-accuse, never over" doc — so where coverage is silent, a
+  production-reachable file no test reaches through imports is the finding, on the
+  file, `Probable`. Manifest-anchored Production entries are wiring the heuristic
+  skips (nothing can import a binary's main; the question applies to what it leads
+  to); ingested coverage still judges per function, `Certain`, wiring included.
+  Measured: vite 25 symbol findings → 6 file findings (same truths, the evidence's
+  granularity); ripgrep 2, both real static blind spots (integration tests spawn
+  the binary). Three js conformance fixtures regenerated under this change,
+  reviewed leaf by leaf.
+- **A name-binding keeps its declaration whatever the reach.** Rust's privacy unit
+  is the module tree — `super::ENCODINGS` from a child module legally binds the
+  parent's private static — so `bound_by_name` moved out of the exported-only
+  guard. vite held byte-identical: importing a genuinely unexported js name is
+  broken code, and broken code is never license to accuse.
+- **`mod foo;` is an edge, not a declaration** (import-statement posture), and
+  **`pub mod` in a lib tree is `ReexportAll`** — a lib's pub-mod tree is its
+  published surface (`published-lib-surface` went from 3 findings to v1's exact 1).
+  In files nothing can import (`main.rs`, `src/bin/`, `examples/`, `tests/`,
+  `benches/`, `build.rs`) a pub mod publishes to no one and stays a mute edge —
+  that distinction is what keeps `test-only-and-cycle`'s dead `rally` honest.
+- **A `use` leaf emits a pair**: the named binding (per-item precision, privates
+  included) plus the namespace record (the whole-surface keep that survives alias
+  hops the resolver cannot follow). The cost is pinned in `test-only-and-cycle`:
+  `rally`, which v1's per-symbol reachability accused, is over-kept by the pong
+  surface until per-symbol propagation exists (same future as the ladder).
+- **The crate root is found by ancestor scan** — the nearest ancestor directory
+  holding `lib.rs`/`main.rs`. ripgrep's `[[bin]] path = "crates/core/main.rs"` in a
+  lib-less root package had broken every `crate::` path under `crates/core`
+  (24 false unused); the package-geometry fallback remains for entry-less trees.
+- **`#[path = "…"] mod` redirects the edge, and `use` paths through the alias
+  substitute it** (`use self::imp::*` where `mod imp` points at `disabled.rs` —
+  the standard cfg-platform idiom; uses process after all mods for that reason).
+- **A top-level `fn main` roots itself by convention**, `Probable` — Production,
+  or Tooling in `build.rs`/`examples/` (cargo's own path semantics). Manifest
+  roots stay `Certain`; this covers targets extraction cannot see declared.
+- **Strings carry two kinds of hidden uses**: inline format arguments
+  (`"{VERSION}"`) and attribute-string item names (`schemars(schema_with = "f")`,
+  `serde(with = "m")`) — both now emit references. Trait impls declare nothing
+  (accusing `fmt` would accuse the trait bound); `macro_rules!`, struct fields and
+  enum variants stay undeclared on purpose (textual scope and derive dispatch are
+  invisible to the grammar — never accuse what it cannot prove dead).
+- **Pragmas START their comment**: `kndo:allow` mid-sentence is prose about a
+  pragma, never a pragma or a diagnostic — the dogfood's own doc comments proved
+  the need.
+- **The dogfood's dedupe demands were real**: core's twice-written `line_starts`
+  collapsed into one, and both adapters' cloned test harnesses promoted into
+  `kndo-testkit` (`extract_evidence`, `declaration_named`, `resolve_in`) — the
+  second-copy rule applied to ourselves. `RunOutcome::exit_code` exposed the
+  member rule's re-export blindness; members of an owner bound by name are
+  published surface (`owner_bound`), which `published-lib-surface` also demanded.
+
+ripgrep at the pin: 143 findings — unused 3 (all verified true at the source),
+duplicate 135 (real Type-2 clones of one test scaffold; presentation question
+recorded, floor unchanged), test-only 3, untested 2. The 25 v1 fixtures replay
+byte-pinned through the conformance gate beside the 22 js ones; divergences from
+v1's expected verdicts are each named in COMPARISON.md (`rally`, symbol-level
+test-only, the guest example v2 anchors because its manifest declares it).

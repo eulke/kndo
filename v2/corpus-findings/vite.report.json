@@ -11351,454 +11351,70 @@
       "message": "only tests reach this file — no production or tooling root does"
     },
     {
-      "id": "kndo-34a22a136658",
+      "id": "kndo-0f44f4cb4f5c",
       "category": "untested",
       "severity": "info",
       "confidence": "probable",
       "subject": {
-        "kind": "symbol",
-        "path": "playground/dynamic-import/alias/hi.js",
-        "selector": {
-          "Free": "hi"
-        },
-        "span": {
-          "start": 7,
-          "end": 38
-        }
+        "kind": "file",
+        "path": "playground/optimize-deps/dep-cjs-external-package-omit-js-suffix/test.astro.js"
       },
-      "message": "no test references this function"
+      "message": "production-reachable, but no test reaches this file"
     },
     {
-      "id": "kndo-c027f5a7c293",
+      "id": "kndo-1d7187e89339",
       "category": "untested",
       "severity": "info",
       "confidence": "probable",
       "subject": {
-        "kind": "symbol",
-        "path": "playground/forward-console/fixtures/throw-dep/index.js",
-        "selector": {
-          "Free": "throwDepError"
-        },
-        "span": {
-          "start": 7,
-          "end": 86
-        }
+        "kind": "file",
+        "path": "playground/optimize-deps/dep-cjs-external-package-omit-js-suffix/test.okay.js"
       },
-      "message": "no test references this function"
+      "message": "production-reachable, but no test reaches this file"
     },
     {
-      "id": "kndo-05e55bf9a70d",
+      "id": "kndo-061d5bd22c1b",
       "category": "untested",
       "severity": "info",
       "confidence": "probable",
       "subject": {
-        "kind": "symbol",
-        "path": "playground/nested-deps/test-package-e/test-package-e-excluded/index.js",
-        "selector": {
-          "Free": "testExcluded"
-        },
-        "span": {
-          "start": 116,
-          "end": 164
-        }
+        "kind": "file",
+        "path": "playground/optimize-deps/dep-cjs-external-package-omit-js-suffix/test.scss.js"
       },
-      "message": "no test references this function"
+      "message": "production-reachable, but no test reaches this file"
     },
     {
-      "id": "kndo-ccc4512afe9f",
+      "id": "kndo-66cf599fc881",
       "category": "untested",
       "severity": "info",
       "confidence": "probable",
       "subject": {
-        "kind": "symbol",
-        "path": "playground/nested-deps/test-package-e/test-package-e-included/index.js",
-        "selector": {
-          "Free": "testIncluded"
-        },
-        "span": {
-          "start": 71,
-          "end": 122
-        }
+        "kind": "file",
+        "path": "playground/optimize-deps/dep-cjs-external-package-omit-js-suffix/test.tsx.js"
       },
-      "message": "no test references this function"
+      "message": "production-reachable, but no test reaches this file"
     },
     {
-      "id": "kndo-4399ee34874f",
+      "id": "kndo-658abff6b2f6",
       "category": "untested",
       "severity": "info",
       "confidence": "probable",
       "subject": {
-        "kind": "symbol",
-        "path": "playground/optimize-deps/dep-cjs-external-package-omit-js-suffix/test.astro.js",
-        "selector": {
-          "Free": "astro"
-        },
-        "span": {
-          "start": 0,
-          "end": 37
-        }
+        "kind": "file",
+        "path": "playground/optimize-deps/dep-lodash-es/camelCase.js"
       },
-      "message": "no test references this function"
+      "message": "production-reachable, but no test reaches this file"
     },
     {
-      "id": "kndo-b6b62b8f7937",
+      "id": "kndo-3ceb8ec20137",
       "category": "untested",
       "severity": "info",
       "confidence": "probable",
       "subject": {
-        "kind": "symbol",
-        "path": "playground/optimize-deps/dep-cjs-external-package-omit-js-suffix/test.okay.js",
-        "selector": {
-          "Free": "okay"
-        },
-        "span": {
-          "start": 0,
-          "end": 35
-        }
+        "kind": "file",
+        "path": "playground/optimize-deps/dep-lodash/cloneDeep.js"
       },
-      "message": "no test references this function"
-    },
-    {
-      "id": "kndo-2fe19eb05985",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "playground/optimize-deps/dep-cjs-external-package-omit-js-suffix/test.scss.js",
-        "selector": {
-          "Free": "scss"
-        },
-        "span": {
-          "start": 0,
-          "end": 35
-        }
-      },
-      "message": "no test references this function"
-    },
-    {
-      "id": "kndo-420655e2ac16",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "playground/optimize-deps/dep-cjs-external-package-omit-js-suffix/test.tsx.js",
-        "selector": {
-          "Free": "tsx"
-        },
-        "span": {
-          "start": 0,
-          "end": 33
-        }
-      },
-      "message": "no test references this function"
-    },
-    {
-      "id": "kndo-c29b4665fad9",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "playground/optimize-deps/dep-linked-include/index.mjs",
-        "selector": {
-          "Free": "useCount"
-        },
-        "span": {
-          "start": 132,
-          "end": 176
-        }
-      },
-      "message": "no test references this function"
-    },
-    {
-      "id": "kndo-be1702fa3f09",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "playground/optimize-deps/dep-lodash-clonedeep/index.js",
-        "selector": {
-          "Free": "cloneDeep"
-        },
-        "span": {
-          "start": 62,
-          "end": 386
-        }
-      },
-      "message": "no test references this function"
-    },
-    {
-      "id": "kndo-b1ee48fd20ea",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "playground/optimize-deps/dep-lodash-es/camelCase.js",
-        "selector": {
-          "Free": "camelCase"
-        },
-        "span": {
-          "start": 63,
-          "end": 227
-        }
-      },
-      "message": "no test references this function"
-    },
-    {
-      "id": "kndo-9263c08fd9c2",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "playground/optimize-deps/dep-lodash/cloneDeep.js",
-        "selector": {
-          "Free": "cloneDeep"
-        },
-        "span": {
-          "start": 62,
-          "end": 386
-        }
-      },
-      "message": "no test references this function"
-    },
-    {
-      "id": "kndo-41981f81922c",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "playground/optimize-deps/dep-with-assets/index.js",
-        "selector": {
-          "Free": "getAssetUrl"
-        },
-        "span": {
-          "start": 221,
-          "end": 300
-        }
-      },
-      "message": "no test references this function"
-    },
-    {
-      "id": "kndo-c07764c8c8e1",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "playground/optimize-deps/dep-with-assets/index.js",
-        "selector": {
-          "Free": "urlImportWorker"
-        },
-        "span": {
-          "start": 7,
-          "end": 212
-        }
-      },
-      "message": "no test references this function"
-    },
-    {
-      "id": "kndo-4a1dfc936afe",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "playground/optimize-deps/dep-with-assets/nested/index.js",
-        "selector": {
-          "Free": "urlImportWorker"
-        },
-        "span": {
-          "start": 7,
-          "end": 249
-        }
-      },
-      "message": "no test references this function"
-    },
-    {
-      "id": "kndo-b3ce0607a358",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "playground/optimize-deps/dep-with-builtin-module-esm/index.js",
-        "selector": {
-          "Free": "read"
-        },
-        "span": {
-          "start": 458,
-          "end": 507
-        }
-      },
-      "message": "no test references this function"
-    },
-    {
-      "id": "kndo-d4e242cfc688",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "playground/optimize-deps/dep-with-injected-import/index.js",
-        "selector": {
-          "Free": "getInjectedMsg"
-        },
-        "span": {
-          "start": 155,
-          "end": 205
-        }
-      },
-      "message": "no test references this function"
-    },
-    {
-      "id": "kndo-02fa5e9717c0",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "playground/optimize-deps/dep-with-optional-peer-dep-submodule/index.js",
-        "selector": {
-          "Free": "callItself"
-        },
-        "span": {
-          "start": 7,
-          "end": 53
-        }
-      },
-      "message": "no test references this function"
-    },
-    {
-      "id": "kndo-b27db1e153b4",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "playground/optimize-deps/dep-with-optional-peer-dep-submodule/index.js",
-        "selector": {
-          "Free": "callPeerDepSubmodule"
-        },
-        "span": {
-          "start": 62,
-          "end": 139
-        }
-      },
-      "message": "no test references this function"
-    },
-    {
-      "id": "kndo-6b11084c8d69",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "playground/optimize-deps/dep-with-optional-peer-dep/index.js",
-        "selector": {
-          "Free": "callPeerDep"
-        },
-        "span": {
-          "start": 62,
-          "end": 126
-        }
-      },
-      "message": "no test references this function"
-    },
-    {
-      "id": "kndo-94486f129fa4",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "playground/optimize-deps/dep-with-optional-peer-dep/index.js",
-        "selector": {
-          "Free": "callItself"
-        },
-        "span": {
-          "start": 7,
-          "end": 53
-        }
-      },
-      "message": "no test references this function"
-    },
-    {
-      "id": "kndo-97908f72423c",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "playground/optimize-missing-deps/missing-dep/index.js",
-        "selector": {
-          "Free": "sayName"
-        },
-        "span": {
-          "start": 60,
-          "end": 96
-        }
-      },
-      "message": "no test references this function"
-    },
-    {
-      "id": "kndo-07cc29f1e1b9",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "playground/ssr-deps/external-entry/entry.js",
-        "selector": {
-          "Free": "setMessage"
-        },
-        "span": {
-          "start": 120,
-          "end": 176
-        }
-      },
-      "message": "no test references this function"
-    },
-    {
-      "id": "kndo-c74c74243b25",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "playground/ssr-deps/nested-external/index.js",
-        "selector": {
-          "Free": "setMessage"
-        },
-        "span": {
-          "start": 120,
-          "end": 176
-        }
-      },
-      "message": "no test references this function"
-    },
-    {
-      "id": "kndo-7f1c681fab1a",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "playground/worker/dep-self-reference-url-worker/index.js",
-        "selector": {
-          "Free": "startWorker"
-        },
-        "span": {
-          "start": 7,
-          "end": 231
-        }
-      },
-      "message": "no test references this function"
+      "message": "production-reachable, but no test reaches this file"
     }
   ],
   "fixed": [],

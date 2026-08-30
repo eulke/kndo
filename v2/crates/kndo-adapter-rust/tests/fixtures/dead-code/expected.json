@@ -1,0 +1,63 @@
+{
+  "run": {
+    "schema": "kndo-v2/m3",
+    "files_discovered": 4,
+    "files_claimed": 3,
+    "adapters": [
+      {
+        "id": "rust",
+        "files": 3
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "kndo-5983868ea68f",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "src/orphan.rs"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-fb82bbc28b47",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "src/util.rs",
+        "selector": {
+          "Free": "abandoned"
+        },
+        "span": {
+          "start": 18,
+          "end": 39
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    }
+  ],
+  "fixed": [],
+  "baselined": 0,
+  "abstained": [
+    {
+      "category": "test-only",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    },
+    {
+      "category": "untested",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    }
+  ],
+  "suppressed": {
+    "total": 0,
+    "by_category": []
+  },
+  "diagnostics": []
+}

@@ -66,8 +66,9 @@ fn fixture() -> TempProject {
 #[test]
 fn dogfood_kndo_reports_nothing_on_itself() {
     // The REAL default adapter set over this repository — the same composition a user
-    // runs. The repo's JS surface today has no roots, so `unused` abstains rather than
-    // accusing (an abstention is honest; a finding here would be a bug in ours to fix).
+    // runs. The subject is v2's own Rust (the root `.ignore` quarries v1): every
+    // analysis judges it, and a finding here is a bug in ours to fix or dead code of
+    // ours to delete — never an entry to allowlist.
     let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let session = kndo::open(repo_root, Config::default()).expect("open repo");
     let snap = session.analyze(RunMode::Full).expect("analyze repo");
@@ -78,7 +79,7 @@ fn dogfood_kndo_reports_nothing_on_itself() {
     );
     assert!(
         !snap.graph.files.is_empty(),
-        "the default adapters claim this repository's own JS surface — an empty claim \
+        "the default adapters claim this repository's own source — an empty claim \
          set would make this gate vacuous"
     );
 }
@@ -133,15 +134,11 @@ fn dogfood_zero_means_measured() {
     // (cheapening the zero) fails, and so does one that silently starts judging
     // (the accepted entry must be retired deliberately).
     //
-    // Accepted abstentions, one shared cause: the repo's only claimed JS today is
-    // v1's `action/render.mjs`, whose root is `action.yml` — a file no v2 adapter
-    // reads. No roots ⇒ no reachability evidence and no test evidence. These retire
-    // with the root swap or a manifest adapter that reads workflow files.
-    const ACCEPTED: &[(&str, &str)] = &[
-        ("unused", "no root anchors any file in this graph"),
-        ("test-only", "no test root anchors any file in this graph"),
-        ("untested", "no test root anchors any file in this graph"),
-    ];
+    // No accepted abstentions: the Rust adapter's Cargo.toml roots anchor this
+    // repository's own crates, so every analysis judges the dogfood run. The zero
+    // above is fully measured — an entry returning here is an analysis that quietly
+    // stopped judging.
+    const ACCEPTED: &[(&str, &str)] = &[];
 
     let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let session = kndo::open(repo_root, Config::default()).expect("open repo");
@@ -212,48 +209,54 @@ fn threads_one_and_many_are_byte_identical() {
 
 #[test]
 fn adapter_conformance_fixtures_are_byte_identical() {
-    // The harvested regression floor: v1's js fixture corpus (every false-positive
-    // hunt it encodes) replayed through the v2 engine, each report pinned byte-for-
+    // The harvested regression floor: v1's fixture corpora (every false-positive
+    // hunt they encode) replayed through the v2 engine, each report pinned byte-for-
     // byte. A diff is either your bug or a deliberate, documented contract change —
     // regenerate with KNDO_CONFORMANCE=overwrite and justify the diff in the PR;
     // the pinned reports GROW as analyses land, which is the point of pinning them.
-    let fixtures =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../kndo-adapter-ts/tests/fixtures");
-    let mut names: Vec<_> = std::fs::read_dir(&fixtures)
-        .expect("fixture corpus exists")
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().is_dir())
-        .map(|e| e.file_name().to_string_lossy().into_owned())
-        .collect();
-    names.sort();
-    assert!(names.len() >= 22, "the harvested corpus is present");
-
+    let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let corpora = [
+        (manifest.join("../kndo-adapter-ts/tests/fixtures"), 22),
+        (manifest.join("../kndo-adapter-rust/tests/fixtures"), 25),
+    ];
     let overwrite = std::env::var_os("KNDO_CONFORMANCE").is_some_and(|v| v == "overwrite");
     let mut failures = Vec::new();
-    for name in &names {
-        let dir = fixtures.join(name);
-        let session = kndo::open(
-            dir.join("project"),
-            Config {
-                threads: Threads::Auto,
-                use_cache: false,
-            },
-        )
-        .expect("open fixture project");
-        let report = session
-            .analyze(RunMode::Full)
-            .expect("analyze fixture")
-            .report()
-            .to_json();
-        let expected_path = dir.join("expected.json");
-        if overwrite {
-            std::fs::write(&expected_path, &report).expect("write expected");
-            continue;
-        }
-        let expected = std::fs::read_to_string(&expected_path)
-            .unwrap_or_else(|_| panic!("{name}/expected.json exists — regenerate deliberately"));
-        if report != expected {
-            failures.push(name.clone());
+    for (fixtures, floor) in corpora {
+        let mut names: Vec<_> = std::fs::read_dir(&fixtures)
+            .expect("fixture corpus exists")
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().is_dir())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        assert!(names.len() >= floor, "the harvested corpus is present");
+
+        for name in &names {
+            let dir = fixtures.join(name);
+            let session = kndo::open(
+                dir.join("project"),
+                Config {
+                    threads: Threads::Auto,
+                    use_cache: false,
+                },
+            )
+            .expect("open fixture project");
+            let report = session
+                .analyze(RunMode::Full)
+                .expect("analyze fixture")
+                .report()
+                .to_json();
+            let expected_path = dir.join("expected.json");
+            if overwrite {
+                std::fs::write(&expected_path, &report).expect("write expected");
+                continue;
+            }
+            let expected = std::fs::read_to_string(&expected_path).unwrap_or_else(|_| {
+                panic!("{name}/expected.json exists — regenerate deliberately")
+            });
+            if report != expected {
+                failures.push(name.clone());
+            }
         }
     }
     assert!(

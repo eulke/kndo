@@ -1,6 +1,8 @@
 //! The color analyses end-to-end: test reachability keeps files from `unused` but
-//! surfaces them as `test-only`; test references decide `untested`; and with test
-//! evidence present, nothing abstains.
+//! surfaces them as `test-only`; test reachability decides `untested` at file
+//! granularity (anything a test imports, however indirectly, is exercised — and a
+//! manifest-anchored entry is wiring, never judged); and with test evidence
+//! present, nothing abstains.
 
 use kndo::{Category, Config, RunMode, Subject};
 use kndo_testkit::TempProject;
@@ -24,7 +26,7 @@ fn test_color_separates_test_only_from_unused_and_untested() {
     let p = TempProject::new();
     p.file(
         "package.json",
-        r#"{ "name": "demo", "main": "src/index.js" }"#,
+        r#"{ "name": "demo", "main": "src/index.js", "bin": { "demo": "src/cli.js" } }"#,
     );
     p.file(
         "src/index.js",
@@ -34,6 +36,15 @@ fn test_color_separates_test_only_from_unused_and_untested() {
     p.file(
         "src/fixtures-helper.js",
         "export function makeFixture() { return {}; }\n",
+    );
+    // A second production entry no test imports: its helper is the untested one.
+    p.file(
+        "src/cli.js",
+        "import { runCli } from \"./cli-helper.js\";\nrunCli();\n",
+    );
+    p.file(
+        "src/cli-helper.js",
+        "export function runCli() { return 0; }\n",
     );
     p.file(
         "test/app.test.js",
@@ -64,23 +75,13 @@ fn test_color_separates_test_only_from_unused_and_untested() {
         snap.findings
     );
 
-    // `api` is exercised by the test; `uncovered` and `used` are not.
-    let untested = subjects(&snap, &Category::UNTESTED);
-    assert!(
-        untested.contains(&"symbol:src/index.js:uncovered".to_string()),
-        "{untested:#?}"
-    );
-    assert!(
-        untested.contains(&"symbol:src/used.js:used".to_string()),
-        "{untested:#?}"
-    );
-    assert!(
-        !untested.iter().any(|s| s.contains(":api")),
-        "{untested:#?}"
-    );
-    // The test file's own contents are never judged untested.
-    assert!(
-        !untested.iter().any(|s| s.contains("app.test")),
-        "{untested:#?}"
+    // Everything the test imports — `index.js` and, through it, `used.js` — is
+    // exercised; the cli entry's helper is production-reachable with no test
+    // anywhere above it. The anchored entries themselves are wiring, never judged.
+    assert_eq!(
+        subjects(&snap, &Category::UNTESTED),
+        ["file:src/cli-helper.js"],
+        "{:#?}",
+        snap.findings
     );
 }

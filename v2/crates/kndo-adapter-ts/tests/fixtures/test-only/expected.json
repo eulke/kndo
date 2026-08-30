@@ -21,24 +21,6 @@
         "path": "src/fixtures.ts"
       },
       "message": "only tests reach this file — no production or tooling root does"
-    },
-    {
-      "id": "kndo-45a336afef62",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "src/core.ts",
-        "selector": {
-          "Free": "core"
-        },
-        "span": {
-          "start": 184,
-          "end": 228
-        }
-      },
-      "message": "no test references this function"
     }
   ],
   "fixed": [],

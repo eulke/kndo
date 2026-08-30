@@ -177,10 +177,11 @@ fn parse_pragma(
     pragmas: &mut Vec<Pragma>,
     problems: &mut Vec<PragmaProblem>,
 ) {
-    let Some(at) = text.find("kndo:allow") else {
+    // A pragma STARTS its comment; `kndo:allow` mid-sentence is prose about a
+    // pragma (documentation, a TODO), never a pragma or a problem.
+    let Some(rest) = text.trim_start().strip_prefix("kndo:allow") else {
         return;
     };
-    let rest = &text[at + "kndo:allow".len()..];
     let (scope, rest) = match rest.strip_prefix("-file") {
         Some(r) => (Scope::File, r),
         None => (Scope::Line, rest),
@@ -232,15 +233,7 @@ fn comment_text(content: &[u8], text: Span) -> &str {
     std::str::from_utf8(&content[start..end]).unwrap_or("")
 }
 
-fn line_starts(content: &[u8]) -> Vec<u32> {
-    let mut starts = vec![0u32];
-    for (i, &b) in content.iter().enumerate() {
-        if b == b'\n' {
-            starts.push(i as u32 + 1);
-        }
-    }
-    starts
-}
+use crate::coverage::line_starts;
 
 /// 1-based.
 fn line_of(starts: &[u32], byte: u32) -> u32 {

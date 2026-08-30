@@ -185,3 +185,49 @@ impl Default for TempProject {
         Self::new()
     }
 }
+
+/// One extraction, harness-style: feed `source` to `adapter` as `path` through a
+/// fresh sink and return the finished evidence. The shared front half of every
+/// adapter's extraction tests.
+pub fn extract_evidence(
+    adapter: &dyn LanguageAdapter,
+    path: &str,
+    source: &str,
+) -> kndo_contract::evidence::FileEvidence {
+    let path = ProjectPath::new(path);
+    let mut sink = EvidenceSink::new(source.len() as u32, adapter.spec().emits().clone());
+    adapter.extract(
+        &SourceFile {
+            path: &path,
+            content: source.as_bytes(),
+        },
+        &mut sink,
+    );
+    sink.finish()
+}
+
+/// The declaration named `name`, or a panic that prints every declaration — the
+/// assertion failure an extraction test wants to read.
+pub fn declaration_named<'e>(
+    ev: &'e kndo_contract::evidence::FileEvidence,
+    name: &str,
+) -> &'e kndo_contract::evidence::Declaration {
+    ev.declarations
+        .iter()
+        .find(|d| d.name == name)
+        .unwrap_or_else(|| panic!("declaration {name} missing: {:#?}", ev.declarations))
+}
+
+/// One resolution against a synthetic file set — the shared front half of every
+/// adapter's resolution tests.
+pub fn resolve_in(
+    adapter: &dyn LanguageAdapter,
+    files: &[&str],
+    from: &str,
+    specifier: &str,
+) -> Resolution {
+    let known: std::collections::BTreeSet<ProjectPath> =
+        files.iter().map(|p| ProjectPath::new(*p)).collect();
+    let cx = ResolveContext::new(&known);
+    adapter.resolve(&ProjectPath::new(from), specifier, &cx)
+}

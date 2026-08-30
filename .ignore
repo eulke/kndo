@@ -11,6 +11,19 @@
 # effect, so the exclusion is stated once and means only what it says.
 **/tests/fixtures/
 
-# v2 greenfield seed: spike code, oracle JSON, harvested corpus — kndo's own
-# analysis skips it (git tracks it; same mechanism as the fixture corpus above).
-v2/
+# The v1 quarry: source the v2 rewrite mines for fixtures and oracle comparisons,
+# no longer the code under self-analysis. kndo's dogfood judges v2 — the kndo being
+# built — and these directories retire from the repo at the root swap.
+/crates/
+/xtask/
+/action/
+/examples/
+/spikes/
+
+# Frozen v2 experiment records (M-1 fingerprint spike): kept as evidence for the
+# decision they measured, not product code.
+/v2/spikes/
+
+# Oracle output and corpus measurements: JSON captured from real runs, not code.
+/v2/oracle/
+/v2/corpus-findings/

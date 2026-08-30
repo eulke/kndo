@@ -12,24 +12,6 @@
   },
   "findings": [
     {
-      "id": "kndo-65b5e29dccb4",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "main.ts",
-        "selector": {
-          "Free": "run"
-        },
-        "span": {
-          "start": 86,
-          "end": 165
-        }
-      },
-      "message": "no test references this function"
-    },
-    {
       "id": "kndo-6013c8db5f4d",
       "category": "untested",
       "severity": "info",

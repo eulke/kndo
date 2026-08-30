@@ -2,10 +2,2600 @@
   "run": {
     "schema": "kndo-v2/m3",
     "files_discovered": 231,
-    "files_claimed": 0,
-    "adapters": []
+    "files_claimed": 110,
+    "adapters": [
+      {
+        "id": "rust",
+        "files": 110
+      }
+    ]
   },
-  "findings": [],
+  "findings": [
+    {
+      "id": "kndo-82e55f9f24dc",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/index/src/index.rs",
+        "selector": {
+          "Member": {
+            "owner": "Handle",
+            "name": "read_write_mut"
+          }
+        },
+        "span": {
+          "start": 5354,
+          "end": 5622
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-dbfee5610a1d",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/index/src/index.rs",
+        "selector": {
+          "Member": {
+            "owner": "Handle",
+            "name": "read_write"
+          }
+        },
+        "span": {
+          "start": 5092,
+          "end": 5348
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-72d6a4af68ff",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "SHERLOCK_CRLF"
+        },
+        "span": {
+          "start": 64018,
+          "end": 64437
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-021633cfda56",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_invert_match"
+        },
+        "span": {
+          "start": 116611,
+          "end": 117033
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
+    },
+    {
+      "id": "kndo-04feec9e89e2",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_help"
+        },
+        "span": {
+          "start": 86764,
+          "end": 87325
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_debug"
+    },
+    {
+      "id": "kndo-067ca9a5dce4",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_line_buffered"
+        },
+        "span": {
+          "start": 122005,
+          "end": 122507
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_auto_hybrid_regex"
+    },
+    {
+      "id": "kndo-084ec2e0304f",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_no_messages"
+        },
+        "span": {
+          "start": 156479,
+          "end": 156811
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
+    },
+    {
+      "id": "kndo-132d06eeb740",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_block_buffered"
+        },
+        "span": {
+          "start": 18550,
+          "end": 19056
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_auto_hybrid_regex"
+    },
+    {
+      "id": "kndo-1bf6952e52ec",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_ignore_case"
+        },
+        "span": {
+          "start": 101474,
+          "end": 102013
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_auto_hybrid_regex"
+    },
+    {
+      "id": "kndo-20ad47aadb98",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_ignore_file_case_insensitive"
+        },
+        "span": {
+          "start": 104969,
+          "end": 105652
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_glob_case_insensitive"
+    },
+    {
+      "id": "kndo-2426cbcc2e87",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_max_count"
+        },
+        "span": {
+          "start": 131154,
+          "end": 131667
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_max_columns"
+    },
+    {
+      "id": "kndo-258a5d865e81",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_multiline_dotall"
+        },
+        "span": {
+          "start": 142251,
+          "end": 142633
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
+    },
+    {
+      "id": "kndo-26cf08f64d3b",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_smart_case"
+        },
+        "span": {
+          "start": 199110,
+          "end": 199831
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_auto_hybrid_regex"
+    },
+    {
+      "id": "kndo-26ee4fbc3f2d",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_hidden"
+        },
+        "span": {
+          "start": 88834,
+          "end": 89312
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
+    },
+    {
+      "id": "kndo-2f2f44ac0473",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_heading"
+        },
+        "span": {
+          "start": 84984,
+          "end": 85519
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_column"
+    },
+    {
+      "id": "kndo-31d78c74f033",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_no_ignore_parent"
+        },
+        "span": {
+          "start": 153546,
+          "end": 153921
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
+    },
+    {
+      "id": "kndo-339af38275e1",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_stats"
+        },
+        "span": {
+          "start": 210150,
+          "end": 210446
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
+    },
+    {
+      "id": "kndo-38f116173b3d",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_type_clear"
+        },
+        "span": {
+          "start": 224311,
+          "end": 224908
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_type_add"
+    },
+    {
+      "id": "kndo-3bbfc882059e",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_fixed_strings"
+        },
+        "span": {
+          "start": 73954,
+          "end": 74495
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
+    },
+    {
+      "id": "kndo-3c9e2bc40877",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_crlf"
+        },
+        "span": {
+          "start": 45742,
+          "end": 46544
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
+    },
+    {
+      "id": "kndo-3f166dcd3ec2",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_trim"
+        },
+        "span": {
+          "start": 218145,
+          "end": 218434
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
+    },
+    {
+      "id": "kndo-400d7a466f33",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_mmap"
+        },
+        "span": {
+          "start": 136458,
+          "end": 137001
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_auto_hybrid_regex"
+    },
+    {
+      "id": "kndo-4722beccec01",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_iglob"
+        },
+        "span": {
+          "start": 99652,
+          "end": 100229
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_glob"
+    },
+    {
+      "id": "kndo-4a39156c38a7",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_no_ignore_dot"
+        },
+        "span": {
+          "start": 147099,
+          "end": 147445
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
+    },
+    {
+      "id": "kndo-4eba02ba0fbf",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_threads"
+        },
+        "span": {
+          "start": 215671,
+          "end": 216249
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_max_columns"
+    },
+    {
+      "id": "kndo-56fcf114d8ef",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_null_data"
+        },
+        "span": {
+          "start": 164569,
+          "end": 165199
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
+    },
+    {
+      "id": "kndo-5bd0b67d2d08",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_text"
+        },
+        "span": {
+          "start": 213801,
+          "end": 214678
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_auto_hybrid_regex"
+    },
+    {
+      "id": "kndo-6701d0912e2c",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_type_list"
+        },
+        "span": {
+          "start": 228395,
+          "end": 228631
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_files"
+    },
+    {
+      "id": "kndo-6a850be09632",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_engine"
+        },
+        "span": {
+          "start": 55984,
+          "end": 57043
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_auto_hybrid_regex"
+    },
+    {
+      "id": "kndo-6dd45fdf0a9a",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_binary"
+        },
+        "span": {
+          "start": 16437,
+          "end": 17255
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_auto_hybrid_regex"
+    },
+    {
+      "id": "kndo-6ea00c359a2c",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_line_number"
+        },
+        "span": {
+          "start": 123387,
+          "end": 123819
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_column"
+    },
+    {
+      "id": "kndo-704d8c5832f1",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_follow"
+        },
+        "span": {
+          "start": 75538,
+          "end": 76016
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
+    },
+    {
+      "id": "kndo-736279f9c8da",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_trace"
+        },
+        "span": {
+          "start": 217066,
+          "end": 217403
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_debug"
+    },
+    {
+      "id": "kndo-7b9e86fae1b9",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_no_ignore_files"
+        },
+        "span": {
+          "start": 149498,
+          "end": 149858
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
+    },
+    {
+      "id": "kndo-8b4fffba34f4",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_pcre2"
+        },
+        "span": {
+          "start": 174427,
+          "end": 175111
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_auto_hybrid_regex"
+    },
+    {
+      "id": "kndo-92ebd66a022f",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_with_filename_no"
+        },
+        "span": {
+          "start": 237434,
+          "end": 237969
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_column"
+    },
+    {
+      "id": "kndo-996c46612c2e",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_regex_size_limit"
+        },
+        "span": {
+          "start": 187022,
+          "end": 188253
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_dfa_size_limit"
+    },
+    {
+      "id": "kndo-a0725f28e68c",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_no_ignore_exclude"
+        },
+        "span": {
+          "start": 148316,
+          "end": 148698
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
+    },
+    {
+      "id": "kndo-a690b67a008a",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_no_unicode"
+        },
+        "span": {
+          "start": 161416,
+          "end": 161975
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
+    },
+    {
+      "id": "kndo-aa3517431188",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_one_file_system"
+        },
+        "span": {
+          "start": 166444,
+          "end": 166818
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
+    },
+    {
+      "id": "kndo-b069fb7a7e07",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_no_line_number"
+        },
+        "span": {
+          "start": 124766,
+          "end": 125202
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_column"
+    },
+    {
+      "id": "kndo-b750c3b0819f",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_no_ignore_messages"
+        },
+        "span": {
+          "start": 152136,
+          "end": 152525
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
+    },
+    {
+      "id": "kndo-bbc73fe921b2",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_stop_on_nonmatch"
+        },
+        "span": {
+          "start": 211493,
+          "end": 212213
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
+    },
+    {
+      "id": "kndo-c12f76977980",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_include_zero"
+        },
+        "span": {
+          "start": 106594,
+          "end": 106939
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
+    },
+    {
+      "id": "kndo-c1b4a39ea87d",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_field_match_separator"
+        },
+        "span": {
+          "start": 61740,
+          "end": 63973
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_field_context_separator"
+    },
+    {
+      "id": "kndo-ca0e0122c1cc",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_pcre2_version"
+        },
+        "span": {
+          "start": 176040,
+          "end": 176280
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_line_regexp"
+    },
+    {
+      "id": "kndo-cad4637e06e2",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_multiline"
+        },
+        "span": {
+          "start": 140061,
+          "end": 140462
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
+    },
+    {
+      "id": "kndo-cae5135e7cae",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_sortr"
+        },
+        "span": {
+          "start": 207884,
+          "end": 208917
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_sort_files"
+    },
+    {
+      "id": "kndo-cec4afd2a27b",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_no_require_git"
+        },
+        "span": {
+          "start": 159254,
+          "end": 159607
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
+    },
+    {
+      "id": "kndo-cfadf4579612",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_no_ignore_global"
+        },
+        "span": {
+          "start": 150766,
+          "end": 151141
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
+    },
+    {
+      "id": "kndo-d6a97483ad45",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_no_pcre2_unicode"
+        },
+        "span": {
+          "start": 157624,
+          "end": 157981
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
+    },
+    {
+      "id": "kndo-d7a34d524a41",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_no_ignore"
+        },
+        "span": {
+          "start": 145216,
+          "end": 146088
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
+    },
+    {
+      "id": "kndo-df204de18983",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_files_without_match"
+        },
+        "span": {
+          "start": 72344,
+          "end": 72999
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_count"
+    },
+    {
+      "id": "kndo-e16cc8a63caa",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_version"
+        },
+        "span": {
+          "start": 232510,
+          "end": 233095
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_debug"
+    },
+    {
+      "id": "kndo-e25fabc3d8d7",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_max_columns_preview"
+        },
+        "span": {
+          "start": 129409,
+          "end": 129824
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
+    },
+    {
+      "id": "kndo-ec200199d497",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_count_matches"
+        },
+        "span": {
+          "start": 43849,
+          "end": 44393
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_count"
+    },
+    {
+      "id": "kndo-ef40665becee",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_only_matching"
+        },
+        "span": {
+          "start": 167677,
+          "end": 167993
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_null"
+    },
+    {
+      "id": "kndo-f5f736671168",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_before_context"
+        },
+        "span": {
+          "start": 12598,
+          "end": 14051
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_after_context"
+    },
+    {
+      "id": "kndo-f7deecb97e7e",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_word_regexp"
+        },
+        "span": {
+          "start": 239246,
+          "end": 239804
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_debug"
+    },
+    {
+      "id": "kndo-f7f7522d2e2a",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/defs.rs",
+        "selector": {
+          "Free": "test_no_ignore_vcs"
+        },
+        "span": {
+          "start": 155263,
+          "end": 155609
+        }
+      },
+      "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
+    },
+    {
+      "id": "kndo-78c2db724a41",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/lowargs.rs",
+        "selector": {
+          "Member": {
+            "owner": "FieldContextSeparator",
+            "name": "new"
+          }
+        },
+        "span": {
+          "start": 20911,
+          "end": 21294
+        }
+      },
+      "message": "structural clone of crates/core/flags/lowargs.rs:ContextSeparator.new"
+    },
+    {
+      "id": "kndo-8fa8906a136f",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/flags/lowargs.rs",
+        "selector": {
+          "Member": {
+            "owner": "FieldMatchSeparator",
+            "name": "new"
+          }
+        },
+        "span": {
+          "start": 21979,
+          "end": 22358
+        }
+      },
+      "message": "structural clone of crates/core/flags/lowargs.rs:ContextSeparator.new"
+    },
+    {
+      "id": "kndo-38b1c78801c8",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/globset/src/lib.rs",
+        "selector": {
+          "Free": "matches_all_prefix"
+        },
+        "span": {
+          "start": 37971,
+          "end": 38277
+        }
+      },
+      "message": "structural clone of crates/globset/src/lib.rs:matches_all_required_extensions"
+    },
+    {
+      "id": "kndo-5e2f36bc73c3",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/globset/src/lib.rs",
+        "selector": {
+          "Free": "matches_all_extensions"
+        },
+        "span": {
+          "start": 37392,
+          "end": 37682
+        }
+      },
+      "message": "structural clone of crates/globset/src/lib.rs:matches_all_literals"
+    },
+    {
+      "id": "kndo-84eb4e51c631",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/globset/src/lib.rs",
+        "selector": {
+          "Free": "matches_all_suffix"
+        },
+        "span": {
+          "start": 38295,
+          "end": 38529
+        }
+      },
+      "message": "structural clone of crates/globset/src/lib.rs:matches_all_required_extensions"
+    },
+    {
+      "id": "kndo-91b9eeddec28",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/globset/src/lib.rs",
+        "selector": {
+          "Member": {
+            "owner": "ExtensionStrategy",
+            "name": "matches_into"
+          }
+        },
+        "span": {
+          "start": 26279,
+          "end": 26572
+        }
+      },
+      "message": "structural clone of crates/globset/src/lib.rs:BasenameLiteralStrategy.matches_into"
+    },
+    {
+      "id": "kndo-a2944af2f095",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/globset/src/lib.rs",
+        "selector": {
+          "Member": {
+            "owner": "GlobSetMatchStrategy",
+            "name": "matches_all"
+          }
+        },
+        "span": {
+          "start": 23165,
+          "end": 23712
+        }
+      },
+      "message": "structural clone of crates/globset/src/lib.rs:GlobSetMatchStrategy.is_match"
+    },
+    {
+      "id": "kndo-bc504223eead",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/globset/src/lib.rs",
+        "selector": {
+          "Free": "matches_all_basename_literals"
+        },
+        "span": {
+          "start": 37089,
+          "end": 37374
+        }
+      },
+      "message": "structural clone of crates/globset/src/lib.rs:matches_all_literals"
+    },
+    {
+      "id": "kndo-57bb10525886",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/ignore/src/dir.rs",
+        "selector": {
+          "Free": "gitignore"
+        },
+        "span": {
+          "start": 41667,
+          "end": 42088
+        }
+      },
+      "message": "structural clone of crates/ignore/src/dir.rs:git_exclude"
+    },
+    {
+      "id": "kndo-a275b3ac73f7",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/ignore/src/dir.rs",
+        "selector": {
+          "Free": "ignore"
+        },
+        "span": {
+          "start": 43423,
+          "end": 43798
+        }
+      },
+      "message": "structural clone of crates/ignore/src/dir.rs:gitignore_no_git"
+    },
+    {
+      "id": "kndo-e2d82c847e9b",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/ignore/src/dir.rs",
+        "selector": {
+          "Free": "gitignore_with_jj"
+        },
+        "span": {
+          "start": 42106,
+          "end": 42534
+        }
+      },
+      "message": "structural clone of crates/ignore/src/dir.rs:git_exclude"
+    },
+    {
+      "id": "kndo-e9a0c4b811f3",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/ignore/src/dir.rs",
+        "selector": {
+          "Free": "errored_partial"
+        },
+        "span": {
+          "start": 47145,
+          "end": 47461
+        }
+      },
+      "message": "structural clone of crates/ignore/src/dir.rs:git_exclude"
+    },
+    {
+      "id": "kndo-973426b02961",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/ignore/src/overrides.rs",
+        "selector": {
+          "Free": "gitignore"
+        },
+        "span": {
+          "start": 7834,
+          "end": 8401
+        }
+      },
+      "message": "structural clone of crates/ignore/src/overrides.rs:precedence"
+    },
+    {
+      "id": "kndo-14d049d32c3f",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/ignore/src/types.rs",
+        "selector": {
+          "Member": {
+            "owner": "TypesBuilder",
+            "name": "negate"
+          }
+        },
+        "span": {
+          "start": 12615,
+          "end": 12959
+        }
+      },
+      "message": "structural clone of crates/ignore/src/types.rs:TypesBuilder.select"
+    },
+    {
+      "id": "kndo-4324693cd26c",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/ignore/src/walk.rs",
+        "selector": {
+          "Member": {
+            "owner": "WalkBuilder",
+            "name": "sort_by_file_name"
+          }
+        },
+        "span": {
+          "start": 33300,
+          "end": 33527
+        }
+      },
+      "message": "structural clone of crates/ignore/src/walk.rs:WalkBuilder.sort_by_file_path"
+    },
+    {
+      "id": "kndo-ac6c47dce579",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/ignore/tests/gitignore_matched_path_or_any_parents_tests.rs",
+        "selector": {
+          "Free": "test_files_in_deep"
+        },
+        "span": {
+          "start": 1665,
+          "end": 2811
+        }
+      },
+      "message": "structural clone of crates/ignore/tests/gitignore_matched_path_or_any_parents_tests.rs:test_files_in_root"
+    },
+    {
+      "id": "kndo-027a770cf716",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/index/src/literal.rs",
+        "selector": {
+          "Member": {
+            "owner": "GramQuery",
+            "name": "from_set_and"
+          }
+        },
+        "span": {
+          "start": 4080,
+          "end": 4453
+        }
+      },
+      "message": "structural clone of crates/index/src/literal.rs:GramQuery.from_set_or"
+    },
+    {
+      "id": "kndo-fed0b5a6c76d",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/index/src/literal.rs",
+        "selector": {
+          "Member": {
+            "owner": "GramQuery",
+            "name": "and"
+          }
+        },
+        "span": {
+          "start": 2768,
+          "end": 3697
+        }
+      },
+      "message": "structural clone of crates/index/src/literal.rs:GramQuery.or"
+    },
+    {
+      "id": "kndo-03049038d058",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "max_columns_with_count_preview_no_match"
+        },
+        "span": {
+          "start": 90015,
+          "end": 90824
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:max_columns_preview"
+    },
+    {
+      "id": "kndo-0323c5160e24",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "per_match_multi_line2"
+        },
+        "span": {
+          "start": 114557,
+          "end": 115495
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:only_matching_multi_line1"
+    },
+    {
+      "id": "kndo-0b35e00ffa0b",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "invert_multi_line"
+        },
+        "span": {
+          "start": 128773,
+          "end": 129635
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:only_matching_multi_line1"
+    },
+    {
+      "id": "kndo-1172d9919003",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "per_match_multi_line3"
+        },
+        "span": {
+          "start": 115513,
+          "end": 116472
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:only_matching_multi_line1"
+    },
+    {
+      "id": "kndo-16871e3e4c26",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "no_heading_multiple"
+        },
+        "span": {
+          "start": 78341,
+          "end": 79565
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:no_heading"
+    },
+    {
+      "id": "kndo-17cb12e5d608",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "max_columns_multi_line_preview"
+        },
+        "span": {
+          "start": 93252,
+          "end": 94190
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:max_columns_multi_line"
+    },
+    {
+      "id": "kndo-18b475af8dac",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "replacement"
+        },
+        "span": {
+          "start": 120308,
+          "end": 121138
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:replacement_passthru"
+    },
+    {
+      "id": "kndo-1da4e30a4037",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "only_matching_max_columns_preview_multi_line2"
+        },
+        "span": {
+          "start": 111826,
+          "end": 112783
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:only_matching_max_columns_multi_line2"
+    },
+    {
+      "id": "kndo-21cfba94999c",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "context_break_multiple_no_heading"
+        },
+        "span": {
+          "start": 69976,
+          "end": 71668
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:context_break"
+    },
+    {
+      "id": "kndo-2d67e8a5b287",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "max_columns_with_count_preview_one_match"
+        },
+        "span": {
+          "start": 90842,
+          "end": 91642
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:max_columns_preview"
+    },
+    {
+      "id": "kndo-2deac4b34a35",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "per_match_multi_line1_only_first_line"
+        },
+        "span": {
+          "start": 116490,
+          "end": 117437
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:only_matching_multi_line1"
+    },
+    {
+      "id": "kndo-2fa811fd5ff1",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "invert_context_multi_line"
+        },
+        "span": {
+          "start": 130685,
+          "end": 131749
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:invert_context"
+    },
+    {
+      "id": "kndo-308ebd43144a",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "byte_offset"
+        },
+        "span": {
+          "start": 86062,
+          "end": 86777
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:column_number"
+    },
+    {
+      "id": "kndo-3093fbf32a60",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "per_match"
+        },
+        "span": {
+          "start": 112801,
+          "end": 113628
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:line_number"
+    },
+    {
+      "id": "kndo-3094c86b8249",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "only_matching_multi_line2"
+        },
+        "span": {
+          "start": 106338,
+          "end": 107181
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:only_matching_multi_line1"
+    },
+    {
+      "id": "kndo-35c3e15c3e2d",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "replacement_multi_line_combine_lines"
+        },
+        "span": {
+          "start": 122866,
+          "end": 123541
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:replacement_multi_line"
+    },
+    {
+      "id": "kndo-3bdf3cf9bf71",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "heading_multiple"
+        },
+        "span": {
+          "start": 79583,
+          "end": 80785
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:heading"
+    },
+    {
+      "id": "kndo-3ce172eb2914",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "max_columns_with_count_preview_two_matches"
+        },
+        "span": {
+          "start": 91660,
+          "end": 92489
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:max_columns_preview"
+    },
+    {
+      "id": "kndo-414e217f15d8",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "max_columns_with_count"
+        },
+        "span": {
+          "start": 89268,
+          "end": 89997
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:max_columns_preview"
+    },
+    {
+      "id": "kndo-4470fc9209f4",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "invert_context_only_matching"
+        },
+        "span": {
+          "start": 131767,
+          "end": 132730
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:invert_context"
+    },
+    {
+      "id": "kndo-479a211468d2",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "max_matches_multi_line4"
+        },
+        "span": {
+          "start": 104178,
+          "end": 104870
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:max_matches_multi_line3"
+    },
+    {
+      "id": "kndo-4ad84dc658f3",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "only_matching_max_columns_preview_multi_line1"
+        },
+        "span": {
+          "start": 109823,
+          "end": 110923
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:only_matching_max_columns_multi_line1"
+    },
+    {
+      "id": "kndo-508421bd128d",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Member": {
+            "owner": "StandardImpl",
+            "name": "from_context"
+          }
+        },
+        "span": {
+          "start": 33815,
+          "end": 34199
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:StandardImpl.from_match"
+    },
+    {
+      "id": "kndo-50c8825b9d80",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "invert"
+        },
+        "span": {
+          "start": 127943,
+          "end": 128755
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:only_matching_multi_line1"
+    },
+    {
+      "id": "kndo-6515172afb8f",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "per_match_multi_line2_only_first_line"
+        },
+        "span": {
+          "start": 117455,
+          "end": 118329
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:only_matching_multi_line1"
+    },
+    {
+      "id": "kndo-71e7fb3d8e6f",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "line_number_multi_line"
+        },
+        "span": {
+          "start": 83437,
+          "end": 84357
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:line_number"
+    },
+    {
+      "id": "kndo-783d145073c8",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "max_matches_multi_line1"
+        },
+        "span": {
+          "start": 101989,
+          "end": 102678
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:max_columns_multi_line"
+    },
+    {
+      "id": "kndo-82bee38bddf6",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "path_terminator"
+        },
+        "span": {
+          "start": 76057,
+          "end": 76838
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:separator_path"
+    },
+    {
+      "id": "kndo-9423ebea196e",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "replacement_only_matching"
+        },
+        "span": {
+          "start": 126232,
+          "end": 126966
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:replacement_passthru"
+    },
+    {
+      "id": "kndo-95f1bd49f874",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "replacement_per_match"
+        },
+        "span": {
+          "start": 126984,
+          "end": 127925
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:replacement_passthru"
+    },
+    {
+      "id": "kndo-9c77f84f2bc5",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "max_matches"
+        },
+        "span": {
+          "start": 94208,
+          "end": 94846
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:max_columns"
+    },
+    {
+      "id": "kndo-9f863207ae18",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "replacement_max_columns_preview1"
+        },
+        "span": {
+          "start": 124419,
+          "end": 125363
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:replacement_max_columns"
+    },
+    {
+      "id": "kndo-a16cb9ebb71d",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "invert_context_only_matching_multi_line"
+        },
+        "span": {
+          "start": 132748,
+          "end": 133761
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:invert_context"
+    },
+    {
+      "id": "kndo-a5ea7ff51153",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "per_match_multi_line1"
+        },
+        "span": {
+          "start": 113646,
+          "end": 114539
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:only_matching_multi_line1"
+    },
+    {
+      "id": "kndo-c9d5feaff70c",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "byte_offset_multi_line"
+        },
+        "span": {
+          "start": 86795,
+          "end": 87767
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:column_number_multi_line"
+    },
+    {
+      "id": "kndo-d24c263a7a48",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "only_matching_max_columns_preview"
+        },
+        "span": {
+          "start": 107952,
+          "end": 108737
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:only_matching_max_columns"
+    },
+    {
+      "id": "kndo-eee0c83bf9a7",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "only_matching"
+        },
+        "span": {
+          "start": 104888,
+          "end": 105562
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:line_number"
+    },
+    {
+      "id": "kndo-fc8b996d8fdf",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/standard.rs",
+        "selector": {
+          "Free": "per_match_multi_line3_only_first_line"
+        },
+        "span": {
+          "start": 118347,
+          "end": 119224
+        }
+      },
+      "message": "structural clone of crates/printer/src/standard.rs:only_matching_multi_line1"
+    },
+    {
+      "id": "kndo-12cea3af2ff4",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/summary.rs",
+        "selector": {
+          "Free": "path_with_match_found"
+        },
+        "span": {
+          "start": 36402,
+          "end": 36957
+        }
+      },
+      "message": "structural clone of crates/printer/src/summary.rs:count_path"
+    },
+    {
+      "id": "kndo-2f8b9a24913b",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/summary.rs",
+        "selector": {
+          "Free": "count_matches"
+        },
+        "span": {
+          "start": 35827,
+          "end": 36384
+        }
+      },
+      "message": "structural clone of crates/printer/src/summary.rs:count_path"
+    },
+    {
+      "id": "kndo-4d35f3955ade",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/summary.rs",
+        "selector": {
+          "Free": "count_path_with_zero"
+        },
+        "span": {
+          "start": 32264,
+          "end": 32847
+        }
+      },
+      "message": "structural clone of crates/printer/src/summary.rs:count_no_path_even_with_path"
+    },
+    {
+      "id": "kndo-c02746151cac",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/summary.rs",
+        "selector": {
+          "Free": "path_without_match_found"
+        },
+        "span": {
+          "start": 37544,
+          "end": 38108
+        }
+      },
+      "message": "structural clone of crates/printer/src/summary.rs:count_path"
+    },
+    {
+      "id": "kndo-f0c1b1ea8318",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/summary.rs",
+        "selector": {
+          "Free": "path_without_match_not_found"
+        },
+        "span": {
+          "start": 38126,
+          "end": 38681
+        }
+      },
+      "message": "structural clone of crates/printer/src/summary.rs:path_with_match_not_found"
+    },
+    {
+      "id": "kndo-f550819404cd",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/printer/src/summary.rs",
+        "selector": {
+          "Free": "path_without_match_error"
+        },
+        "span": {
+          "start": 30217,
+          "end": 30635
+        }
+      },
+      "message": "structural clone of crates/printer/src/summary.rs:path_with_match_error"
+    },
+    {
+      "id": "kndo-b768eef566f6",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/regex/src/literal.rs",
+        "selector": {
+          "Member": {
+            "owner": "Extractor",
+            "name": "extract_class_bytes"
+          }
+        },
+        "span": {
+          "start": 13711,
+          "end": 14106
+        }
+      },
+      "message": "structural clone of crates/regex/src/literal.rs:Extractor.extract_class_unicode"
+    },
+    {
+      "id": "kndo-5cf59447166d",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/regex/src/matcher.rs",
+        "selector": {
+          "Free": "line_terminator_crlf"
+        },
+        "span": {
+          "start": 23125,
+          "end": 23912
+        }
+      },
+      "message": "structural clone of crates/pcre2/src/matcher.rs:line_terminator_crlf"
+    },
+    {
+      "id": "kndo-ba330fc3b88e",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/regex/src/matcher.rs",
+        "selector": {
+          "Free": "word"
+        },
+        "span": {
+          "start": 21744,
+          "end": 22076
+        }
+      },
+      "message": "structural clone of crates/pcre2/src/matcher.rs:word"
+    },
+    {
+      "id": "kndo-df1ca11deb40",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/regex/src/matcher.rs",
+        "selector": {
+          "Free": "case_smart"
+        },
+        "span": {
+          "start": 23965,
+          "end": 24298
+        }
+      },
+      "message": "structural clone of crates/pcre2/src/matcher.rs:case_smart"
+    },
+    {
+      "id": "kndo-52994f3de553",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/searcher/src/line_buffer.rs",
+        "selector": {
+          "Free": "buffer_binary_convert4"
+        },
+        "span": {
+          "start": 34534,
+          "end": 35185
+        }
+      },
+      "message": "structural clone of crates/searcher/src/line_buffer.rs:buffer_binary_convert3"
+    },
+    {
+      "id": "kndo-a2db94cf1dab",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/searcher/src/searcher/core.rs",
+        "selector": {
+          "Member": {
+            "owner": "Core",
+            "name": "sink_other_context"
+          }
+        },
+        "span": {
+          "start": 19460,
+          "end": 20338
+        }
+      },
+      "message": "structural clone of crates/searcher/src/searcher/core.rs:Core.sink_before_context"
+    },
+    {
+      "id": "kndo-00bc44006f72",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/searcher/src/searcher/glue.rs",
+        "selector": {
+          "Free": "context_sherlock2"
+        },
+        "span": {
+          "start": 30157,
+          "end": 31885
+        }
+      },
+      "message": "structural clone of crates/searcher/src/searcher/glue.rs:context_sherlock1"
+    },
+    {
+      "id": "kndo-47adc4d51501",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/searcher/src/searcher/glue.rs",
+        "selector": {
+          "Free": "multi_line_overlap2"
+        },
+        "span": {
+          "start": 16782,
+          "end": 17208
+        }
+      },
+      "message": "structural clone of crates/searcher/src/searcher/glue.rs:multi_line_overlap1"
+    },
+    {
+      "id": "kndo-607de38b172a",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/searcher/src/searcher/glue.rs",
+        "selector": {
+          "Free": "context_sherlock5"
+        },
+        "span": {
+          "start": 37745,
+          "end": 40015
+        }
+      },
+      "message": "structural clone of crates/searcher/src/searcher/glue.rs:context_sherlock1"
+    },
+    {
+      "id": "kndo-6490c1d8ce8e",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/searcher/src/searcher/glue.rs",
+        "selector": {
+          "Free": "context_sherlock3"
+        },
+        "span": {
+          "start": 34269,
+          "end": 35999
+        }
+      },
+      "message": "structural clone of crates/searcher/src/searcher/glue.rs:context_sherlock1"
+    },
+    {
+      "id": "kndo-98e049ff0c7e",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/searcher/src/searcher/glue.rs",
+        "selector": {
+          "Free": "context_sherlock4"
+        },
+        "span": {
+          "start": 36017,
+          "end": 37727
+        }
+      },
+      "message": "structural clone of crates/searcher/src/searcher/glue.rs:context_sherlock1"
+    },
+    {
+      "id": "kndo-ac0dbb2c605f",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/searcher/src/searcher/glue.rs",
+        "selector": {
+          "Free": "context_code3"
+        },
+        "span": {
+          "start": 46283,
+          "end": 48247
+        }
+      },
+      "message": "structural clone of crates/searcher/src/searcher/glue.rs:context_code2"
+    },
+    {
+      "id": "kndo-d1bef7d5274f",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/searcher/src/searcher/glue.rs",
+        "selector": {
+          "Free": "context_sherlock_invert2"
+        },
+        "span": {
+          "start": 31903,
+          "end": 34251
+        }
+      },
+      "message": "structural clone of crates/searcher/src/searcher/glue.rs:context_sherlock_invert1"
+    },
+    {
+      "id": "kndo-e9b1c7692060",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/searcher/src/searcher/glue.rs",
+        "selector": {
+          "Free": "context_sherlock6"
+        },
+        "span": {
+          "start": 40033,
+          "end": 42290
+        }
+      },
+      "message": "structural clone of crates/searcher/src/searcher/glue.rs:context_sherlock1"
+    },
+    {
+      "id": "kndo-d692bf09bfd9",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/searcher/src/testutil.rs",
+        "selector": {
+          "Member": {
+            "owner": "TesterConfig",
+            "name": "search_slice"
+          }
+        },
+        "span": {
+          "start": 24706,
+          "end": 25213
+        }
+      },
+      "message": "structural clone of crates/searcher/src/testutil.rs:TesterConfig.search_reader"
+    },
+    {
+      "id": "kndo-b9549168ee53",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "tests/util.rs",
+        "selector": {
+          "Member": {
+            "owner": "Dir",
+            "name": "link_dir"
+          }
+        },
+        "span": {
+          "start": 7222,
+          "end": 7528
+        }
+      },
+      "message": "structural clone of tests/util.rs:Dir.link_dir"
+    },
+    {
+      "id": "kndo-05a66885c639",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "tests/index/basic.rs"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-3f12ac8d3294",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "tests/index/disallowed.rs"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-50bdf2c13736",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "tests/index/mod.rs"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-d385d623d7cf",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "crates/core/index/disabled.rs"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-f6f5fcea115c",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "crates/core/index/enabled.rs"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    }
+  ],
   "fixed": [],
   "baselined": 0,
   "abstained": [],

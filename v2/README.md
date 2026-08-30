@@ -166,6 +166,34 @@ Complete (CI verification pending only the credits reset, like M0–M2):
   vite 1,023 (unused 702, duplicate 174 vs oracle 179, test-only 122, untested 25),
   lodash 21, Alamofire 5 duplicates; dogfood still zero through honest evidence.
 
+## M4 — status
+
+- **M4.a — contract growth pack**: `Resolution::Files` (a directory as the imported
+  unit), `ImportShape::Glob`, `PackageEntry.entry` optional (entry-less ecosystems),
+  `ResolveContext::package_of`, and `import_targets` as one-to-many
+  (`GRAPH_SEMANTICS_VERSION` 2). Corpus held byte-identical — shape only.
+- **M4.b — the Rust adapter, done**: `kndo-adapter-rust` (id `rust`, tree-sitter-rust)
+  — binary reach (`pub` in any form is nameable beyond the file), `mod` edges with
+  `#[path]` redirects and alias substitution, the full `use`-tree (globs, groups,
+  aliases, reexports; each plain leaf a binding+namespace pair), qualified paths as
+  deduplicated inline imports, crate roots by ancestor scan, Cargo.toml targets and
+  conventions as roots, `#[test]`/linkage-attribute/`fn main` declaration roots,
+  winnowing metrics, comment spans with doc-slash stripping. 25 v1 fixtures replay
+  byte-pinned in the conformance gate beside the 22 js ones.
+- **The dogfood now judges v2 itself**: the root `.ignore` quarries v1 and the
+  ACCEPTED abstention list is empty — zero findings, every analysis judging, and the
+  33 findings first contact produced each became a fix (core's duplicated
+  `line_starts`, test harnesses promoted to `kndo-testkit`, the member rule's
+  re-export blindness) or a recorded gap.
+- **untested** decides by test reachability at file granularity where coverage is
+  silent (v1 parity; manifest-anchored entries are wiring), coverage per-function
+  `Certain` unchanged; three js fixtures regenerated under the documented change.
+- Corpus: ripgrep 143 (unused 3 — all verified true at the source, duplicate 135,
+  test-only 3, untested 2) against oracle 149; vite 1,004 (unused 702, duplicate
+  174, test-only 122, untested 6); lodash 21. Deltas named in COMPARISON.md.
+- Pending in M4: the Go adapter (M4.c), the visibility-ladder measurement (M4.d),
+  and the milestone close-out (M4.e).
+
 ## Name verification (2026-08-29)
 
 - npm: `kndo` still taken by an unrelated DeFi package (unchanged since the v1 check);
@@ -174,6 +202,7 @@ Complete (CI verification pending only the credits reset, like M0–M2):
   (2026-08-18: crates.io free, brew unverifiable) stands as most recent. Re-check both
   from an unproxied machine before M0 reserves anything.
 
-Note for kndo-on-kndo: `v2/` is listed in the repository's `.ignore` so v1's own analysis
-skips the seed (spike code, oracle JSON) while git tracks all of it — same mechanism and
-reasoning as the fixture corpus.
+Note for kndo-on-kndo: the repository's `.ignore` quarries v1's source (and the frozen
+M-1 spike) so the dogfood judges v2 — the kndo being built — while git tracks everything;
+same mechanism and reasoning as the fixture-corpus exclusion. The quarry entries retire
+at the root swap.

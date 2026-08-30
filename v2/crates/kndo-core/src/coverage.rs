@@ -126,7 +126,9 @@ fn parse_lcov(text: &str, contents: &BTreeMap<ProjectPath, &[u8]>) -> Option<Cov
     (!files.is_empty()).then_some(Coverage { files })
 }
 
-fn line_starts(content: &[u8]) -> Vec<u32> {
+/// Byte offset of each line's first byte — the one line table both coverage and
+/// suppression map spans through.
+pub(crate) fn line_starts(content: &[u8]) -> Vec<u32> {
     let mut starts = vec![0u32];
     for (i, &b) in content.iter().enumerate() {
         if b == b'\n' {
