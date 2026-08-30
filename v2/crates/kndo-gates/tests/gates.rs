@@ -123,19 +123,24 @@ fn threads_one_and_many_are_byte_identical() {
 
 #[test]
 fn incremental_and_full_assembly_are_byte_identical() {
-    // M1 form of patch≡full: after a one-file change, a run that reuses cached
-    // evidence for every unchanged file must serialize identically to a from-scratch
-    // build of the same tree. (The surgical graph patch tightens this gate in M2.)
+    // Patch ≡ full, in all three shapes of change: content-only (the surgical path
+    // patches the persisted graph in place), a new file and a deleted file (the file
+    // set moved, so the patch declines and assembly rebuilds from cached evidence).
+    // Every cached run must serialize identically to a from-scratch build.
     let p = fixture();
     run(p.root(), true, Threads::Auto);
+    assert!(
+        p.root().join(".kndo/cache/graph.bin").is_file(),
+        "the graph cache engaged"
+    );
 
     p.file(
         "main.kmock",
         "root-file\nimport ./lib { helper }\ncall helper\nfn local_used\ncall local_used\nfn dead_one\nfn appended_dead\n# a note\n",
     );
-    let incremental = serialized(&run(p.root(), true, Threads::Auto));
+    let patched = serialized(&run(p.root(), true, Threads::Auto));
     let from_scratch = serialized(&run(p.root(), false, Threads::Auto));
-    assert_eq!(incremental, from_scratch);
+    assert_eq!(patched, from_scratch, "content-only change: patched ≡ full");
 
     let snap = run(p.root(), true, Threads::Auto);
     assert!(
@@ -145,5 +150,23 @@ fn incremental_and_full_assembly_are_byte_identical() {
                 && f.message.contains("declaration")
                 && format!("{:?}", f.subject).contains("appended_dead")),
         "the changed file's new dead symbol is seen through the incremental path"
+    );
+
+    p.file("extra.kmock", "fn lonely\n");
+    let added = serialized(&run(p.root(), true, Threads::Auto));
+    let added_full = serialized(&run(p.root(), false, Threads::Auto));
+    assert_eq!(added, added_full, "added file: rebuilt ≡ full");
+    assert!(
+        added.0.contains("extra.kmock"),
+        "the new file joined the graph through the cached path"
+    );
+
+    std::fs::remove_file(p.root().join("orphan.kmock")).expect("delete orphan");
+    let removed = serialized(&run(p.root(), true, Threads::Auto));
+    let removed_full = serialized(&run(p.root(), false, Threads::Auto));
+    assert_eq!(removed, removed_full, "deleted file: rebuilt ≡ full");
+    assert!(
+        !removed.0.contains("orphan.kmock"),
+        "the deleted file left the graph"
     );
 }

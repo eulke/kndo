@@ -1,16 +1,20 @@
-//! The evidence cache: content-addressed, disposable, and versioned by the contract
+//! The two caches, both content-addressed, disposable, and versioned by the contract
 //! fingerprint — a shape change in any evidence type invalidates every entry with no
-//! constant to remember. The key also folds the adapter's id, `semantics_version` and
-//! declared streams, so a behavior or declaration change invalidates exactly that
-//! adapter's entries. Every failure path degrades to a miss or a skipped write; the
-//! cache can slow a run down, never change it.
+//! constant to remember. The evidence cache's key also folds the adapter's id,
+//! `semantics_version` and declared streams, so a behavior or declaration change
+//! invalidates exactly that adapter's entries; the graph cache's key folds the whole
+//! adapter set and `GRAPH_SEMANTICS_VERSION`. Every failure path degrades to a miss
+//! or a skipped write; a cache can slow a run down, never change it.
 
+use crate::graph::Graph;
 use kndo_contract::adapter::AdapterSpec;
 use kndo_contract::evidence::FileEvidence;
 use kndo_contract::vocab::ProjectPath;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 const MAGIC: &[u8; 4] = b"KNE1";
+const GRAPH_MAGIC: &[u8; 4] = b"KNG1";
 
 pub struct EvidenceCache {
     dir: Option<PathBuf>,
@@ -89,5 +93,60 @@ impl EvidenceCache {
         bytes.extend_from_slice(&self.fingerprint);
         bytes.extend_from_slice(&payload);
         let _ = std::fs::write(path, bytes);
+    }
+}
+
+/// A graph plus what its manifest-derived parts were computed from, so a later run
+/// can tell whether they still hold.
+#[derive(Serialize, Deserialize)]
+pub struct PersistedGraph {
+    /// Hash over every discovered manifest file's (path, content hash), in path
+    /// order — anchored roots and the package map are pure functions of it.
+    pub manifest_state: [u8; 32],
+    pub graph: Graph,
+}
+
+/// The persisted graph: one snapshot per project, keyed by everything that could
+/// change how the same tree assembles (contract fingerprint, graph semantics,
+/// the full adapter set).
+pub struct GraphCache {
+    file: Option<PathBuf>,
+    key: [u8; 32],
+}
+
+impl GraphCache {
+    pub fn new(dir: Option<PathBuf>, key: [u8; 32]) -> Self {
+        if let Some(d) = &dir {
+            let _ = std::fs::create_dir_all(d);
+        }
+        GraphCache {
+            file: dir.map(|d| d.join("graph.bin")),
+            key,
+        }
+    }
+
+    pub fn load(&self) -> Option<PersistedGraph> {
+        let bytes = std::fs::read(self.file.as_ref()?).ok()?;
+        let (magic, rest) = bytes.split_at_checked(4)?;
+        if magic != GRAPH_MAGIC {
+            return None;
+        }
+        let (key, payload) = rest.split_at_checked(32)?;
+        if key != self.key {
+            return None;
+        }
+        bincode::deserialize(payload).ok()
+    }
+
+    pub fn store(&self, persisted: &PersistedGraph) {
+        let Some(file) = &self.file else { return };
+        let Ok(payload) = bincode::serialize(persisted) else {
+            return;
+        };
+        let mut bytes = Vec::with_capacity(4 + 32 + payload.len());
+        bytes.extend_from_slice(GRAPH_MAGIC);
+        bytes.extend_from_slice(&self.key);
+        bytes.extend_from_slice(&payload);
+        let _ = std::fs::write(file, bytes);
     }
 }

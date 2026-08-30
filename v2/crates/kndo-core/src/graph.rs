@@ -2,16 +2,26 @@
 //! the path-sorted file list (two-phase: order fixed before any resolution runs), and
 //! every edge list is sorted, so the graph is a pure function of the tree —
 //! serialized, it is byte-identical across thread counts and cache states, which is
-//! exactly what the equivalence gates compare.
+//! exactly what the equivalence gates compare. A persisted graph is patched
+//! surgically when only file contents changed; anything that moves the ground under
+//! resolution (the file set, a manifest) falls back to full assembly.
 
+use crate::cache::EvidenceCache;
 use crate::discover::DiscoveredFile;
 use crate::extract::ClaimedFile;
-use kndo_contract::adapter::{LanguageAdapter, Resolution, ResolveContext, SourceFile};
+use kndo_contract::adapter::{
+    LanguageAdapter, PackageEntry, Resolution, ResolveContext, SourceFile,
+};
 use kndo_contract::evidence::{FileEvidence, ImportTarget, Root, RootTarget};
 use kndo_contract::vocab::ProjectPath;
 use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+
+/// Bump when the SAME evidence assembles into a DIFFERENT graph — resolution
+/// candidate changes, reachability semantics, new assembled fields. Folded into the
+/// graph cache key beside the contract fingerprint and the adapter set.
+pub const GRAPH_SEMANTICS_VERSION: u32 = 1;
 
 #[derive(Serialize, Deserialize)]
 pub struct GraphFile {
@@ -62,17 +72,7 @@ pub fn assemble(
         .map(|c| files[c.file_index].path.clone())
         .collect();
 
-    // The package pass first: what each manifest declares becomes queryable by every
-    // adapter's `resolve`. Manifests are consulted in path order; the first manifest
-    // to declare a name keeps it.
-    let files_cx = ResolveContext::new(&known);
-    let mut packages: std::collections::BTreeMap<SmolStr, kndo_contract::adapter::PackageEntry> =
-        std::collections::BTreeMap::new();
-    for_each_manifest(files, adapters, |adapter, manifest| {
-        for pkg in adapter.packages(&manifest, &files_cx) {
-            packages.entry(pkg.name.clone()).or_insert(pkg);
-        }
-    });
+    let packages = package_map(files, adapters, &known);
     let cx = ResolveContext::with_packages(&known, &packages);
 
     let mut graph_files: Vec<GraphFile> = claims
@@ -94,56 +94,19 @@ pub fn assemble(
         .collect();
     graph_files.sort_by(|a, b| a.path.cmp(&b.path));
 
-    let index_of = |path: &ProjectPath, gf: &[GraphFile]| -> Option<u32> {
-        gf.binary_search_by(|x| x.path.cmp(path))
-            .ok()
-            .map(|i| i as u32)
-    };
-
     // Resolution as a second phase over fixed ids.
+    let sorted_paths: Vec<ProjectPath> = graph_files.iter().map(|g| g.path.clone()).collect();
     let mut resolved: Vec<(Vec<u32>, Vec<Option<u32>>, u32)> =
         Vec::with_capacity(graph_files.len());
     for gf in &graph_files {
-        let adapter = adapters
-            .iter()
-            .find(|a| a.spec().id() == gf.adapter.as_str())
-            .expect("claiming adapter is registered");
-        let mut targets = BTreeSet::new();
-        let mut per_import = Vec::with_capacity(gf.evidence.imports.len());
-        let mut unresolved = 0u32;
-        for import in &gf.evidence.imports {
-            let (specifier, relative) = match &import.target {
-                ImportTarget::Relative(s) => (s, true),
-                ImportTarget::Package(s) => (s, false),
-                // An unknown target kind keeps its import alive, unresolved-silently.
-                _ => {
-                    per_import.push(None);
-                    continue;
-                }
-            };
-            match adapter.resolve(&gf.path, specifier, &cx) {
-                Resolution::File(p) => match index_of(&p, &graph_files) {
-                    Some(ix) => {
-                        targets.insert(ix);
-                        per_import.push(Some(ix));
-                    }
-                    None => {
-                        per_import.push(None);
-                        unresolved += 1;
-                    }
-                },
-                _ => {
-                    per_import.push(None);
-                    // A relative specifier that resolves nowhere is a broken edge
-                    // worth counting; an unmatched bare specifier is an external
-                    // package, which is normal.
-                    if relative {
-                        unresolved += 1;
-                    }
-                }
-            }
-        }
-        resolved.push((targets.into_iter().collect(), per_import, unresolved));
+        let adapter = adapter_by_id(adapters, &gf.adapter);
+        resolved.push(resolve_file(
+            &gf.path,
+            &gf.evidence,
+            adapter,
+            &cx,
+            &sorted_paths,
+        ));
     }
     for (gf, (imports, per_import, unresolved)) in graph_files.iter_mut().zip(resolved) {
         gf.imports = imports;
@@ -154,6 +117,154 @@ pub fn assemble(
     anchor_manifest_roots(files, adapters, &cx, &mut graph_files);
 
     Graph { files: graph_files }
+}
+
+fn adapter_by_id<'a>(
+    adapters: &'a [Box<dyn LanguageAdapter>],
+    id: &str,
+) -> &'a dyn LanguageAdapter {
+    adapters
+        .iter()
+        .find(|a| a.spec().id() == id)
+        .expect("claiming adapter is registered")
+        .as_ref()
+}
+
+/// The package pass: what each manifest declares becomes queryable by every
+/// adapter's `resolve`. Manifests are consulted in path order; the first manifest to
+/// declare a name keeps it.
+fn package_map(
+    files: &[DiscoveredFile],
+    adapters: &[Box<dyn LanguageAdapter>],
+    known: &BTreeSet<ProjectPath>,
+) -> BTreeMap<SmolStr, PackageEntry> {
+    let files_cx = ResolveContext::new(known);
+    let mut packages: BTreeMap<SmolStr, PackageEntry> = BTreeMap::new();
+    for_each_manifest(files, adapters, |adapter, manifest| {
+        for pkg in adapter.packages(&manifest, &files_cx) {
+            packages.entry(pkg.name.clone()).or_insert(pkg);
+        }
+    });
+    packages
+}
+
+fn resolve_file(
+    from: &ProjectPath,
+    evidence: &FileEvidence,
+    adapter: &dyn LanguageAdapter,
+    cx: &ResolveContext<'_>,
+    sorted_paths: &[ProjectPath],
+) -> (Vec<u32>, Vec<Option<u32>>, u32) {
+    let index_of = |p: &ProjectPath| sorted_paths.binary_search(p).ok().map(|i| i as u32);
+    let mut targets = BTreeSet::new();
+    let mut per_import = Vec::with_capacity(evidence.imports.len());
+    let mut unresolved = 0u32;
+    for import in &evidence.imports {
+        let (specifier, relative) = match &import.target {
+            ImportTarget::Relative(s) => (s, true),
+            ImportTarget::Package(s) => (s, false),
+            // An unknown target kind keeps its import alive, unresolved-silently.
+            _ => {
+                per_import.push(None);
+                continue;
+            }
+        };
+        match adapter.resolve(from, specifier, cx) {
+            Resolution::File(p) => match index_of(&p) {
+                Some(ix) => {
+                    targets.insert(ix);
+                    per_import.push(Some(ix));
+                }
+                None => {
+                    per_import.push(None);
+                    unresolved += 1;
+                }
+            },
+            _ => {
+                per_import.push(None);
+                // A relative specifier that resolves nowhere is a broken edge worth
+                // counting; an unmatched bare specifier is an external package,
+                // which is normal.
+                if relative {
+                    unresolved += 1;
+                }
+            }
+        }
+    }
+    (targets.into_iter().collect(), per_import, unresolved)
+}
+
+/// Hash over every discovered manifest's (path, content), in path order — the
+/// manifest-derived parts of a graph (anchors, the package map) are pure functions
+/// of this state.
+pub fn manifest_state(files: &[DiscoveredFile], adapters: &[Box<dyn LanguageAdapter>]) -> [u8; 32] {
+    let mut h = blake3::Hasher::new();
+    for_each_manifest(files, adapters, |_, manifest| {
+        let path = manifest.path.as_str().as_bytes();
+        h.update(&(path.len() as u32).to_le_bytes());
+        h.update(path);
+        h.update(&(manifest.content.len() as u32).to_le_bytes());
+        h.update(manifest.content);
+    });
+    *h.finalize().as_bytes()
+}
+
+/// The surgical path: when the file set, every claim, and every manifest are
+/// unchanged, only re-extract and re-resolve the files whose content moved — every
+/// other node, edge and anchor is reused verbatim. `None` means the ground shifted
+/// (set, claims, or manifests) and the caller assembles from scratch; either way the
+/// result is byte-identical to full assembly, which the incremental gate compares.
+pub fn patch(
+    mut prev: Graph,
+    prev_manifest_state: [u8; 32],
+    files: &[DiscoveredFile],
+    claims: &[ClaimedFile],
+    adapters: &[Box<dyn LanguageAdapter>],
+    cache: &EvidenceCache,
+) -> Option<Graph> {
+    if manifest_state(files, adapters) != prev_manifest_state {
+        return None;
+    }
+    if prev.files.len() != claims.len() {
+        return None;
+    }
+    // Claims iterate discovery order, which is path order — the same order the
+    // persisted graph is sorted in.
+    let mut changed: Vec<(usize, usize)> = Vec::new();
+    for (ix, c) in claims.iter().enumerate() {
+        let f = &files[c.file_index];
+        let gf = &prev.files[ix];
+        if gf.path != f.path || gf.adapter != adapters[c.adapter_index].spec().id() {
+            return None;
+        }
+        let hex: String = f.hash.iter().map(|b| format!("{b:02x}")).collect();
+        if gf.hash_hex != hex {
+            changed.push((ix, c.file_index));
+            prev.files[ix].hash_hex = hex;
+        }
+    }
+    if changed.is_empty() {
+        return Some(prev);
+    }
+
+    let known: BTreeSet<ProjectPath> = prev.files.iter().map(|g| g.path.clone()).collect();
+    let packages = package_map(files, adapters, &known);
+    let cx = ResolveContext::with_packages(&known, &packages);
+    let sorted_paths: Vec<ProjectPath> = prev.files.iter().map(|g| g.path.clone()).collect();
+
+    for (ix, file_index) in changed {
+        let file = &files[file_index];
+        let adapter = adapter_by_id(adapters, &prev.files[ix].adapter);
+        let evidence = crate::extract::extract_one(file, adapter, cache);
+        let (imports, per_import, unresolved) =
+            resolve_file(&file.path, &evidence, adapter, &cx, &sorted_paths);
+        let gf = &mut prev.files[ix];
+        gf.evidence = evidence;
+        gf.imports = imports;
+        gf.import_targets = per_import;
+        gf.unresolved_imports = unresolved;
+    }
+    Some(prev)
 }
 
 /// Every (adapter, discovered manifest) pair, in file-path order — the one iteration

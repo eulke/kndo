@@ -64,6 +64,9 @@ pub struct Session {
 /// so run-varying metadata stays out of the envelope — frontends render these
 /// (verbose/human output, serve's own metadata channel) and the bench harness measures
 /// around `analyze()` with its per-machine baseline.
+///
+/// On a surgically patched run, re-extraction of the changed files happens inside the
+/// patch, so `extract` reads zero and that work lands in `assemble`.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct PhaseTimings {
     pub discover: Duration,
@@ -128,6 +131,20 @@ impl Session {
         &self.root
     }
 
+    /// Everything that could change how the same tree assembles: the contract
+    /// fingerprint, the graph semantics, and the full adapter set as data.
+    fn graph_cache_key(&self) -> [u8; 32] {
+        let mut h = blake3::Hasher::new();
+        h.update(&kndo_contract::contract_fingerprint());
+        h.update(&crate::graph::GRAPH_SEMANTICS_VERSION.to_le_bytes());
+        for adapter in &self.adapters {
+            let spec = serde_json::to_string(adapter.spec()).unwrap_or_default();
+            h.update(&(spec.len() as u32).to_le_bytes());
+            h.update(spec.as_bytes());
+        }
+        *h.finalize().as_bytes()
+    }
+
     pub fn analyze(&self, _mode: RunMode) -> Result<Snapshot, Refusal> {
         let threads = match self.config.threads {
             Threads::Auto => 0,
@@ -158,19 +175,49 @@ impl Session {
             claims = extract::claim(&files, &self.adapters);
         });
 
-        let cache_dir = self
-            .config
-            .use_cache
-            .then(|| self.root.join(".kndo/cache/evidence"));
-        let cache = EvidenceCache::new(cache_dir, kndo_contract::contract_fingerprint());
-        let mut evidence = Vec::new();
-        timed(&mut timings.extract, &mut || {
-            evidence = extract::extract(&files, &claims, &self.adapters, &cache);
-        });
+        let fingerprint = kndo_contract::contract_fingerprint();
+        let cache_root = self.config.use_cache.then(|| self.root.join(".kndo/cache"));
+        let cache =
+            EvidenceCache::new(cache_root.as_ref().map(|r| r.join("evidence")), fingerprint);
+        let graph_cache = crate::cache::GraphCache::new(cache_root, self.graph_cache_key());
 
+        // The surgical path first: a persisted graph patched in place when only file
+        // contents moved. Re-extraction of the changed files happens inside `patch`,
+        // so on a patched run the extract phase reads as zero and its work is folded
+        // into `assemble`.
         let assemble_start = Instant::now();
-        let graph = crate::graph::assemble(&files, &claims, evidence, &self.adapters);
-        timings.assemble = assemble_start.elapsed();
+        let patched = graph_cache.load().and_then(|p| {
+            crate::graph::patch(
+                p.graph,
+                p.manifest_state,
+                &files,
+                &claims,
+                &self.adapters,
+                &cache,
+            )
+        });
+        let graph = match patched {
+            Some(graph) => {
+                timings.assemble = assemble_start.elapsed();
+                graph
+            }
+            None => {
+                let mut evidence = Vec::new();
+                timed(&mut timings.extract, &mut || {
+                    evidence = extract::extract(&files, &claims, &self.adapters, &cache);
+                });
+                let assemble_start = Instant::now();
+                let graph = crate::graph::assemble(&files, &claims, evidence, &self.adapters);
+                timings.assemble = assemble_start.elapsed();
+                graph
+            }
+        };
+        let persisted = crate::cache::PersistedGraph {
+            manifest_state: crate::graph::manifest_state(&files, &self.adapters),
+            graph,
+        };
+        graph_cache.store(&persisted);
+        let graph = persisted.graph;
 
         let analyze_start = Instant::now();
         let (findings, abstained) = run_all(&graph, &[&Unused]);

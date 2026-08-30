@@ -54,23 +54,33 @@ pub fn extract(
     claims
         .par_iter()
         .map(|c| {
-            let file = &files[c.file_index];
-            let adapter = &adapters[c.adapter_index];
-            let spec = adapter.spec();
-            if let Some(hit) = cache.get(spec, &file.path, &file.hash) {
-                return hit;
-            }
-            let mut sink = EvidenceSink::new(file.content.len() as u32, spec.emits().clone());
-            adapter.extract(
-                &SourceFile {
-                    path: &file.path,
-                    content: &file.content,
-                },
-                &mut sink,
-            );
-            let evidence = sink.finish();
-            cache.put(spec, &file.path, &file.hash, &evidence);
-            evidence
+            extract_one(
+                &files[c.file_index],
+                adapters[c.adapter_index].as_ref(),
+                cache,
+            )
         })
         .collect()
+}
+
+pub fn extract_one(
+    file: &DiscoveredFile,
+    adapter: &dyn LanguageAdapter,
+    cache: &EvidenceCache,
+) -> FileEvidence {
+    let spec = adapter.spec();
+    if let Some(hit) = cache.get(spec, &file.path, &file.hash) {
+        return hit;
+    }
+    let mut sink = EvidenceSink::new(file.content.len() as u32, spec.emits().clone());
+    adapter.extract(
+        &SourceFile {
+            path: &file.path,
+            content: &file.content,
+        },
+        &mut sink,
+    );
+    let evidence = sink.finish();
+    cache.put(spec, &file.path, &file.hash, &evidence);
+    evidence
 }
