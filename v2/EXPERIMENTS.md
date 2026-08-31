@@ -120,6 +120,21 @@ how many test-only findings on the corpus are actionable?
 Roadmap idea. Needs: determinism story for history-derived data (history changes run to
 run — likely advisory-only), and a corpus measurement of signal quality.
 
+### Java qualified-name segments in the reference stream (keep-alive inflation)
+Discovered 2026-08-31 by the Scoped-comparison instrument: kndo:java emits a reference
+for every `type_identifier` node, and tree-sitter-java types the package segments of a
+qualified type that way — `java.util.function.Function` also emits `function`. Pooled
+keep-alive matching then keeps any same-named declaration alive from unrelated
+qualified mentions: guava `Tables.java`/`Collections2.java` carry package-private
+fields named `function`, and seven instrument rows resolved against them. Direction:
+`unused` false NEGATIVES — silent, bounded by lowercase-segment name collisions.
+Related grammar fact: extends-position references classify as `Extend` only for raw
+supertypes; a generic supertype's identifier reaches the stream as `TypeUse` (the
+`generic_type` node owns it), so `RefKind::Extend` consumers see a grammar-shaped
+subset. Fix sketch: emit only the leaf segment of `scoped_type_identifier` and
+classify through `generic_type` to the enclosing clause — adapter version bump,
+conformance re-audit, and a guava `unused`-delta corpus measure as the experiment.
+
 ### Visibility-ladder shape (module-and-descendants scope)
 v1's linear rung ladder could not express Rust's module-and-descendants privacy — a
 recorded incident (the adapter "had to stop lying about private"; equal rungs anchored
@@ -185,6 +200,22 @@ slice of rust's `pub`-vs-`pub(crate)`), with its own false-positive surface:
 an Exported name is nameable from anywhere, so "all uses in own file" is a weaker
 fact than region-enumerated absence. Zero-FP definition first, corpus count
 second — the demand number is pinned here.
+
+**Scoped-comparison verdict (2026-08-31):** the region-subset half of
+`private-type-leak` (fire when the signature's audience strictly contains the named
+type's region — Exported-vs-Scoped, Scoped-vs-narrower-Scoped) was instrumented
+before being built and measured **0 true defects in a 1,190-candidate upper bound**
+across the six Scoped-rung repos (guava 1,048, Alamofire 69, vapor 35, Exposed 30,
+gin 7, ripgrep 1). Every signature-position hit decomposed into deliberate idiom
+(guava's 88 package-private skeleton/bridge supertypes, Exposed's 15 internal
+marker-interface conformances), rung folding (java `protected` → Exported), shadow
+trees (GWT `src-super`), or the instrument's own name-fuzzy mis-resolution — Swift
+was the control group, its compiler making the real thing unrepresentable, and all
+40 of its "hits" were noise, catching same-directory name matching red-handed.
+DECISIONS 2026-08-31 has the full decomposition and the instrument's shape for a
+re-run. Parked until a consumer arrives with a real case; the toolchains own the
+valuable slices already (kotlinc/swiftc reject signature exposure, rustc lints
+`private_interfaces`), and javac's silence measured zero on the one Java repo.
 
 ### Import-shape debt: the `use`-leaf pair (recorded 2026-08-30, M4)
 A plain Rust `use` leaf emits TWO import records over the same target: a

@@ -1968,3 +1968,64 @@ with both names in the loop; the same shape dev-side is silence).
 221 tests, 15 gates, clippy clean; every conformance fixture regenerated for
 the one new envelope field (`health.by_package`), the diff audited to contain
 nothing else.
+
+## 2026-08-31 — Scoped-vs-Scoped visibility comparison: measured to zero, deferred
+
+The region-subset half of `private-type-leak` — fire when the signature's audience is
+a STRICT superset of the named type's region (Exported-vs-Scoped, and Scoped against a
+narrower Scoped) — was instrumented before being built, and the number closes it.
+
+**Instrument.** A throwaway binary over the engine's own evidence graph, replicating
+the shipped floor (all-Exported owner chain, same-file unique resolution, test-root
+exemption) plus what the floor cannot yet have: a same-directory type index as the
+region approximation (java/go packages are directories), a textual promise cut (a
+function's signature ends at its body's `{`, a value's at its initializer's `=`, a
+type's header at its body's `{`), and whole-span containment where java and go emit no
+signature spans. Swift served as the control group: swiftc rejects real
+public-exposes-internal signatures outright, so every Swift "signature hit" measures
+the instrument's own noise floor.
+
+**Upper bound: 1,190 candidates. True defects a maintainer would patch: zero.**
+Per repo: guava 1,048, Alamofire 69, vapor 35, Exposed 30, gin 7, ripgrep 1. The
+signature-position slice (154) decomposes without remainder:
+
+- guava type headers (88): `public class X extends PackagePrivateSkeleton` — the
+  deliberate skeleton/bridge idiom (`Abstract*`, `*Bridge`, `TypeCapture`, GWT
+  specializations), uniform across the whole slice. v1's "package-private types in
+  package-visible signatures" vice reincarnated as accusations against architecture.
+- guava method signatures (11): four `protected` overrides forced by a
+  package-private parent's contract (`protected` folds to Exported — a rung the
+  ladder deliberately does not split), three GWT `src-super` shadow-tree interop
+  shims (never a javac consumer surface), four qualified-name-segment
+  mis-resolutions (the `function` collision recorded in EXPERIMENTS).
+- Exposed type headers (15): public objects conforming to `internal interface
+  OpBoolean` — an empty marker interface, deliberate DSL architecture, and it
+  compiles in the shipped library as written.
+- Swift signatures (40): all noise, as the control group predicts — 39 name-fuzzy
+  mis-resolutions (stdlib `Result` 21, generic parameters `Failure`/`Value` 18)
+  where same-directory name matching bound a generic parameter or a standard-library
+  name to an unrelated internal declaration, plus one promise-cut artifact (a
+  computed property's getter body sits before any `=`). Name matching is not
+  resolution; the vice is now measured at 100% of what it touched.
+- The BODY buckets (1,036): the factory pattern — a public signature declares the
+  interface, the body constructs the package-private implementation — plus each
+  class span re-counting its methods' bodies. This is the exemplary pattern in both
+  Java and Go, and it dies the moment a real signature span exists.
+- gin struct fields (4): three unexported fields (per-field visibility is invisible
+  to the instrument), and the one pattern-true instance in the whole corpus —
+  `Context.Errors errorMsgs`, an exported field of a package-scoped type, shipped
+  deliberately for a decade in one of Go's most-used libraries. Not a finding
+  anyone would act on; and Go's adapter deliberately declares neither methods nor
+  fields, so even seeing it requires supply that does not exist.
+
+**Verdict: deferred, 0/1,190.** The toolchains already own the valuable slices —
+kotlinc and swiftc reject signature exposure, rustc lints `private_interfaces` — and
+the one javac-silent ecosystem measured zero because guava's review culture already
+enforces what the analysis would check. No contract work, no signature emission in
+java/go, no region-subset judgment. Reopening condition: a consumer with a real case
+(most plausibly a Java codebase leaking package-private types through public
+returns/params, or per-field visibility demand in Go) re-runs this instrument's audit
+before any build. Two adapter facts the instrument surfaced — java's qualified-name
+segments entering the reference stream (keep-alive inflation, `unused` false
+negatives) and generic supertypes bypassing `RefKind::Extend` — are recorded as their
+own candidate in EXPERIMENTS with a fix sketch and their measurement.
