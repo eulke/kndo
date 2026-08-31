@@ -76,7 +76,7 @@ fn package_dir_files(dir_suffix: &str, cx: &ResolveContext<'_>) -> Vec<ProjectPa
 ///   `src/main/java/<pkg>` are ONE unit, symmetrically: the jar tool merges
 ///   them into the same package of the same artifact, so a reference to the
 ///   class keeps every release's variant of it.
-pub fn unit_mates(path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
+pub fn sees(path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
     let p = path.as_str();
     let dir = match p.rsplit_once('/') {
         Some((dir, _)) => dir,

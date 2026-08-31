@@ -119,9 +119,9 @@ fn subject_derives_kind_and_identity_ignores_spans() {
 #[test]
 fn plugin_categories_are_namespaced() {
     let c = Category::extension("github.com/acme/kndo-x", "no-foo");
-    assert!(c.is_plugin());
+    assert!(c.is_extension());
     assert_eq!(c.as_str(), "ext:github.com/acme/kndo-x/no-foo");
-    assert!(!Category::UNUSED.is_plugin());
+    assert!(!Category::UNUSED.is_extension());
 }
 
 #[test]
@@ -136,11 +136,11 @@ fn contract_fingerprint_is_stable_within_a_build() {
 fn declaring_extensions_is_claiming_them() {
     use kndo_contract::extension::ExtensionSpec;
     let spec = ExtensionSpec::builder("demo", 1)
-        .extensions(&["ts", "tsx"])
+        .suffixes(&["ts", "tsx"])
         .claims(&["**/special.conf"])
         .build();
     // One declaration: the extension list is queryable AND the claim globs derive
     // from it, in order, with non-extension claims preserved alongside.
-    assert_eq!(spec.extensions(), ["ts", "tsx"]);
+    assert_eq!(spec.suffixes(), ["ts", "tsx"]);
     assert_eq!(spec.claims(), ["**/*.ts", "**/*.tsx", "**/special.conf"]);
 }

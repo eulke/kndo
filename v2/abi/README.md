@@ -8,7 +8,7 @@ declared, in whatever combination —
 
 | Cluster | Spec fields | Hooks | Gate |
 | --- | --- | --- | --- |
-| extraction | `extensions`, `claims`, `emits`, `manifests` | `extract`, `resolve`, `roots`, `packages`, `manifest-dependencies`, `unit-mates` | claims |
+| extraction | `suffixes`, `claims`, `emits`, `manifests` | `extract`, `resolve`, `roots`, `packages`, `manifest-dependencies`, `sees` | claims |
 | conduct | `activation`, `mutates-graph`, `dependencies`, `requested-file-access`, `rules` | `contribute-roots`, `report-findings` | activation (+ `mutates-graph` for roots) |
 | ingestion | `reads-reports` | `ingest` | activation |
 

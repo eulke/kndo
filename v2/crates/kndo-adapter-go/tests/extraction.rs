@@ -105,7 +105,7 @@ import (
 "#,
     );
     // Evidence is faithful to the source: exactly the written imports, nothing
-    // synthetic — the package-as-unit fact lives in `unit_mates`.
+    // synthetic — the package-as-unit fact lives in `sees`.
     assert_eq!(ev.imports.len(), 4);
     assert!(matches!(
         &import(&ev, "fmt").shape,

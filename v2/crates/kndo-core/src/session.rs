@@ -6,8 +6,8 @@
 
 use crate::analysis::{Abstention, Duplicate, TestOnly, Untested, Unused, run_all};
 use crate::cache::EvidenceCache;
+use crate::conduct::Contribution;
 use crate::graph::Graph;
-use crate::plugin::PluginContribution;
 use crate::report::{ExtensionRun, Report, ReportDiagnostic, RunInfo, SCHEMA};
 use crate::{discover, extract};
 use kndo_contract::evidence::DiagnosticLevel;
@@ -96,7 +96,7 @@ pub struct Snapshot {
     pub suppressed: crate::suppress::SuppressedSummary,
     /// What each active plugin asserted, in registration order — always reported,
     /// even when everything applied cleanly.
-    pub plugins: Vec<PluginContribution>,
+    pub contributions: Vec<Contribution>,
     pub timings: PhaseTimings,
     baseline: Option<Vec<Finding>>,
     pragma_problems: Vec<crate::suppress::PragmaProblem>,
@@ -240,7 +240,7 @@ impl Session {
             manifest_dependencies.extend(extension.manifest_dependencies(&manifest));
         });
         let active =
-            crate::plugin::activate(&self.extensions, &discovered_paths, &manifest_dependencies);
+            crate::conduct::activate(&self.extensions, &discovered_paths, &manifest_dependencies);
         let plugins_mutate = active
             .iter()
             .any(|(ix, _)| self.extensions[*ix].spec().mutates_graph());
@@ -300,7 +300,7 @@ impl Session {
             .map(|f| (f.path.clone(), f.content.as_slice()))
             .collect();
         let round =
-            crate::plugin::run_round(&self.extensions, &active, &mut graph, &self.root, &contents);
+            crate::conduct::run_round(&self.extensions, &active, &mut graph, &self.root, &contents);
         let mut outcome = run_all(
             &graph,
             round.coverage,
@@ -326,7 +326,7 @@ impl Session {
             findings,
             abstained: outcome.abstained,
             suppressed: suppressed.summary,
-            plugins: round.contributions,
+            contributions: round.contributions,
             pragma_problems: suppressed.problems,
             composition_diagnostics: composition,
             timings,
@@ -448,7 +448,7 @@ impl Snapshot {
             baselined,
             abstained: self.abstained.clone(),
             suppressed: self.suppressed.clone(),
-            plugins: self.plugins.clone(),
+            plugins: self.contributions.clone(),
             diagnostics,
         }
     }
@@ -463,7 +463,7 @@ impl Snapshot {
         };
         let at_or_above = self
             .new_findings()
-            .filter(|f| !f.category.is_plugin() && f.severity.at_least(floor))
+            .filter(|f| !f.category.is_extension() && f.severity.at_least(floor))
             .count() as u32;
         if at_or_above == 0 {
             RunOutcome::Pass

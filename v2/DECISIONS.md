@@ -1049,3 +1049,48 @@ diagnostics; the `unit_mates` entry's "55 conformance reports" was a miscount of
 family and `ExtensionSpec::extensions` (file suffixes) — identity-scale renames that
 belong to a toll commit like M6.a tanda 2; the scope-shape contract change (M6.c);
 `ingest`'s trap-honesty channel (EXPERIMENTS has both debts).
+
+## 2026-08-31 — The naming toll: three passengers, one commit, before M6.c
+
+Owner decision. Identity-scale renames ride together (the M6.a tanda-2 pattern),
+deliberately BEFORE M6.c so the visibility capability is born with its twin name
+instead of renamed after. The mapping, old → new:
+
+- **The conduct cluster stops speaking v1's "plugin".** `PluginSeverity` →
+  `ConductSeverity`, `PluginTarget` → `ConductTarget`, `PluginContribution` →
+  `Contribution` (beside its children `ContributedRoot`/`ContributedFinding`),
+  `Category::is_plugin` → `is_extension`, core module `plugin.rs` → `conduct.rs`,
+  test `plugin_containment.rs` → `conduct_containment.rs`, gate
+  `builtin_plugin_proofs` → `builtin_conduct_proofs` (registry + generated
+  workflow). WIT: `plugin-severity`/`plugin-target` → `conduct-severity`/
+  `conduct-target`. NOT renamed, deliberately: the report envelope's `plugins`
+  JSON key and the `ext:` category prefix — both are user-facing contract
+  (schema `kndo-v2/m6`, finding identity); the schema's `$defs` name follows the
+  type and the regenerated schema is this commit's deliberate diff. Guest
+  directory names (`probe-plugin`) keep their identity as fixtures.
+- **`ExtensionSpec::extensions` → `suffixes`** (builder, getter, WIT field,
+  wire structs, `declare_extensions` → `declare_suffixes`): the list holds file
+  suffixes, and "extension" already means the species. The serde field feeds
+  only cache keys — renaming invalidates caches once, changes no envelope.
+- **`unit_mates` → `sees`.** The relation is directional (a test sees main,
+  never the reverse; the engine's reverse map was already called `seen_by`) and
+  "unit" borrowed Go's compilation story where the real fact is a shared name
+  scope — in Java, "compilation unit" formally means ONE file, the worst
+  possible reader collision. `sees(path)` = the files whose names `path` sees
+  with no import naming them. M6.c's region capability arrives as `seen_from`,
+  completing the pair.
+
+ABI toll paid: pins rebuilt via `cargo xtask pin-abi` in this commit. Everything
+byte-stable that should be: conformance fixtures, corpus reports and the report
+envelope are unchanged; the schema diff is the `$defs` rename plus the
+documented-key note.
+
+## 2026-08-31 — Cache writes are atomic (temp-then-rename)
+
+Both caches wrote with `std::fs::write` straight to the final path; two sessions
+on one root (parallel gate tests, a user's second terminal) could hand each
+other a half-written entry. The magic-prefix/bincode checks degrade most torn
+reads to a miss, but "mostly degrades" is not a contract — writes now go
+temp-then-rename in the destination directory, so a reader sees old bytes or
+new bytes, never a mix. Failures stay silent by design: a cache that cannot
+write is a cache that misses.

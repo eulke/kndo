@@ -71,7 +71,7 @@ fn package_dir_files(dir_suffix: &str, cx: &ResolveContext<'_>) -> Vec<ProjectPa
 /// at compile — plus the standard layout's test→main mirror across BOTH
 /// source-set spellings: `src/test/kotlin/<pkg>` sees `src/main/kotlin/<pkg>`
 /// AND `src/main/java/<pkg>`, one direction only.
-pub fn unit_mates(path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
+pub fn sees(path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
     let p = path.as_str();
     let dir = match p.rsplit_once('/') {
         Some((dir, _)) => dir,

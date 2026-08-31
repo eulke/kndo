@@ -2,7 +2,7 @@
 //! directory of files sharing one namespace with no imports between siblings — so
 //! this adapter leans on the contract's unit features: imports resolve to
 //! [`Resolution::Files`] (every non-test `.go` in the package dir), and
-//! [`Extension::unit_mates`] declares what each file sees without an import
+//! [`Extension::sees`] declares what each file sees without an import
 //! (a production file sees its non-test siblings; a test file sees the whole
 //! package), which the engine turns into reachability edges and pooled
 //! references. Capitalization IS the visibility: an upper-case initial is
@@ -63,7 +63,7 @@ impl Extension for GoAdapter {
         manifest::dependencies(manifest)
     }
 
-    fn unit_mates(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
-        resolve::unit_mates(path, cx)
+    fn sees(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
+        resolve::sees(path, cx)
     }
 }

@@ -2,7 +2,7 @@
 //! full-tree walk for references and comments. Go-specific facts spelled here:
 //! capitalization is reach, `package main` + `func main` is the binary entry, and
 //! `_test.go` is the test runner's file. The package-as-unit fact lives in
-//! [`crate::resolve::unit_mates`], not in evidence — what a file sees without an
+//! [`crate::resolve::sees`], not in evidence — what a file sees without an
 //! import depends on the file set, never on this file's bytes. Deliberately
 //! undeclared: struct fields, interface methods, and ALL methods — Go's interfaces
 //! are structural, so any method may satisfy one and be dispatched without its

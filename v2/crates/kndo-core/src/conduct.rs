@@ -18,8 +18,8 @@ use std::collections::{BTreeMap, BTreeSet};
 /// module — the one door); re-exported here where the engine that enforces it
 /// lives.
 pub use kndo_contract::extension::{
-    Activation, ActivationRule, CONTENT_MAX_BYTES, CONTENT_MAX_FILES, ConductSink, ContentView,
-    Extension, GraphAccess, PluginSeverity, PluginTarget, RuleDescriptor,
+    Activation, ActivationRule, CONTENT_MAX_BYTES, CONTENT_MAX_FILES, ConductSeverity, ConductSink,
+    ConductTarget, ContentView, Extension, GraphAccess, RuleDescriptor,
 };
 
 pub use kndo_contract::extension::is_reserved_coordinate;
@@ -86,7 +86,7 @@ impl WellKnown<'_> {
 /// it asserted, what missed, and whether its content budget cut.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-pub struct PluginContribution {
+pub struct Contribution {
     pub coordinate: SmolStr,
     pub roots: u32,
     pub findings: u32,
@@ -182,7 +182,7 @@ fn rule_matches(
 
 /// Everything one plugin round produced, ready for the session to fold in.
 pub struct PluginRound {
-    pub contributions: Vec<PluginContribution>,
+    pub contributions: Vec<Contribution>,
     pub coverage: Option<crate::coverage::Coverage>,
     pub findings: Vec<Finding>,
 }
@@ -292,7 +292,7 @@ pub fn run_round(
             applied_findings += 1;
         }
 
-        contributions.push(PluginContribution {
+        contributions.push(Contribution {
             coordinate: SmolStr::new(spec.coordinate()),
             roots: applied_roots,
             findings: applied_findings,
@@ -312,10 +312,10 @@ fn file_index(graph: &Graph, path: &ProjectPath) -> Option<usize> {
     graph.files.binary_search_by(|f| f.path.cmp(path)).ok()
 }
 
-fn resolve_target(graph: &Graph, target: &PluginTarget) -> Option<(usize, RootTarget)> {
+fn resolve_target(graph: &Graph, target: &ConductTarget) -> Option<(usize, RootTarget)> {
     match target {
-        PluginTarget::File(path) => Some((file_index(graph, path)?, RootTarget::WholeFile)),
-        PluginTarget::Symbol { path, name } => {
+        ConductTarget::File(path) => Some((file_index(graph, path)?, RootTarget::WholeFile)),
+        ConductTarget::Symbol { path, name } => {
             let ix = file_index(graph, path)?;
             let (id, _) = graph.files[ix]
                 .evidence
@@ -326,13 +326,13 @@ fn resolve_target(graph: &Graph, target: &PluginTarget) -> Option<(usize, RootTa
     }
 }
 
-fn target_subject(graph: &Graph, target: &PluginTarget) -> Option<Subject> {
+fn target_subject(graph: &Graph, target: &ConductTarget) -> Option<Subject> {
     match target {
-        PluginTarget::File(path) => {
+        ConductTarget::File(path) => {
             file_index(graph, path)?;
             Some(Subject::File { path: path.clone() })
         }
-        PluginTarget::Symbol { path, name } => {
+        ConductTarget::Symbol { path, name } => {
             let ix = file_index(graph, path)?;
             let decl = graph.files[ix]
                 .evidence
@@ -358,10 +358,10 @@ fn target_subject(graph: &Graph, target: &PluginTarget) -> Option<Subject> {
 
 /// Neutral spelling of a target for dropped-contribution lines — each drop site
 /// states its own reason beside it.
-fn describe_target(target: &PluginTarget) -> String {
+fn describe_target(target: &ConductTarget) -> String {
     match target {
-        PluginTarget::File(path) => format!("file {}", path.as_str()),
-        PluginTarget::Symbol { path, name } => {
+        ConductTarget::File(path) => format!("file {}", path.as_str()),
+        ConductTarget::Symbol { path, name } => {
             format!("symbol {name} in {}", path.as_str())
         }
     }

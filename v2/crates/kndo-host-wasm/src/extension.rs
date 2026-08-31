@@ -293,9 +293,9 @@ impl Extension for WasmExtension {
         .unwrap_or_default()
     }
 
-    fn unit_mates(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
+    fn sees(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
         self.call(StoreData::project(cx), |guest, store| {
-            guest.call_unit_mates(store, path.as_str())
+            guest.call_sees(store, path.as_str())
         })
         .map(|paths| paths.into_iter().map(ProjectPath::new).collect())
         .unwrap_or_default()
@@ -318,7 +318,7 @@ impl Extension for WasmExtension {
         };
         for root in roots {
             out.root(
-                convert::plugin_target(root.target),
+                convert::conduct_target(root.target),
                 convert::root_kind(root.kind),
                 convert::confidence(root.confidence),
             );
@@ -343,8 +343,8 @@ impl Extension for WasmExtension {
         for finding in findings {
             out.finding(
                 &finding.rule,
-                convert::plugin_severity(finding.severity),
-                convert::plugin_target(finding.target),
+                convert::conduct_severity(finding.severity),
+                convert::conduct_target(finding.target),
                 convert::confidence(finding.confidence),
                 finding.message,
             );

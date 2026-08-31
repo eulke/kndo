@@ -92,7 +92,7 @@ impl EvidenceCache {
         bytes.extend_from_slice(MAGIC);
         bytes.extend_from_slice(&self.fingerprint);
         bytes.extend_from_slice(&payload);
-        let _ = std::fs::write(path, bytes);
+        write_atomically(&path, &bytes);
     }
 }
 
@@ -147,6 +147,26 @@ impl GraphCache {
         bytes.extend_from_slice(GRAPH_MAGIC);
         bytes.extend_from_slice(&self.key);
         bytes.extend_from_slice(&payload);
-        let _ = std::fs::write(file, bytes);
+        write_atomically(&file, &bytes);
+    }
+}
+
+/// Temp-then-rename in the destination directory: a cache file is either the
+/// old bytes or the new bytes, never a torn mix — two sessions on one root
+/// (parallel tests, a user's second terminal) must not be able to hand each
+/// other a half-written entry. Failures stay silent: a cache that cannot write
+/// is a cache that misses.
+fn write_atomically(path: &std::path::Path, bytes: &[u8]) {
+    let Some(dir) = path.parent() else { return };
+    let tmp = dir.join(format!(
+        ".tmp-{}-{:x}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ));
+    if std::fs::write(&tmp, bytes).is_ok() && std::fs::rename(&tmp, path).is_err() {
+        let _ = std::fs::remove_file(&tmp);
     }
 }

@@ -3,7 +3,7 @@
 //! (timings, timestamps) joins at the frontend edge when a milestone needs it.
 
 use crate::analysis::Abstention;
-use crate::plugin::PluginContribution;
+use crate::conduct::Contribution;
 use crate::suppress::SuppressedSummary;
 use kndo_contract::evidence::DiagnosticLevel;
 use kndo_contract::finding::Finding;
@@ -61,7 +61,9 @@ pub struct Report {
     /// One entry per ACTIVE plugin, in registration order — what it asserted, what
     /// missed, whether its content budget cut. Always present, so a plugin that
     /// contributed nothing is visibly distinct from a plugin that never ran.
-    pub plugins: Vec<PluginContribution>,
+    /// JSON key `plugins` is envelope contract (schema `kndo-v2/m6`) — the key
+    /// predates the conduct renaming and stays; the TYPE carries the new name.
+    pub plugins: Vec<Contribution>,
     pub diagnostics: Vec<ReportDiagnostic>,
 }
 

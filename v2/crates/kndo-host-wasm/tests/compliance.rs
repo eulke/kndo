@@ -46,7 +46,17 @@ fn component(name: &str) -> PathBuf {
         .encode()
         .expect("componentizes");
     let out = built_guests().join(format!("{name}.component.wasm"));
-    std::fs::write(&out, component).expect("write component");
+    // Tests run in parallel and several want the same component: temp-then-
+    // rename, so a concurrent loader sees the old bytes or the new bytes,
+    // never a torn module.
+    static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let tmp = built_guests().join(format!(
+        ".{name}.component.{}-{}.tmp",
+        std::process::id(),
+        SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
+    std::fs::write(&tmp, component).expect("write component");
+    std::fs::rename(&tmp, &out).expect("publish component");
     out
 }
 
@@ -125,7 +135,7 @@ fn the_wasm_adapter_world_is_a_first_class_language() {
     );
     assert!(
         finding_on(&snap, "from_part").is_empty(),
-        "a symbol used only by its unit mate is kept through wasm unit-mates"
+        "a symbol used only by a file that sees it is kept through wasm sees"
     );
     assert!(
         finding_on(&snap, "app_part.kmini").is_empty(),
@@ -148,10 +158,10 @@ fn the_wasm_adapter_world_is_a_first_class_language() {
         .analyze(RunMode::Full)
         .expect("analyze with witness");
     assert_eq!(
-        snap.plugins.len(),
+        snap.contributions.len(),
         1,
         "the kmini.pkg `dep` line activated the witness: {:#?}",
-        snap.plugins
+        snap.contributions
     );
 }
 
@@ -187,7 +197,7 @@ fn the_wasm_plugin_world_carries_the_containment_model() {
     let session = kmini_session(&p, true, vec![Box::new(plugin)]);
     let snap = session.analyze(RunMode::Full).expect("analyze");
 
-    let contribution = &snap.plugins[0];
+    let contribution = &snap.contributions[0];
     assert_eq!(contribution.coordinate, "demo:probe");
     assert_eq!(
         (contribution.roots, contribution.findings),
@@ -277,7 +287,7 @@ fn the_wasm_ingester_world_feeds_untested_like_the_builtin() {
         "records from the wasm guest assemble into the same Certain verdict: {:#?}",
         with.findings
     );
-    assert_eq!(with.plugins[0].coordinate, "demo:lcov-records");
+    assert_eq!(with.contributions[0].coordinate, "demo:lcov-records");
 }
 
 #[test]
@@ -315,7 +325,11 @@ fn a_two_cluster_extension_speaks_a_language_and_conducts() {
     // Cluster two, conduct: activated by the manifest dependency name, its root
     // keeps extra.kmini, and the CHAIN activates demo:probe although probe's own
     // FileExists rule was never needed for it.
-    let coordinates: Vec<&str> = snap.plugins.iter().map(|c| c.coordinate.as_str()).collect();
+    let coordinates: Vec<&str> = snap
+        .contributions
+        .iter()
+        .map(|c| c.coordinate.as_str())
+        .collect();
     assert_eq!(
         coordinates,
         ["acme:framework", "demo:probe"],

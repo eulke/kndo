@@ -77,7 +77,7 @@ fn flood(graph: &Graph, kind: RootKind) -> Vec<bool> {
         // Unit mates are edges like imports: reaching one file of a shared-scope
         // unit reaches what its names can see.
         let f = &graph.files[i];
-        for &t in f.imports.iter().chain(&f.unit_mates) {
+        for &t in f.imports.iter().chain(&f.sees) {
             let t = t as usize;
             if !reached[t] {
                 reached[t] = true;

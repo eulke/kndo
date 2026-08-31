@@ -10,7 +10,7 @@
 use kndo_contract::evidence::RootKind;
 use kndo_contract::extension::{
     Activation, ActivationRule, ConductSink, ContentAccess, Extension, ExtensionSpec, GraphAccess,
-    MutatesGraph, PluginSeverity, PluginTarget,
+    MutatesGraph, ConductSeverity, ConductTarget,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use std::sync::LazyLock;
@@ -43,14 +43,14 @@ impl Extension for ProbePlugin {
         // Anchor liveness the language cannot see, when the target exists.
         if graph.contains(&ProjectPath::new("wired.kmini")) {
             out.root(
-                PluginTarget::File(ProjectPath::new("wired.kmini")),
+                ConductTarget::File(ProjectPath::new("wired.kmini")),
                 RootKind::Production,
                 Confidence::Certain,
             );
         }
         // A root at a file no graph holds — the host must drop it, described.
         out.root(
-            PluginTarget::File(ProjectPath::new("nowhere.kmini")),
+            ConductTarget::File(ProjectPath::new("nowhere.kmini")),
             RootKind::Production,
             Confidence::Certain,
         );
@@ -73,16 +73,16 @@ impl Extension for ProbePlugin {
         };
         out.finding(
             "note",
-            PluginSeverity::Info,
-            PluginTarget::File(first),
+            ConductSeverity::Info,
+            ConductTarget::File(first),
             Confidence::Certain,
             seen,
         );
         // Under a rule the spec never declared — the host must drop it.
         out.finding(
             "ghost",
-            PluginSeverity::Info,
-            PluginTarget::File(ProjectPath::new("wired.kmini")),
+            ConductSeverity::Info,
+            ConductTarget::File(ProjectPath::new("wired.kmini")),
             Confidence::Possible,
             "never lands",
         );

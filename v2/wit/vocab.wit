@@ -182,7 +182,7 @@ interface types {
     record extension-spec {
         coordinate: string,
         version: u32,
-        extensions: list<string>,
+        suffixes: list<string>,
         claims: list<string>,
         emits: list<evidence-stream>,
         manifests: list<string>,
@@ -236,7 +236,7 @@ interface types {
 
     /// Mirrors `PluginSeverity` — a plugin's own vocabulary, mapped host-side into
     /// the advisory channel; a guest can never construct a gate-eligible finding.
-    enum plugin-severity {
+    enum conduct-severity {
         error,
         warning,
         info,
@@ -248,21 +248,21 @@ interface types {
         name: string,
     }
 
-    variant plugin-target {
+    variant conduct-target {
         file(string),
         symbol(symbol-ref),
     }
 
     record contributed-root {
-        target: plugin-target,
+        target: conduct-target,
         kind: root-kind,
         confidence: confidence,
     }
 
     record contributed-finding {
         rule: string,
-        severity: plugin-severity,
-        target: plugin-target,
+        severity: conduct-severity,
+        target: conduct-target,
         /// The extension's own claim about this finding — a fact parsed from a
         /// lockfile is certain, a heuristic possible; carried verbatim.
         confidence: confidence,

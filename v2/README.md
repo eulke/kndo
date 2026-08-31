@@ -190,7 +190,7 @@ Complete (CI verification pending only the credits reset, like M0–M2):
   silent (v1 parity; manifest-anchored entries are wiring), coverage per-function
   `Certain` unchanged; three js fixtures regenerated under the documented change.
 - **M4.c — the Go adapter, done**: `kndo-adapter-go` (id `go`, tree-sitter-go) —
-  the package as the unit (`LanguageAdapter::unit_mates` declares what a file
+  the package as the unit (what is now `Extension::sees` declares what a file
   sees without an import — the engine draws the edges and pools references;
   module-path-prefix resolution to `Resolution::Files`), capitalization as
   reach, library-mode roots with the `internal/` fence, generated-file and

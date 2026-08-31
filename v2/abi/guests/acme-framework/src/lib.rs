@@ -12,14 +12,14 @@ use kndo_contract::evidence::{
 };
 use kndo_contract::extension::{
     Activation, ActivationRule, ConductSink, ContentAccess, Extension, ExtensionSpec, GraphAccess,
-    MutatesGraph, PluginTarget,
+    MutatesGraph, ConductTarget,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use std::sync::LazyLock;
 
 static SPEC: LazyLock<ExtensionSpec> = LazyLock::new(|| {
     ExtensionSpec::builder("acme:framework", 1)
-        .extensions(&["acme"])
+        .suffixes(&["acme"])
         .emits(EvidenceStreams::none())
         .conduct(
             Activation::AnyRule(vec![ActivationRule::ManifestDependency(
@@ -70,7 +70,7 @@ impl Extension for AcmeFramework {
     ) {
         if graph.contains(&ProjectPath::new("extra.kmini")) {
             out.root(
-                PluginTarget::Symbol {
+                ConductTarget::Symbol {
                     path: ProjectPath::new("extra.kmini"),
                     name: "di_wired".into(),
                 },

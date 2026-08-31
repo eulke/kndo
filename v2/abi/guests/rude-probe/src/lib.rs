@@ -20,7 +20,7 @@ impl bindings::Guest for RudeProbe {
         wire::ExtensionSpec {
             coordinate: "demo:rude".to_string(),
             version: 1,
-            extensions: vec!["rude".to_string()],
+            suffixes: vec!["rude".to_string()],
             claims: vec!["**/*.rude".to_string()],
             emits: Vec::new(),
             manifests: Vec::new(),
@@ -78,7 +78,7 @@ impl bindings::Guest for RudeProbe {
         Vec::new()
     }
 
-    fn unit_mates(_path: String) -> Vec<String> {
+    fn sees(_path: String) -> Vec<String> {
         Vec::new()
     }
 

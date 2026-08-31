@@ -40,7 +40,7 @@ impl TypeScriptAdapter {
             &["**/package.json"],
         );
         let mut resolution_exts = Vec::new();
-        for ext in spec.extensions() {
+        for ext in spec.suffixes() {
             resolution_exts.push(format!(".{ext}"));
             if ext == "tsx" {
                 resolution_exts.push(format!(".{TYPE_DECLARATION_EXT}"));

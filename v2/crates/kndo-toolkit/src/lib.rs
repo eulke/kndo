@@ -235,9 +235,9 @@ pub mod jvm_manifest {
     pub fn jvm_spec(
         coordinate: &'static str,
         version: u32,
-        extensions: &[&'static str],
+        suffixes: &[&'static str],
     ) -> kndo_contract::extension::ExtensionSpec {
-        crate::source_adapter_spec(coordinate, version, extensions, MANIFEST_GLOBS)
+        crate::source_adapter_spec(coordinate, version, suffixes, MANIFEST_GLOBS)
     }
 
     /// The one build system's manifest names — the shared half of every JVM
@@ -450,12 +450,12 @@ pub fn function_metrics(
 pub fn source_adapter_spec(
     coordinate: &'static str,
     version: u32,
-    extensions: &[&'static str],
+    suffixes: &[&'static str],
     manifests: &[&'static str],
 ) -> kndo_contract::extension::ExtensionSpec {
     use kndo_contract::evidence::{EvidenceStream, EvidenceStreams};
     kndo_contract::extension::ExtensionSpec::builder(coordinate, version)
-        .extensions(extensions)
+        .suffixes(suffixes)
         .emits(EvidenceStreams::of(&[
             EvidenceStream::Comments,
             EvidenceStream::Metrics,

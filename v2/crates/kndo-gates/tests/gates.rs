@@ -342,7 +342,7 @@ fn incremental_and_full_assembly_are_byte_identical() {
 }
 
 #[test]
-fn builtin_plugin_proofs() {
+fn builtin_conduct_proofs() {
     // Every built-in conducting extension ships with the baseline-then-plugin
     // proof the authoring docs demand of anyone else: the run WITHOUT it
     // establishes what fires, the run WITH it changes exactly what it claims to
@@ -399,7 +399,7 @@ fn builtin_plugin_proofs() {
             .count()
     };
     assert_eq!(
-        without.plugins.len(),
+        without.contributions.len(),
         0,
         "the baseline run carries no plugin"
     );
@@ -419,7 +419,7 @@ fn builtin_plugin_proofs() {
         "the plugin's whole effect is that one finding — nothing else moved"
     );
 
-    let contribution = &with.plugins[0];
+    let contribution = &with.contributions[0];
     assert_eq!(contribution.coordinate, "kndo:coverage-lcov");
     assert_eq!(
         (contribution.roots, contribution.findings),
@@ -442,8 +442,8 @@ fn extension_dependency_implication() {
     use kndo_contract::evidence::RootKind;
     use kndo_contract::vocab::{Confidence, ProjectPath};
     use kndo_core::{
-        Activation, ActivationRule, Extension, ExtensionSpec, MutatesGraph, PluginSeverity,
-        PluginTarget,
+        Activation, ActivationRule, ConductSeverity, ConductTarget, Extension, ExtensionSpec,
+        MutatesGraph,
     };
     use kndo_testkit::MockExtension;
 
@@ -458,8 +458,8 @@ fn extension_dependency_implication() {
             };
             out.finding(
                 "probe",
-                PluginSeverity::Info,
-                PluginTarget::File(path),
+                ConductSeverity::Info,
+                ConductTarget::File(path),
                 Confidence::Probable,
                 message,
             );
@@ -500,7 +500,7 @@ fn extension_dependency_implication() {
             )
             .on_contribute(|_, _, out| {
                 out.root(
-                    PluginTarget::File(ProjectPath::new("orphan.kmock")),
+                    ConductTarget::File(ProjectPath::new("orphan.kmock")),
                     RootKind::Production,
                     Confidence::Certain,
                 );
@@ -657,7 +657,7 @@ fn abi_compat_matrix() {
     let plugin = kndo_host_wasm::WasmExtension::load(&compat.join("probe_plugin.wasm"))
         .expect("the pinned plugin component loads against the HEAD host");
     let snap = session(&p, vec![Box::new(plugin)]);
-    let contribution = &snap.plugins[0];
+    let contribution = &snap.contributions[0];
     assert_eq!(
         (
             contribution.coordinate.as_str(),
@@ -713,7 +713,11 @@ fn abi_compat_matrix() {
     let probe = kndo_host_wasm::WasmExtension::load(&compat.join("probe_plugin.wasm"))
         .expect("the pinned plugin component loads against the HEAD host");
     let snap = session(&p, vec![Box::new(acme), Box::new(probe)]);
-    let coordinates: Vec<&str> = snap.plugins.iter().map(|c| c.coordinate.as_str()).collect();
+    let coordinates: Vec<&str> = snap
+        .contributions
+        .iter()
+        .map(|c| c.coordinate.as_str())
+        .collect();
     assert_eq!(
         coordinates,
         ["acme:framework", "demo:probe"],

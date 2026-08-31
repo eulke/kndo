@@ -84,7 +84,7 @@ pub struct ExtensionSpec {
     coordinate: SmolStr,
     version: u32,
     // -- extraction --
-    extensions: Vec<SmolStr>,
+    suffixes: Vec<SmolStr>,
     claims: Vec<SmolStr>,
     emits: EvidenceStreams,
     manifests: Vec<SmolStr>,
@@ -114,7 +114,7 @@ impl ExtensionSpec {
             spec: ExtensionSpec {
                 coordinate: SmolStr::new_static(coordinate),
                 version,
-                extensions: Vec::new(),
+                suffixes: Vec::new(),
                 claims: Vec::new(),
                 emits: EvidenceStreams::none(),
                 manifests: Vec::new(),
@@ -140,11 +140,12 @@ impl ExtensionSpec {
         self.version
     }
 
-    /// Extensions this extension speaks (no leading dot), in resolution-candidate
-    /// priority order. Analyses and resolution read this one list; claims derive
-    /// from it at build time.
-    pub fn extensions(&self) -> &[SmolStr] {
-        &self.extensions
+    /// File suffixes this extension speaks (no leading dot), in
+    /// resolution-candidate priority order. Analyses and resolution read this
+    /// one list; claims derive from it at build time. Named for what it holds —
+    /// "extension" already means the species.
+    pub fn suffixes(&self) -> &[SmolStr] {
+        &self.suffixes
     }
 
     pub fn claims(&self) -> &[SmolStr] {
@@ -203,7 +204,7 @@ impl ExtensionSpec {
 pub struct ExtensionSpecParts {
     pub coordinate: SmolStr,
     pub version: u32,
-    pub extensions: Vec<SmolStr>,
+    pub suffixes: Vec<SmolStr>,
     pub claims: Vec<SmolStr>,
     pub emits: EvidenceStreams,
     pub manifests: Vec<SmolStr>,
@@ -235,7 +236,7 @@ impl From<ExtensionSpecParts> for ExtensionSpec {
         ExtensionSpec {
             coordinate: parts.coordinate,
             version: parts.version,
-            extensions: parts.extensions,
+            suffixes: parts.suffixes,
             claims: parts.claims,
             emits: parts.emits,
             manifests: parts.manifests,
@@ -250,16 +251,16 @@ impl From<ExtensionSpecParts> for ExtensionSpec {
     }
 }
 
-/// Declaring extensions IS claiming them: each declared extension derives its
+/// Declaring suffixes IS claiming them: each declared suffix derives its
 /// `**/*.<ext>` claim glob, in declaration order. The one spelling of the rule,
 /// called by every spec builder that speaks extensions.
-pub(crate) fn declare_extensions(
-    extensions: &mut Vec<SmolStr>,
+pub(crate) fn declare_suffixes(
+    suffixes: &mut Vec<SmolStr>,
     claims: &mut Vec<SmolStr>,
     declared: &[&'static str],
 ) {
     for ext in declared {
-        extensions.push(SmolStr::new_static(ext));
+        suffixes.push(SmolStr::new_static(ext));
         claims.push(SmolStr::from(format!("**/*.{ext}")));
     }
 }
@@ -270,11 +271,11 @@ pub struct ExtensionSpecBuilder {
 }
 
 impl ExtensionSpecBuilder {
-    /// Declare the extensions this extension speaks (no leading dot), in
-    /// resolution-candidate priority order — see [`declare_extensions`]; `claims`
+    /// Declare the file suffixes this extension speaks (no leading dot), in
+    /// resolution-candidate priority order — see [`declare_suffixes`]; `claims`
     /// stays for patterns that are not extension-shaped.
-    pub fn extensions(mut self, extensions: &[&'static str]) -> Self {
-        declare_extensions(&mut self.spec.extensions, &mut self.spec.claims, extensions);
+    pub fn suffixes(mut self, suffixes: &[&'static str]) -> Self {
+        declare_suffixes(&mut self.spec.suffixes, &mut self.spec.claims, suffixes);
         self
     }
 
@@ -371,20 +372,20 @@ impl ConductBuilder {
 /// engine maps it into the advisory channel, so an extension can never construct
 /// a gate-eligible finding directly.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PluginSeverity {
+pub enum ConductSeverity {
     Error,
     Warning,
     Info,
 }
 
-impl PluginSeverity {
+impl ConductSeverity {
     /// The advisory mapping the engine applies; findings so mapped ride the
     /// namespaced categories the gate never counts.
     pub fn advisory(self) -> Severity {
         match self {
-            PluginSeverity::Error => Severity::Error,
-            PluginSeverity::Warning => Severity::Warning,
-            PluginSeverity::Info => Severity::Info,
+            ConductSeverity::Error => Severity::Error,
+            ConductSeverity::Warning => Severity::Warning,
+            ConductSeverity::Info => Severity::Info,
         }
     }
 }
@@ -394,7 +395,7 @@ impl PluginSeverity {
 /// author debugging "contributed 0 roots" needs the why; the run never crashes
 /// on it.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PluginTarget {
+pub enum ConductTarget {
     File(ProjectPath),
     Symbol { path: ProjectPath, name: SmolStr },
 }
@@ -415,7 +416,7 @@ pub trait GraphAccess {
 /// twin, so consumers name fields instead of destructuring positions.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ContributedRoot {
-    pub target: PluginTarget,
+    pub target: ConductTarget,
     pub kind: RootKind,
     pub confidence: Confidence,
 }
@@ -426,8 +427,8 @@ pub struct ContributedRoot {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ContributedFinding {
     pub rule: SmolStr,
-    pub severity: PluginSeverity,
-    pub target: PluginTarget,
+    pub severity: ConductSeverity,
+    pub target: ConductTarget,
     pub confidence: Confidence,
     pub message: String,
 }
@@ -445,7 +446,7 @@ impl ConductSink {
     /// `mutates_graph` — the declaration is self-enforcing, because the hook
     /// that fills this is only invoked on those; anything smuggled through the
     /// shared sink drops with a described line.
-    pub fn root(&mut self, target: PluginTarget, kind: RootKind, confidence: Confidence) {
+    pub fn root(&mut self, target: ConductTarget, kind: RootKind, confidence: Confidence) {
         self.roots.push(ContributedRoot {
             target,
             kind,
@@ -458,8 +459,8 @@ impl ConductSink {
     pub fn finding(
         &mut self,
         rule: &str,
-        severity: PluginSeverity,
-        target: PluginTarget,
+        severity: ConductSeverity,
+        target: ConductTarget,
         confidence: Confidence,
         message: impl Into<String>,
     ) {
@@ -635,10 +636,16 @@ pub trait Extension: Send + Sync {
         Vec::new()
     }
 
-    /// The files whose names `path` can see WITHOUT an import. Depends only on
-    /// `path` and the file SET, never on content — which is what lets a persisted
-    /// graph trust it while only contents change.
-    fn unit_mates(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
+    /// The files whose names `path` SEES with no import naming them — the rest
+    /// of its shared name scope, in the languages where that scope is bigger
+    /// than the file (every non-test sibling of a Go file's package; a test
+    /// file sees the whole package). Directional, deliberately: a test sees
+    /// `src/main`, never the reverse. The engine draws one reachability edge
+    /// per seen file and pools references over this sight. Depends only on
+    /// `path` and the file SET, never on content — which is what lets a
+    /// persisted graph trust it while only contents change. The default — sees
+    /// nothing beyond itself — reproduces pre-capability behavior.
+    fn sees(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
         let _ = (path, cx);
         Vec::new()
     }
@@ -685,7 +692,7 @@ mod tests {
     #[test]
     fn the_two_stage_builder_produces_the_declared_spec() {
         let extraction_only = ExtensionSpec::builder("kndo:kmini", 3)
-            .extensions(&["kmini"])
+            .suffixes(&["kmini"])
             .claims(&["**/legacy.km"])
             .manifests(&["kmini.toml"])
             .build();
@@ -748,7 +755,7 @@ mod tests {
         let cx = ResolveContext::new(&cx_files);
         let from = ProjectPath::new("a.js");
         assert_eq!(bare.resolve(&from, "./b", &cx), Resolution::Unresolved);
-        assert!(bare.unit_mates(&from, &cx).is_empty());
+        assert!(bare.sees(&from, &cx).is_empty());
         assert_eq!(bare.ingest("coverage/lcov.info", b"TN:"), None);
 
         let contents = BTreeMap::new();

@@ -2,7 +2,7 @@
 //! adapter is built on: a package is declared (`package com.foo;`) AND the
 //! compiler-checked file/directory convention makes it directory-shaped — so
 //! imports resolve by PATH SUFFIX (`com.foo.Bar` → `**/com/foo/Bar.java`) and
-//! [`Extension::unit_mates`] is the directory, plus the Maven/Gradle standard
+//! [`Extension::sees`] is the directory, plus the Maven/Gradle standard
 //! layout's test↔main mirror (a test class shares its package with the main
 //! classes it exercises, from a parallel source root). Java is nominal, so —
 //! unlike Go's structural interfaces — members are declared and judged; the
@@ -59,7 +59,7 @@ impl Extension for JavaAdapter {
         kndo_toolkit::jvm_manifest::dependencies(manifest)
     }
 
-    fn unit_mates(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
-        resolve::unit_mates(path, cx)
+    fn sees(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
+        resolve::sees(path, cx)
     }
 }

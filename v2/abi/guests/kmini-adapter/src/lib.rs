@@ -37,7 +37,7 @@ impl Default for KminiAdapter {
     fn default() -> Self {
         KminiAdapter {
             spec: ExtensionSpec::builder("kmini", 1)
-                .extensions(&["kmini"])
+                .suffixes(&["kmini"])
                 .emits(EvidenceStreams::of(&[EvidenceStream::Comments]))
                 .manifests(&["**/kmini.pkg"])
                 .build(),
@@ -182,7 +182,7 @@ impl Extension for KminiAdapter {
             .collect()
     }
 
-    fn unit_mates(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
+    fn sees(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
         mate_of(path)
             .filter(|m| cx.contains(m))
             .into_iter()

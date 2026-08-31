@@ -119,14 +119,14 @@ fn the_unit_is_the_directory_plus_the_test_mirror() {
     let cx = ResolveContext::new(&known);
     let a = JavaAdapter::new();
 
-    let main_mates = a.unit_mates(&path("src/main/java/com/foo/Widget.java"), &cx);
+    let main_mates = a.sees(&path("src/main/java/com/foo/Widget.java"), &cx);
     assert_eq!(
         main_mates,
         vec![path("src/main/java/com/foo/Helper.java")],
         "production sees its siblings, never the test tree"
     );
 
-    let test_mates = a.unit_mates(&path("src/test/java/com/foo/WidgetTest.java"), &cx);
+    let test_mates = a.sees(&path("src/test/java/com/foo/WidgetTest.java"), &cx);
     assert_eq!(
         test_mates,
         vec![

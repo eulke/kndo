@@ -157,7 +157,7 @@ impl Category {
         (!coordinate.is_empty() && !rule.is_empty()).then(|| Category(SmolStr::from(s)))
     }
 
-    pub fn is_plugin(&self) -> bool {
+    pub fn is_extension(&self) -> bool {
         self.0.starts_with("ext:")
     }
 

@@ -88,7 +88,7 @@ fn the_unit_is_the_directory_plus_both_main_mirrors() {
     let cx = ResolveContext::new(&known);
     let a = KotlinAdapter::new();
 
-    let main_mates = a.unit_mates(&path("src/main/kotlin/com/foo/Widget.kt"), &cx);
+    let main_mates = a.sees(&path("src/main/kotlin/com/foo/Widget.kt"), &cx);
     assert_eq!(
         main_mates,
         vec![
@@ -98,7 +98,7 @@ fn the_unit_is_the_directory_plus_both_main_mirrors() {
         "joint compilation: production sees its package across BOTH main spellings"
     );
 
-    let test_mates = a.unit_mates(&path("src/test/kotlin/com/foo/WidgetTest.kt"), &cx);
+    let test_mates = a.sees(&path("src/test/kotlin/com/foo/WidgetTest.kt"), &cx);
     assert_eq!(
         test_mates,
         vec![

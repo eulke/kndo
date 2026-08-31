@@ -73,7 +73,7 @@ ripgrep 59, gin 1) plus private-type-leak 43 — the largest unbuilt category, b
 than everything v2 reports today combined. Supply: three languages shipped on binary
 `Reach` alone, and NONE of M4's false-positive fixes wanted a rung between private and
 exported — every one wanted scope SHAPE: Go's package scope landed as what is now
-`unit_mates` (a capability, not a rung; it retired the interim `ReferenceScope`), and
+`sees` (née `sees` — a capability, not a rung; it retired the interim `ReferenceScope`), and
 Rust's module-tree privacy landed as bindings-keep-whatever-the-reach. That is the hypothesis confirmed early and
 partially absorbed: the linear part of the ladder is what remains, its consumer is the
 internal-only analysis, and it does not exist yet — so the ladder waits for it
@@ -99,7 +99,7 @@ Shape: `Reach` grows `Scoped { scope: SmolStr }` — the token is the adapter's 
 word ("package", "module", "crate", "in:a::b"), core never parses it (the
 `SymbolKind::Other` posture). The adapter grows one capability:
 `scope_of(path, scope, cx) -> Option<files>` — path- and manifest-computable, never
-content-dependent (the `unit_mates` stability class, so the persisted graph can trust
+content-dependent (the `sees` stability class, so the persisted graph can trust
 it), `None` = unboundable, treated exactly as Exported (keep-alive). Engine judgment
 becomes evidence-shaped, ignorant of every language word: Private pools over
 file+unit; Scoped pools over its region, is NOT part of the `entry_surface` handed-out

@@ -5,8 +5,8 @@
 //! same suppression pass as first-party ones.
 
 use kndo::{
-    Activation, Category, Confidence, Config, Extension, ExtensionSpec, MutatesGraph,
-    PluginSeverity, PluginTarget, ProjectPath, RootKind, RunMode, Session, Snapshot, Subject,
+    Activation, Category, ConductSeverity, ConductTarget, Confidence, Config, Extension,
+    ExtensionSpec, MutatesGraph, ProjectPath, RootKind, RunMode, Session, Snapshot, Subject,
     Threads,
 };
 use kndo_testkit::{MockAdapter, MockExtension, TempProject};
@@ -38,12 +38,12 @@ fn analyze(p: &TempProject, conduct: Vec<Box<dyn Extension>>) -> Snapshot {
     .expect("analyze")
 }
 
-fn file(path: &str) -> PluginTarget {
-    PluginTarget::File(ProjectPath::new(path))
+fn file(path: &str) -> ConductTarget {
+    ConductTarget::File(ProjectPath::new(path))
 }
 
-fn symbol(path: &str, name: &str) -> PluginTarget {
-    PluginTarget::Symbol {
+fn symbol(path: &str, name: &str) -> ConductTarget {
+    ConductTarget::Symbol {
         path: ProjectPath::new(path),
         name: name.into(),
     }
@@ -78,21 +78,21 @@ fn misdirected_contributions_drop_with_described_lines() {
     .on_report(|_, _, out| {
         out.finding(
             "ghost",
-            PluginSeverity::Info,
+            ConductSeverity::Info,
             file("main.kmock"),
             Confidence::Probable,
             "scripted",
         );
         out.finding(
             "hello",
-            PluginSeverity::Info,
+            ConductSeverity::Info,
             file("missing.kmock"),
             Confidence::Probable,
             "scripted",
         );
         out.finding(
             "hello",
-            PluginSeverity::Info,
+            ConductSeverity::Info,
             symbol("lib.kmock", "helper"),
             Confidence::Probable,
             "scripted",
@@ -100,7 +100,7 @@ fn misdirected_contributions_drop_with_described_lines() {
     });
 
     let snap = analyze(&fixture(), vec![Box::new(m)]);
-    let contribution = &snap.plugins[0];
+    let contribution = &snap.contributions[0];
     assert_eq!(
         (contribution.roots, contribution.findings),
         (1, 1),
@@ -156,10 +156,10 @@ fn a_non_mutating_plugin_cannot_smuggle_roots_through_the_sink() {
 
     let snap = analyze(&fixture(), vec![Box::new(n)]);
     assert_eq!(
-        snap.plugins[0].dropped,
+        snap.contributions[0].dropped,
         ["root refused: file orphan.kmock — the plugin declares mutates_graph() == false"]
     );
-    assert_eq!(snap.plugins[0].roots, 0);
+    assert_eq!(snap.contributions[0].roots, 0);
     assert!(
         snap.findings
             .iter()
@@ -190,7 +190,7 @@ fn the_content_budget_cut_is_reported_on_the_contribution() {
 
     let snap = analyze(&p, vec![Box::new(n)]);
     assert!(
-        snap.plugins[0].content_budget_cut,
+        snap.contributions[0].content_budget_cut,
         "reading past the budget is visible on the contribution, never silent"
     );
 }
@@ -211,7 +211,7 @@ fn plugin_findings_ride_the_same_suppression_pass() {
     .on_report(|_, _, out| {
         out.finding(
             "hello",
-            PluginSeverity::Info,
+            ConductSeverity::Info,
             symbol("lib.kmock", "helper"),
             Confidence::Probable,
             "scripted",

@@ -36,10 +36,10 @@
       }
     },
     "plugins": {
-      "description": "One entry per ACTIVE plugin, in registration order — what it asserted, what\nmissed, whether its content budget cut. Always present, so a plugin that\ncontributed nothing is visibly distinct from a plugin that never ran.",
+      "description": "One entry per ACTIVE plugin, in registration order — what it asserted, what\nmissed, whether its content budget cut. Always present, so a plugin that\ncontributed nothing is visibly distinct from a plugin that never ran.\nJSON key `plugins` is envelope contract (schema `kndo-v2/m6`) — the key\npredates the conduct renaming and stays; the TYPE carries the new name.",
       "type": "array",
       "items": {
-        "$ref": "#/$defs/PluginContribution"
+        "$ref": "#/$defs/Contribution"
       }
     },
     "run": {
@@ -161,6 +161,42 @@
         "certain"
       ]
     },
+    "Contribution": {
+      "description": "What one plugin asserted this run — the observable half of the containment\nmodel: a plugin can only lie about graph facts, and here is exactly what facts\nit asserted, what missed, and whether its content budget cut.",
+      "type": "object",
+      "properties": {
+        "content_budget_cut": {
+          "type": "boolean"
+        },
+        "coordinate": {
+          "type": "string"
+        },
+        "dropped": {
+          "description": "Contributions whose targets resolved to nothing, one described line each.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "findings": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "roots": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "coordinate",
+        "roots",
+        "findings",
+        "dropped",
+        "content_budget_cut"
+      ]
+    },
     "DiagnosticLevel": {
       "description": "Closed by design: three levels are the reporting contract.",
       "type": "string",
@@ -229,42 +265,6 @@
     "FindingId": {
       "description": "A finding's stable identity. Baselines and suppressions depend on it, so it is a\ntype, derived from typed parts — never five adjacent strings.",
       "type": "string"
-    },
-    "PluginContribution": {
-      "description": "What one plugin asserted this run — the observable half of the containment\nmodel: a plugin can only lie about graph facts, and here is exactly what facts\nit asserted, what missed, and whether its content budget cut.",
-      "type": "object",
-      "properties": {
-        "content_budget_cut": {
-          "type": "boolean"
-        },
-        "coordinate": {
-          "type": "string"
-        },
-        "dropped": {
-          "description": "Contributions whose targets resolved to nothing, one described line each.",
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "findings": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "roots": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        }
-      },
-      "required": [
-        "coordinate",
-        "roots",
-        "findings",
-        "dropped",
-        "content_budget_cut"
-      ]
     },
     "ProjectPath": {
       "description": "A `/`-separated, project-relative path. The one path spelling that crosses crate\nboundaries; OS paths stay at the discovery edge.",

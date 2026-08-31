@@ -19,8 +19,8 @@ use kndo_contract::evidence::{
     self as ev, CoverageRecords, EvidenceSink, EvidenceStream, FileEvidence,
 };
 use kndo_contract::extension::{
-    Activation, ActivationRule, ConductSink, ContentAccess, Extension, ExtensionSpec, GraphAccess,
-    PluginSeverity, PluginTarget,
+    Activation, ActivationRule, ConductSeverity, ConductSink, ConductTarget, ContentAccess,
+    Extension, ExtensionSpec, GraphAccess,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use smol_str::SmolStr;
@@ -46,7 +46,7 @@ pub fn spec_to_wire(spec: &ExtensionSpec) -> wire::ExtensionSpec {
     wire::ExtensionSpec {
         coordinate: spec.coordinate().to_string(),
         version: spec.version(),
-        extensions: spec.extensions().iter().map(|s| s.to_string()).collect(),
+        suffixes: spec.suffixes().iter().map(|s| s.to_string()).collect(),
         claims: spec.claims().iter().map(|s| s.to_string()).collect(),
         // The declared set itself is the wire spelling — no second list to
         // forget when the contract grows a stream; a variant this SDK build
@@ -305,21 +305,21 @@ fn package_entry_from_wire(entry: wire::PackageEntry) -> PackageEntry {
     }
 }
 
-fn plugin_target_to_wire(target: &PluginTarget) -> wire::PluginTarget {
+fn conduct_target_to_wire(target: &ConductTarget) -> wire::ConductTarget {
     match target {
-        PluginTarget::File(p) => wire::PluginTarget::File(p.as_str().to_string()),
-        PluginTarget::Symbol { path, name } => wire::PluginTarget::Symbol(wire::SymbolRef {
+        ConductTarget::File(p) => wire::ConductTarget::File(p.as_str().to_string()),
+        ConductTarget::Symbol { path, name } => wire::ConductTarget::Symbol(wire::SymbolRef {
             path: path.as_str().to_string(),
             name: name.to_string(),
         }),
     }
 }
 
-fn severity_to_wire(severity: PluginSeverity) -> wire::PluginSeverity {
+fn severity_to_wire(severity: ConductSeverity) -> wire::ConductSeverity {
     match severity {
-        PluginSeverity::Error => wire::PluginSeverity::Error,
-        PluginSeverity::Warning => wire::PluginSeverity::Warning,
-        PluginSeverity::Info => wire::PluginSeverity::Info,
+        ConductSeverity::Error => wire::ConductSeverity::Error,
+        ConductSeverity::Warning => wire::ConductSeverity::Warning,
+        ConductSeverity::Info => wire::ConductSeverity::Info,
     }
 }
 
@@ -375,7 +375,7 @@ fn project_snapshot() -> &'static ProjectSnapshot {
 /// gated off during `extract` (evidence is cached by file content alone, so an
 /// extraction that read the file SET would go stale invisibly) — the host traps
 /// the call as a phase violation. Use it from `resolve`, `roots`, `packages`
-/// and `unit_mates`, where the project enumerations are the contract.
+/// and `sees`, where the project enumerations are the contract.
 /// The real `ResolveContext`, rebuilt from the host's enumerations.
 pub fn resolve_context() -> ResolveContext<'static> {
     let snap = project_snapshot();
@@ -514,10 +514,10 @@ impl<E: Extension + Default> bindings::Guest for ExportedExtension<E> {
             .collect()
     }
 
-    fn unit_mates(path: String) -> Vec<String> {
+    fn sees(path: String) -> Vec<String> {
         let path = ProjectPath::new(path);
         E::default()
-            .unit_mates(&path, &resolve_context())
+            .sees(&path, &resolve_context())
             .iter()
             .map(|p| p.as_str().to_string())
             .collect()
@@ -533,7 +533,7 @@ impl<E: Extension + Default> bindings::Guest for ExportedExtension<E> {
         roots
             .into_iter()
             .map(|r| wire::ContributedRoot {
-                target: plugin_target_to_wire(&r.target),
+                target: conduct_target_to_wire(&r.target),
                 kind: root_kind_to_wire(r.kind),
                 confidence: confidence_to_wire(r.confidence),
             })
@@ -552,7 +552,7 @@ impl<E: Extension + Default> bindings::Guest for ExportedExtension<E> {
             .map(|f| wire::ContributedFinding {
                 rule: f.rule.to_string(),
                 severity: severity_to_wire(f.severity),
-                target: plugin_target_to_wire(&f.target),
+                target: conduct_target_to_wire(&f.target),
                 confidence: confidence_to_wire(f.confidence),
                 message: f.message,
             })

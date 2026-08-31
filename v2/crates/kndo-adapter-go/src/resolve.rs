@@ -1,7 +1,7 @@
 //! Import resolution, package-shaped: an import path maps to a DIRECTORY through
 //! the longest module-path prefix a `go.mod` declares, and the resolution is every
 //! non-test `.go` file in it — [`Resolution::Files`], the engine drawing one edge
-//! per file. The same directory fact answers [`unit_mates`]: what a file sees with
+//! per file. The same directory fact answers [`sees`]: what a file sees with
 //! no import at all. Anything outside the project's modules is `Unresolved` —
 //! keep-alive, never an accusation.
 
@@ -14,7 +14,7 @@ use kndo_contract::vocab::ProjectPath;
 /// and external `_test`-package files over-keep in the same safe direction). The
 /// asymmetry is the point: tests consume the package, the package never consumes
 /// its tests, so the production color cannot leak through a test file.
-pub fn unit_mates(path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
+pub fn sees(path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
     let dir = parent_dir(path.as_str());
     let prefix = if dir.is_empty() {
         String::new()

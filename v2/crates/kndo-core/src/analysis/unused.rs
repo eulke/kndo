@@ -41,7 +41,7 @@ impl Analysis for Unused {
         // Shared-scope units (a Go package): a file's declarations are visible to
         // its unit mates with no import naming them, so the references that can
         // keep a declaration include every reachable file that SEES its file —
-        // exported and private alike. `seen_by` is the reverse of `unit_mates`.
+        // exported and private alike. `seen_by` is the reverse of `sees`.
         let mut seen_by: Vec<Vec<u32>> = vec![Vec::new(); n];
         for (i, f) in g.files.iter().enumerate() {
             if !reachable(i) {
@@ -50,7 +50,7 @@ impl Analysis for Unused {
             for r in &f.evidence.references {
                 member_referenced.insert(r.name.as_str());
             }
-            for &m in &f.unit_mates {
+            for &m in &f.sees {
                 seen_by[m as usize].push(i as u32);
             }
             for (import, targets) in f.evidence.imports.iter().zip(&f.import_targets) {

@@ -48,7 +48,7 @@ impl MockExtension {
     pub fn new() -> Self {
         MockExtension {
             spec: ExtensionSpec::builder("kmock", 1)
-                .extensions(&["kmock"])
+                .suffixes(&["kmock"])
                 .emits(EvidenceStreams::of(&[EvidenceStream::Comments]))
                 .build(),
             speaks_kmock: true,
@@ -217,7 +217,7 @@ impl Extension for MockExtension {
             Some((dir, _)) => format!("{dir}/"),
             None => String::new(),
         };
-        let ext = &self.spec.extensions()[0];
+        let ext = &self.spec.suffixes()[0];
         let candidate = ProjectPath::new(format!("{dir}{name}.{ext}"));
         if cx.contains(&candidate) {
             Resolution::File(candidate)

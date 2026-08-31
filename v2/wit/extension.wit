@@ -5,7 +5,7 @@
 // and calling one outside its phase traps with a named contract violation —
 // `extract` imports NOTHING (evidence is cached by file content alone, so the
 // file SET may not influence it); `resolve`, `roots`, `packages` and
-// `unit-mates` may use only the project enumerations; `manifest-dependencies`
+// `sees` may use only the project enumerations; `manifest-dependencies`
 // gets bytes and imports nothing; conduct-phase exports (contribute-roots,
 // report-findings) only the graph and content imports; ingest imports nothing.
 //
@@ -72,7 +72,7 @@ world extension {
 
     /// The files whose names `path` can see without an import — must depend only
     /// on the path and the file set (the same purity the native contract demands).
-    export unit-mates: func(path: string) -> list<string>;
+    export sees: func(path: string) -> list<string>;
 
     /// Liveness the language cannot know. Invoked only when the spec declares
     /// `mutates-graph` (and any active mutating extension bypasses the persisted

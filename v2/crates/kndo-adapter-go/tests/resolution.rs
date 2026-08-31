@@ -18,7 +18,7 @@ fn files(paths: &[&str]) -> Resolution {
 }
 
 #[test]
-fn unit_mates_are_the_package_with_test_asymmetry() {
+fn sight_is_the_package_with_test_asymmetry() {
     let known = project(&[
         "pkg/a.go",
         "pkg/b.go",
@@ -31,7 +31,7 @@ fn unit_mates_are_the_package_with_test_asymmetry() {
     let adapter = GoAdapter::new();
     let mates = |p: &str| -> Vec<String> {
         adapter
-            .unit_mates(&ProjectPath::new(p), &cx)
+            .sees(&ProjectPath::new(p), &cx)
             .iter()
             .map(|m| m.as_str().to_string())
             .collect()

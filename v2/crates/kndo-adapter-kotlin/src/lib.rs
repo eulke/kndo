@@ -64,7 +64,7 @@ impl Extension for KotlinAdapter {
         kndo_toolkit::jvm_manifest::dependencies(manifest)
     }
 
-    fn unit_mates(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
-        resolve::unit_mates(path, cx)
+    fn sees(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
+        resolve::sees(path, cx)
     }
 }

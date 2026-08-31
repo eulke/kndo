@@ -14,7 +14,7 @@ use kndo_contract::evidence::{
     RootKind,
 };
 use kndo_contract::extension::{
-    Activation, ActivationRule, ExtensionSpec, ExtensionSpecParts, PluginSeverity, PluginTarget,
+    Activation, ActivationRule, ConductSeverity, ConductTarget, ExtensionSpec, ExtensionSpecParts,
     RuleDescriptor,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
@@ -48,7 +48,7 @@ pub(crate) fn extension_spec(spec: awire::ExtensionSpec) -> ExtensionSpec {
     ExtensionSpecParts {
         coordinate: SmolStr::new(spec.coordinate),
         version: spec.version,
-        extensions: spec.extensions.into_iter().map(SmolStr::new).collect(),
+        suffixes: spec.suffixes.into_iter().map(SmolStr::new).collect(),
         claims: spec.claims.into_iter().map(SmolStr::new).collect(),
         emits: EvidenceStreams::of(
             &spec
@@ -106,21 +106,21 @@ pub(crate) fn project_root(root: awire::ProjectRoot) -> ProjectRoot {
     }
 }
 
-pub(crate) fn plugin_target(target: awire::PluginTarget) -> PluginTarget {
+pub(crate) fn conduct_target(target: awire::ConductTarget) -> ConductTarget {
     match target {
-        awire::PluginTarget::File(path) => PluginTarget::File(ProjectPath::new(path)),
-        awire::PluginTarget::Symbol(s) => PluginTarget::Symbol {
+        awire::ConductTarget::File(path) => ConductTarget::File(ProjectPath::new(path)),
+        awire::ConductTarget::Symbol(s) => ConductTarget::Symbol {
             path: ProjectPath::new(s.path),
             name: SmolStr::new(s.name),
         },
     }
 }
 
-pub(crate) fn plugin_severity(s: awire::PluginSeverity) -> PluginSeverity {
+pub(crate) fn conduct_severity(s: awire::ConductSeverity) -> ConductSeverity {
     match s {
-        awire::PluginSeverity::Error => PluginSeverity::Error,
-        awire::PluginSeverity::Warning => PluginSeverity::Warning,
-        awire::PluginSeverity::Info => PluginSeverity::Info,
+        awire::ConductSeverity::Error => ConductSeverity::Error,
+        awire::ConductSeverity::Warning => ConductSeverity::Warning,
+        awire::ConductSeverity::Info => ConductSeverity::Info,
     }
 }
 

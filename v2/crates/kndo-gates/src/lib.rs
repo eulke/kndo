@@ -59,8 +59,8 @@ pub const GATES: &[Gate] = &[
         invariant: "a frontend's production dependencies contain exactly one kndo crate: kndo",
     },
     Gate {
-        name: "builtin_plugin_proofs",
-        invariant: "every built-in conducting extension proves its effect baseline-then-plugin, closed over the conduct subset of default_extensions",
+        name: "builtin_conduct_proofs",
+        invariant: "every built-in conducting extension proves its effect baseline-then-conduct, closed over the conduct subset of default_extensions",
     },
     Gate {
         name: "extension_dependency_implication",
