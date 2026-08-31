@@ -12,7 +12,9 @@ path = "src/main.rs"
 
 [dependencies]
 # The build shell: the shipped frontends carry the WASM component loader.
-kndo = { path = "../kndo", features = ["wasm"] }
+# `schema` because the tool listing advertises the query contract's own
+# generated Options shape — one source, never a hand-written copy.
+kndo = { path = "../kndo", features = ["wasm", "schema"] }
 serde_json = "1"
 
 [dev-dependencies]

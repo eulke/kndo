@@ -407,8 +407,11 @@ and `path: null` exits 1, so `kndo trace x && rm x` cannot delete something
 reachable); `impact --if-deleted` simulates the removal as typed reachability flips
 (newly-unreachable, newly-test-only, orphaned symbols), never fabricated findings;
 `explain` closes finding-id → subject → why, where for `unused` the empty keeper
-preview IS the why. The serve tools (one MCP tool per verb, same `Request` types)
-are the remainder.
+preview IS the why. `kndo-serve` grew from skeleton to proof: one MCP tool per verb
+plus `check`, every tool answering in the agent grammar, advertising the query
+contract's own generated `Options` schema, and answering from a HELD session — one
+analysis amortized across a conversation of lookups, refreshed by `check` (the
+tool descriptions say so; a test proves it behaviorally). One contract, two doors.
 
 Sixth row: **`kndo.toml` and `init`**. The CLI's persisted invocation defaults —
 `[check]` `fail-on`/`format`/`only`/`skip`, only keys with living consumers — with

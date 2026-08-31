@@ -3,7 +3,7 @@
 //! [`Host`] — the terminal and environment facts are inputs here, not ambience.
 
 use kndo_cli::{Host, run_args};
-use kndo_testkit::TempProject;
+use kndo_testkit::{TempProject, js_demo_project as project_with_findings};
 
 fn piped() -> Host {
     Host {
@@ -17,21 +17,6 @@ fn terminal() -> Host {
         tty: true,
         format_env: None,
     }
-}
-
-fn project_with_findings() -> TempProject {
-    let p = TempProject::new();
-    p.file(
-        "package.json",
-        r#"{ "name": "demo", "main": "src/index.js" }"#,
-    );
-    p.file(
-        "src/index.js",
-        "export function api() { return used(); }\nimport { used } from \"./used.js\";\n",
-    );
-    p.file("src/used.js", "export function used() { return 1; }\n");
-    p.file("src/orphan.js", "export function floats() {}\n");
-    p
 }
 
 fn check(p: &TempProject, extra: &[&str], host: Host) -> kndo_cli::CliOutput {

@@ -141,6 +141,12 @@ pub struct Snapshot {
     pragma_problems: Vec<crate::suppress::PragmaProblem>,
     composition_diagnostics: Vec<ReportDiagnostic>,
     files_discovered: u32,
+    /// Reachability + navigation index, built on the first query and held for
+    /// the snapshot's lifetime — a pure function of the graph, so a holder
+    /// answering many queries (serve) pays the build once, and a single-query
+    /// holder (the CLI) pays exactly what it always did.
+    pub(crate) navigation:
+        std::sync::OnceLock<(crate::analysis::Reachability, crate::navigate::Index)>,
 }
 
 /// Byte offsets where each line begins; line N (1-based) starts at `[N-1]`.
@@ -478,6 +484,7 @@ impl Session {
             timings,
             baseline,
             files_discovered: files.len() as u32,
+            navigation: std::sync::OnceLock::new(),
         }
     }
 

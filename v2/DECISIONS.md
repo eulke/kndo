@@ -1661,3 +1661,40 @@ not-found. One dogfood catch during the build: `Verb::as_str` as a 7-arm match
 was a structural clone of an existing describe ladder — reshaped to a
 discriminant-indexed array tied to serde's spelling by a test, because the tool
 flagged its own author. 212 tests, 15 gates, clippy clean.
+
+## 2026-08-31 — Query Q4 shipped: serve is the amortizer, and one contract has two doors
+
+`kndo-serve` grows from skeleton to its designed role: one MCP tool per query
+verb plus `check`, all eight speaking the agent grammar — the token-thrifty
+render is the reason this server exists, so serve returns it everywhere and the
+JSON envelopes stay the CLI's piped door (one optimal render per door; a format
+knob on serve waits for a measured need).
+
+- **The held session is the amortization, stated and proven.** Query tools
+  answer from the last analysis of their root, analyzing once on first use;
+  `check` is the refresh and its description says so. A test edits the tree
+  mid-conversation and asserts the held truth survives until `check`, then
+  flips — the contract is behavioral, not a comment. Core-side, the navigation
+  index moved into the snapshot (`OnceLock`): built on the first query, held for
+  the snapshot's lifetime — a pure function of the graph, so serve pays one
+  build per analysis while the single-query CLI pays exactly what it always did.
+- **The advertised schema is the parsed schema.** Each verb tool's `options`
+  is `query::options_schema()` — schemars over the same `Options` the door
+  deserializes (`$defs` hoisted so refs resolve) — through a new `schema`
+  feature on the facade, because serve is a frontend and reaches nothing
+  deeper than `kndo::<Name>`. A typo in `options` refuses with serde's own
+  message, the same deny-unknown-fields law as the CLI flags and kndo.toml.
+- **Tool names are the contract's spelling.** `Verb::as_str` names the tools
+  (`used-by`, not a second snake_case alias) — the CLI verb, the serde value,
+  and the MCP tool are one word.
+
+Dogfood caught the build once more: serve's test fixture project was a
+structural clone of the CLI's — the second copy, promoted to the testkit
+(`js_demo_project`, the three liveness stories every frontend test needs) with
+both frontends delegating, exactly the floor the promotion rule names for test
+machinery.
+
+With this the navigation ledger row closes: all seven verbs on one contract,
+both doors live, `frontends_import_only_the_facade` still the tenth gate's
+proof that two frontends need nothing the facade doesn't export. 214 tests,
+15 gates, clippy clean.

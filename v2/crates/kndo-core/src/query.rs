@@ -477,12 +477,13 @@ fn selector_of(graph: &Graph, file: usize, decl: Option<usize>) -> String {
 
 // ------------------------------------------------------------------ the door
 
-/// Everything one query call needs, built once per call: the same index the
-/// analyses ran on, rebuilt from the snapshot's graph (a pure function of it).
+/// Everything one query call needs: the same index the analyses ran on,
+/// rebuilt from the snapshot's graph (a pure function of it) on the first
+/// query and held for the snapshot's lifetime.
 struct QueryContext<'a> {
     graph: &'a Graph,
-    reach: Reachability,
-    index: Index,
+    reach: &'a Reachability,
+    index: &'a Index,
     lines: &'a BTreeMap<ProjectPath, Vec<u32>>,
     findings: &'a [kndo_contract::finding::Finding],
 }
@@ -491,8 +492,11 @@ impl Snapshot {
     /// The one door: CLI verbs and serve tools alike build a [`Request`] and
     /// read a [`Response`].
     pub fn query(&self, request: &Request) -> Response {
-        let reach = Reachability::compute(&self.graph);
-        let index = Index::build(&self.graph, &reach);
+        let (reach, index) = self.navigation.get_or_init(|| {
+            let reach = Reachability::compute(&self.graph);
+            let index = Index::build(&self.graph, &reach);
+            (reach, index)
+        });
         let cx = QueryContext {
             graph: &self.graph,
             reach,
@@ -573,7 +577,7 @@ fn node_ref(cx: &QueryContext<'_>, file: usize, decl: Option<usize>) -> NodeRef 
     NodeRef {
         selector: selector_of(cx.graph, file, decl),
         kind,
-        color: ReachColor::of(&cx.reach, file),
+        color: ReachColor::of(cx.reach, file),
         lines,
     }
 }
@@ -701,7 +705,7 @@ fn describe(cx: &QueryContext<'_>, selector: Selector) -> Answer {
         }
         Selector::Symbol { file, decl } => {
             let d = &cx.graph.files[file].evidence.declarations[decl];
-            let preview = navigate::keepers(cx.graph, &cx.index, file, decl, 4);
+            let preview = navigate::keepers(cx.graph, cx.index, file, decl, 4);
             let more = preview.len() > 3;
             Answer::Describe(Box::new(DescribeAnswer {
                 node: node_ref(cx, file, Some(decl)),
@@ -865,13 +869,13 @@ fn resolve_name(cx: &QueryContext<'_>, file: usize, name: &SmolStr) -> Option<No
 fn used_by(cx: &QueryContext<'_>, selector: Selector, limit: usize) -> Answer {
     match selector {
         Selector::Symbol { file, decl } => {
-            let keepers = navigate::keepers(cx.graph, &cx.index, file, decl, limit + 1);
+            let keepers = navigate::keepers(cx.graph, cx.index, file, decl, limit + 1);
             let elided = keepers.len().saturating_sub(limit) as u32;
             let mut by_color: BTreeMap<&'static str, u32> = BTreeMap::new();
             for k in keepers.iter().take(limit) {
                 if let Some(site) = keeper_site(k) {
                     *by_color
-                        .entry(ReachColor::of(&cx.reach, site.file as usize).as_str())
+                        .entry(ReachColor::of(cx.reach, site.file as usize).as_str())
                         .or_insert(0) += 1;
                 }
             }
@@ -936,7 +940,7 @@ fn used_by(cx: &QueryContext<'_>, selector: Selector, limit: usize) -> Answer {
                     && let Some(ix) = cx.graph.files.iter().position(|f| f.path == site.path)
                 {
                     *by_color
-                        .entry(ReachColor::of(&cx.reach, ix).as_str())
+                        .entry(ReachColor::of(cx.reach, ix).as_str())
                         .or_insert(0) += 1;
                 }
             }
@@ -1090,7 +1094,7 @@ fn trace(cx: &QueryContext<'_>, selector: Selector, roots: Option<RootSet>) -> A
                 })
                 .collect();
             let keeper = decl.and_then(|d| {
-                navigate::keepers(cx.graph, &cx.index, file, d, 1)
+                navigate::keepers(cx.graph, cx.index, file, d, 1)
                     .first()
                     .map(|k| edge_ref(cx, k))
             });
@@ -1145,7 +1149,7 @@ fn impact(cx: &QueryContext<'_>, selector: Selector, if_deleted: bool, limit: us
             continue;
         }
         *by_color
-            .entry(ReachColor::of(&cx.reach, i).as_str())
+            .entry(ReachColor::of(cx.reach, i).as_str())
             .or_insert(0) += 1;
         for r in cx.graph.files[i]
             .evidence
@@ -1230,7 +1234,7 @@ fn simulate_deletion(
                     continue;
                 }
                 let now = (production[i], test[i], tooling[i]);
-                let before = ReachColor::of(&cx.reach, i);
+                let before = ReachColor::of(cx.reach, i);
                 match (before, now) {
                     (_, (false, false, false)) => newly_unreachable.push(node_ref(cx, i, None)),
                     (ReachColor::Production, (false, true, _)) => {
@@ -1358,4 +1362,12 @@ pub fn response_schema() -> String {
     let mut json = serde_json::to_string_pretty(&schema).expect("schema serializes");
     json.push('\n');
     json
+}
+
+/// [`Options`] alone, as a JSON value — for a caller (serve's tool listing)
+/// that names the verb out of band and embeds the options shape verbatim, so
+/// its advertised schema is derived from the same type the door parses.
+#[cfg(feature = "schema")]
+pub fn options_schema() -> serde_json::Value {
+    serde_json::to_value(schemars::schema_for!(Options)).expect("schema serializes")
 }

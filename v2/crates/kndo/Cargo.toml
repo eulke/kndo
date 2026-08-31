@@ -24,6 +24,10 @@ kndo-host-wasm = { path = "../kndo-host-wasm", optional = true }
 # WASM components from `<root>/.kndo/plugins/`. The shipped `kndo` binary turns
 # it on; embedders that want no wasmtime in their tree simply don't.
 wasm = ["dep:kndo-host-wasm"]
+# Schema generation doors (`query::options_schema` and friends) for frontends
+# that advertise the contract — serve's tool listing derives from the same
+# types the door parses.
+schema = ["kndo-core/schema"]
 
 [dev-dependencies]
 kndo-testkit = { path = "../kndo-testkit" }

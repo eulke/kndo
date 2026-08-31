@@ -272,6 +272,25 @@ impl Default for TempProject {
     }
 }
 
+/// The three liveness stories every frontend test needs, as one tiny JS
+/// project: a production root (`src/index.js`, the manifest's `main`), a
+/// symbol it keeps (`src/used.js#used`), and a floating orphan
+/// (`src/orphan.js#floats`) that yields exactly one unused finding.
+pub fn js_demo_project() -> TempProject {
+    let p = TempProject::new();
+    p.file(
+        "package.json",
+        r#"{ "name": "demo", "main": "src/index.js" }"#,
+    );
+    p.file(
+        "src/index.js",
+        "export function api() { return used(); }\nimport { used } from \"./used.js\";\n",
+    );
+    p.file("src/used.js", "export function used() { return 1; }\n");
+    p.file("src/orphan.js", "export function floats() {}\n");
+    p
+}
+
 /// One extraction, harness-style: feed `source` to `adapter` as `path` through a
 /// fresh sink and return the finished evidence. The shared front half of every
 /// adapter's extraction tests.
