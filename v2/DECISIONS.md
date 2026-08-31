@@ -1526,3 +1526,17 @@ someone's work), and `--hook` installs `.git/hooks/pre-commit` running
 `kndo check --staged` — the diff modes' natural home. 207 tests, 14 gates, clippy
 clean; envelope, fixtures and goldens byte-unmoved (config is invocation, not
 output).
+
+## 2026-08-31 — doctor: introspection through two new facade doors
+
+`kndo doctor` prints what kndo would see at a root, without running an analysis:
+the REAL composition in registration order (built-ins and `.kndo/plugins`
+components alike, load failures included — an opted-in component never vanishes
+silently), the config as parsed (a broken `kndo.toml` is doctor's diagnosis —
+`config: BROKEN — …` — never its crash), and cache/baseline as filesystem facts
+only (doctor never learns the baseline's format; byte size is honest without a
+second reader). The two doors it needed went through the facade as PRs to core,
+per the frontier law: `Session::extensions()` (the specs, the extensions' own
+claims) and `Session::composition_diagnostics()`. Spellings come from the one
+source each: clap's `to_possible_value` for flag values, `REPORT_SCHEMA` for the
+envelope. 208 tests, 14 gates, clippy clean.

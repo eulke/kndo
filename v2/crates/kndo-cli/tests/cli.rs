@@ -461,3 +461,31 @@ fn init_writes_the_template_once_and_the_hook_gates_staged() {
     assert_eq!(again.code, 2);
     assert!(again.stderr.contains("already exists"), "{}", again.stderr);
 }
+
+#[test]
+fn doctor_tells_the_truth_about_what_kndo_sees() {
+    let p = project_with_findings();
+    p.file("kndo.toml", "[check]\nfail-on = \"never\"\n");
+    let root = p.root().to_string_lossy().into_owned();
+    let out = run_args(["kndo", "doctor", &root], terminal());
+    assert_eq!(out.code, 0, "{}{}", out.stdout, out.stderr);
+    assert!(out.stdout.contains("- kndo:js-ts v"), "{}", out.stdout);
+    assert!(out.stdout.contains("- kndo:python v"), "{}", out.stdout);
+    assert!(
+        out.stdout.contains("config: kndo.toml · fail-on never"),
+        "{}",
+        out.stdout
+    );
+    assert!(out.stdout.contains("cache: none yet"), "{}", out.stdout);
+    assert!(out.stdout.contains("baseline: none"), "{}", out.stdout);
+
+    // A broken config is doctor's diagnosis, never its crash.
+    p.file("kndo.toml", "[check]\nfail-onn = \"never\"\n");
+    let broken = run_args(["kndo", "doctor", &root], terminal());
+    assert_eq!(broken.code, 0);
+    assert!(
+        broken.stdout.contains("config: BROKEN"),
+        "{}",
+        broken.stdout
+    );
+}

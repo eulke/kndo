@@ -278,6 +278,18 @@ impl Session {
         &self.root
     }
 
+    /// The composition this session runs, in registration order — introspection
+    /// for `doctor`-shaped frontends; the specs are the extensions' own claims.
+    pub fn extensions(&self) -> impl Iterator<Item = &kndo_contract::extension::ExtensionSpec> {
+        self.extensions.iter().map(|e| e.spec())
+    }
+
+    /// What went sideways assembling the composition (a component that failed to
+    /// load, a rejected coordinate) — the same entries every report carries.
+    pub fn composition_diagnostics(&self) -> &[crate::report::ReportDiagnostic] {
+        &self.composition_diagnostics
+    }
+
     /// Everything that could change how the same tree assembles: the contract
     /// fingerprint, the graph semantics, and the full adapter set as data.
     fn graph_cache_key(&self) -> [u8; 32] {

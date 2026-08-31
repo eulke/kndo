@@ -32,6 +32,14 @@ enum Command {
     Health(RunArgs),
     /// Write the kndo.toml template (and, with --hook, a pre-commit gate)
     Init(InitArgs),
+    /// What kndo sees here: composition, config, cache, baseline
+    Doctor(InitPath),
+}
+
+#[derive(clap::Args)]
+struct InitPath {
+    /// Project root (defaults to the current directory)
+    path: Option<PathBuf>,
 }
 
 #[derive(clap::Args)]
@@ -185,7 +193,140 @@ pub fn run(cli: Cli, host: Host) -> CliOutput {
         Command::Baseline(args) => baseline(args),
         Command::Health(args) => health(args, &host),
         Command::Init(args) => init(args),
+        Command::Doctor(args) => doctor(args),
     }
+}
+
+/// Honest introspection, no analysis run: the composition the session would
+/// use (WASM load failures included — an opted-in component never vanishes
+/// silently), the config as parsed, and filesystem facts about cache and
+/// baseline. Exit 2 only when the session itself cannot open.
+fn doctor(args: InitPath) -> CliOutput {
+    let root = args.path.clone().unwrap_or_else(|| PathBuf::from("."));
+    let session = match kndo::open(root.clone(), Config::default()) {
+        Ok(session) => session,
+        Err(refusal) => return refused(refusal),
+    };
+    let mut out = format!(
+        "kndo {} · envelope {}
+extensions:
+",
+        env!("CARGO_PKG_VERSION"),
+        kndo::REPORT_SCHEMA
+    );
+    for spec in session.extensions() {
+        let suffixes: Vec<&str> = spec.suffixes().iter().map(|s| s.as_str()).collect();
+        out.push_str(&format!(
+            "- {} v{}{}
+",
+            spec.coordinate(),
+            spec.version(),
+            if suffixes.is_empty() {
+                String::new()
+            } else {
+                format!(" · suffixes {}", suffixes.join(","))
+            }
+        ));
+    }
+    for diagnostic in session.composition_diagnostics() {
+        out.push_str(&format!(
+            "- [warn] {}: {}
+",
+            diagnostic.path.as_str(),
+            diagnostic.message
+        ));
+    }
+    match config::load(&root) {
+        Err(message) => out.push_str(&format!(
+            "config: BROKEN — {message}
+"
+        )),
+        Ok(file) if !root.join("kndo.toml").is_file() => {
+            let _ = file;
+            out.push_str(
+                "config: no kndo.toml (`kndo init` writes one)
+",
+            );
+        }
+        Ok(file) => {
+            let c = &file.check;
+            let mut parts = Vec::new();
+            if let Some(v) = c.fail_on.and_then(|f| f.to_possible_value()) {
+                parts.push(format!("fail-on {}", v.get_name()));
+            }
+            if let Some(v) = c.format.and_then(|f| f.to_possible_value()) {
+                parts.push(format!("format {}", v.get_name()));
+            }
+            if !c.only.is_empty() {
+                parts.push(format!("only {}", c.only.join(",")));
+            }
+            if !c.skip.is_empty() {
+                parts.push(format!("skip {}", c.skip.join(",")));
+            }
+            if parts.is_empty() {
+                out.push_str(
+                    "config: kndo.toml present (all defaults)
+",
+                );
+            } else {
+                out.push_str(&format!(
+                    "config: kndo.toml · {}
+",
+                    parts.join(" · ")
+                ));
+            }
+        }
+    }
+    let cache = root.join(".kndo/cache");
+    if cache.is_dir() {
+        let (files, bytes) = dir_size(&cache);
+        out.push_str(&format!(
+            "cache: .kndo/cache · {files} files · {bytes} bytes
+"
+        ));
+    } else {
+        out.push_str(
+            "cache: none yet
+",
+        );
+    }
+    let baseline = root.join(".kndo/baseline.json");
+    match std::fs::metadata(&baseline) {
+        Ok(meta) => out.push_str(&format!(
+            "baseline: .kndo/baseline.json · {} bytes
+",
+            meta.len()
+        )),
+        Err(_) => out.push_str(
+            "baseline: none (`kndo baseline` accepts the current findings)
+",
+        ),
+    }
+    CliOutput {
+        stdout: out,
+        stderr: String::new(),
+        code: 0,
+    }
+}
+
+fn dir_size(dir: &std::path::Path) -> (u64, u64) {
+    let mut files = 0;
+    let mut bytes = 0;
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return (0, 0);
+    };
+    for entry in entries.filter_map(|e| e.ok()) {
+        let path = entry.path();
+        if path.is_dir() {
+            let (f, b) = dir_size(&path);
+            files += f;
+            bytes += b;
+        } else if let Ok(meta) = entry.metadata() {
+            files += 1;
+            bytes += meta.len();
+        }
+    }
+    (files, bytes)
 }
 
 /// Refuses to overwrite: an existing kndo.toml (or hook) is someone's work.
