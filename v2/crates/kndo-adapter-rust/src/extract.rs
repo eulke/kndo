@@ -42,6 +42,7 @@ pub fn extract(
         main_root_kind: main_root_kind(path),
         unimportable_root: unimportable_crate_root(path),
         types: BTreeMap::new(),
+        declared_free: BTreeMap::new(),
         impls: Vec::new(),
         redirects: BTreeMap::new(),
         uses: Vec::new(),
@@ -60,7 +61,43 @@ pub fn extract(
     for (node, stack) in uses {
         cx.use_declaration(node, &stack);
     }
+    let declared_free = std::mem::take(&mut cx.declared_free);
+    macro_template_roots(root, source, &declared_free, out);
     references_and_comments(root, source, out);
+}
+
+/// Names a `macro_rules!` template references are resolved at every EXPANSION
+/// site, not here: the macro travels (textual scope, `#[macro_use]`,
+/// `#[macro_export]`), and narrowing a name its body mentions breaks call
+/// sites no reference in this file records. Free declarations of this file
+/// named inside a macro body therefore root `Possible` — the same tier as the
+/// rest of the dispatch-the-source-never-names family.
+fn macro_template_roots(
+    root: Node<'_>,
+    source: &[u8],
+    declared_free: &BTreeMap<String, DeclarationId>,
+    out: &mut EvidenceSink,
+) {
+    let mut seen: BTreeSet<usize> = BTreeSet::new();
+    tk::walk(root, &mut |n| {
+        if n.kind() != "macro_definition" {
+            return;
+        }
+        let name_node = n.child_by_field_name("name");
+        tk::walk(n, &mut |t| {
+            if t.kind() == "identifier"
+                && Some(t) != name_node
+                && let Some(&id) = declared_free.get(tk::text(t, source))
+                && seen.insert(id.index())
+            {
+                out.root(
+                    RootTarget::Declaration(id),
+                    RootKind::Production,
+                    Confidence::Possible,
+                );
+            }
+        });
+    });
 }
 
 /// What a top-level `fn main` anchors, by cargo's own path conventions: a build
@@ -97,6 +134,10 @@ struct ItemPass<'a, 'o> {
     unimportable_root: bool,
     /// Type name → its declaration, for wiring `impl` members to their owner.
     types: BTreeMap<String, DeclarationId>,
+    /// Every free declaration by name, for the macro-template pass: names a
+    /// `macro_rules!` body references must stay resolvable at every expansion
+    /// site, so they root rather than count as file-local uses.
+    declared_free: BTreeMap<String, DeclarationId>,
     impls: Vec<Node<'a>>,
     /// `#[path = "…"]`-redirected module names → their real path segments. `use`
     /// paths through the alias substitute these (`use self::imp::*` where `mod imp`
@@ -139,6 +180,7 @@ impl<'a> ItemPass<'a, '_> {
                     let id =
                         self.out
                             .declaration(name, SymbolKind::Function, tk::span(item), reach);
+                    self.declared_free.entry(name.to_string()).or_insert(id);
                     self.out.metrics(id, function_metrics(item, self.source));
                     root_for_attrs(&attrs, id, self.out);
                     // A top-level `fn main` is the language's entry convention: in
@@ -163,6 +205,7 @@ impl<'a> ItemPass<'a, '_> {
                         self.out
                             .declaration(name, SymbolKind::Type, tk::span(item), reach.clone());
                     self.types.entry(name.to_string()).or_insert(id);
+                    self.declared_free.entry(name.to_string()).or_insert(id);
                     root_for_attrs(&attrs, id, self.out);
                     if item.kind() == "trait_item" {
                         self.trait_members(item, id, reach);
@@ -176,9 +219,9 @@ impl<'a> ItemPass<'a, '_> {
                     } else {
                         SymbolKind::Variable
                     };
-                    let id =
-                        self.out
-                            .declaration(tk::text(n, self.source), kind, tk::span(item), reach);
+                    let name = tk::text(n, self.source);
+                    let id = self.out.declaration(name, kind, tk::span(item), reach);
+                    self.declared_free.entry(name.to_string()).or_insert(id);
                     root_for_attrs(&attrs, id, self.out);
                 }
             }
@@ -193,6 +236,7 @@ impl<'a> ItemPass<'a, '_> {
                                 tk::span(item),
                                 reach,
                             );
+                            self.declared_free.entry(name.to_string()).or_insert(id);
                             root_for_attrs(&attrs, id, self.out);
                             self.stack.push(name.to_string());
                             self.items(body);

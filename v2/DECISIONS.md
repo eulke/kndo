@@ -1258,3 +1258,40 @@ import — and mypy-driven `type_check/` fixtures). Decomposed in COMPARISON.
 The ancestor-package chain (`import a.b.c` executes `a/__init__.py` and
 `a/b/__init__.py`) is NOT built: no measured case in flask needed it —
 recorded in EXPERIMENTS as an open candidate instead.
+
+## 2026-08-31 — M6.d: measured parity closed, and the reread caught a vice
+
+**Decision.** The parity milestone closes as a measurement, not a prose pass: the
+full v2-vs-oracle table (nine repos × every category) was tabulated from the live
+reports and the pinned oracle, and every cell is now decomposed — in a milestone
+section where one existed, in COMPARISON's new close-out section where none did
+(vite `internal-only` 0 vs 147 is structural: TS has no `Scoped` rung, and v1's
+147 are export-narrowing advice, a different analysis now pinned in EXPERIMENTS
+with its demand; the five `test-only` zeros are the one library-roots mechanism
+named at guava, standing for all five; lodash's untested/test-only remainders and
+ripgrep's unused 3-vs-11 close under the decompositions already written). The
+unbuilt categories are a ledger, not an omission: 497 oracle findings across
+undeclared/unresolved/version-skew (the dependency-hygiene family, one
+EXPERIMENTS candidate with per-language dependency models as its cost),
+private-type-leak (consumer-rule censused on `RefKind::TypeUse`), cyclic
+(zero-FP definition first), and deep-import (half killed by v1's own
+measurement, half deferred on external-manifest visibility).
+
+**The catch.** Rereading ripgrep's three `internal-only` against ground truth
+showed two false: `set_errored`/`ignore_messages` are referenced only inside
+`macro_rules!` bodies in their own file, and a macro template's names resolve at
+every EXPANSION site — narrowing them breaks every `err_message!` caller, so
+"the narrower rung would suffice" was wrong. The `macro-use-mod` fixture
+(harvested from the very hunt that produced ripgrep's pattern) had the false
+finding PINNED in its expectation since internal-only landed. The posture, not a
+patch: free declarations named inside a `macro_rules!` body root `Possible` —
+dispatch the source never names, the expansion site does. The fixture now pins
+the contrast in both directions (macro-named silent, ordinary own-file-only
+still fires), a new `macro-template-names` fixture pins it end-to-end (26 rust
+fixtures), and ripgrep measures 144: internal-only 1, the survivor
+(`RegexCaptures`) grep-verified true. One existing expectation regenerated,
+deliberately, for exactly this documented reason.
+
+Also fixed by the reread: Exposed's headline miscalled `test-only` an unbuilt
+category (it is built; its zero is the library-roots mechanism) and now carries
+the tracked 936→987 arithmetic. 182 tests, 13 gates, clippy clean.

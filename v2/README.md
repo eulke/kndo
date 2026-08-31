@@ -326,8 +326,18 @@ Complete (CI verification pending only the credits reset, like M0–M2):
   `narrowable_scopes`, the spec's list of rungs the language actually
   enforces. The first fix it demanded was kndo's own: `StoreData` in the
   dogfood went private.
-- **M6.d — measured parity, M6.e — close-out.** Per the census order in
-  `DECISIONS.md`.
+- **M6.d — done: measured parity closed as a measurement.** The full
+  v2-vs-oracle table (nine repos × every category) tabulated and every cell
+  decomposed — COMPARISON's close-out section carries the table, the cells no
+  milestone section had written (vite's structural `internal-only` zero, the
+  five library-roots `test-only` zeros, lodash and ripgrep remainders), and
+  the 497-finding unbuilt-category ledger with a disposition per category.
+  The reread caught a vice: two of ripgrep's three `internal-only` were false
+  — names referenced only inside `macro_rules!` bodies resolve at every
+  expansion site, so they now root `Possible` (the harvested `macro-use-mod`
+  fixture had the falsehood pinned; it now pins the contrast, and
+  `macro-template-names` pins it end-to-end).
+- **M6.e — close-out.** Per the census order in `DECISIONS.md`.
 - **M6.b.4 — python, done (owner decision 2026-08-31).** The first
   fresh-baseline language: v1 never spoke it, so there is no quarry, no
   harvested fixtures and no oracle row — every posture is derived from the

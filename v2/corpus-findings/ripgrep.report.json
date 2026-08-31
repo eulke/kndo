@@ -2541,42 +2541,6 @@
       "message": "structural clone of tests/util.rs:Dir.link_dir"
     },
     {
-      "id": "kndo-70febcb60254",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "crates/core/messages.rs",
-        "selector": {
-          "Free": "set_errored"
-        },
-        "span": {
-          "start": 4967,
-          "end": 5042
-        }
-      },
-      "message": "declared `crate`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
-    },
-    {
-      "id": "kndo-ed431c49d56a",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "crates/core/messages.rs",
-        "selector": {
-          "Free": "ignore_messages"
-        },
-        "span": {
-          "start": 4177,
-          "end": 4264
-        }
-      },
-      "message": "declared `crate`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
-    },
-    {
       "id": "kndo-b383e72406f5",
       "category": "internal-only",
       "severity": "info",

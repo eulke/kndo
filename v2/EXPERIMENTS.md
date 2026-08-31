@@ -44,6 +44,22 @@ manifest visibility before any measurement.
 
 ## Open candidates (never decided in v1)
 
+### Dependency-hygiene family (undeclared / unresolved / version-skew)
+The oracle's largest unbuilt block after the ladder: 410 findings — undeclared 293
+(vite 289, lodash 4), unresolved 79 (vite), version-skew 38 (vite 24, ripgrep 10,
+Exposed 4). The inputs half-exist (`manifest_dependencies` is read for conduct
+activation), but judging them needs per-language dependency MODELS — what counts as
+declared (workspace inheritance, peer/optional/dev tiers, version ranges), what an
+import resolves against, per ecosystem. Nothing here ships without its corpus
+experiment; the demand decomposition above is the starting measurement.
+
+### cyclic (import cycles)
+38 oracle findings (vite 31, Exposed 4, guava 3). The graph has the edges already;
+the open question is the zero-FP definition of an ACTIONABLE cycle — same-package
+mutual imports are idiomatic in several ecosystems (Go forbids them at compile time,
+so gin's zero is the language's; JS tolerates them at runtime). Definition first,
+corpus count second.
+
 ### Python ancestor-package import edges
 `import a.b.c` executes `a/__init__.py` and `a/b/__init__.py` on the way down —
 the language's rule, but kndo:python emits no edges to the ancestors, only to
@@ -121,6 +137,18 @@ non-Private variants, killing the representable-but-inert `Private`+`Some`). Cos
 change — fingerprint moves, WIT variant + pin-abi toll, adapters bump when they start
 emitting it. Conformance case: kotlin `internal` fixtures (unused internal accused;
 cross-package-same-module use keeps it; `protected` stays Unknown→Exported).
+
+**Post-ship residue (2026-08-31, M6.d):** the shipped regions serve every Scoped
+rung (guava 3,305, Alamofire 268, vapor 85, Exposed 31, ripgrep 1 measured), which
+leaves the demand's two-rung slice structurally unserved: vite's 147 are
+`export`ed TypeScript symbols whose every use sits in their own file, where
+removing the `export` is the language-checked narrowing — `internal-only` judges
+`Scoped` declarations only, and TS has no Scoped rung. That is a DIFFERENT
+analysis (export-narrowing over `Exported` declarations, likely also the residual
+slice of rust's `pub`-vs-`pub(crate)`), with its own false-positive surface:
+an Exported name is nameable from anywhere, so "all uses in own file" is a weaker
+fact than region-enumerated absence. Zero-FP definition first, corpus count
+second — the demand number is pinned here.
 
 ### Import-shape debt: the `use`-leaf pair (recorded 2026-08-30, M4)
 A plain Rust `use` leaf emits TWO import records over the same target: a

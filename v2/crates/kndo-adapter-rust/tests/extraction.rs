@@ -388,3 +388,39 @@ fn broken_source_degrades_to_diagnostic() {
     let ev = extract("src/lib.rs", "pub fn broken( {{{{");
     assert!(!ev.diagnostics.is_empty());
 }
+
+#[test]
+fn macro_template_names_root_their_declarations() {
+    let ev = extract(
+        "src/messages.rs",
+        "macro_rules! log_err {\n\
+             ($msg:expr) => {\n\
+                 crate::messages::set_flag($msg)\n\
+             };\n\
+         }\n\
+         pub(crate) fn set_flag(_m: &str) {}\n\
+         pub(crate) fn unrelated() {}\n",
+    );
+    let ix = |name: &str| {
+        ev.declarations_with_ids()
+            .find(|(_, d)| d.name == name)
+            .map(|(id, _)| id.index())
+            .unwrap()
+    };
+    let rooted: Vec<usize> = ev
+        .roots
+        .iter()
+        .filter_map(|r| match &r.target {
+            RootTarget::Declaration(id) => Some(id.index()),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        rooted.contains(&ix("set_flag")),
+        "a name the macro template mentions resolves at every expansion site"
+    );
+    assert!(
+        !rooted.contains(&ix("unrelated")),
+        "declarations the template never names stay unrooted"
+    );
+}

@@ -1,16 +1,35 @@
 {
   "run": {
     "schema": "kndo-v2/m6",
-    "files_discovered": 4,
-    "files_claimed": 3,
+    "files_discovered": 3,
+    "files_claimed": 2,
     "extensions": [
       {
         "id": "kndo:rust",
-        "files": 3
+        "files": 2
       }
     ]
   },
-  "findings": [],
+  "findings": [
+    {
+      "id": "kndo-e0eba007185f",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "src/messages.rs",
+        "selector": {
+          "Free": "local_only"
+        },
+        "span": {
+          "start": 131,
+          "end": 178
+        }
+      },
+      "message": "declared `crate`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+    }
+  ],
   "fixed": [],
   "baselined": 0,
   "abstained": [

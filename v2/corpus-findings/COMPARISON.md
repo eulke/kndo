@@ -309,10 +309,11 @@ harvested fixture.
 ## M6.b.2 — Exposed speaks: the first Kotlin measurement
 
 `kndo:kotlin` lands and Exposed claims 809 files, measuring 936 findings
-(774 before the audit round; the deltas are called out below) against the
-oracle's 1,037 (of which 163 are `internal-only`, unbuilt until
-M6.c, and 22 more sit in unbuilt categories — test-only 14, cyclic 4,
-version-skew 4).
+(774 before the audit round; 987 after M6.c — the +31 `internal-only` and
++20 `unused` are tracked below; the deltas are called out below) against the
+oracle's 1,037 (of which 163 are `internal-only`, unbuilt until M6.c, and 8
+sit in unbuilt categories — cyclic 4, version-skew 4; the oracle's 14
+test-only are the library-roots zero decomposed at guava).
 
 **duplicate 812 vs 91 — the surplus is real, maintained-in-parallel code.**
 (646 before the audit round's unified metrics rule; the +166 are the same two
@@ -467,3 +468,96 @@ What stands, 23 findings, all verified:
 between underscore-private and importable, so `narrowable` is empty — "add an
 underscore" would be advice about a convention, not a boundary the language
 checks.
+
+## M6.d — the close-out: every cell of the table, decomposed
+
+The census is complete: seven languages, nine repos, and this section is the
+whole table read at once — current numbers (this directory's reports) against
+the full oracle, with every cell either decomposed above or decomposed here.
+The reread itself was run as a measurement, and it caught one more vice.
+
+**The reread's catch: two of ripgrep's three `internal-only` were false, and
+the harvested fixture had the falsehood pinned.** `set_errored` and
+`ignore_messages` (`crates/core/messages.rs`) are referenced ONLY inside
+`macro_rules!` bodies in their own file — but a macro template's names
+resolve at every EXPANSION site, so "the narrower rung would suffice" is
+exactly wrong: narrowing them breaks every `err_message!` call in the crate.
+The `macro-use-mod` fixture — harvested from the same v1 hunt — had that
+false `internal-only` finding pinned in its expectation since M6.c built the
+analysis. The fix is a posture, not a patch: free declarations named inside a
+`macro_rules!` body root `Possible` (dispatch the source never names — the
+expansion site does), the fixture now pins the contrast both ways
+(macro-named `set_flag` silent, ordinary own-file-only `local_only` still
+fires), and ripgrep reads 144: `internal-only` 1, the survivor being
+`RegexCaptures` in `matcher/tests/util.rs`, grep-verified — every use in its
+own file, `private` compiles.
+
+**The current table** (v2 12,928 across nine repos; oracle 24,459 across
+eight — flask has no oracle row):
+
+| repo | v2 | oracle | decomposed at |
+|---|---|---|---|
+| vite | 895 | 1,878 | M2 + M3 + M4.e, and below |
+| lodash | 21 | 37 | M2 + M3, and below |
+| gin | 108 | 20 | M4.c |
+| ripgrep | 144 | 149 | M4, and above |
+| guava | 9,925 | 20,244 | M6.b.1 |
+| Exposed | 987 | 1,037 | M6.b.2 |
+| vapor | 216 | 593 | M6.b.3 |
+| Alamofire | 609 | 501 | M6.b.3 |
+| flask | 23 | — | M6.b.4 (fresh baseline) |
+
+**Cells written nowhere above, closed here:**
+
+- **vite `internal-only` 0 vs 147 — structural, not missing.** The analysis
+  judges `Scoped` declarations against enumerated regions, and TypeScript has
+  no `Scoped` rung: its ladder is unexported (Private, file-enforced) /
+  `export`ed (everywhere). v1's 147 are the OTHER judgment — `export`ed
+  symbols every use of which sits in their own file, where removing the
+  `export` is a language-checked narrowing. That is real advice a future
+  analysis can give, but it is export-narrowing over `Exported`
+  declarations, not a rung demotion — recorded in EXPERIMENTS with this
+  demand, beside the ladder entry it extends.
+- **`test-only` 0 on gin, guava, Exposed, vapor, Alamofire (oracle 570 + 14
+  + 5 + 1 + 2) — one mechanism, named at guava, standing here for all
+  five:** under library-mode roots every importable file carries its own
+  Production root, so no file is ever reached ONLY by tests at file
+  granularity; v1's counts are symbol-granularity. The same
+  file-vs-symbol gap that untested carries everywhere coverage is not
+  ingested — lcov upgrades both wherever reports exist.
+- **lodash `untested` 0 vs 4, `test-only` 2 vs 0:** lodash's four oracle
+  untested are inside `dist/`+`vendor/` trees v2 keeps via different edges
+  (the M2 decomposition); its two v2-only test-only are `vendor/*/test/`
+  fixtures only the test convention roots — mechanically true, the same
+  tautology class as ripgrep's `tests/index/*`.
+- **ripgrep `unused` 3 vs 11:** the three are grep-verified true; v1's
+  extra eight ride its per-symbol reach inside files v2 keeps whole
+  (`rally`-class precision, recorded at M4) plus its fuzzier pooling. The
+  keep-alive direction, unchanged since M4.
+
+**The unbuilt categories — the standing ledger, 497 oracle findings, each
+with a disposition:**
+
+| category | oracle demand | disposition |
+|---|---|---|
+| undeclared | 293 (vite 289, lodash 4) | dependency-hygiene family: EXPERIMENTS open candidate |
+| unresolved | 79 (vite) | same family, same entry |
+| version-skew | 38 (vite 24, ripgrep 10, Exposed 4) | same family, same entry |
+| private-type-leak | 43 (vite 30, guava 9, ripgrep 4) | consumer-rule censused: `RefKind::TypeUse` is its input (EXPERIMENTS) |
+| cyclic | 38 (vite 31, Exposed 4, guava 3) | EXPERIMENTS open candidate, zero-FP definition first |
+| deep-import | 6 (vite) | half killed by v1's own measurement; external-provider half deferred (EXPERIMENTS) |
+
+Every unbuilt category is a decision with a written home, not an omission:
+the dependency family waits on per-language dependency models measured
+against this demand, and nothing arrives without its corpus experiment
+first.
+
+**The law, applied to the whole document:** no cell above is justified by
+matching v1 — the close matches (vite duplicate 174 vs 179, ripgrep totals
+144 vs 149) are coincidences of composition, and the wide ones carry the
+name of a v1 defect (name-fuzzy resolution, untiered confidence,
+reflection-blind enum accusations, symbol-vs-file granularity without
+coverage) or a v2 decision (never-declare postures, library-mode roots,
+keep-alive direction, categories not yet earned through measurement) — in
+both directions, including the four repos where v2 reports MORE within a
+category (gin/ripgrep/Exposed duplicates, Alamofire unused).
