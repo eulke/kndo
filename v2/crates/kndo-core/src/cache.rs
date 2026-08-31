@@ -147,7 +147,7 @@ impl GraphCache {
         bytes.extend_from_slice(GRAPH_MAGIC);
         bytes.extend_from_slice(&self.key);
         bytes.extend_from_slice(&payload);
-        write_atomically(&file, &bytes);
+        write_atomically(file, &bytes);
     }
 }
 

@@ -1129,3 +1129,28 @@ regions are not yet enumerable from paths.
 Contract fingerprint moved (regenerated in this commit), WIT `reach` is a
 variant with `scoped(string)` plus a `seen-from` export, pins rebuilt. The
 second half — `internal-only` over the same regions — is next.
+
+## 2026-08-31 — M6.c second half: internal-only over the regions
+
+The census's category, built on the same mechanism: a `Scoped` declaration with
+real uses in its own file and no confident use beyond it — no binding importer,
+no reference elsewhere in its REGION (the only files that can legally resolve
+the name; matches outside it are v1's "weaker matches", carried by
+`Possible`/`Info` exactly as v1 carried them). `unused` outranks it: a
+zero-use declaration is dead, not demotable — the tiering v1 could not make,
+and most of the numeric gap to the oracle (guava 3,305 vs 7,014, Exposed 31 vs
+163, ripgrep 3; every slice explained in COMPARISON).
+
+The ignorance rule demanded one new fact: whether a narrower rung EXISTS is
+language knowledge, so `ExtensionSpec` grows `narrowable_scopes` (spec data,
+floor 2 — default empty keeps the analysis silent; java: package, kotlin:
+module, rust: crate, go: deliberately none — the same evidence is advice in
+one language and noise in the other; gin reports zero by design). Analyses
+read it through `RunContext::narrowables`, never by adapter identity.
+
+The dogfood fired on its first run: `pub(crate) StoreData` in the WASM host,
+used only in its own file — narrowed to private in this commit. Three
+harvested fixtures gained internal-only findings (rust macro-use-mod, java
+nested members, kotlin ctor defaults), each verified by hand; the wire grew
+the spec field, pins rebuilt. The category leaves `Category::parse`'s
+reserved shelf and is judged.

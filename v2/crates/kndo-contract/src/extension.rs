@@ -85,6 +85,7 @@ pub struct ExtensionSpec {
     version: u32,
     // -- extraction --
     suffixes: Vec<SmolStr>,
+    narrowable_scopes: Vec<SmolStr>,
     claims: Vec<SmolStr>,
     emits: EvidenceStreams,
     manifests: Vec<SmolStr>,
@@ -115,6 +116,7 @@ impl ExtensionSpec {
                 coordinate: SmolStr::new_static(coordinate),
                 version,
                 suffixes: Vec::new(),
+                narrowable_scopes: Vec::new(),
                 claims: Vec::new(),
                 emits: EvidenceStreams::none(),
                 manifests: Vec::new(),
@@ -146,6 +148,15 @@ impl ExtensionSpec {
     /// "extension" already means the species.
     pub fn suffixes(&self) -> &[SmolStr] {
         &self.suffixes
+    }
+
+    /// Scope tokens whose language has a strictly NARROWER rung to demote to —
+    /// the language fact `internal-only` needs before advising anything: Java
+    /// can narrow "package" to private, Go has nothing below "package", so the
+    /// same evidence is advice in one language and noise in the other. Empty
+    /// (the default) means the analysis never fires for this adapter's files.
+    pub fn narrowable_scopes(&self) -> &[SmolStr] {
+        &self.narrowable_scopes
     }
 
     pub fn claims(&self) -> &[SmolStr] {
@@ -205,6 +216,7 @@ pub struct ExtensionSpecParts {
     pub coordinate: SmolStr,
     pub version: u32,
     pub suffixes: Vec<SmolStr>,
+    pub narrowable_scopes: Vec<SmolStr>,
     pub claims: Vec<SmolStr>,
     pub emits: EvidenceStreams,
     pub manifests: Vec<SmolStr>,
@@ -237,6 +249,7 @@ impl From<ExtensionSpecParts> for ExtensionSpec {
             coordinate: parts.coordinate,
             version: parts.version,
             suffixes: parts.suffixes,
+            narrowable_scopes: parts.narrowable_scopes,
             claims: parts.claims,
             emits: parts.emits,
             manifests: parts.manifests,
@@ -276,6 +289,14 @@ impl ExtensionSpecBuilder {
     /// stays for patterns that are not extension-shaped.
     pub fn suffixes(mut self, suffixes: &[&'static str]) -> Self {
         declare_suffixes(&mut self.spec.suffixes, &mut self.spec.claims, suffixes);
+        self
+    }
+
+    /// Declare which scope tokens can demote to a narrower rung (see
+    /// [`ExtensionSpec::narrowable_scopes`]). Omitted ⇒ none — the
+    /// default-compatibility rule: `internal-only` stays silent.
+    pub fn narrowable(mut self, scopes: &[&'static str]) -> Self {
+        self.spec.narrowable_scopes = scopes.iter().map(|s| SmolStr::new_static(s)).collect();
         self
     }
 

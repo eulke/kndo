@@ -236,8 +236,9 @@ pub mod jvm_manifest {
         coordinate: &'static str,
         version: u32,
         suffixes: &[&'static str],
+        narrowable: &'static [&'static str],
     ) -> kndo_contract::extension::ExtensionSpec {
-        crate::source_adapter_spec(coordinate, version, suffixes, MANIFEST_GLOBS)
+        crate::source_adapter_spec(coordinate, version, suffixes, MANIFEST_GLOBS, narrowable)
     }
 
     /// The one build system's manifest names — the shared half of every JVM
@@ -452,6 +453,7 @@ pub fn source_adapter_spec(
     version: u32,
     suffixes: &[&'static str],
     manifests: &[&'static str],
+    narrowable: &'static [&'static str],
 ) -> kndo_contract::extension::ExtensionSpec {
     use kndo_contract::evidence::{EvidenceStream, EvidenceStreams};
     kndo_contract::extension::ExtensionSpec::builder(coordinate, version)
@@ -461,5 +463,6 @@ pub fn source_adapter_spec(
             EvidenceStream::Metrics,
         ]))
         .manifests(manifests)
+        .narrowable(narrowable)
         .build()
 }

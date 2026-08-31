@@ -30,7 +30,13 @@ pub struct RustAdapter {
 impl RustAdapter {
     pub fn new() -> Self {
         RustAdapter {
-            spec: kndo_toolkit::source_adapter_spec("kndo:rust", 2, &["rs"], &["**/Cargo.toml"]),
+            spec: kndo_toolkit::source_adapter_spec(
+                "kndo:rust",
+                2,
+                &["rs"],
+                &["**/Cargo.toml"],
+                &["crate"],
+            ),
         }
     }
 }

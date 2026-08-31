@@ -17476,6 +17476,600 @@
       "message": "structural clone of spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/SpringTransactionTestBase.kt:execute"
     },
     {
+      "id": "kndo-0ede24bde99f",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "possible",
+      "subject": {
+        "kind": "symbol",
+        "path": "buildSrc/src/main/kotlin/org/jetbrains/exposed/gradle/TestDbDsl.kt",
+        "selector": {
+          "Member": {
+            "owner": "TestDb",
+            "name": "ignoresSpringTests"
+          }
+        },
+        "span": {
+          "start": 887,
+          "end": 1005
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+    },
+    {
+      "id": "kndo-7c4535dd8cc3",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "possible",
+      "subject": {
+        "kind": "symbol",
+        "path": "buildSrc/src/main/kotlin/org/jetbrains/exposed/gradle/TestDbDsl.kt",
+        "selector": {
+          "Member": {
+            "owner": "TestDb",
+            "name": "dependencies"
+          }
+        },
+        "span": {
+          "start": 830,
+          "end": 881
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-938e08c6a58c",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "possible",
+      "subject": {
+        "kind": "symbol",
+        "path": "buildSrc/src/main/kotlin/org/jetbrains/exposed/gradle/TestDbDsl.kt",
+        "selector": {
+          "Member": {
+            "owner": "TestDb",
+            "name": "ignoresPluginTests"
+          }
+        },
+        "span": {
+          "start": 1011,
+          "end": 1129
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+    },
+    {
+      "id": "kndo-e12782c881e8",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "possible",
+      "subject": {
+        "kind": "symbol",
+        "path": "buildSrc/src/main/kotlin/org/jetbrains/exposed/gradle/TestDbDsl.kt",
+        "selector": {
+          "Member": {
+            "owner": "TestDb",
+            "name": "dialects"
+          }
+        },
+        "span": {
+          "start": 648,
+          "end": 695
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-90cda0732825",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "possible",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/datetime/LocalDateTimeColumnType.kt",
+        "selector": {
+          "Free": "toSqlTimestamp"
+        },
+        "span": {
+          "start": 6805,
+          "end": 7040
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+    },
+    {
+      "id": "kndo-b8924a0f384a",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "possible",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/transactions/TransactionManagersContainer.kt",
+        "selector": {
+          "Free": "TransactionManagersContainer"
+        },
+        "span": {
+          "start": 347,
+          "end": 1164
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-5fbf7d765095",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "possible",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/transactions/JdbcTransactionManager.kt",
+        "selector": {
+          "Free": "contextKey"
+        },
+        "span": {
+          "start": 1844,
+          "end": 2020
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-26474a4152d2",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "possible",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/transactions/Transactions.kt",
+        "selector": {
+          "Free": "closeStatementsAndConnection"
+        },
+        "span": {
+          "start": 18967,
+          "end": 19570
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+    },
+    {
+      "id": "kndo-7837226c372d",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "possible",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/ddl/EnumerationTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "EnumTable",
+            "name": "enumColumn"
+          }
+        },
+        "span": {
+          "start": 2595,
+          "end": 2659
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-7b9a2f0cd332",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "possible",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/ddl/EnumerationTests.kt",
+        "selector": {
+          "Free": "Foo"
+        },
+        "span": {
+          "start": 1607,
+          "end": 1655
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-7e6e5647f199",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "possible",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/ddl/EnumerationTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "EnumTable",
+            "name": "initEnumColumn"
+          }
+        },
+        "span": {
+          "start": 2669,
+          "end": 3152
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+    },
+    {
+      "id": "kndo-9968cb7bcfac",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "possible",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/transactions/R2dbcTransactionManager.kt",
+        "selector": {
+          "Free": "contextKey"
+        },
+        "span": {
+          "start": 1982,
+          "end": 2159
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-88c3ba62235e",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "possible",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/transactions/Transactions.kt",
+        "selector": {
+          "Free": "handleR2dbcException"
+        },
+        "span": {
+          "start": 10478,
+          "end": 11273
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+    },
+    {
+      "id": "kndo-b427c53d5ceb",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "possible",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/transactions/Transactions.kt",
+        "selector": {
+          "Free": "closeStatementsAndConnection"
+        },
+        "span": {
+          "start": 11641,
+          "end": 12265
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+    },
+    {
+      "id": "kndo-60a3cbf04ece",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "possible",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/metadata/H2Metadata.kt",
+        "selector": {
+          "Free": "H2PropertyProvider"
+        },
+        "span": {
+          "start": 298,
+          "end": 1351
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-82916e50c5e7",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "possible",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/metadata/H2Metadata.kt",
+        "selector": {
+          "Free": "H2TypeProvider"
+        },
+        "span": {
+          "start": 1353,
+          "end": 2914
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-06b1f2eca513",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "possible",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/metadata/MariaDBMetadata.kt",
+        "selector": {
+          "Free": "MariaDBTypeProvider"
+        },
+        "span": {
+          "start": 1632,
+          "end": 2316
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-e9d3234e043f",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "possible",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/metadata/MariaDBMetadata.kt",
+        "selector": {
+          "Free": "MariaDBPropertyProvider"
+        },
+        "span": {
+          "start": 111,
+          "end": 1630
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-1420afc970d8",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "possible",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/metadata/OracleMetadata.kt",
+        "selector": {
+          "Free": "OracleTypeProvider"
+        },
+        "span": {
+          "start": 932,
+          "end": 2165
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-c1fe3491b65b",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "possible",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/metadata/OracleMetadata.kt",
+        "selector": {
+          "Free": "OraclePropertyProvider"
+        },
+        "span": {
+          "start": 111,
+          "end": 930
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-388a4ee63832",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "possible",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/metadata/PostgreSQLMetadata.kt",
+        "selector": {
+          "Free": "PostgreSQLTypeProvider"
+        },
+        "span": {
+          "start": 2212,
+          "end": 5290
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-77394521bde8",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "possible",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/metadata/PostgreSQLMetadata.kt",
+        "selector": {
+          "Free": "PostgreSQLPropertyProvider"
+        },
+        "span": {
+          "start": 111,
+          "end": 2210
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-6ca63bfdb167",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "possible",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/metadata/SQLServerMetadata.kt",
+        "selector": {
+          "Free": "SQLServerPropertyProvider"
+        },
+        "span": {
+          "start": 111,
+          "end": 2148
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-f00323a13bd4",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "possible",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/metadata/SQLServerMetadata.kt",
+        "selector": {
+          "Free": "SQLServerTypeProvider"
+        },
+        "span": {
+          "start": 2150,
+          "end": 3401
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-225d530e4f72",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "possible",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/ddl/EnumerationTests.kt",
+        "selector": {
+          "Free": "Foo"
+        },
+        "span": {
+          "start": 1270,
+          "end": 1389
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-4273de1b45e5",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "possible",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/ddl/EnumerationTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "EnumTable",
+            "name": "initEnumColumn"
+          }
+        },
+        "span": {
+          "start": 1522,
+          "end": 2135
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+    },
+    {
+      "id": "kndo-e2fd44a2a103",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "possible",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/ddl/EnumerationTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "EnumTable",
+            "name": "enumColumn"
+          }
+        },
+        "span": {
+          "start": 1448,
+          "end": 1512
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-700be17714f9",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "possible",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/entities/EntityTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "EntityTests",
+            "name": "SingleFieldEntity"
+          }
+        },
+        "span": {
+          "start": 5402,
+          "end": 5557
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-f62d3326af71",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "possible",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/entities/EntityTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "EntityTests",
+            "name": "OneAutoFieldTable"
+          }
+        },
+        "span": {
+          "start": 5341,
+          "end": 5397
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-257efcf262bc",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "possible",
+      "subject": {
+        "kind": "symbol",
+        "path": "spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/SpringTransactionAttributeSourceConcurrencyTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "SpringTransactionAttributeSourceConcurrencyTest",
+            "name": "Sample"
+          }
+        },
+        "span": {
+          "start": 3717,
+          "end": 3798
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-1d32235431ad",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "possible",
+      "subject": {
+        "kind": "symbol",
+        "path": "spring7-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring7/transaction/SpringTransactionAttributeSourceConcurrencyTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "SpringTransactionAttributeSourceConcurrencyTest",
+            "name": "Sample"
+          }
+        },
+        "span": {
+          "start": 3718,
+          "end": 3799
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
       "id": "kndo-dc09d51e9b6a",
       "category": "untested",
       "severity": "info",

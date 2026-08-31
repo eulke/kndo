@@ -76,6 +76,11 @@
       "scope": "whole-run"
     },
     {
+      "category": "internal-only",
+      "reason": "no-roots-anywhere",
+      "scope": "whole-run"
+    },
+    {
       "category": "test-only",
       "reason": "no-test-roots-anywhere",
       "scope": "whole-run"

@@ -38,6 +38,7 @@ impl TypeScriptAdapter {
             3,
             &["ts", "tsx", "js", "jsx", "mjs", "cjs"],
             &["**/package.json"],
+            &[],
         );
         let mut resolution_exts = Vec::new();
         for ext in spec.suffixes() {

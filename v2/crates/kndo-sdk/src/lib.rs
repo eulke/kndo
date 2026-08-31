@@ -47,6 +47,11 @@ pub fn spec_to_wire(spec: &ExtensionSpec) -> wire::ExtensionSpec {
         coordinate: spec.coordinate().to_string(),
         version: spec.version(),
         suffixes: spec.suffixes().iter().map(|s| s.to_string()).collect(),
+        narrowable_scopes: spec
+            .narrowable_scopes()
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
         claims: spec.claims().iter().map(|s| s.to_string()).collect(),
         // The declared set itself is the wire spelling — no second list to
         // forget when the contract grows a stream; a variant this SDK build

@@ -186,6 +186,9 @@ interface types {
         coordinate: string,
         version: u32,
         suffixes: list<string>,
+        /// Scope tokens with a strictly narrower rung to demote to — the
+        /// language fact behind internal-only; empty keeps it silent.
+        narrowable-scopes: list<string>,
         claims: list<string>,
         emits: list<evidence-stream>,
         manifests: list<string>,

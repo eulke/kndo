@@ -28,7 +28,7 @@ pub struct JavaAdapter {
 impl JavaAdapter {
     pub fn new() -> Self {
         JavaAdapter {
-            spec: kndo_toolkit::jvm_manifest::jvm_spec("kndo:java", 2, &["java"]),
+            spec: kndo_toolkit::jvm_manifest::jvm_spec("kndo:java", 2, &["java"], &["package"]),
         }
     }
 }

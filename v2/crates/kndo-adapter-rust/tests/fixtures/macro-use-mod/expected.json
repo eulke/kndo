@@ -10,7 +10,26 @@
       }
     ]
   },
-  "findings": [],
+  "findings": [
+    {
+      "id": "kndo-97b9539791bd",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "possible",
+      "subject": {
+        "kind": "symbol",
+        "path": "src/messages.rs",
+        "selector": {
+          "Free": "set_errored"
+        },
+        "span": {
+          "start": 335,
+          "end": 428
+        }
+      },
+      "message": "declared `crate`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+    }
+  ],
   "fixed": [],
   "baselined": 0,
   "abstained": [

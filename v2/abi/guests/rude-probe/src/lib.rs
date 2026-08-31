@@ -21,6 +21,7 @@ impl bindings::Guest for RudeProbe {
             coordinate: "demo:rude".to_string(),
             version: 1,
             suffixes: vec!["rude".to_string()],
+            narrowable_scopes: Vec::new(),
             claims: vec!["**/*.rude".to_string()],
             emits: Vec::new(),
             manifests: Vec::new(),

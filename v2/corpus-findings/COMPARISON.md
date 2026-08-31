@@ -233,10 +233,24 @@ remain, as they should — v1 sees the same graph truth.
 ## M6.b.1 — guava speaks: the first Java measurement
 
 `kndo:java` lands on the unified door and guava claims 3,277 of 3,352 files.
-v2 reports 6,620 findings (5,621 before the 2026-08-31 audit round unified the
-metrics rule; 6,369 before M6.c's scope regions — see the unused note); the
-oracle (minus its 7,014 `internal-only`, which v2 does not build until M6.c's
-second half) reports 13,230. Category by category:
+v2 reports 9,925 findings (5,621 before the 2026-08-31 audit round unified the
+metrics rule; 6,369 before M6.c's scope regions; 6,620 before its second half
+built `internal-only`); the oracle reports 20,244. Category by category:
+
+**internal-only 3,305 vs 7,014 — same order, and the difference is a precision
+tiering v1 could not make.** The rule: a `Scoped` declaration (here:
+package-private) with real uses in its own file and no confident use beyond it
+— no binding importer, no reference anywhere else in its REGION, the only
+files that can legally resolve the name; same-named references outside the
+region are exactly v1's "weaker matches point outside", carried by
+`Possible`/`Info` like v1 did. The gap to 7,014 is deliberate: v1 also fired
+on declarations with ZERO resolved uses, which v2 reports as `unused` at
+`Certain` instead (the 1,017 below absorb that slice — a dead package-private
+is dead, not demotable), and v1's field/enum-member subjects ride looser
+name resolution. Only adapters that DECLARE a narrower rung exists
+(`narrowable_scopes`) fire at all: gin reports zero by design — Go has
+nothing below "package", so the same evidence would be advice nobody can
+take. Category by category:
 
 **unused 766 vs 6,525 — and 5,485 of the oracle's are false positives its own
 subject proves.** 84% of v1's guava `unused` findings are `enum-member` rows
@@ -308,6 +322,10 @@ duplicated pair-by-pair (`SelectTests.testCompoundOp`,
 granularity; the recorded presentation question (grouping clone families)
 applies, and v1's far smaller count is v1's weaker Kotlin metrics, not a
 v2 false-positive flood.
+
+**internal-only 31 vs 163** — the same tiering: `internal` declarations used
+only inside their own file (`private` would suffice), `Possible`/`Info`; the
+zero-use slice sits in `unused` at `Certain` instead.
 
 **unused 38 vs 277 — Kotlin's public-by-default meets library-mode roots**
 (18 before M6.c: `internal` is `Scoped("module")` now — a bounded region the

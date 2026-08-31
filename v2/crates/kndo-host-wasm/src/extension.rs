@@ -52,7 +52,7 @@ impl Phase {
 /// One guest call's store: the phase it runs in, the data that phase provides,
 /// and the memory limiter. Every call gets a fresh instance, so an enumeration
 /// answered in one call can never poison another.
-pub(crate) struct StoreData {
+struct StoreData {
     phase: Phase,
     known_files: Vec<String>,
     packages: Vec<wire::PackageEntry>,

@@ -8,11 +8,13 @@
 //! the same [`Reachability`] instead of building its own.
 
 mod duplicate;
+mod internal_only;
 mod test_only;
 mod untested;
 mod unused;
 
 pub use duplicate::Duplicate;
+pub use internal_only::InternalOnly;
 pub use test_only::TestOnly;
 pub use untested::Untested;
 pub use unused::Unused;
@@ -93,6 +95,10 @@ pub struct RunContext<'a> {
     pub graph: &'a Graph,
     pub reach: Reachability,
     pub coverage: Option<crate::coverage::Coverage>,
+    /// Per adapter coordinate: the scope tokens its language can demote to a
+    /// strictly narrower rung (`ExtensionSpec::narrowable_scopes`) — the fact
+    /// `internal-only` reads before advising anything.
+    pub narrowables: &'a [(smol_str::SmolStr, Vec<smol_str::SmolStr>)],
 }
 
 pub struct AnalysisContext<'a> {
@@ -185,12 +191,14 @@ pub struct AnalysisOutcome {
 pub fn run_all(
     graph: &Graph,
     coverage: Option<crate::coverage::Coverage>,
+    narrowables: &[(smol_str::SmolStr, Vec<smol_str::SmolStr>)],
     analyses: &[&dyn Analysis],
 ) -> AnalysisOutcome {
     let run = RunContext {
         graph,
         reach: Reachability::compute(graph),
         coverage,
+        narrowables,
     };
     let mut findings = Vec::new();
     let mut abstained = Vec::new();

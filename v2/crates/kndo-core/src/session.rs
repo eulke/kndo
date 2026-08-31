@@ -4,7 +4,7 @@
 //! `Result<Snapshot, Refusal>`: the run either happened or was refused, and the
 //! refusal reappears inside [`RunOutcome`] so `exit_code` covers that path too.
 
-use crate::analysis::{Abstention, Duplicate, TestOnly, Untested, Unused, run_all};
+use crate::analysis::{Abstention, Duplicate, InternalOnly, TestOnly, Untested, Unused, run_all};
 use crate::cache::EvidenceCache;
 use crate::conduct::Contribution;
 use crate::graph::Graph;
@@ -301,10 +301,21 @@ impl Session {
             .collect();
         let round =
             crate::conduct::run_round(&self.extensions, &active, &mut graph, &self.root, &contents);
+        let narrowables: Vec<(SmolStr, Vec<SmolStr>)> = self
+            .extensions
+            .iter()
+            .map(|e| {
+                (
+                    SmolStr::new(e.spec().coordinate()),
+                    e.spec().narrowable_scopes().to_vec(),
+                )
+            })
+            .collect();
         let mut outcome = run_all(
             &graph,
             round.coverage,
-            &[&Unused, &TestOnly, &Untested, &Duplicate],
+            &narrowables,
+            &[&Unused, &InternalOnly, &TestOnly, &Untested, &Duplicate],
         );
         // Plugin findings ride the same suppression pass — a `kndo:allow
         // ext:<coordinate>/<rule>` pragma reaches them like any category — and

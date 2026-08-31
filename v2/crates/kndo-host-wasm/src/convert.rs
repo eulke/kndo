@@ -49,6 +49,11 @@ pub(crate) fn extension_spec(spec: awire::ExtensionSpec) -> ExtensionSpec {
         coordinate: SmolStr::new(spec.coordinate),
         version: spec.version,
         suffixes: spec.suffixes.into_iter().map(SmolStr::new).collect(),
+        narrowable_scopes: spec
+            .narrowable_scopes
+            .into_iter()
+            .map(SmolStr::new)
+            .collect(),
         claims: spec.claims.into_iter().map(SmolStr::new).collect(),
         emits: EvidenceStreams::of(
             &spec

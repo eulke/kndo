@@ -10,7 +10,44 @@
       }
     ]
   },
-  "findings": [],
+  "findings": [
+    {
+      "id": "kndo-0e79a122618f",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "possible",
+      "subject": {
+        "kind": "symbol",
+        "path": "src/main/kotlin/demo/Demo.kt",
+        "selector": {
+          "Free": "MyProvider"
+        },
+        "span": {
+          "start": 243,
+          "end": 280
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-564989475f65",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "possible",
+      "subject": {
+        "kind": "symbol",
+        "path": "src/main/kotlin/demo/Demo.kt",
+        "selector": {
+          "Free": "MyMeta"
+        },
+        "span": {
+          "start": 282,
+          "end": 322
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    }
+  ],
   "fixed": [],
   "baselined": 0,
   "abstained": [
