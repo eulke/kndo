@@ -1911,3 +1911,22 @@ region semantics with a consumer, recorded in EXPERIMENTS beside the ladder
 work. 219 tests, 15 gates, clippy clean; the harvested private-type-leak
 fixture pins the canonical case (signature fires, body use does not), and
 the fingerprint bump is this entry's announcement.
+
+## 2026-08-31 — deep-import defers with its number; the oracle ledger closes
+
+The last unbuilt oracle category decomposes to nothing: all six findings are
+the monorepo's own test or tooling packages deep-importing vite's internals —
+`@vitejs/unit-ssr`'s 99 sites are vite's unit-test suite doing exactly its
+job. The consumer-role gate an honest v2 build would need makes the corpus
+demand zero, and this rule's zero (unlike `unresolved`'s) guards nothing the
+corpus can show. Deferred in EXPERIMENTS with the conditions that would
+reopen it.
+
+With this, every oracle category has a verdict: nine analyses ship (unused,
+duplicate, internal-only, test-only, untested, stale, unresolved,
+version-skew, cyclic, private-type-leak — ten, counting stale's
+suppression-side), three defer with numbers (undeclared, dependency
+unused/test-only, deep-import), and the deferrals' reopening conditions are
+recorded. The remaining open candidates (hollow-test, speculative-abstraction,
+churn×complexity, crap-with-coverage) have no recorded demand and wait for
+their own zero-FP definitions plus a measurement.

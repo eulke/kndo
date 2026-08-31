@@ -81,6 +81,26 @@ reached by direct imports anyway — so the edges are not built. Build only when
 corpus repo shows a finding this changes; the emission point is one loop in
 `imports()` next to the binding probes.
 
+### deep-import — DEFERRED with its number 2026-08-31
+The last oracle category: 6 findings, and every one is the monorepo's own
+test or tooling package deep-importing vite's internals (`@vitejs/unit-ssr`
+at 99 sites IS vite's unit-test suite doing its job; `create-vite`'s tsdown
+config reaching for a type is tooling). v1's design was already careful
+(contract-gated on a declared surface) and still produced only this. A
+consumer-role gate — test/tooling consumers exempt, which any honest v2 build
+would need — makes the corpus demand exactly zero, and unlike `unresolved`
+(whose zero floor guards future renames everywhere) this rule's regression
+value exists only in monorepos with declared surfaces and production-role
+cross-package consumers, which the corpus lacks. Cost it would need anyway:
+`declares_surface` package knowledge, package-pair subjects, consumer-role
+gating. Build only when a corpus repo shows a production-role deep-import.
+
+### crap (complexity × uncoverage)
+Oracle demand 0 — corpus runs carry no coverage, so v1's own analysis never
+fired there. v2 has both inputs (metrics winnowing, lcov ingestion); build
+only with a measurement from a coverage-bearing corpus repo, as its own
+experiment.
+
 ### hollow-test rule
 A test that asserts nothing / covers nothing real. No decision recorded; needs a
 definition that can reach zero FP and a corpus count.
