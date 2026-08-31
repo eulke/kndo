@@ -845,6 +845,13 @@ fn agent_format_matches_its_committed_golden() {
         "`_gone` is declared but nothing in the project uses it",
     )];
     sort_findings(&mut fixed);
+    // The real model over the specimen's own findings, so the golden pins genuine
+    // output: the Info and dependency-subject findings must not implicate.
+    let health = kndo::Health::measure(
+        &findings,
+        40,
+        &std::collections::BTreeSet::from([Category::UNUSED]),
+    );
     let report = Report {
         run: RunInfo {
             schema: REPORT_SCHEMA,
@@ -861,6 +868,7 @@ fn agent_format_matches_its_committed_golden() {
                 },
             ],
         },
+        health,
         findings,
         fixed,
         baselined: 3,

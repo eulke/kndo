@@ -93,6 +93,9 @@ pub struct Snapshot {
     /// the gate's view; the snapshot keeps the whole truth.
     pub findings: Vec<Finding>,
     pub abstained: Vec<Abstention>,
+    /// Categories whose analysis actually ran — health refuses to measure when
+    /// reachability itself is absent from this set.
+    pub judged: std::collections::BTreeSet<kndo_contract::vocab::Category>,
     pub suppressed: crate::suppress::SuppressedSummary,
     /// What each active plugin asserted, in registration order — always reported,
     /// even when everything applied cleanly.
@@ -336,6 +339,7 @@ impl Session {
             graph,
             findings,
             abstained: outcome.abstained,
+            judged: outcome.judged,
             suppressed: suppressed.summary,
             contributions: round.contributions,
             pragma_problems: suppressed.problems,
@@ -444,6 +448,15 @@ impl Snapshot {
         let findings: Vec<Finding> = self.new_findings().cloned().collect();
         let baselined = (self.findings.len() - findings.len()) as u32;
 
+        let subjects = self.graph.files.len()
+            + self
+                .graph
+                .files
+                .iter()
+                .map(|f| f.evidence.declarations.len())
+                .sum::<usize>();
+        let health = crate::health::Health::measure(&self.findings, subjects as u32, &self.judged);
+
         Report {
             run: RunInfo {
                 schema: REPORT_SCHEMA,
@@ -454,6 +467,7 @@ impl Snapshot {
                     .map(|(id, files)| ExtensionRun { id, files })
                     .collect(),
             },
+            health,
             findings,
             fixed,
             baselined,

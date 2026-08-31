@@ -53,6 +53,11 @@ fn findings_fail_the_gate_and_render_as_text_on_a_terminal() {
         out.stdout
     );
     assert!(out.stdout.contains("1 finding\n"), "{}", out.stdout);
+    assert!(
+        out.stdout.contains("\nhealth ") && out.stdout.contains("· implicated 1 of "),
+        "{}",
+        out.stdout
+    );
 }
 
 #[test]
@@ -184,6 +189,12 @@ fn baseline_accepts_findings_and_check_diffs_against_it() {
     let after = check(&p, &[], terminal());
     assert_eq!(after.code, 0, "{}", after.stdout);
     assert!(after.stdout.contains("baselined"), "{}", after.stdout);
+    // …but health still measures the tree: acknowledged debt is still debt.
+    assert!(
+        after.stdout.contains("· implicated 1 of "),
+        "the baseline must not launder health: {}",
+        after.stdout
+    );
 }
 
 #[test]

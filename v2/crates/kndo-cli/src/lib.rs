@@ -286,6 +286,18 @@ fn render_text(report: &Report) -> String {
         }
         out.push('\n');
     }
+    if let Some(health) = &report.health {
+        out.push_str(&format!(
+            "health {} · implicated {} of {}",
+            health.score_text(),
+            health.implicated,
+            health.subjects
+        ));
+        for c in &health.by_category {
+            out.push_str(&format!(" · {} {}", c.category.as_str(), c.findings));
+        }
+        out.push('\n');
+    }
     for abstention in &report.abstained {
         out.push_str(&format!(
             "abstained: {} — {}\n",

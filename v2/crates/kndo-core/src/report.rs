@@ -4,6 +4,7 @@
 
 use crate::analysis::Abstention;
 use crate::conduct::Contribution;
+use crate::health::Health;
 use crate::suppress::SuppressedSummary;
 use kndo_contract::evidence::DiagnosticLevel;
 use kndo_contract::finding::Finding;
@@ -50,6 +51,11 @@ pub struct ReportDiagnostic {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Report {
     pub run: RunInfo,
+    /// The project-level aggregate over the CURRENT tree — the baseline hides
+    /// findings from the listing below, never from health. Absent when
+    /// reachability itself abstained (the abstention entry says why).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub health: Option<Health>,
     /// New relative to the baseline; all current findings when none exists.
     pub findings: Vec<Finding>,
     /// Baseline entries the current run no longer produces.

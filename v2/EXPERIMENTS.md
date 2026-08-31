@@ -213,7 +213,7 @@ commitment to v1's design: each item is rebuilt v2-native when it lands.
 | formats: human, json, agent, sarif + flag > `KNDO_FORMAT` > tty selection | shipped | the render toll (2026-08-31): `--format`, agent format 1, SARIF with byte regions |
 | line/column in findings and output | absent — spans are byte offsets | open contract decision, the render toll's one deliberate gap: named consumers are SARIF text regions (`startLine` for code-scanning UIs) and `path:line` in the human render; touches `Finding` serialization, so it regenerates schema + every conformance fixture in one loud commit |
 | `--staged` / `--diff <ref>` change-scoped runs | absent | open — the diff workflow is v1 value (gate on what a commit touches); needs its v2 design (RunMode grows, baseline interplay) |
-| `health` verb (score + per-category breakdown) | absent | open — measure whether a grade earns its keep beyond the envelope's counts before rebuilding it |
+| health (score + per-category breakdown) | model shipped — envelope `health` + human/agent lines (2026-08-31) | derived ratio, no weights (see DECISIONS); still open: a `health` verb as sugar over `check`, and v1's `--by-package` split (waits on package aggregation) |
 | navigation verbs (`find`/`describe`/`uses`/`used-by`/`trace`/`impact`, batched `query`) | absent | open — the graph is queryable; the verbs are agent value; design against `kndo serve` so CLI and MCP share one query contract |
 | `explain <id>` (evidence chain behind one finding) | absent | open — pairs with the navigation verbs |
 | `doctor` (what kndo sees: extensions, cache, config) | absent | open — small, honest introspection; waits on config existing |

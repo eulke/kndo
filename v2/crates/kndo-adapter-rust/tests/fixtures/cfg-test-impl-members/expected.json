@@ -10,6 +10,11 @@
       }
     ]
   },
+  "health": {
+    "implicated": 0,
+    "subjects": 10,
+    "by_category": []
+  },
   "findings": [],
   "fixed": [],
   "baselined": 0,

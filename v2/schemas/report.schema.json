@@ -35,6 +35,17 @@
         "$ref": "#/$defs/Finding"
       }
     },
+    "health": {
+      "description": "The project-level aggregate over the CURRENT tree — the baseline hides\nfindings from the listing below, never from health. Absent when\nreachability itself abstained (the abstention entry says why).",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Health"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "plugins": {
       "description": "One entry per ACTIVE plugin, in registration order — what it asserted, what\nmissed, whether its content budget cut. Always present, so a plugin that\ncontributed nothing is visibly distinct from a plugin that never ran.\nJSON key `plugins` is envelope contract (schema `kndo-v2/m6`) — the key\npredates the conduct renaming and stays; the TYPE carries the new name.",
       "type": "array",
@@ -152,6 +163,23 @@
       "description": "A finding category: a validated string newtype, not an enum, because the\n`ext:<coordinate>/<rule>` namespace is open. First-party categories are the\nassociated constants.",
       "type": "string"
     },
+    "CategoryCount": {
+      "type": "object",
+      "properties": {
+        "category": {
+          "$ref": "#/$defs/Category"
+        },
+        "findings": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "category",
+        "findings"
+      ]
+    },
     "Confidence": {
       "description": "Ordered by strength, so `max()` and threshold comparisons read naturally.\nClosed by design: a fourth tier would change what every existing threshold means —\nthat is a semantic contract change, not growth.",
       "type": "string",
@@ -265,6 +293,35 @@
     "FindingId": {
       "description": "A finding's stable identity. Baselines and suppressions depend on it, so it is a\ntype, derived from typed parts — never five adjacent strings.",
       "type": "string"
+    },
+    "Health": {
+      "type": "object",
+      "properties": {
+        "by_category": {
+          "description": "Counting findings per category, in category order. More entries than\n`implicated` when one subject carries findings from several categories.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CategoryCount"
+          }
+        },
+        "implicated": {
+          "description": "Distinct universe subjects carrying at least one counting finding.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "subjects": {
+          "description": "The judged universe: every declaration plus every claimed file.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "implicated",
+        "subjects",
+        "by_category"
+      ]
     },
     "ProjectPath": {
       "description": "A `/`-separated, project-relative path. The one path spelling that crosses crate\nboundaries; OS paths stay at the discovery edge.",

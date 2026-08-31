@@ -1,5 +1,6 @@
 kndo agent format 1 (kndo-v2/m6)
 result: findings 4 · baselined 3 · fixed 1 · files 11/12 claimed
+health: 95.0 · implicated 2 of 40 · unused 2
 extensions: kndo:python 7 · kndo:swift 4
 findings:
 [kndo-efd2ed08e471] warning unused · dependency package.json (left-pad) · certain

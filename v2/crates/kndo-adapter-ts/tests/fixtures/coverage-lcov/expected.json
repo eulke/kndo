@@ -10,6 +10,11 @@
       }
     ]
   },
+  "health": {
+    "implicated": 0,
+    "subjects": 5,
+    "by_category": []
+  },
   "findings": [
     {
       "id": "kndo-f5eea7905f5d",

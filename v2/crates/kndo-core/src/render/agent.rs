@@ -35,6 +35,18 @@ impl Report {
             self.run.files_claimed,
             self.run.files_discovered,
         ));
+        if let Some(health) = &self.health {
+            out.push_str(&format!(
+                "health: {} · implicated {} of {}",
+                health.score_text(),
+                health.implicated,
+                health.subjects
+            ));
+            for c in &health.by_category {
+                out.push_str(&format!(" · {} {}", c.category.as_str(), c.findings));
+            }
+            out.push('\n');
+        }
         if !self.run.extensions.is_empty() {
             let list: Vec<String> = self
                 .run
@@ -137,6 +149,7 @@ mod tests {
                 files_claimed: 0,
                 extensions: Vec::new(),
             },
+            health: None,
             findings: Vec::new(),
             fixed: Vec::new(),
             baselined: 0,
@@ -177,6 +190,14 @@ mod tests {
         let mut report = empty_report();
         report.run.files_discovered = 6;
         report.run.files_claimed = 5;
+        report.health = Some(crate::health::Health {
+            implicated: 1,
+            subjects: 8,
+            by_category: vec![crate::health::CategoryCount {
+                category: Category::UNUSED,
+                findings: 1,
+            }],
+        });
         report.run.extensions.push(ExtensionRun {
             id: SmolStr::new("kndo:python"),
             files: 5,
@@ -208,6 +229,7 @@ mod tests {
 
         let text = report.to_agent();
         assert!(text.contains("result: findings 1 · baselined 2 · fixed 1 · files 5/6 claimed\n"));
+        assert!(text.contains("health: 87.5 · implicated 1 of 8 · unused 1\n"));
         assert!(text.contains("extensions: kndo:python 5\n"));
         assert!(text.contains("findings:\n["));
         assert!(text.contains("] warning unused · symbol src/lib.py — _ghost · probable\n"));

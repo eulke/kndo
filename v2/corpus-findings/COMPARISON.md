@@ -561,3 +561,40 @@ coverage) or a v2 decision (never-declare postures, library-mode roots,
 keep-alive direction, categories not yet earned through measurement) — in
 both directions, including the four repos where v2 reports MORE within a
 category (gin/ripgrep/Exposed duplicates, Alamofire unused).
+
+## Health — the first measurement of the derived ratio (2026-08-31)
+
+The model: `implicated / subjects`, distinct symbols-or-files carrying a first-party,
+warning-or-worse finding, over every declaration plus every claimed file. No weights,
+no bands — the score is the ratio. Across the nine repos it differentiates, and every
+position is explainable from the findings themselves:
+
+| repo | score | implicated / subjects | counting categories |
+|---|---|---|---|
+| vite | 86.1 | 699 / 5,044 | unused 699 |
+| lodash | 90.4 | 18 / 187 | unused 18 |
+| Alamofire | 95.4 | 154 / 3,380 | unused 154 |
+| vapor | 97.6 | 77 / 3,149 | unused 77 |
+| guava | 98.6 | 1,017 / 70,175 | unused 1,017 |
+| Exposed | 99.7 | 38 / 12,482 | unused 38 |
+| flask | 99.7 | 3 / 1,187 | unused 3 |
+| ripgrep | 99.9 | 3 / 2,557 | unused 3 |
+| gin | 100.0 | 0 / 1,304 | — |
+
+Two readings the table forces, both intended:
+
+- **Size cannot hide damage, and damage cannot hide size.** guava carries the largest
+  implicated count of the corpus (1,017) and still scores 98.6 — its universe is
+  70,175 subjects. vite's 699 in a 5,044-subject universe is 86.1. A penalty score
+  (v1's −25-per-bucket shape) would have ranked them by accident of caps.
+- **Only the warning tier implicates, and on this corpus that is `unused` alone** —
+  duplicate, internal-only and untested all report at Info, the advisory tier (gin:
+  108 duplicate findings, health 100.0). This is inherited from the severity
+  contract, deliberately: health has no severity opinion of its own, so the one
+  place a category's tier is decided (its analysis) is also the one place its
+  health-weight is decided. Promote a category to warning and health counts it,
+  with no health-side change.
+
+The scores live in each `<repo>.report.json` as the two integers plus the
+per-category tally; the 100× ratio is computed at render, one decimal, in
+`Health::score_text` — the envelope stays float-free.

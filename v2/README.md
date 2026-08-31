@@ -369,6 +369,17 @@ core-side as pure projections of `Report`, byte-identical from any frontend. The
 ledger's one open contract decision: line numbers in findings, named consumers SARIF
 text regions and `path:line` in the human render.
 
+Second row: **health**, rebuilt as a derived ratio instead of v1's penalty score. The
+envelope's `health` carries two counted integers and a per-category tally —
+`implicated` (distinct symbols/files with a first-party, warning-or-worse finding; two
+findings on one function are one problem unit) over `subjects` (every declaration plus
+every claimed file) — and the score is their ratio, rendered in one place. No penalty
+weights, no letter bands, no `previous` (v1's run-varying `health.previous` forced its
+one determinism carve-out — the vice is named in DECISIONS). Health measures the
+CURRENT tree: the baseline hides findings from the listing, never from health;
+suppression, a human verdict in the code, clears it. Absent — not 100 — when
+reachability itself abstained.
+
 ## Name verification (2026-08-29)
 
 - npm: `kndo` still taken by an unrelated DeFi package (unchanged since the v1 check);

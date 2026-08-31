@@ -225,6 +225,7 @@ mod tests {
                 files_claimed: 0,
                 extensions: Vec::new(),
             },
+            health: None,
             findings,
             fixed: Vec::new(),
             baselined: 0,

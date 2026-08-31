@@ -10,6 +10,16 @@
       }
     ]
   },
+  "health": {
+    "implicated": 1,
+    "subjects": 7,
+    "by_category": [
+      {
+        "category": "unused",
+        "findings": 1
+      }
+    ]
+  },
   "findings": [
     {
       "id": "kndo-bf500c882332",

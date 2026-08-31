@@ -1359,3 +1359,55 @@ Shipped, v2-native — each divergence from v1 carries its own reason:
 **Deliberate regenerations.** `gen-ci` (the new gate's step), `gen-schema` — the diff
 is one doc-string (schemars embeds rustdoc; the const value never moved). 193 tests,
 14 gates, clippy clean.
+
+## 2026-08-31 — Health: a derived ratio, not a penalty score
+
+**Owner decision.** Health is a key piece and was never in any milestone — the
+v1-surface ledger was its only mention. Built now, greenfield.
+
+**The model.** `Report.health` carries three counted facts: `implicated` (distinct
+symbol-or-file subjects with at least one first-party, warning-or-worse finding — two
+findings on one function are one problem unit), `subjects` (every declaration plus
+every claimed file — the graph's own universe), and the per-category tally of counting
+findings. The score IS the ratio, `100 × (1 − implicated/subjects)`, computed at
+render to one decimal in `Health::score_text` — the envelope stays integer-only and
+byte-stable with no float formatting in it.
+
+**Every rule is a derivation, not a knob:**
+
+- *Extension findings never count* — plugin findings are advisory by the two-tier
+  containment decision already on this log.
+- *Info never counts* — it is the advisory severity tier; health takes no severity
+  opinion of its own, so a category's health-weight is decided where its severity is
+  decided (its analysis), and promoting one to warning changes health with no
+  health-side edit.
+- *Distinct subjects* — health measures how much OF THE PROJECT is implicated, not
+  how many complaints exist.
+- *The baseline is transparent to health* — acknowledged debt is still debt;
+  baselining everything must not read as getting healthier (the CLI test pins this).
+- *Suppression clears health* — an in-code `kndo:allow` is a human verdict
+  overriding the analysis.
+- *Absent, not 100, when `unused` never judged* — no reachability, no implicated
+  set; `Snapshot.judged` (the categories that actually ran) gates it and the
+  abstention channel says why.
+- *No `previous`, no delta, no clock* — v1's `health.previous` was the one
+  run-varying field that ever forced a determinism carve-out; v2's health is a pure
+  function of the current tree, covered by the byte-identity gates like the rest of
+  the envelope.
+- *No penalty weights, no letter bands* — v1's −25/−10 bucket constants were
+  underivable, and grade letters imply model meaning that does not exist. If letters
+  are ever wanted they are frontend presentation over documented thresholds, never
+  model.
+
+**The measurement.** Nine repos, one run: vite 86.1 (699/5,044) → lodash 90.4 →
+Alamofire 95.4 → vapor 97.6 → guava 98.6 (1,017 implicated in a 70,175 universe —
+size cannot hide damage, damage cannot hide size) → Exposed and flask 99.7 → ripgrep
+99.9 → gin 100.0 (its 108 findings are all Info-tier duplicates). Decomposed in
+COMPARISON's health section.
+
+**Freight.** Envelope schema regenerated (+Health defs); 79 conformance fixtures
+regenerated — 505 insertions, zero deletions, verified health-only; agent golden
+regenerated (the specimen's health comes from the real `Health::measure`, so the
+golden pins genuine model output: its Info and dependency-subject findings implicate
+nothing). Still open in the ledger: a `health` verb as sugar, and `--by-package`
+(waits on package aggregation). 196 tests, 14 gates, clippy clean.
