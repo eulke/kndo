@@ -384,6 +384,12 @@ fn import(item: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
     );
 }
 
+/// Java's comment markers, declared where its grammar knowledge lives.
+const COMMENT_MARKERS: tk::CommentMarkers<'static> = tk::CommentMarkers {
+    line: &["//"],
+    block: &[("/*", "*/")],
+};
+
 fn references_and_comments(root: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
     // Import/package paths already became import evidence (or deliberately
     // none); every segment inside would read as a false identifier use.
@@ -392,7 +398,7 @@ fn references_and_comments(root: Node<'_>, source: &[u8], out: &mut EvidenceSink
         &["import_declaration", "package_declaration"],
         &mut |n| {
             if matches!(n.kind(), "line_comment" | "block_comment") {
-                tk::plain_comment(n, source, out);
+                tk::comment_evidence(n, source, &COMMENT_MARKERS, out);
                 return;
             }
             if !matches!(n.kind(), "identifier" | "type_identifier") {

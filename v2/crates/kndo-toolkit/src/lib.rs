@@ -100,11 +100,28 @@ pub fn walk_pruned(node: Node<'_>, skip: &[&str], f: &mut dyn FnMut(Node<'_>)) {
     }
 }
 
-/// Comment evidence for plain `//` and `/* */` grammars: the node's span with
-/// any trailing newline the grammar swallowed trimmed off, and the text span
-/// inside the markers. Grammars whose comments carry more meaning (Rust's doc
-/// markers) keep their own version — that difference is grammar knowledge.
-pub fn plain_comment(n: Node<'_>, source: &[u8], out: &mut kndo_contract::evidence::EvidenceSink) {
+/// The comment markers one grammar declares — the language fact, stated at the
+/// call site. WHICH nodes are comments is also the adapter's (it matches its
+/// grammar's kinds); this is the BYTES that open and close one, so the text
+/// span can exclude them. An adapter whose comment markers carry more meaning
+/// than text (Rust's doc markers) keeps its own extraction instead — that
+/// difference is grammar knowledge too.
+pub struct CommentMarkers<'a> {
+    /// Line-comment openers, checked in order.
+    pub line: &'a [&'a str],
+    /// Block-comment (opener, closer) pairs, checked in order.
+    pub block: &'a [(&'a str, &'a str)],
+}
+
+/// Comment evidence: the node's span with any trailing newline the grammar
+/// swallowed trimmed off, and the text span inside the declared markers. The
+/// mechanics; the markers come from the adapter.
+pub fn comment_evidence(
+    n: Node<'_>,
+    source: &[u8],
+    markers: &CommentMarkers<'_>,
+    out: &mut kndo_contract::evidence::EvidenceSink,
+) {
     let mut span = span(n);
     while span.end > span.start
         && matches!(source.get(span.end as usize - 1), Some(b'\n') | Some(b'\r'))
@@ -112,12 +129,24 @@ pub fn plain_comment(n: Node<'_>, source: &[u8], out: &mut kndo_contract::eviden
         span = Span::new(span.start, span.end - 1);
     }
     let bytes = &source[span.start as usize..(span.end as usize).min(source.len())];
-    let text = if bytes.starts_with(b"//") {
-        Span::new(span.start + 2, span.end)
-    } else if bytes.starts_with(b"/*") && bytes.ends_with(b"*/") && bytes.len() >= 4 {
-        Span::new(span.start + 2, span.end - 2)
-    } else {
-        span
-    };
+    let text = markers
+        .line
+        .iter()
+        .find(|m| bytes.starts_with(m.as_bytes()))
+        .map(|m| Span::new(span.start + m.len() as u32, span.end))
+        .or_else(|| {
+            markers.block.iter().find_map(|(open, close)| {
+                (bytes.starts_with(open.as_bytes())
+                    && bytes.ends_with(close.as_bytes())
+                    && bytes.len() >= open.len() + close.len())
+                .then(|| {
+                    Span::new(
+                        span.start + open.len() as u32,
+                        span.end - close.len() as u32,
+                    )
+                })
+            })
+        })
+        .unwrap_or(span);
     out.comment(span, text);
 }

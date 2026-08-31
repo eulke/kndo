@@ -192,12 +192,18 @@ fn string_content(node: Node<'_>, source: &[u8]) -> String {
     tk::text(node, source).trim_matches(['"', '`']).to_string()
 }
 
+/// Go's comment markers, declared where its grammar knowledge lives.
+const COMMENT_MARKERS: tk::CommentMarkers<'static> = tk::CommentMarkers {
+    line: &["//"],
+    block: &[("/*", "*/")],
+};
+
 fn references_and_comments(root: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
     // Import declarations bind and rename; their paths already became import
     // evidence.
     tk::walk_pruned(root, &["import_declaration"], &mut |n| {
         if n.kind() == "comment" {
-            tk::plain_comment(n, source, out);
+            tk::comment_evidence(n, source, &COMMENT_MARKERS, out);
             return;
         }
         if !matches!(
