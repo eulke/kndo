@@ -264,27 +264,6 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
-      "id": "kndo-07c1c7328dfc",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/StatementInterceptorTests.kt",
-        "selector": {
-          "Member": {
-            "owner": "RollbackCheckInterceptor",
-            "name": "ROLLBACK_CHECK"
-          }
-        },
-        "span": {
-          "start": 1768,
-          "end": 1828
-        }
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
       "id": "kndo-51565dd15b62",
       "category": "unused",
       "severity": "warning",
@@ -365,6 +344,69 @@
       "message": "byte-identical to documentation-website/Writerside/snippets/exposed-modules-groovy-gradle/src/main/kotlin/com/example/Main.kt"
     },
     {
+      "id": "kndo-fc4fca446e19",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/Expression.kt",
+        "selector": {
+          "Member": {
+            "owner": "QueryBuilder",
+            "name": "appendTo"
+          }
+        },
+        "span": {
+          "start": 1339,
+          "end": 1758
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/Expression.kt:QueryBuilder.appendTo"
+    },
+    {
+      "id": "kndo-aedfaef1207b",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/Op.kt",
+        "selector": {
+          "Member": {
+            "owner": "ModOp",
+            "name": "invoke"
+          }
+        },
+        "span": {
+          "start": 12769,
+          "end": 13106
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/Op.kt:ModOp.invoke"
+    },
+    {
+      "id": "kndo-c29f6f27c578",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/Op.kt",
+        "selector": {
+          "Member": {
+            "owner": "FALSE",
+            "name": "toQueryBuilder"
+          }
+        },
+        "span": {
+          "start": 2503,
+          "end": 2963
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/Op.kt:TRUE.toQueryBuilder"
+    },
+    {
       "id": "kndo-5785203e3f76",
       "category": "duplicate",
       "severity": "info",
@@ -394,6 +436,24 @@
           "Free": "neq"
         },
         "span": {
+          "start": 6733,
+          "end": 7044
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/OpBuilder.kt:eq"
+    },
+    {
+      "id": "kndo-b2e6ac4d6f46",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/OpBuilder.kt",
+        "selector": {
+          "Free": "neq"
+        },
+        "span": {
           "start": 7151,
           "end": 7620
         }
@@ -401,7 +461,43 @@
       "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/OpBuilder.kt:eq"
     },
     {
-      "id": "kndo-09811d4cee34",
+      "id": "kndo-b2e6ac4d6f46",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/OpBuilder.kt",
+        "selector": {
+          "Free": "neq"
+        },
+        "span": {
+          "start": 7707,
+          "end": 7922
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/OpBuilder.kt:eq"
+    },
+    {
+      "id": "kndo-b2e6ac4d6f46",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/OpBuilder.kt",
+        "selector": {
+          "Free": "neq"
+        },
+        "span": {
+          "start": 6379,
+          "end": 6657
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/OpBuilder.kt:eq"
+    },
+    {
+      "id": "kndo-031f8e0c18f0",
       "category": "duplicate",
       "severity": "info",
       "confidence": "certain",
@@ -411,15 +507,666 @@
         "selector": {
           "Member": {
             "owner": "ISqlExpressionBuilder",
-            "name": "asLiteral"
+            "name": "lead"
           }
         },
         "span": {
-          "start": 65308,
-          "end": 66133
+          "start": 48900,
+          "end": 49423
         }
       },
-      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/LiteralOp.kt:asLiteral"
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.lag"
+    },
+    {
+      "id": "kndo-0fff57207fa6",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "bitwiseXor"
+          }
+        },
+        "span": {
+          "start": 35694,
+          "end": 36122
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.bitwiseAnd"
+    },
+    {
+      "id": "kndo-0fff57207fa6",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "bitwiseXor"
+          }
+        },
+        "span": {
+          "start": 36128,
+          "end": 36554
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.bitwiseAnd"
+    },
+    {
+      "id": "kndo-161e24cb2f9f",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "times"
+          }
+        },
+        "span": {
+          "start": 28007,
+          "end": 28440
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.plus"
+    },
+    {
+      "id": "kndo-161e24cb2f9f",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "times"
+          }
+        },
+        "span": {
+          "start": 27585,
+          "end": 28001
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.plus"
+    },
+    {
+      "id": "kndo-224215bc77be",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "neq"
+          }
+        },
+        "span": {
+          "start": 5805,
+          "end": 6239
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.eq"
+    },
+    {
+      "id": "kndo-224215bc77be",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "neq"
+          }
+        },
+        "span": {
+          "start": 4520,
+          "end": 4920
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.eq"
+    },
+    {
+      "id": "kndo-224215bc77be",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "neq"
+          }
+        },
+        "span": {
+          "start": 5365,
+          "end": 5799
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.eq"
+    },
+    {
+      "id": "kndo-224215bc77be",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "neq"
+          }
+        },
+        "span": {
+          "start": 4926,
+          "end": 5359
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.eq"
+    },
+    {
+      "id": "kndo-2a246db7e7e1",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "rem"
+          }
+        },
+        "span": {
+          "start": 31175,
+          "end": 31677
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.rem"
+    },
+    {
+      "id": "kndo-319e6effaea1",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "greater"
+          }
+        },
+        "span": {
+          "start": 13660,
+          "end": 14129
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.less"
+    },
+    {
+      "id": "kndo-319e6effaea1",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "greater"
+          }
+        },
+        "span": {
+          "start": 13182,
+          "end": 13654
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.less"
+    },
+    {
+      "id": "kndo-319e6effaea1",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "greater"
+          }
+        },
+        "span": {
+          "start": 14135,
+          "end": 14622
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.less"
+    },
+    {
+      "id": "kndo-319e6effaea1",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "greater"
+          }
+        },
+        "span": {
+          "start": 12264,
+          "end": 12693
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.less"
+    },
+    {
+      "id": "kndo-319e6effaea1",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "greater"
+          }
+        },
+        "span": {
+          "start": 11791,
+          "end": 12258
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.less"
+    },
+    {
+      "id": "kndo-319e6effaea1",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "greater"
+          }
+        },
+        "span": {
+          "start": 12699,
+          "end": 13176
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.less"
+    },
+    {
+      "id": "kndo-4a6343385101",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "isDistinctFrom"
+          }
+        },
+        "span": {
+          "start": 23641,
+          "end": 24138
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.isNotDistinctFrom"
+    },
+    {
+      "id": "kndo-4a6343385101",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "isDistinctFrom"
+          }
+        },
+        "span": {
+          "start": 22656,
+          "end": 23120
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.less"
+    },
+    {
+      "id": "kndo-4a6343385101",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "isDistinctFrom"
+          }
+        },
+        "span": {
+          "start": 22148,
+          "end": 22650
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.less"
+    },
+    {
+      "id": "kndo-4a6343385101",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "isDistinctFrom"
+          }
+        },
+        "span": {
+          "start": 23126,
+          "end": 23635
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.isNotDistinctFrom"
+    },
+    {
+      "id": "kndo-5d24826fad6e",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "minus"
+          }
+        },
+        "span": {
+          "start": 27146,
+          "end": 27579
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.plus"
+    },
+    {
+      "id": "kndo-5d24826fad6e",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "minus"
+          }
+        },
+        "span": {
+          "start": 26724,
+          "end": 27140
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.plus"
+    },
+    {
+      "id": "kndo-69c3c40d038b",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "notLike"
+          }
+        },
+        "span": {
+          "start": 42201,
+          "end": 42748
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.like"
+    },
+    {
+      "id": "kndo-69c3c40d038b",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "notLike"
+          }
+        },
+        "span": {
+          "start": 42754,
+          "end": 43229
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.like"
+    },
+    {
+      "id": "kndo-69c3c40d038b",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "notLike"
+          }
+        },
+        "span": {
+          "start": 44343,
+          "end": 44813
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.like"
+    },
+    {
+      "id": "kndo-69c3c40d038b",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "notLike"
+          }
+        },
+        "span": {
+          "start": 43235,
+          "end": 43819
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.like"
+    },
+    {
+      "id": "kndo-69c3c40d038b",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "notLike"
+          }
+        },
+        "span": {
+          "start": 43825,
+          "end": 44337
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.like"
+    },
+    {
+      "id": "kndo-69c3c40d038b",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "notLike"
+          }
+        },
+        "span": {
+          "start": 44819,
+          "end": 45339
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.like"
+    },
+    {
+      "id": "kndo-78efa65c2302",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "isNotDistinctFrom"
+          }
+        },
+        "span": {
+          "start": 20097,
+          "end": 20576
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.less"
+    },
+    {
+      "id": "kndo-78efa65c2302",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "isNotDistinctFrom"
+          }
+        },
+        "span": {
+          "start": 19574,
+          "end": 20091
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.less"
+    },
+    {
+      "id": "kndo-8736275b00ca",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "div"
+          }
+        },
+        "span": {
+          "start": 28866,
+          "end": 29297
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.plus"
+    },
+    {
+      "id": "kndo-8736275b00ca",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "div"
+          }
+        },
+        "span": {
+          "start": 28446,
+          "end": 28860
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.plus"
     },
     {
       "id": "kndo-88740a72f8da",
@@ -443,6 +1190,624 @@
       "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.inList"
     },
     {
+      "id": "kndo-88740a72f8da",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "notInList"
+          }
+        },
+        "span": {
+          "start": 62575,
+          "end": 63285
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.inList"
+    },
+    {
+      "id": "kndo-88740a72f8da",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "notInList"
+          }
+        },
+        "span": {
+          "start": 59638,
+          "end": 60105
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.inList"
+    },
+    {
+      "id": "kndo-88740a72f8da",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "notInList"
+          }
+        },
+        "span": {
+          "start": 63291,
+          "end": 63976
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.inList"
+    },
+    {
+      "id": "kndo-88740a72f8da",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "notInList"
+          }
+        },
+        "span": {
+          "start": 60655,
+          "end": 61243
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.inList"
+    },
+    {
+      "id": "kndo-88740a72f8da",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "notInList"
+          }
+        },
+        "span": {
+          "start": 60111,
+          "end": 60649
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.inList"
+    },
+    {
+      "id": "kndo-88740a72f8da",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "notInList"
+          }
+        },
+        "span": {
+          "start": 61249,
+          "end": 61709
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.inList"
+    },
+    {
+      "id": "kndo-9b194655284d",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "lessEq"
+          }
+        },
+        "span": {
+          "start": 10834,
+          "end": 11298
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.less"
+    },
+    {
+      "id": "kndo-9b194655284d",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "lessEq"
+          }
+        },
+        "span": {
+          "start": 10361,
+          "end": 10828
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.less"
+    },
+    {
+      "id": "kndo-9b194655284d",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "lessEq"
+          }
+        },
+        "span": {
+          "start": 11304,
+          "end": 11785
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.less"
+    },
+    {
+      "id": "kndo-9b194655284d",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "lessEq"
+          }
+        },
+        "span": {
+          "start": 9454,
+          "end": 9878
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.less"
+    },
+    {
+      "id": "kndo-9b194655284d",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "lessEq"
+          }
+        },
+        "span": {
+          "start": 8986,
+          "end": 9448
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.less"
+    },
+    {
+      "id": "kndo-9b194655284d",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "lessEq"
+          }
+        },
+        "span": {
+          "start": 9884,
+          "end": 10355
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.less"
+    },
+    {
+      "id": "kndo-9ffde42ef9a3",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "bitwiseOr"
+          }
+        },
+        "span": {
+          "start": 34838,
+          "end": 35261
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.bitwiseAnd"
+    },
+    {
+      "id": "kndo-9ffde42ef9a3",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "bitwiseOr"
+          }
+        },
+        "span": {
+          "start": 35267,
+          "end": 35688
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.bitwiseAnd"
+    },
+    {
+      "id": "kndo-c53e9fb64476",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "greaterEq"
+          }
+        },
+        "span": {
+          "start": 16539,
+          "end": 17018
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.less"
+    },
+    {
+      "id": "kndo-c53e9fb64476",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "greaterEq"
+          }
+        },
+        "span": {
+          "start": 16051,
+          "end": 16533
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.less"
+    },
+    {
+      "id": "kndo-c53e9fb64476",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "greaterEq"
+          }
+        },
+        "span": {
+          "start": 17024,
+          "end": 17523
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.less"
+    },
+    {
+      "id": "kndo-c53e9fb64476",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "greaterEq"
+          }
+        },
+        "span": {
+          "start": 15111,
+          "end": 15550
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.less"
+    },
+    {
+      "id": "kndo-c53e9fb64476",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "greaterEq"
+          }
+        },
+        "span": {
+          "start": 14628,
+          "end": 15105
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.less"
+    },
+    {
+      "id": "kndo-c53e9fb64476",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "ISqlExpressionBuilder",
+            "name": "greaterEq"
+          }
+        },
+        "span": {
+          "start": 15556,
+          "end": 16045
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.less"
+    },
+    {
+      "id": "kndo-2a3372ac0ea5",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/Table.kt",
+        "selector": {
+          "Free": "leftJoin"
+        },
+        "span": {
+          "start": 5519,
+          "end": 5870
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/Table.kt:innerJoin"
+    },
+    {
+      "id": "kndo-6e15400e27ff",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/Table.kt",
+        "selector": {
+          "Free": "rightJoin"
+        },
+        "span": {
+          "start": 6150,
+          "end": 6503
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/Table.kt:innerJoin"
+    },
+    {
+      "id": "kndo-78dab9706708",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/Table.kt",
+        "selector": {
+          "Free": "fullJoin"
+        },
+        "span": {
+          "start": 6782,
+          "end": 7133
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/Table.kt:innerJoin"
+    },
+    {
+      "id": "kndo-9499b5c4435c",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/Table.kt",
+        "selector": {
+          "Member": {
+            "owner": "Table",
+            "name": "ushort"
+          }
+        },
+        "span": {
+          "start": 34860,
+          "end": 35131
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/Table.kt:Table.ubyte"
+    },
+    {
+      "id": "kndo-d2417879cdcc",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/Table.kt",
+        "selector": {
+          "Free": "crossJoin"
+        },
+        "span": {
+          "start": 7407,
+          "end": 7760
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/Table.kt:innerJoin"
+    },
+    {
+      "id": "kndo-dfbfec186b50",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/Table.kt",
+        "selector": {
+          "Member": {
+            "owner": "Table",
+            "name": "short"
+          }
+        },
+        "span": {
+          "start": 34111,
+          "end": 34389
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/Table.kt:Table.byte"
+    },
+    {
+      "id": "kndo-e2558812ffda",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/Table.kt",
+        "selector": {
+          "Member": {
+            "owner": "Table",
+            "name": "uinteger"
+          }
+        },
+        "span": {
+          "start": 36104,
+          "end": 36377
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/Table.kt:Table.ubyte"
+    },
+    {
+      "id": "kndo-eccc6531b52e",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/Table.kt",
+        "selector": {
+          "Member": {
+            "owner": "Table",
+            "name": "integer"
+          }
+        },
+        "span": {
+          "start": 35350,
+          "end": 35628
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/Table.kt:Table.byte"
+    },
+    {
+      "id": "kndo-fd5260fd38d2",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/Table.kt",
+        "selector": {
+          "Member": {
+            "owner": "Table",
+            "name": "long"
+          }
+        },
+        "span": {
+          "start": 36596,
+          "end": 36868
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/Table.kt:Table.byte"
+    },
+    {
+      "id": "kndo-6c43a4903faa",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/datetime/LocalTimeColumnType.kt",
+        "selector": {
+          "Member": {
+            "owner": "LocalTimeColumnType",
+            "name": "readObject"
+          }
+        },
+        "span": {
+          "start": 3937,
+          "end": 4268
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/datetime/LocalDateColumnType.kt:LocalDateColumnType.readObject"
+    },
+    {
       "id": "kndo-0d974e3dae07",
       "category": "duplicate",
       "severity": "info",
@@ -462,6 +1827,27 @@
         }
       },
       "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/statements/BatchReplaceStatement.kt:BatchReplaceStatement.prepareSQL"
+    },
+    {
+      "id": "kndo-534cb9848c63",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/statements/StatementBuilder.kt",
+        "selector": {
+          "Member": {
+            "owner": "StatementBuilder",
+            "name": "insertIgnore"
+          }
+        },
+        "span": {
+          "start": 6195,
+          "end": 6511
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/statements/StatementBuilder.kt:StatementBuilder.insert"
     },
     {
       "id": "kndo-6616da51a841",
@@ -485,6 +1871,69 @@
       "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/statements/BatchUpsertStatement.kt:BatchUpsertStatement.prepareSQL"
     },
     {
+      "id": "kndo-18d76f1977e3",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/vendors/SQLServerDialect.kt",
+        "selector": {
+          "Member": {
+            "owner": "SQLServerDialect",
+            "name": "createIndex"
+          }
+        },
+        "span": {
+          "start": 18269,
+          "end": 18629
+        }
+      },
+      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/vendors/MariaDBDialect.kt:MariaDBDialect.createIndex"
+    },
+    {
+      "id": "kndo-7792a767eab6",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-java-time/src/test/kotlin/org/jetbrains/exposed/v1/javatime/DateTimeLiteralTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "DateTimeLiteralTest",
+            "name": "testSelectByTimestampLiteralEquality"
+          }
+        },
+        "span": {
+          "start": 2854,
+          "end": 3315
+        }
+      },
+      "message": "structural clone of exposed-java-time/src/test/kotlin/org/jetbrains/exposed/v1/javatime/DateTimeLiteralTest.kt:DateTimeLiteralTest.testSelectByDateLiteralEquality"
+    },
+    {
+      "id": "kndo-de912d2eb1ad",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-java-time/src/test/kotlin/org/jetbrains/exposed/v1/javatime/DateTimeLiteralTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "DateTimeLiteralTest",
+            "name": "testSelectByDatetimeLiteralEquality"
+          }
+        },
+        "span": {
+          "start": 2010,
+          "end": 2456
+        }
+      },
+      "message": "structural clone of exposed-java-time/src/test/kotlin/org/jetbrains/exposed/v1/javatime/DateTimeLiteralTest.kt:DateTimeLiteralTest.testSelectByDateLiteralEquality"
+    },
+    {
       "id": "kndo-683f8afdfca6",
       "category": "duplicate",
       "severity": "info",
@@ -504,6 +1953,114 @@
         }
       },
       "message": "structural clone of exposed-java-time/src/test/kotlin/org/jetbrains/exposed/v1/javatime/DefaultsTest.kt:DefaultsTest.testTimestampDefaultDoesNotTriggerAlterStatement"
+    },
+    {
+      "id": "kndo-02f6c81185db",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/Queries.kt",
+        "selector": {
+          "Free": "batchInsert"
+        },
+        "span": {
+          "start": 19798,
+          "end": 20134
+        }
+      },
+      "message": "structural clone of exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/Queries.kt:batchInsert"
+    },
+    {
+      "id": "kndo-02f6c81185db",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/Queries.kt",
+        "selector": {
+          "Free": "batchInsert"
+        },
+        "span": {
+          "start": 18266,
+          "end": 18558
+        }
+      },
+      "message": "structural clone of exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/Queries.kt:batchInsert"
+    },
+    {
+      "id": "kndo-13ca541f761f",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/Queries.kt",
+        "selector": {
+          "Free": "replace"
+        },
+        "span": {
+          "start": 22034,
+          "end": 22294
+        }
+      },
+      "message": "structural clone of exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/Queries.kt:insert"
+    },
+    {
+      "id": "kndo-2712b29b379f",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/Queries.kt",
+        "selector": {
+          "Free": "deleteIgnoreWhere"
+        },
+        "span": {
+          "start": 3444,
+          "end": 3897
+        }
+      },
+      "message": "structural clone of exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/Queries.kt:deleteWhere"
+    },
+    {
+      "id": "kndo-27c58308416f",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/Queries.kt",
+        "selector": {
+          "Free": "insertIgnore"
+        },
+        "span": {
+          "start": 12233,
+          "end": 12503
+        }
+      },
+      "message": "structural clone of exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/Queries.kt:insert"
+    },
+    {
+      "id": "kndo-46dff3ece33f",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/Queries.kt",
+        "selector": {
+          "Free": "batchUpsert"
+        },
+        "span": {
+          "start": 37925,
+          "end": 38416
+        }
+      },
+      "message": "structural clone of exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/Queries.kt:batchUpsert"
     },
     {
       "id": "kndo-f2f743ba20b1",
@@ -527,22 +2084,25 @@
       "message": "structural clone of exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/SchemaUtils.kt:SchemaUtils.createDatabase"
     },
     {
-      "id": "kndo-5516b5542e42",
+      "id": "kndo-fe189bd0df87",
       "category": "duplicate",
       "severity": "info",
       "confidence": "certain",
       "subject": {
         "kind": "symbol",
-        "path": "exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/transactions/Transactions.kt",
+        "path": "exposed-jodatime/src/test/kotlin/org/jetbrains/exposed/v1/jodatime/JodaDateTimeLiteralTest.kt",
         "selector": {
-          "Free": "suspendTransaction"
+          "Member": {
+            "owner": "JodaDateTimeLiteralTest",
+            "name": "testSelectByDatetimeLiteralEquality"
+          }
         },
         "span": {
-          "start": 12127,
-          "end": 13288
+          "start": 1010,
+          "end": 1456
         }
       },
-      "message": "structural clone of exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/transactions/Transactions.kt:transaction"
+      "message": "structural clone of exposed-java-time/src/test/kotlin/org/jetbrains/exposed/v1/javatime/DateTimeLiteralTest.kt:DateTimeLiteralTest.testSelectByDateLiteralEquality"
     },
     {
       "id": "kndo-0d3cc32c7960",
@@ -650,6 +2210,45 @@
       "message": "structural clone of exposed-java-time/src/test/kotlin/org/jetbrains/exposed/v1/javatime/JavaTimeTests.kt:JavaTimeTests.testSQLiteDateTimeFieldRegression"
     },
     {
+      "id": "kndo-ae85c3b1cedf",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-jodatime/src/test/kotlin/org/jetbrains/exposed/v1/jodatime/JodaTimeDefaultsTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "JodaTimeDefaultsTest",
+            "name": "testCustomDefaultTimestampFunctionWithEntity"
+          }
+        },
+        "span": {
+          "start": 22415,
+          "end": 22869
+        }
+      },
+      "message": "structural clone of exposed-java-time/src/test/kotlin/org/jetbrains/exposed/v1/javatime/DefaultsTest.kt:DefaultsTest.testCustomDefaultTimestampFunctionWithEntity"
+    },
+    {
+      "id": "kndo-1218e1bf71dc",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-jodatime/src/test/kotlin/org/jetbrains/exposed/v1/jodatime/JodaTimeMiscTableTest.kt",
+        "selector": {
+          "Free": "checkRowFull"
+        },
+        "span": {
+          "start": 18750,
+          "end": 19317
+        }
+      },
+      "message": "structural clone of exposed-java-time/src/test/kotlin/org/jetbrains/exposed/v1/javatime/MiscTableTest.kt:checkRowFull"
+    },
+    {
       "id": "kndo-db2cc3a9506c",
       "category": "duplicate",
       "severity": "info",
@@ -705,6 +2304,90 @@
         }
       },
       "message": "structural clone of exposed-json/src/test/kotlin/org/jetbrains/exposed/v1/json/JsonTestsData.kt:withJsonArrays"
+    },
+    {
+      "id": "kndo-0958539dbff8",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-kotlin-datetime/src/test/kotlin/org/jetbrains/exposed/v1/datetime/DateTimeLiteralTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "DateTimeLiteralTest",
+            "name": "testSelectByDatetimeLiteralEquality"
+          }
+        },
+        "span": {
+          "start": 2390,
+          "end": 2836
+        }
+      },
+      "message": "structural clone of exposed-java-time/src/test/kotlin/org/jetbrains/exposed/v1/javatime/DateTimeLiteralTest.kt:DateTimeLiteralTest.testSelectByDateLiteralEquality"
+    },
+    {
+      "id": "kndo-200c86a37ef3",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-kotlin-datetime/src/test/kotlin/org/jetbrains/exposed/v1/datetime/DateTimeLiteralTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "DateTimeLiteralTest",
+            "name": "testSelectByDateLiteralEquality"
+          }
+        },
+        "span": {
+          "start": 1646,
+          "end": 2032
+        }
+      },
+      "message": "structural clone of exposed-java-time/src/test/kotlin/org/jetbrains/exposed/v1/javatime/DateTimeLiteralTest.kt:DateTimeLiteralTest.testSelectByDateLiteralEquality"
+    },
+    {
+      "id": "kndo-721c58da02a3",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-kotlin-datetime/src/test/kotlin/org/jetbrains/exposed/v1/datetime/DateTimeLiteralTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "DateTimeLiteralTest",
+            "name": "testSelectByXTimestampLiteralEquality"
+          }
+        },
+        "span": {
+          "start": 3234,
+          "end": 3705
+        }
+      },
+      "message": "structural clone of exposed-java-time/src/test/kotlin/org/jetbrains/exposed/v1/javatime/DateTimeLiteralTest.kt:DateTimeLiteralTest.testSelectByDateLiteralEquality"
+    },
+    {
+      "id": "kndo-cd936474244c",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-kotlin-datetime/src/test/kotlin/org/jetbrains/exposed/v1/datetime/DateTimeLiteralTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "DateTimeLiteralTest",
+            "name": "testSelectByTimestampLiteralEquality"
+          }
+        },
+        "span": {
+          "start": 3711,
+          "end": 4172
+        }
+      },
+      "message": "structural clone of exposed-java-time/src/test/kotlin/org/jetbrains/exposed/v1/javatime/DateTimeLiteralTest.kt:DateTimeLiteralTest.testSelectByDateLiteralEquality"
     },
     {
       "id": "kndo-0b1589d1eace",
@@ -810,6 +2493,48 @@
         }
       },
       "message": "structural clone of exposed-java-time/src/test/kotlin/org/jetbrains/exposed/v1/javatime/DefaultsTest.kt:DefaultsTest.testTimestampDefaultDoesNotTriggerAlterStatement"
+    },
+    {
+      "id": "kndo-8397ede35999",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-kotlin-datetime/src/test/kotlin/org/jetbrains/exposed/v1/datetime/DefaultsTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "DefaultsTest",
+            "name": "testCustomDefaultTimestampFunctionWithInsertStatement"
+          }
+        },
+        "span": {
+          "start": 29038,
+          "end": 29582
+        }
+      },
+      "message": "structural clone of exposed-java-time/src/test/kotlin/org/jetbrains/exposed/v1/javatime/DefaultsTest.kt:DefaultsTest.testCustomDefaultTimestampFunctionWithInsertStatement"
+    },
+    {
+      "id": "kndo-ca5e32b87458",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-kotlin-datetime/src/test/kotlin/org/jetbrains/exposed/v1/datetime/DefaultsTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "DefaultsTest",
+            "name": "testCustomDefaultTimestampFunctionWithEntity"
+          }
+        },
+        "span": {
+          "start": 28578,
+          "end": 29032
+        }
+      },
+      "message": "structural clone of exposed-java-time/src/test/kotlin/org/jetbrains/exposed/v1/javatime/DefaultsTest.kt:DefaultsTest.testCustomDefaultTimestampFunctionWithEntity"
     },
     {
       "id": "kndo-d1c93bccc46f",
@@ -1016,27 +2741,6 @@
       "message": "structural clone of exposed-migration-jdbc/src/test/kotlin/org/jetbrains/exposed/v1/migration/jdbc/DatabaseMigrationTests.kt:DatabaseMigrationTests.testJavatimeCurrentDateAsDefaultExpression"
     },
     {
-      "id": "kndo-f6e2729250ea",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-migration-jdbc/src/test/kotlin/org/jetbrains/exposed/v1/migration/jdbc/IndexConstraintsTests.kt",
-        "selector": {
-          "Member": {
-            "owner": "IndexConstraintsTests",
-            "name": "testAddMissingCheckConstraint"
-          }
-        },
-        "span": {
-          "start": 3600,
-          "end": 4399
-        }
-      },
-      "message": "structural clone of exposed-migration-jdbc/src/test/kotlin/org/jetbrains/exposed/v1/migration/jdbc/IndexConstraintsTests.kt:IndexConstraintsTests.testDifferentCheckConstraintForSameUnderlyingColumnType"
-    },
-    {
       "id": "kndo-17b8fa950df7",
       "category": "duplicate",
       "severity": "info",
@@ -1079,48 +2783,6 @@
       "message": "structural clone of exposed-migration-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/migration/jdbc/MigrationUtils.kt:MigrationUtils.dropUnmappedColumnsStatements"
     },
     {
-      "id": "kndo-8c393b134d7c",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-migration-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/migration/r2dbc/MigrationUtils.kt",
-        "selector": {
-          "Member": {
-            "owner": "MigrationUtils",
-            "name": "checkUnmappedSequences"
-          }
-        },
-        "span": {
-          "start": 14682,
-          "end": 15500
-        }
-      },
-      "message": "structural clone of exposed-migration-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/migration/jdbc/MigrationUtils.kt:MigrationUtils.checkUnmappedSequences"
-    },
-    {
-      "id": "kndo-a7de13ee52b9",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-migration-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/migration/r2dbc/MigrationUtils.kt",
-        "selector": {
-          "Member": {
-            "owner": "MigrationUtils",
-            "name": "checkMissingSequences"
-          }
-        },
-        "span": {
-          "start": 13399,
-          "end": 14000
-        }
-      },
-      "message": "structural clone of exposed-migration-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/migration/jdbc/MigrationUtils.kt:MigrationUtils.checkMissingSequences"
-    },
-    {
       "id": "kndo-c86d09ecc672",
       "category": "duplicate",
       "severity": "info",
@@ -1140,27 +2802,6 @@
         }
       },
       "message": "structural clone of exposed-migration-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/migration/jdbc/MigrationUtils.kt:MigrationUtils.statementsRequiredForDatabaseMigration"
-    },
-    {
-      "id": "kndo-dfa383d3d11c",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-migration-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/migration/r2dbc/MigrationUtils.kt",
-        "selector": {
-          "Member": {
-            "owner": "MigrationUtils",
-            "name": "mappingConsistenceRequiredStatements"
-          }
-        },
-        "span": {
-          "start": 11341,
-          "end": 13079
-        }
-      },
-      "message": "structural clone of exposed-migration-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/migration/jdbc/MigrationUtils.kt:MigrationUtils.mappingConsistenceRequiredStatements"
     },
     {
       "id": "kndo-08ccbf848aea",
@@ -1499,27 +3140,6 @@
       "message": "structural clone of exposed-migration-jdbc/src/test/kotlin/org/jetbrains/exposed/v1/migration/jdbc/IndexConstraintsTests.kt:IndexConstraintsTests.testDropUnmappedIndices"
     },
     {
-      "id": "kndo-fe19292d2ff7",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-migration-r2dbc/src/test/kotlin/org/jetbrains/exposed/v1/migration/r2dbc/IndexConstraintsTests.kt",
-        "selector": {
-          "Member": {
-            "owner": "IndexConstraintsTests",
-            "name": "testAddMissingCheckConstraint"
-          }
-        },
-        "span": {
-          "start": 3648,
-          "end": 4452
-        }
-      },
-      "message": "structural clone of exposed-migration-r2dbc/src/test/kotlin/org/jetbrains/exposed/v1/migration/r2dbc/IndexConstraintsTests.kt:IndexConstraintsTests.testDifferentCheckConstraintForSameUnderlyingColumnType"
-    },
-    {
       "id": "kndo-26f2696e949e",
       "category": "duplicate",
       "severity": "info",
@@ -1604,6 +3224,27 @@
       "message": "structural clone of exposed-migration-r2dbc/src/test/kotlin/org/jetbrains/exposed/v1/migration/r2dbc/SequenceAutoIncrementTests.kt:SequenceAutoIncrementTests.testAddCustomSequenceToExistingAutoIncrementColumnWithSequenceName"
     },
     {
+      "id": "kndo-8cfd82510091",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-plugin-core/src/test/kotlin/org/jetbrains/exposed/v1/plugin/core/migration/migrations/FileVersionGeneratorTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "FileVersionGeneratorTest",
+            "name": "testTimestampWithoutSecondsFormatGeneratesUniqueVersionsForEachIndex"
+          }
+        },
+        "span": {
+          "start": 2948,
+          "end": 3449
+        }
+      },
+      "message": "structural clone of exposed-plugin-core/src/test/kotlin/org/jetbrains/exposed/v1/plugin/core/migration/migrations/FileVersionGeneratorTest.kt:FileVersionGeneratorTest.testTimestampOnlyFormatGeneratesUniqueVersionsForEachIndex"
+    },
+    {
       "id": "kndo-dc89e32d9107",
       "category": "duplicate",
       "severity": "info",
@@ -1623,6 +3264,27 @@
         }
       },
       "message": "structural clone of exposed-plugin-core/src/test/kotlin/org/jetbrains/exposed/v1/plugin/core/migration/migrations/FileVersionGeneratorTest.kt:FileVersionGeneratorTest.testTimestampOnlyFormatGeneratesUniqueVersionsWithSingleUnderscoreSeparator"
+    },
+    {
+      "id": "kndo-001798234e71",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-plugin-core/src/test/kotlin/org/jetbrains/exposed/v1/plugin/core/migration/migrations/StatementToFileDescriptionGeneratorTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "StatementToFileDescriptionGeneratorTest",
+            "name": "testDROPINDEXStatements"
+          }
+        },
+        "span": {
+          "start": 7071,
+          "end": 7724
+        }
+      },
+      "message": "structural clone of exposed-plugin-core/src/test/kotlin/org/jetbrains/exposed/v1/plugin/core/migration/migrations/StatementToFileDescriptionGeneratorTest.kt:StatementToFileDescriptionGeneratorTest.testCREATESEQUENCEStatements"
     },
     {
       "id": "kndo-55cb3d1f3057",
@@ -1665,24 +3327,6 @@
         }
       },
       "message": "structural clone of exposed-plugin-core/src/test/kotlin/org/jetbrains/exposed/v1/plugin/core/migration/migrations/StatementToFileDescriptionGeneratorTest.kt:StatementToFileDescriptionGeneratorTest.testALTERTABLEStatements"
-    },
-    {
-      "id": "kndo-63c160106227",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-r2dbc-tests/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/tests/shared/MiscTable.kt",
-        "selector": {
-          "Free": "checkInsert"
-        },
-        "span": {
-          "start": 2174,
-          "end": 3125
-        }
-      },
-      "message": "structural clone of exposed-r2dbc-tests/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/tests/shared/MiscTable.kt:checkRow"
     },
     {
       "id": "kndo-32e664eaa5ac",
@@ -1895,6 +3539,69 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/h2/H2Tests.kt:H2Tests.insertInH2"
     },
     {
+      "id": "kndo-8ef88b785cde",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/javatime/DateTimeLiteralTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "DateTimeLiteralTest",
+            "name": "testSelectByDateLiteralEquality"
+          }
+        },
+        "span": {
+          "start": 1703,
+          "end": 2089
+        }
+      },
+      "message": "structural clone of exposed-java-time/src/test/kotlin/org/jetbrains/exposed/v1/javatime/DateTimeLiteralTest.kt:DateTimeLiteralTest.testSelectByDateLiteralEquality"
+    },
+    {
+      "id": "kndo-ed1197307586",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/javatime/DateTimeLiteralTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "DateTimeLiteralTest",
+            "name": "testSelectByTimestampLiteralEquality"
+          }
+        },
+        "span": {
+          "start": 3291,
+          "end": 3752
+        }
+      },
+      "message": "structural clone of exposed-java-time/src/test/kotlin/org/jetbrains/exposed/v1/javatime/DateTimeLiteralTest.kt:DateTimeLiteralTest.testSelectByDateLiteralEquality"
+    },
+    {
+      "id": "kndo-f5c5b9d37c63",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/javatime/DateTimeLiteralTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "DateTimeLiteralTest",
+            "name": "testSelectByDatetimeLiteralEquality"
+          }
+        },
+        "span": {
+          "start": 2447,
+          "end": 2893
+        }
+      },
+      "message": "structural clone of exposed-java-time/src/test/kotlin/org/jetbrains/exposed/v1/javatime/DateTimeLiteralTest.kt:DateTimeLiteralTest.testSelectByDateLiteralEquality"
+    },
+    {
       "id": "kndo-11e325fbdeb3",
       "category": "duplicate",
       "severity": "info",
@@ -2040,6 +3747,27 @@
         }
       },
       "message": "structural clone of exposed-java-time/src/test/kotlin/org/jetbrains/exposed/v1/javatime/DefaultsTest.kt:DefaultsTest.testTimeDefaultDoesNotTriggerAlterStatement"
+    },
+    {
+      "id": "kndo-c0d6f7be6f1c",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/javatime/DefaultsTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "DefaultsTest",
+            "name": "testCustomDefaultTimestampFunctionWithInsertStatement"
+          }
+        },
+        "span": {
+          "start": 21925,
+          "end": 22469
+        }
+      },
+      "message": "structural clone of exposed-java-time/src/test/kotlin/org/jetbrains/exposed/v1/javatime/DefaultsTest.kt:DefaultsTest.testCustomDefaultTimestampFunctionWithInsertStatement"
     },
     {
       "id": "kndo-c55abc349553",
@@ -2561,25 +4289,25 @@
       "message": "structural clone of exposed-java-time/src/test/kotlin/org/jetbrains/exposed/v1/javatime/MiscTableTest.kt:MiscTableTest.testInsert03"
     },
     {
-      "id": "kndo-44529e092bf5",
+      "id": "kndo-fdfc52222533",
       "category": "duplicate",
       "severity": "info",
       "confidence": "certain",
       "subject": {
         "kind": "symbol",
-        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/javatime/sqlserver/SQLServerDefaultsTest.kt",
+        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/jodatime/JodaDateTimeLiteralTest.kt",
         "selector": {
           "Member": {
-            "owner": "SQLServerDefaultsTest",
-            "name": "testDefaultExpressionsForTemporalTable"
+            "owner": "JodaDateTimeLiteralTest",
+            "name": "testSelectByDatetimeLiteralEquality"
           }
         },
         "span": {
-          "start": 986,
-          "end": 2971
+          "start": 1239,
+          "end": 1751
         }
       },
-      "message": "structural clone of exposed-java-time/src/test/kotlin/org/jetbrains/exposed/v1/javatime/sqlserver/SQLServerDefaultsTest.kt:SQLServerDefaultsTest.testDefaultExpressionsForTemporalTable"
+      "message": "structural clone of exposed-java-time/src/test/kotlin/org/jetbrains/exposed/v1/javatime/DateTimeLiteralTest.kt:DateTimeLiteralTest.testSelectByDateLiteralEquality"
     },
     {
       "id": "kndo-4f9dc3b1fe76",
@@ -2685,6 +4413,27 @@
         }
       },
       "message": "structural clone of exposed-java-time/src/test/kotlin/org/jetbrains/exposed/v1/javatime/DefaultsTest.kt:DefaultsTest.testConsistentSchemeWithFunctionAsDefaultExpression"
+    },
+    {
+      "id": "kndo-9f6af97df3a4",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/jodatime/JodaTimeDefaultsTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "JodaTimeDefaultsTest",
+            "name": "testCustomDefaultTimestampFunctionWithInsertStatement"
+          }
+        },
+        "span": {
+          "start": 18167,
+          "end": 18753
+        }
+      },
+      "message": "structural clone of exposed-jodatime/src/test/kotlin/org/jetbrains/exposed/v1/jodatime/JodaTimeDefaultsTest.kt:JodaTimeDefaultsTest.testCustomDefaultTimestampFunctionWithInsertStatement"
     },
     {
       "id": "kndo-a2db736d93d6",
@@ -2895,6 +4644,24 @@
         }
       },
       "message": "structural clone of exposed-jodatime/src/test/kotlin/org/jetbrains/exposed/v1/jodatime/JodaTimeMiscTableTest.kt:JodaTimeMiscTableTest.testInsert01"
+    },
+    {
+      "id": "kndo-b7a316aec523",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/jodatime/JodaTimeMiscTableTest.kt",
+        "selector": {
+          "Free": "checkRowFull"
+        },
+        "span": {
+          "start": 18873,
+          "end": 19440
+        }
+      },
+      "message": "structural clone of exposed-java-time/src/test/kotlin/org/jetbrains/exposed/v1/javatime/MiscTableTest.kt:checkRowFull"
     },
     {
       "id": "kndo-bca189817d25",
@@ -3161,24 +4928,6 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/json/JsonTestsData.kt:withJsonArrays"
     },
     {
-      "id": "kndo-cec8b608994b",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/json/JsonTestsData.kt",
-        "selector": {
-          "Free": "withJsonTable"
-        },
-        "span": {
-          "start": 1240,
-          "end": 1805
-        }
-      },
-      "message": "structural clone of exposed-json/src/test/kotlin/org/jetbrains/exposed/v1/json/JsonTestsData.kt:withJsonTable"
-    },
-    {
       "id": "kndo-fbcbaa91e085",
       "category": "duplicate",
       "severity": "info",
@@ -3194,7 +4943,91 @@
           "end": 2376
         }
       },
-      "message": "structural clone of exposed-json/src/test/kotlin/org/jetbrains/exposed/v1/json/JsonTestsData.kt:withJsonTable"
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/json/JsonTestsData.kt:withJsonTable"
+    },
+    {
+      "id": "kndo-5c5c69552df3",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/kotlindatetime/DateTimeLiteralTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "DateTimeLiteralTest",
+            "name": "testSelectByXTimestampLiteralEquality"
+          }
+        },
+        "span": {
+          "start": 3407,
+          "end": 3882
+        }
+      },
+      "message": "structural clone of exposed-java-time/src/test/kotlin/org/jetbrains/exposed/v1/javatime/DateTimeLiteralTest.kt:DateTimeLiteralTest.testSelectByDateLiteralEquality"
+    },
+    {
+      "id": "kndo-cd0d53a6c458",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/kotlindatetime/DateTimeLiteralTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "DateTimeLiteralTest",
+            "name": "testSelectByTimestampLiteralEquality"
+          }
+        },
+        "span": {
+          "start": 3888,
+          "end": 4349
+        }
+      },
+      "message": "structural clone of exposed-java-time/src/test/kotlin/org/jetbrains/exposed/v1/javatime/DateTimeLiteralTest.kt:DateTimeLiteralTest.testSelectByDateLiteralEquality"
+    },
+    {
+      "id": "kndo-de2526c04c70",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/kotlindatetime/DateTimeLiteralTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "DateTimeLiteralTest",
+            "name": "testSelectByDateLiteralEquality"
+          }
+        },
+        "span": {
+          "start": 1819,
+          "end": 2205
+        }
+      },
+      "message": "structural clone of exposed-java-time/src/test/kotlin/org/jetbrains/exposed/v1/javatime/DateTimeLiteralTest.kt:DateTimeLiteralTest.testSelectByDateLiteralEquality"
+    },
+    {
+      "id": "kndo-e864e0145c18",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/kotlindatetime/DateTimeLiteralTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "DateTimeLiteralTest",
+            "name": "testSelectByDatetimeLiteralEquality"
+          }
+        },
+        "span": {
+          "start": 2563,
+          "end": 3009
+        }
+      },
+      "message": "structural clone of exposed-java-time/src/test/kotlin/org/jetbrains/exposed/v1/javatime/DateTimeLiteralTest.kt:DateTimeLiteralTest.testSelectByDateLiteralEquality"
     },
     {
       "id": "kndo-03dd5334ca09",
@@ -3216,6 +5049,27 @@
         }
       },
       "message": "structural clone of exposed-java-time/src/test/kotlin/org/jetbrains/exposed/v1/javatime/DefaultsTest.kt:DefaultsTest.testConsistentSchemeWithFunctionAsDefaultExpression"
+    },
+    {
+      "id": "kndo-07cd67ea0497",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/kotlindatetime/DefaultsTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "DefaultsTest",
+            "name": "testCustomDefaultTimestampFunctionWithInsertStatement"
+          }
+        },
+        "span": {
+          "start": 25190,
+          "end": 25734
+        }
+      },
+      "message": "structural clone of exposed-java-time/src/test/kotlin/org/jetbrains/exposed/v1/javatime/DefaultsTest.kt:DefaultsTest.testCustomDefaultTimestampFunctionWithInsertStatement"
     },
     {
       "id": "kndo-31185da325c2",
@@ -3815,7 +5669,7 @@
           "end": 2988
         }
       },
-      "message": "structural clone of exposed-java-time/src/test/kotlin/org/jetbrains/exposed/v1/javatime/sqlserver/SQLServerDefaultsTest.kt:SQLServerDefaultsTest.testDefaultExpressionsForTemporalTable"
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/javatime/sqlserver/SQLServerDefaultsTest.kt:SQLServerDefaultsTest.testDefaultExpressionsForTemporalTable"
     },
     {
       "id": "kndo-82c4c7cb98f9",
@@ -3837,27 +5691,6 @@
         }
       },
       "message": "structural clone of exposed-money/src/test/kotlin/org/jetbrains/exposed/v1/money/MoneyTests.kt:MoneyBaseTest.testUsingManualCompositeMoneyColumns"
-    },
-    {
-      "id": "kndo-c015ae9b2fd7",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/money/MoneyTests.kt",
-        "selector": {
-          "Member": {
-            "owner": "MoneyBaseTest",
-            "name": "assertInsertOfComponentValuesReturnsEquivalentOnSelect"
-          }
-        },
-        "span": {
-          "start": 5104,
-          "end": 5780
-        }
-      },
-      "message": "structural clone of exposed-money/src/test/kotlin/org/jetbrains/exposed/v1/money/MoneyTests.kt:MoneyBaseTest.assertInsertOfComponentValuesReturnsEquivalentOnSelect"
     },
     {
       "id": "kndo-b016f693f09e",
@@ -4046,6 +5879,27 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/InsertTests.kt:testXInsertReturnsValuesFromDefaultExpression"
     },
     {
+      "id": "kndo-b02cb57e5c3b",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/MergeBaseTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "Dest",
+            "name": "insertDest"
+          }
+        },
+        "span": {
+          "start": 3990,
+          "end": 4342
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/MergeBaseTest.kt:Source.insertSource"
+    },
+    {
       "id": "kndo-33687c42e9f0",
       "category": "duplicate",
       "severity": "info",
@@ -4109,6 +5963,48 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/SelectTests.kt:SelectTests.testSelectAnd"
     },
     {
+      "id": "kndo-34a4c34dc467",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/SelectTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "SelectTests",
+            "name": "testGreaterEqSubQuery"
+          }
+        },
+        "span": {
+          "start": 11168,
+          "end": 11492
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/SelectTests.kt:SelectTests.testInSubQuery01"
+    },
+    {
+      "id": "kndo-5d74d039a0e2",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/SelectTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "SelectTests",
+            "name": "testLessEqSubQuery"
+          }
+        },
+        "span": {
+          "start": 10510,
+          "end": 10836
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/SelectTests.kt:SelectTests.testEqSubQuery"
+    },
+    {
       "id": "kndo-9c541505d016",
       "category": "duplicate",
       "severity": "info",
@@ -4130,6 +6026,111 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/SelectTests.kt:SelectTests.testEqAnyFromArray"
     },
     {
+      "id": "kndo-b93e54989246",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/SelectTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "SelectTests",
+            "name": "testNotEqSubQuery"
+          }
+        },
+        "span": {
+          "start": 9852,
+          "end": 10176
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/SelectTests.kt:SelectTests.testEqSubQuery"
+    },
+    {
+      "id": "kndo-c16272bd6c29",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/SelectTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "SelectTests",
+            "name": "testGreaterSubQuery"
+          }
+        },
+        "span": {
+          "start": 10842,
+          "end": 11162
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/SelectTests.kt:SelectTests.testInSubQuery01"
+    },
+    {
+      "id": "kndo-c51b4f633fac",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/SelectTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "SelectTests",
+            "name": "testNeqAnyFromSubQuery"
+          }
+        },
+        "span": {
+          "start": 12489,
+          "end": 12779
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/SelectTests.kt:SelectTests.testEqAnyFromSubQuery"
+    },
+    {
+      "id": "kndo-c73d7219a17f",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/SelectTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "SelectTests",
+            "name": "testLessSubQuery"
+          }
+        },
+        "span": {
+          "start": 10182,
+          "end": 10504
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/SelectTests.kt:SelectTests.testEqSubQuery"
+    },
+    {
+      "id": "kndo-ee482002a7d4",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/SelectTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "SelectTests",
+            "name": "testNeqAnyFromList"
+          }
+        },
+        "span": {
+          "start": 14093,
+          "end": 14406
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/SelectTests.kt:SelectTests.testNeqAnyFromArray"
+    },
+    {
       "id": "kndo-740272d60e2e",
       "category": "duplicate",
       "severity": "info",
@@ -4149,6 +6150,27 @@
         }
       },
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/UnionTests.kt:UnionTests.testExceptWithTwoQueries"
+    },
+    {
+      "id": "kndo-89be4a743796",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/UnionTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "UnionTests",
+            "name": "`test limit with offset`"
+          }
+        },
+        "span": {
+          "start": 2022,
+          "end": 2520
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/UnionTests.kt:UnionTests.testUnionWithLimit"
     },
     {
       "id": "kndo-0a2f5cf91e71",
@@ -4193,6 +6215,27 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/functions/FunctionsTests.kt:FunctionsTests.testLocate"
     },
     {
+      "id": "kndo-0facabc6ed0b",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/functions/MathFunctionTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "MathFunctionTests",
+            "name": "testFloorFunction"
+          }
+        },
+        "span": {
+          "start": 1740,
+          "end": 2421
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/functions/MathFunctionTests.kt:MathFunctionTests.testSignFunction"
+    },
+    {
       "id": "kndo-b5bc1c63c5a8",
       "category": "duplicate",
       "severity": "info",
@@ -4211,7 +6254,7 @@
           "end": 3123
         }
       },
-      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/functions/MathFunctionTests.kt:MathFunctionTests.testFloorFunction"
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/functions/MathFunctionTests.kt:MathFunctionTests.testSignFunction"
     },
     {
       "id": "kndo-0502716d46f2",
@@ -4340,6 +6383,27 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/functions/MathFunctionTests.kt:MathFunctionTests.testExpFunction"
     },
     {
+      "id": "kndo-2232e6797e7b",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/BooleanColumnTypeTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "BooleanColumnTypeTests",
+            "name": "`false value`"
+          }
+        },
+        "span": {
+          "start": 1409,
+          "end": 1763
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/BooleanColumnTypeTests.kt:BooleanColumnTypeTests.`true value`"
+    },
+    {
       "id": "kndo-424c24501d83",
       "category": "duplicate",
       "severity": "info",
@@ -4359,6 +6423,69 @@
         }
       },
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/NumericColumnTypesTests.kt:NumericColumnTypesTests.testUShortAcceptsOnlyAllowedRange"
+    },
+    {
+      "id": "kndo-11c633813092",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/UnsignedColumnTypeTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "UnsignedColumnTypeTests",
+            "name": "testUIntColumnType"
+          }
+        },
+        "span": {
+          "start": 8528,
+          "end": 8865
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/UnsignedColumnTypeTests.kt:UnsignedColumnTypeTests.testUByteColumnType"
+    },
+    {
+      "id": "kndo-3f9c3518f351",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/UnsignedColumnTypeTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "UnsignedColumnTypeTests",
+            "name": "testULongColumnType"
+          }
+        },
+        "span": {
+          "start": 12390,
+          "end": 12736
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/UnsignedColumnTypeTests.kt:UnsignedColumnTypeTests.testUByteColumnType"
+    },
+    {
+      "id": "kndo-e8fdbd27ec0c",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/UnsignedColumnTypeTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "UnsignedColumnTypeTests",
+            "name": "testUShortColumnType"
+          }
+        },
+        "span": {
+          "start": 5213,
+          "end": 5564
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/UnsignedColumnTypeTests.kt:UnsignedColumnTypeTests.testUByteColumnType"
     },
     {
       "id": "kndo-3c0eabf39141",
@@ -4415,6 +6542,282 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/JavaUUIDColumnTypeTests.kt:JavaUUIDColumnTypeTests.insertReadUUID"
     },
     {
+      "id": "kndo-0a8917f452b1",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/IterableEx.kt",
+        "selector": {
+          "Member": {
+            "owner": "LazySizedCollection",
+            "name": "notForUpdate"
+          }
+        },
+        "span": {
+          "start": 4875,
+          "end": 5290
+        }
+      },
+      "message": "structural clone of exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/IterableEx.kt:LazySizedCollection.notForUpdate"
+    },
+    {
+      "id": "kndo-346d4d018ac5",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/IterableEx.kt",
+        "selector": {
+          "Member": {
+            "owner": "LazySizedCollection",
+            "name": "forUpdate"
+          }
+        },
+        "span": {
+          "start": 4430,
+          "end": 4869
+        }
+      },
+      "message": "structural clone of exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/IterableEx.kt:LazySizedCollection.forUpdate"
+    },
+    {
+      "id": "kndo-12fde47c746e",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/Queries.kt",
+        "selector": {
+          "Free": "delete"
+        },
+        "span": {
+          "start": 6437,
+          "end": 6799
+        }
+      },
+      "message": "structural clone of exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/Queries.kt:delete"
+    },
+    {
+      "id": "kndo-12fde47c746e",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/Queries.kt",
+        "selector": {
+          "Free": "delete"
+        },
+        "span": {
+          "start": 7639,
+          "end": 7970
+        }
+      },
+      "message": "structural clone of exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/Queries.kt:delete"
+    },
+    {
+      "id": "kndo-13169ae3e0e8",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/Queries.kt",
+        "selector": {
+          "Free": "replace"
+        },
+        "span": {
+          "start": 23987,
+          "end": 24254
+        }
+      },
+      "message": "structural clone of exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/Queries.kt:insertIgnore"
+    },
+    {
+      "id": "kndo-13169ae3e0e8",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/Queries.kt",
+        "selector": {
+          "Free": "replace"
+        },
+        "span": {
+          "start": 22872,
+          "end": 23122
+        }
+      },
+      "message": "structural clone of exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/Queries.kt:insertIgnore"
+    },
+    {
+      "id": "kndo-2897265794f7",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/Queries.kt",
+        "selector": {
+          "Free": "batchInsert"
+        },
+        "span": {
+          "start": 21708,
+          "end": 22052
+        }
+      },
+      "message": "structural clone of exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/Queries.kt:batchInsert"
+    },
+    {
+      "id": "kndo-2897265794f7",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/Queries.kt",
+        "selector": {
+          "Free": "batchInsert"
+        },
+        "span": {
+          "start": 19486,
+          "end": 19786
+        }
+      },
+      "message": "structural clone of exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/Queries.kt:batchInsert"
+    },
+    {
+      "id": "kndo-96d33581de6f",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/Queries.kt",
+        "selector": {
+          "Free": "upsertReturning"
+        },
+        "span": {
+          "start": 36102,
+          "end": 36597
+        }
+      },
+      "message": "structural clone of exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/Queries.kt:upsertReturning"
+    },
+    {
+      "id": "kndo-9f7c3e71718b",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/Queries.kt",
+        "selector": {
+          "Free": "deleteIgnoreWhere"
+        },
+        "span": {
+          "start": 3141,
+          "end": 3601
+        }
+      },
+      "message": "structural clone of exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/Queries.kt:deleteWhere"
+    },
+    {
+      "id": "kndo-a452f16b61b2",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/Queries.kt",
+        "selector": {
+          "Free": "updateReturning"
+        },
+        "span": {
+          "start": 31354,
+          "end": 31654
+        }
+      },
+      "message": "structural clone of exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/Queries.kt:updateReturning"
+    },
+    {
+      "id": "kndo-a708f0471ced",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/Queries.kt",
+        "selector": {
+          "Free": "insertReturning"
+        },
+        "span": {
+          "start": 13144,
+          "end": 13464
+        }
+      },
+      "message": "structural clone of exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/Queries.kt:insertReturning"
+    },
+    {
+      "id": "kndo-cf96e131459b",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/Queries.kt",
+        "selector": {
+          "Free": "batchUpsert"
+        },
+        "span": {
+          "start": 40802,
+          "end": 41301
+        }
+      },
+      "message": "structural clone of exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/Queries.kt:batchUpsert"
+    },
+    {
+      "id": "kndo-e0c6af74ef38",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/Queries.kt",
+        "selector": {
+          "Free": "update"
+        },
+        "span": {
+          "start": 29992,
+          "end": 30262
+        }
+      },
+      "message": "structural clone of exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/Queries.kt:update"
+    },
+    {
+      "id": "kndo-1636706fef94",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/R2dbcTransaction.kt",
+        "selector": {
+          "Free": "withTransactionContext"
+        },
+        "span": {
+          "start": 16240,
+          "end": 16680
+        }
+      },
+      "message": "structural clone of exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/JdbcTransaction.kt:withTransactionContext"
+    },
+    {
       "id": "kndo-01df428413c5",
       "category": "duplicate",
       "severity": "info",
@@ -4457,27 +6860,6 @@
       "message": "structural clone of exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/SchemaUtils.kt:SchemaUtils.createStatements"
     },
     {
-      "id": "kndo-26a24d077141",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/SchemaUtils.kt",
-        "selector": {
-          "Member": {
-            "owner": "SchemaUtils",
-            "name": "statementsRequiredToActualizeScheme"
-          }
-        },
-        "span": {
-          "start": 13854,
-          "end": 15410
-        }
-      },
-      "message": "structural clone of exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/SchemaUtils.kt:SchemaUtils.statementsRequiredToActualizeScheme"
-    },
-    {
       "id": "kndo-36ea6239dec3",
       "category": "duplicate",
       "severity": "info",
@@ -4499,6 +6881,27 @@
       "message": "structural clone of exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/SchemaUtils.kt:SchemaUtils.drop"
     },
     {
+      "id": "kndo-3d20728f43a5",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/SchemaUtils.kt",
+        "selector": {
+          "Member": {
+            "owner": "SchemaUtils",
+            "name": "checkMappingConsistence"
+          }
+        },
+        "span": {
+          "start": 15540,
+          "end": 15935
+        }
+      },
+      "message": "structural clone of exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/SchemaUtils.kt:SchemaUtils.checkMappingConsistence"
+    },
+    {
       "id": "kndo-693e86d19e4d",
       "category": "duplicate",
       "severity": "info",
@@ -4518,27 +6921,6 @@
         }
       },
       "message": "structural clone of exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/SchemaUtils.kt:SchemaUtils.createDatabase"
-    },
-    {
-      "id": "kndo-a27cfef67bcc",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/SchemaUtils.kt",
-        "selector": {
-          "Member": {
-            "owner": "SchemaUtils",
-            "name": "createMissingTablesAndColumns"
-          }
-        },
-        "span": {
-          "start": 10912,
-          "end": 13092
-        }
-      },
-      "message": "structural clone of exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/SchemaUtils.kt:SchemaUtils.createMissingTablesAndColumns"
     },
     {
       "id": "kndo-c5944634776f",
@@ -4646,6 +7028,27 @@
       "message": "structural clone of exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/statements/InsertBlockingExecutable.kt:InsertBlockingExecutable.defaultAndNullableValues"
     },
     {
+      "id": "kndo-d22ffa0b5d82",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/statements/InsertSuspendExecutable.kt",
+        "selector": {
+          "Member": {
+            "owner": "InsertSuspendExecutable",
+            "name": "insertedOnly"
+          }
+        },
+        "span": {
+          "start": 6839,
+          "end": 7277
+        }
+      },
+      "message": "structural clone of exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/statements/InsertBlockingExecutable.kt:InsertBlockingExecutable.insertedOnly"
+    },
+    {
       "id": "kndo-7cfca0696aa3",
       "category": "duplicate",
       "severity": "info",
@@ -4685,6 +7088,24 @@
       "message": "structural clone of exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/statements/jdbc/JdbcDatabaseMetadataImpl.kt:JdbcDatabaseMetadataImpl.extractForeignKeys"
     },
     {
+      "id": "kndo-9252a52b2958",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/transactions/R2dbcTransactionManager.kt",
+        "selector": {
+          "Free": "createTransactionContext"
+        },
+        "span": {
+          "start": 2488,
+          "end": 3035
+        }
+      },
+      "message": "structural clone of exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/transactions/JdbcTransactionManager.kt:createTransactionContext"
+    },
+    {
       "id": "kndo-2a30c9c53fb4",
       "category": "duplicate",
       "severity": "info",
@@ -4700,28 +7121,7 @@
           "end": 5940
         }
       },
-      "message": "structural clone of exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/transactions/Transactions.kt:transaction"
-    },
-    {
-      "id": "kndo-a80665c41ac1",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/DatabaseDialectMetadata.kt",
-        "selector": {
-          "Member": {
-            "owner": "DatabaseDialectMetadata",
-            "name": "tableExists"
-          }
-        },
-        "span": {
-          "start": 2712,
-          "end": 3280
-        }
-      },
-      "message": "structural clone of exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/vendors/DatabaseDialectMetadata.kt:DatabaseDialectMetadata.tableExists"
+      "message": "structural clone of exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/transactions/Transactions.kt:suspendTransaction"
     },
     {
       "id": "kndo-bf37f3f5141a",
@@ -4766,6 +7166,27 @@
       "message": "structural clone of exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/vendors/MysqlDialectMetadata.kt:MysqlDialectMetadata.metadataMatchesTable"
     },
     {
+      "id": "kndo-4888421d08a6",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/metadata/H2Metadata.kt",
+        "selector": {
+          "Member": {
+            "owner": "H2Metadata",
+            "name": "getIndexInfo"
+          }
+        },
+        "span": {
+          "start": 6698,
+          "end": 7322
+        }
+      },
+      "message": "structural clone of exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/metadata/H2Metadata.kt:H2Metadata.getPrimaryKeys"
+    },
+    {
       "id": "kndo-ef0d19766c26",
       "category": "duplicate",
       "severity": "info",
@@ -4803,6 +7224,27 @@
         "span": {
           "start": 8932,
           "end": 9615
+        }
+      },
+      "message": "structural clone of exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/metadata/H2Metadata.kt:H2Metadata.getPrimaryKeys"
+    },
+    {
+      "id": "kndo-23b4077336c4",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/metadata/MySQLMetadata.kt",
+        "selector": {
+          "Member": {
+            "owner": "MySQLMetadata",
+            "name": "getPrimaryKeys"
+          }
+        },
+        "span": {
+          "start": 6879,
+          "end": 7345
         }
       },
       "message": "structural clone of exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/metadata/H2Metadata.kt:H2Metadata.getPrimaryKeys"
@@ -4850,6 +7292,48 @@
       "message": "structural clone of exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/metadata/H2Metadata.kt:H2Metadata.getColumns"
     },
     {
+      "id": "kndo-7fbda5a500e5",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/metadata/MySQLMetadata.kt",
+        "selector": {
+          "Member": {
+            "owner": "MySQLMetadata",
+            "name": "getIndexInfo"
+          }
+        },
+        "span": {
+          "start": 7351,
+          "end": 8621
+        }
+      },
+      "message": "structural clone of exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/metadata/H2Metadata.kt:H2Metadata.getPrimaryKeys"
+    },
+    {
+      "id": "kndo-e1d9f59f2d4a",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/metadata/MySQLMetadata.kt",
+        "selector": {
+          "Member": {
+            "owner": "MySQLMetadata",
+            "name": "getCheckConstraints"
+          }
+        },
+        "span": {
+          "start": 9885,
+          "end": 10511
+        }
+      },
+      "message": "structural clone of exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/metadata/H2Metadata.kt:H2Metadata.getPrimaryKeys"
+    },
+    {
       "id": "kndo-30a7334539ca",
       "category": "duplicate",
       "severity": "info",
@@ -4869,6 +7353,27 @@
         }
       },
       "message": "structural clone of exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/metadata/H2Metadata.kt:H2Metadata.getColumns"
+    },
+    {
+      "id": "kndo-9ca8c3218c97",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/metadata/OracleMetadata.kt",
+        "selector": {
+          "Member": {
+            "owner": "OracleMetadata",
+            "name": "getPrimaryKeys"
+          }
+        },
+        "span": {
+          "start": 5289,
+          "end": 5954
+        }
+      },
+      "message": "structural clone of exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/metadata/H2Metadata.kt:H2Metadata.getPrimaryKeys"
     },
     {
       "id": "kndo-db39aba917c1",
@@ -4911,6 +7416,27 @@
         }
       },
       "message": "structural clone of exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/metadata/H2Metadata.kt:H2Metadata.getColumns"
+    },
+    {
+      "id": "kndo-5e60463e7b5d",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/metadata/PostgreSQLMetadata.kt",
+        "selector": {
+          "Member": {
+            "owner": "PostgreSQLMetadata",
+            "name": "getTables"
+          }
+        },
+        "span": {
+          "start": 6785,
+          "end": 7438
+        }
+      },
+      "message": "structural clone of exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/metadata/H2Metadata.kt:H2Metadata.getTables"
     },
     {
       "id": "kndo-c51314f3e81b",
@@ -4974,6 +7500,27 @@
         }
       },
       "message": "structural clone of exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/metadata/H2Metadata.kt:H2Metadata.getColumns"
+    },
+    {
+      "id": "kndo-024a9941c81e",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/metadata/SQLServerMetadata.kt",
+        "selector": {
+          "Member": {
+            "owner": "SQLServerMetadata",
+            "name": "getIndexInfo"
+          }
+        },
+        "span": {
+          "start": 7201,
+          "end": 7953
+        }
+      },
+      "message": "structural clone of exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/metadata/H2Metadata.kt:H2Metadata.getPrimaryKeys"
     },
     {
       "id": "kndo-bd707418df0a",
@@ -5060,6 +7607,27 @@
       "message": "structural clone of exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/metadata/H2Metadata.kt:H2Metadata.getColumns"
     },
     {
+      "id": "kndo-3fd07fab231d",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/metadata/SqlTypeProvider.kt",
+        "selector": {
+          "Member": {
+            "owner": "SqlTypeProvider",
+            "name": "appendDataPrecisions"
+          }
+        },
+        "span": {
+          "start": 8192,
+          "end": 8546
+        }
+      },
+      "message": "structural clone of exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/metadata/SqlTypeProvider.kt:SqlTypeProvider.appendDataTypes"
+    },
+    {
       "id": "kndo-29b4db4d8224",
       "category": "duplicate",
       "severity": "info",
@@ -5076,27 +7644,6 @@
         }
       },
       "message": "structural clone of exposed-spring-boot-starter/src/main/kotlin/org/jetbrains/exposed/v1/spring/boot/DatabaseInitializer.kt:discoverExposedTables"
-    },
-    {
-      "id": "kndo-38c5e097c687",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-spring-boot4-starter/src/main/kotlin/org/jetbrains/exposed/v1/spring/boot4/DatabaseInitializer.kt",
-        "selector": {
-          "Member": {
-            "owner": "DatabaseInitializer",
-            "name": "run"
-          }
-        },
-        "span": {
-          "start": 1684,
-          "end": 2078
-        }
-      },
-      "message": "structural clone of exposed-spring-boot-starter/src/main/kotlin/org/jetbrains/exposed/v1/spring/boot/DatabaseInitializer.kt:DatabaseInitializer.run"
     },
     {
       "id": "kndo-22698ae61ece",
@@ -5118,6 +7665,27 @@
         }
       },
       "message": "structural clone of exposed-spring-boot-starter/src/main/kotlin/org/jetbrains/exposed/v1/spring/boot/ExposedAotContribution.kt:ExposedAotContribution.registerReflectionHints"
+    },
+    {
+      "id": "kndo-689fde5f4c54",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-spring-boot4-starter/src/main/kotlin/org/jetbrains/exposed/v1/spring/boot4/ExposedAotContribution.kt",
+        "selector": {
+          "Member": {
+            "owner": "ExposedAotContribution",
+            "name": "findSubClassesInPackage"
+          }
+        },
+        "span": {
+          "start": 7121,
+          "end": 7602
+        }
+      },
+      "message": "structural clone of exposed-spring-boot-starter/src/main/kotlin/org/jetbrains/exposed/v1/spring/boot/ExposedAotContribution.kt:ExposedAotContribution.findSubClassesInPackage"
     },
     {
       "id": "kndo-79d2a18b117c",
@@ -5152,67 +7720,22 @@
       "message": "byte-identical to exposed-spring-boot-starter/src/test/kotlin/org/jetbrains/exposed/v1/spring/boot/jdbc_template/JdbcTemplateTests.kt"
     },
     {
-      "id": "kndo-3d75d84f9555",
+      "id": "kndo-95c03fc6c8dc",
       "category": "duplicate",
       "severity": "info",
       "confidence": "certain",
       "subject": {
         "kind": "symbol",
-        "path": "exposed-tests/src/main/kotlin/org/jetbrains/exposed/v1/tests/DatabaseTestsBase.kt",
+        "path": "exposed-tests/src/main/kotlin/org/jetbrains/exposed/v1/tests/shared/Assert.kt",
         "selector": {
-          "Member": {
-            "owner": "DatabaseTestsBase",
-            "name": "withDb"
-          }
+          "Free": "assertEqualCollectionsImpl"
         },
         "span": {
-          "start": 3762,
-          "end": 4402
+          "start": 461,
+          "end": 732
         }
       },
-      "message": "structural clone of exposed-r2dbc-tests/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/tests/R2dbcDatabaseTestsBase.kt:R2dbcDatabaseTestsBase.withDb"
-    },
-    {
-      "id": "kndo-5bf1ef4e1393",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-tests/src/main/kotlin/org/jetbrains/exposed/v1/tests/DatabaseTestsBase.kt",
-        "selector": {
-          "Member": {
-            "owner": "DatabaseTestsBase",
-            "name": "withTables"
-          }
-        },
-        "span": {
-          "start": 4408,
-          "end": 5436
-        }
-      },
-      "message": "structural clone of exposed-r2dbc-tests/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/tests/R2dbcDatabaseTestsBase.kt:R2dbcDatabaseTestsBase.withTables"
-    },
-    {
-      "id": "kndo-e4ecb1b6b7ac",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-tests/src/main/kotlin/org/jetbrains/exposed/v1/tests/DatabaseTestsBase.kt",
-        "selector": {
-          "Member": {
-            "owner": "DatabaseTestsBase",
-            "name": "withSchemas"
-          }
-        },
-        "span": {
-          "start": 5442,
-          "end": 6400
-        }
-      },
-      "message": "structural clone of exposed-r2dbc-tests/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/tests/R2dbcDatabaseTestsBase.kt:R2dbcDatabaseTestsBase.withSchemas"
+      "message": "structural clone of exposed-r2dbc-tests/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/tests/shared/Assert.kt:assertEqualCollectionsImpl"
     },
     {
       "id": "kndo-e54cdeb38599",
@@ -5266,7 +7789,7 @@
           "end": 3119
         }
       },
-      "message": "structural clone of exposed-r2dbc-tests/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/tests/shared/MiscTable.kt:checkRow"
+      "message": "structural clone of exposed-r2dbc-tests/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/tests/shared/MiscTable.kt:checkInsert"
     },
     {
       "id": "kndo-56f6c1813abc",
@@ -5710,48 +8233,6 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/ConnectionTests.kt:ConnectionTests.testNoConnectionLeakOnCancellation"
     },
     {
-      "id": "kndo-686958c2de61",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/CustomTransactionManagerTest.kt",
-        "selector": {
-          "Member": {
-            "owner": "CustomTransactionManagerTest",
-            "name": "testCustomTransactionManagerWithSuccessfulCommit"
-          }
-        },
-        "span": {
-          "start": 6261,
-          "end": 7339
-        }
-      },
-      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/CustomTransactionManagerTest.kt:CustomTransactionManagerTest.testCustomTransactionManagerWithSuccessfulCommit"
-    },
-    {
-      "id": "kndo-8fded9e21a07",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/CustomTransactionManagerTest.kt",
-        "selector": {
-          "Member": {
-            "owner": "CustomTransactionManagerTest",
-            "name": "testCustomTransactionManagerWithQueryExecution"
-          }
-        },
-        "span": {
-          "start": 4786,
-          "end": 6255
-        }
-      },
-      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/CustomTransactionManagerTest.kt:CustomTransactionManagerTest.testCustomTransactionManagerWithQueryExecution"
-    },
-    {
       "id": "kndo-0f872a2a91bb",
       "category": "duplicate",
       "severity": "info",
@@ -5855,6 +8336,27 @@
         }
       },
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/DDLTests.kt:DDLTests.testIndices02"
+    },
+    {
+      "id": "kndo-52bed070fce7",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/DDLTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "DDLTests",
+            "name": "tableExists02"
+          }
+        },
+        "span": {
+          "start": 2151,
+          "end": 2476
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/DDLTests.kt:DDLTests.tableExists02"
     },
     {
       "id": "kndo-53ce550b637a",
@@ -6067,6 +8569,27 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/DDLTests.kt:DDLTests.complexTest01"
     },
     {
+      "id": "kndo-ae6ab2181689",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/DDLTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "DDLTests",
+            "name": "tableExists01"
+          }
+        },
+        "span": {
+          "start": 1830,
+          "end": 2145
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/DDLTests.kt:DDLTests.tableExists01"
+    },
+    {
       "id": "kndo-b643b597202f",
       "category": "duplicate",
       "severity": "info",
@@ -6256,27 +8779,6 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/ParameterizationTests.kt:ParameterizationTests.testNullParameterWithLogger"
     },
     {
-      "id": "kndo-2413858de35c",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/QueryTimeoutTest.kt",
-        "selector": {
-          "Member": {
-            "owner": "QueryTimeoutTest",
-            "name": "testLongQueryThrowsWarning"
-          }
-        },
-        "span": {
-          "start": 4966,
-          "end": 5640
-        }
-      },
-      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/QueryTimeoutTest.kt:QueryTimeoutTest.testLongQueryThrowsWarning"
-    },
-    {
       "id": "kndo-2d27b4c0e025",
       "category": "duplicate",
       "severity": "info",
@@ -6317,6 +8819,27 @@
         }
       },
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/RollbackTransactionTest.kt:RollbackTransactionTest.testRollbackWithSavepoints"
+    },
+    {
+      "id": "kndo-212429ee8cc1",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/SchemaTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "SchemaTests",
+            "name": "testDropSchemaWithCascade"
+          }
+        },
+        "span": {
+          "start": 2722,
+          "end": 3120
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/SchemaTests.kt:SchemaTests.testDropSchemaWithCascade"
     },
     {
       "id": "kndo-35e61cfefad0",
@@ -7201,6 +9724,27 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/ddl/CreateTableTests.kt:CreateTableTests.createIdTableWithPrimaryKeyThatHasForeignKeyByEntityID"
     },
     {
+      "id": "kndo-40b1e6dc625c",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/ddl/ReplaceColumnTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "ReplaceColumnTests",
+            "name": "replaceColumnToDuplicateColumn"
+          }
+        },
+        "span": {
+          "start": 534,
+          "end": 988
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/ddl/ReplaceColumnTests.kt:ReplaceColumnTests.replaceColumnToDuplicateColumn"
+    },
+    {
       "id": "kndo-6a8bf7b2260a",
       "category": "duplicate",
       "severity": "info",
@@ -7259,27 +9803,6 @@
         }
       },
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/AdjustQueryTests.kt:AdjustQueryTests.testQueryAndHaving"
-    },
-    {
-      "id": "kndo-6ec45b20187b",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/AdjustQueryTests.kt",
-        "selector": {
-          "Member": {
-            "owner": "AdjustQueryTests",
-            "name": "assertQueryResultValid"
-          }
-        },
-        "span": {
-          "start": 6981,
-          "end": 7478
-        }
-      },
-      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/AdjustQueryTests.kt:AdjustQueryTests.assertQueryResultValid"
     },
     {
       "id": "kndo-737282440a11",
@@ -8629,27 +11152,6 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/LateralJoinTests.kt:LateralJoinTests.testLateralJoinQuery"
     },
     {
-      "id": "kndo-f21a35470a49",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/LateralJoinTests.kt",
-        "selector": {
-          "Member": {
-            "owner": "LateralJoinTests",
-            "name": "withTestTablesAndDefaultData"
-          }
-        },
-        "span": {
-          "start": 4174,
-          "end": 4646
-        }
-      },
-      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/LateralJoinTests.kt:LateralJoinTests.withTestTablesAndDefaultData"
-    },
-    {
       "id": "kndo-fb7561725079",
       "category": "duplicate",
       "severity": "info",
@@ -8671,7 +11173,7 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/LikeTests.kt:LikeTests.detectSpecialChars"
     },
     {
-      "id": "kndo-07ca491ad1dc",
+      "id": "kndo-f467a33fe373",
       "category": "duplicate",
       "severity": "info",
       "confidence": "certain",
@@ -8680,16 +11182,16 @@
         "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/MergeBaseTest.kt",
         "selector": {
           "Member": {
-            "owner": "MergeBaseTest",
-            "name": "withMergeTestTablesAndDefaultData"
+            "owner": "Dest",
+            "name": "insertDest"
           }
         },
         "span": {
-          "start": 1124,
-          "end": 2845
+          "start": 3831,
+          "end": 4175
         }
       },
-      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/MergeBaseTest.kt:MergeBaseTest.withMergeTestTablesAndDefaultData"
+      "message": "structural clone of exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/MergeBaseTest.kt:Source.insertSource"
     },
     {
       "id": "kndo-1152a669bcb9",
@@ -9427,6 +11929,27 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/OrderByTests.kt:OrderByTests.orderBy06"
     },
     {
+      "id": "kndo-276888952d2d",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/ReplaceTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "ReplaceTests",
+            "name": "testBatchReplaceWithEmptySequence"
+          }
+        },
+        "span": {
+          "start": 9382,
+          "end": 9743
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/ReplaceTests.kt:ReplaceTests.testBatchReplaceWithEmptySequence"
+    },
+    {
       "id": "kndo-2bc0ebbc4e33",
       "category": "duplicate",
       "severity": "info",
@@ -9658,6 +12181,27 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/ReturningTests.kt:ReturningTests.testInsertReturning"
     },
     {
+      "id": "kndo-014971bb0814",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/SelectTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "SelectTests",
+            "name": "testGreaterEqSubQuery"
+          }
+        },
+        "span": {
+          "start": 11863,
+          "end": 12187
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/SelectTests.kt:SelectTests.testInSubQuery01"
+    },
+    {
       "id": "kndo-0c5b7428fb37",
       "category": "duplicate",
       "severity": "info",
@@ -9742,6 +12286,27 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/SelectTests.kt:SelectTests.testInListWithTripleExpressions"
     },
     {
+      "id": "kndo-2102a77732af",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/SelectTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "SelectTests",
+            "name": "testNeqAnyFromList"
+          }
+        },
+        "span": {
+          "start": 14854,
+          "end": 15167
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/SelectTests.kt:SelectTests.testNeqAnyFromArray"
+    },
+    {
       "id": "kndo-238633884e87",
       "category": "duplicate",
       "severity": "info",
@@ -9761,6 +12326,27 @@
         }
       },
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/SelectTests.kt:SelectTests.testGreaterEqAllFromTable"
+    },
+    {
+      "id": "kndo-247bee3fe623",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/SelectTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "SelectTests",
+            "name": "testNotEqSubQuery"
+          }
+        },
+        "span": {
+          "start": 10547,
+          "end": 10871
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/SelectTests.kt:SelectTests.testEqSubQuery"
     },
     {
       "id": "kndo-2c397af16233",
@@ -9847,6 +12433,27 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/SelectTests.kt:SelectTests.testSelectAnd"
     },
     {
+      "id": "kndo-44a8ec4b9a53",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/SelectTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "SelectTests",
+            "name": "testLessSubQuery"
+          }
+        },
+        "span": {
+          "start": 10877,
+          "end": 11199
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/SelectTests.kt:SelectTests.testEqSubQuery"
+    },
+    {
       "id": "kndo-4d57037c9884",
       "category": "duplicate",
       "severity": "info",
@@ -9889,6 +12496,27 @@
       "message": "structural clone of exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/SelectTests.kt:SelectTests.testEqAnyFromSubQuery"
     },
     {
+      "id": "kndo-67eee7fc1177",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/SelectTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "SelectTests",
+            "name": "testEqSubQuery"
+          }
+        },
+        "span": {
+          "start": 10223,
+          "end": 10541
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/SelectTests.kt:SelectTests.testEqSubQuery"
+    },
+    {
       "id": "kndo-69362ba3f8ca",
       "category": "duplicate",
       "severity": "info",
@@ -9908,6 +12536,27 @@
         }
       },
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/SelectTests.kt:SelectTests.testGreaterEqAllFromList"
+    },
+    {
+      "id": "kndo-7414dc421c50",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/SelectTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "SelectTests",
+            "name": "testNeqAnyFromArray"
+          }
+        },
+        "span": {
+          "start": 14533,
+          "end": 14848
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/SelectTests.kt:SelectTests.testNeqAnyFromArray"
     },
     {
       "id": "kndo-7ee6c25afca3",
@@ -10057,6 +12706,69 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/SelectTests.kt:SelectTests.testSelectAnd"
     },
     {
+      "id": "kndo-c35fffb61a89",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/SelectTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "SelectTests",
+            "name": "testInListWithPairExpressionsAndEmptyList"
+          }
+        },
+        "span": {
+          "start": 4824,
+          "end": 5115
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/SelectTests.kt:SelectTests.testInListWithPairExpressionsAndEmptyList"
+    },
+    {
+      "id": "kndo-c4cec5452b77",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/SelectTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "SelectTests",
+            "name": "testLessEqSubQuery"
+          }
+        },
+        "span": {
+          "start": 11205,
+          "end": 11531
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/SelectTests.kt:SelectTests.testEqSubQuery"
+    },
+    {
+      "id": "kndo-d041e684b02c",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/SelectTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "SelectTests",
+            "name": "testInSubQuery01"
+          }
+        },
+        "span": {
+          "start": 9098,
+          "end": 9353
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/SelectTests.kt:SelectTests.testInSubQuery01"
+    },
+    {
       "id": "kndo-daf831acac3c",
       "category": "duplicate",
       "severity": "info",
@@ -10097,6 +12809,27 @@
         }
       },
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/SelectTests.kt:SelectTests.testSelectDistinct"
+    },
+    {
+      "id": "kndo-ee582271f79a",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/SelectTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "SelectTests",
+            "name": "testGreaterSubQuery"
+          }
+        },
+        "span": {
+          "start": 11537,
+          "end": 11857
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/SelectTests.kt:SelectTests.testInSubQuery01"
     },
     {
       "id": "kndo-ee9c60e19986",
@@ -10223,6 +12956,27 @@
         }
       },
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/UnionTests.kt:UnionTests.`test union with all results of three queries`"
+    },
+    {
+      "id": "kndo-a2d8f05eed5d",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/UnionTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "UnionTests",
+            "name": "`test limit with offset`"
+          }
+        },
+        "span": {
+          "start": 1368,
+          "end": 1857
+        }
+      },
+      "message": "structural clone of exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/UnionTests.kt:UnionTests.testUnionWithLimit"
     },
     {
       "id": "kndo-b93ed2067e03",
@@ -11182,6 +13936,27 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/functions/FunctionsTests.kt:FunctionsTests.testCoalesceFunction"
     },
     {
+      "id": "kndo-e642759bb284",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/functions/FunctionsTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "FunctionsTests",
+            "name": "testCalc01"
+          }
+        },
+        "span": {
+          "start": 1134,
+          "end": 1370
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/functions/FunctionsTests.kt:FunctionsTests.testCalc01"
+    },
+    {
       "id": "kndo-eed9603039a3",
       "category": "duplicate",
       "severity": "info",
@@ -11347,7 +14122,7 @@
           "end": 3049
         }
       },
-      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/functions/MathFunctionTests.kt:MathFunctionTests.testFloorFunction"
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/functions/MathFunctionTests.kt:MathFunctionTests.testSignFunction"
     },
     {
       "id": "kndo-f5055946fb11",
@@ -11368,7 +14143,7 @@
           "end": 2347
         }
       },
-      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/functions/MathFunctionTests.kt:MathFunctionTests.testFloorFunction"
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/functions/MathFunctionTests.kt:MathFunctionTests.testSignFunction"
     },
     {
       "id": "kndo-fd41a680bd57",
@@ -11663,6 +14438,27 @@
         }
       },
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/functions/WindowFunctionsTests.kt:WindowFunctionsTests.testPartitionByClause"
+    },
+    {
+      "id": "kndo-44ff884bc0b6",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/functions/WindowFunctionsTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "WindowFunctionsTests",
+            "name": "assertWindowFunctionDefinition"
+          }
+        },
+        "span": {
+          "start": 22841,
+          "end": 23296
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/functions/WindowFunctionsTests.kt:WindowFunctionsTests.assertWindowFunctionDefinition"
     },
     {
       "id": "kndo-60aa1f2a9963",
@@ -11977,6 +14773,27 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/BlobColumnTypeTests.kt:testWriteAndReadBlobValueViaAlias"
     },
     {
+      "id": "kndo-bfa524d17687",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/types/BooleanColumnTypeTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "BooleanColumnTypeTests",
+            "name": "`true value`"
+          }
+        },
+        "span": {
+          "start": 498,
+          "end": 849
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/BooleanColumnTypeTests.kt:BooleanColumnTypeTests.`true value`"
+    },
+    {
       "id": "kndo-d66ede09cfc3",
       "category": "duplicate",
       "severity": "info",
@@ -11996,6 +14813,27 @@
         }
       },
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/BooleanColumnTypeTests.kt:BooleanColumnTypeTests.`bool in a condition`"
+    },
+    {
+      "id": "kndo-dd85b12e9d67",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/types/BooleanColumnTypeTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "BooleanColumnTypeTests",
+            "name": "`false value`"
+          }
+        },
+        "span": {
+          "start": 855,
+          "end": 1209
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/BooleanColumnTypeTests.kt:BooleanColumnTypeTests.`true value`"
     },
     {
       "id": "kndo-f84fc404d269",
@@ -12019,6 +14857,27 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/BooleanColumnTypeTests.kt:BooleanColumnTypeTests.testCustomCharBooleanColumnType"
     },
     {
+      "id": "kndo-6ec38d43a14b",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/types/CharColumnType.kt",
+        "selector": {
+          "Member": {
+            "owner": "CharColumnType",
+            "name": "`test char column read and write`"
+          }
+        },
+        "span": {
+          "start": 700,
+          "end": 1056
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/CharColumnType.kt:CharColumnType.`test char column read and write`"
+    },
+    {
       "id": "kndo-2da2ddab472b",
       "category": "duplicate",
       "severity": "info",
@@ -12038,6 +14897,27 @@
         }
       },
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/DoubleColumnTypeTests.kt:DoubleColumnTypeTests.testInsertAndSelectFromRealColumn"
+    },
+    {
+      "id": "kndo-5809a8341558",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/types/DoubleColumnTypeTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "DoubleColumnTypeTests",
+            "name": "testInsertAndSelectFromDoubleColumn"
+          }
+        },
+        "span": {
+          "start": 598,
+          "end": 952
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/DoubleColumnTypeTests.kt:DoubleColumnTypeTests.testInsertAndSelectFromDoubleColumn"
     },
     {
       "id": "kndo-6e80bfc619ef",
@@ -12268,6 +15148,27 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/UnsignedColumnTypeTests.kt:UnsignedColumnTypeTests.testMaxUnsignedTypesInMySql"
     },
     {
+      "id": "kndo-3989f1248a83",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/types/UnsignedColumnTypeTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "UnsignedColumnTypeTests",
+            "name": "testUShortColumnType"
+          }
+        },
+        "span": {
+          "start": 5244,
+          "end": 5595
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/UnsignedColumnTypeTests.kt:UnsignedColumnTypeTests.testUByteColumnType"
+    },
+    {
       "id": "kndo-3e6789c2b5a3",
       "category": "duplicate",
       "severity": "info",
@@ -12331,6 +15232,27 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/UnsignedColumnTypeTests.kt:UnsignedColumnTypeTests.testUIntWithCheckConstraint"
     },
     {
+      "id": "kndo-72a8e707df16",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/types/UnsignedColumnTypeTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "UnsignedColumnTypeTests",
+            "name": "testUIntColumnType"
+          }
+        },
+        "span": {
+          "start": 8601,
+          "end": 8938
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/UnsignedColumnTypeTests.kt:UnsignedColumnTypeTests.testUByteColumnType"
+    },
+    {
       "id": "kndo-95ad0f65e03b",
       "category": "duplicate",
       "severity": "info",
@@ -12352,6 +15274,27 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/UnsignedColumnTypeTests.kt:UnsignedColumnTypeTests.testCheckConstraintNameAcrossMultipleTables"
     },
     {
+      "id": "kndo-a2c469d760ba",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/types/UnsignedColumnTypeTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "UnsignedColumnTypeTests",
+            "name": "testULongColumnType"
+          }
+        },
+        "span": {
+          "start": 12640,
+          "end": 12986
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/UnsignedColumnTypeTests.kt:UnsignedColumnTypeTests.testUByteColumnType"
+    },
+    {
       "id": "kndo-abfcfba88c65",
       "category": "duplicate",
       "severity": "info",
@@ -12371,6 +15314,27 @@
         }
       },
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/UnsignedColumnTypeTests.kt:UnsignedColumnTypeTests.testUnsignedCheckConstraintNameUsesProperCase"
+    },
+    {
+      "id": "kndo-b3aec7fe1df4",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/types/UnsignedColumnTypeTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "UnsignedColumnTypeTests",
+            "name": "testUByteColumnType"
+          }
+        },
+        "span": {
+          "start": 1766,
+          "end": 2110
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/UnsignedColumnTypeTests.kt:UnsignedColumnTypeTests.testUByteColumnType"
     },
     {
       "id": "kndo-e1902ad5c32f",
@@ -12527,6 +15491,27 @@
         }
       },
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/VectorColumnTypeTests.kt:VectorColumnTypeTests.testPrecisionToleranceBoundary"
+    },
+    {
+      "id": "kndo-2fb55df2bced",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/types/VectorColumnTypeTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "VectorColumnTypeTests",
+            "name": "assertTargetWithinTolerance"
+          }
+        },
+        "span": {
+          "start": 19784,
+          "end": 20121
+        }
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/VectorColumnTypeTests.kt:VectorColumnTypeTests.assertTargetWithinTolerance"
     },
     {
       "id": "kndo-32fadd869fd0",
@@ -12760,27 +15745,6 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/VectorColumnTypeTests.kt:VectorColumnTypeTests.testDistanceAsPartOfOpClause"
     },
     {
-      "id": "kndo-fbb3e927b935",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/types/VectorColumnTypeTests.kt",
-        "selector": {
-          "Member": {
-            "owner": "VectorColumnTypeTests",
-            "name": "withVectorTableAndData"
-          }
-        },
-        "span": {
-          "start": 18423,
-          "end": 19582
-        }
-      },
-      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/VectorColumnTypeTests.kt:VectorColumnTypeTests.withVectorTableAndData"
-    },
-    {
       "id": "kndo-7622f2a1d3db",
       "category": "duplicate",
       "severity": "info",
@@ -12800,6 +15764,69 @@
         }
       },
       "message": "structural clone of spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/MixedExposedJdbcTransactionTest.kt:MixedExposedJdbcTransactionTest.testFailedRequiresNewTransactions"
+    },
+    {
+      "id": "kndo-0c915f7ed697",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/SpringMultiContainerTransactionTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "SpringMultiContainerTransactionTest",
+            "name": "test10"
+          }
+        },
+        "span": {
+          "start": 4331,
+          "end": 4837
+        }
+      },
+      "message": "structural clone of spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/SpringMultiContainerTransactionTest.kt:SpringMultiContainerTransactionTest.test5"
+    },
+    {
+      "id": "kndo-5de543b75b63",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/SpringMultiContainerTransactionTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "SpringMultiContainerTransactionTest",
+            "name": "test9"
+          }
+        },
+        "span": {
+          "start": 3890,
+          "end": 4325
+        }
+      },
+      "message": "structural clone of spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/SpringMultiContainerTransactionTest.kt:SpringMultiContainerTransactionTest.test4"
+    },
+    {
+      "id": "kndo-73ded8fc2d9a",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/SpringTransactionManagerTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "SpringTransactionManagerTest",
+            "name": "`support with transaction`"
+          }
+        },
+        "span": {
+          "start": 12483,
+          "end": 12944
+        }
+      },
+      "message": "structural clone of spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/SpringTransactionManagerTest.kt:SpringTransactionManagerTest.`mandatory with transaction`"
     },
     {
       "id": "kndo-35cf8350fba7",
@@ -12907,6 +15934,27 @@
       "message": "structural clone of spring-transaction/src/main/kotlin/org/jetbrains/exposed/v1/spring/transaction/SpringTransactionManager.kt:SpringTransactionManager.doBegin"
     },
     {
+      "id": "kndo-f8ae8a7f890f",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "spring7-transaction/src/main/kotlin/org/jetbrains/exposed/v1/spring7/transaction/SpringTransactionManager.kt",
+        "selector": {
+          "Member": {
+            "owner": "SpringTransactionManager",
+            "name": "doCleanupAfterCompletion"
+          }
+        },
+        "span": {
+          "start": 6988,
+          "end": 7606
+        }
+      },
+      "message": "structural clone of spring-transaction/src/main/kotlin/org/jetbrains/exposed/v1/spring/transaction/SpringTransactionManager.kt:SpringTransactionManager.doCleanupAfterCompletion"
+    },
+    {
       "id": "kndo-18faf3afdaf4",
       "category": "duplicate",
       "severity": "info",
@@ -12926,6 +15974,27 @@
         }
       },
       "message": "structural clone of spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/ExposedTransactionManagerTest.kt:ExposedTransactionManagerTest.testConnectionWithRequiresNewWithInnerTransactionRollback"
+    },
+    {
+      "id": "kndo-19c569e6a05e",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "spring7-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring7/transaction/ExposedTransactionManagerTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "ExposedTransactionManagerTest",
+            "name": "testTimeout"
+          }
+        },
+        "span": {
+          "start": 9591,
+          "end": 10415
+        }
+      },
+      "message": "structural clone of spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/ExposedTransactionManagerTest.kt:ExposedTransactionManagerTest.testTimeout"
     },
     {
       "id": "kndo-2d51022cf9ce",
@@ -13075,6 +16144,69 @@
       "message": "structural clone of spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/ExposedTransactionManagerTest.kt:ExposedTransactionManagerTest.testIsolationLevelReadUncommitted"
     },
     {
+      "id": "kndo-f3c8a1a81b0d",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "spring7-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring7/transaction/ExposedTransactionManagerTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "ExposedTransactionManagerTest",
+            "name": "testConnection2"
+          }
+        },
+        "span": {
+          "start": 1770,
+          "end": 2017
+        }
+      },
+      "message": "structural clone of spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/ExposedTransactionManagerTest.kt:ExposedTransactionManagerTest.testConnection2"
+    },
+    {
+      "id": "kndo-3b27d478aecd",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "spring7-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring7/transaction/JdbcExposedTransactionManagerTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "JdbcExposedTransactionManagerTest",
+            "name": "testConnectionWithNestedTransactionInnerRollback"
+          }
+        },
+        "span": {
+          "start": 4067,
+          "end": 4472
+        }
+      },
+      "message": "structural clone of spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/JdbcExposedTransactionManagerTest.kt:JdbcExposedTransactionManagerTest.testConnectionWithNestedTransactionInnerRollback"
+    },
+    {
+      "id": "kndo-4de12dd6856f",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "spring7-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring7/transaction/JdbcExposedTransactionManagerTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "JdbcExposedTransactionManagerTest",
+            "name": "testIsolationLevelReadUncommitted"
+          }
+        },
+        "span": {
+          "start": 8580,
+          "end": 9223
+        }
+      },
+      "message": "structural clone of spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/JdbcExposedTransactionManagerTest.kt:JdbcExposedTransactionManagerTest.testIsolationLevelReadUncommitted"
+    },
+    {
       "id": "kndo-73d488d2d2ea",
       "category": "duplicate",
       "severity": "info",
@@ -13096,6 +16228,27 @@
       "message": "structural clone of spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/JdbcExposedTransactionManagerTest.kt:JdbcExposedTransactionManagerTest.testConnectionWithRequiresNewWithInnerTransactionRollback"
     },
     {
+      "id": "kndo-7f5eebace61b",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "spring7-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring7/transaction/JdbcExposedTransactionManagerTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "JdbcExposedTransactionManagerTest",
+            "name": "testConnectionCombineWithExposedTransaction"
+          }
+        },
+        "span": {
+          "start": 2608,
+          "end": 3029
+        }
+      },
+      "message": "structural clone of spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/JdbcExposedTransactionManagerTest.kt:JdbcExposedTransactionManagerTest.testConnectionCombineWithExposedTransaction"
+    },
+    {
       "id": "kndo-aee1f33027b9",
       "category": "duplicate",
       "severity": "info",
@@ -13115,6 +16268,27 @@
         }
       },
       "message": "structural clone of spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/JdbcExposedTransactionManagerTest.kt:JdbcExposedTransactionManagerTest.testConnectionWithNestedTransactionOuterRollback"
+    },
+    {
+      "id": "kndo-dd963881daaa",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "spring7-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring7/transaction/JdbcExposedTransactionManagerTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "JdbcExposedTransactionManagerTest",
+            "name": "testConnectionWithRequiresNew"
+          }
+        },
+        "span": {
+          "start": 5335,
+          "end": 5720
+        }
+      },
+      "message": "structural clone of spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/JdbcExposedTransactionManagerTest.kt:JdbcExposedTransactionManagerTest.testConnectionWithRequiresNew"
     },
     {
       "id": "kndo-182081941c71",
@@ -13201,6 +16375,90 @@
       "message": "structural clone of spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/SpringCoroutineTest.kt:SpringCoroutineTest.testNestedCoroutineTransaction"
     },
     {
+      "id": "kndo-3da1728a0b1f",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "spring7-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring7/transaction/SpringMultiContainerTransactionTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "SpringMultiContainerTransactionTest",
+            "name": "test9"
+          }
+        },
+        "span": {
+          "start": 3891,
+          "end": 4326
+        }
+      },
+      "message": "structural clone of spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/SpringMultiContainerTransactionTest.kt:SpringMultiContainerTransactionTest.test4"
+    },
+    {
+      "id": "kndo-78aeb87118af",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "spring7-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring7/transaction/SpringMultiContainerTransactionTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "SpringMultiContainerTransactionTest",
+            "name": "test4"
+          }
+        },
+        "span": {
+          "start": 2231,
+          "end": 2590
+        }
+      },
+      "message": "structural clone of spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/SpringMultiContainerTransactionTest.kt:SpringMultiContainerTransactionTest.test4"
+    },
+    {
+      "id": "kndo-b410d3e6fce4",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "spring7-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring7/transaction/SpringMultiContainerTransactionTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "SpringMultiContainerTransactionTest",
+            "name": "test5"
+          }
+        },
+        "span": {
+          "start": 2596,
+          "end": 3025
+        }
+      },
+      "message": "structural clone of spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/SpringMultiContainerTransactionTest.kt:SpringMultiContainerTransactionTest.test5"
+    },
+    {
+      "id": "kndo-cf2da18000d6",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "spring7-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring7/transaction/SpringMultiContainerTransactionTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "SpringMultiContainerTransactionTest",
+            "name": "test10"
+          }
+        },
+        "span": {
+          "start": 4332,
+          "end": 4838
+        }
+      },
+      "message": "structural clone of spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/SpringMultiContainerTransactionTest.kt:SpringMultiContainerTransactionTest.test5"
+    },
+    {
       "id": "kndo-486e1d4c085a",
       "category": "duplicate",
       "severity": "info",
@@ -13241,6 +16499,48 @@
         }
       },
       "message": "structural clone of spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/SpringTransactionAttributeSourceConcurrencyTest.kt:SpringTransactionAttributeSourceConcurrencyTest.`delegate's cached attribute is not mutated by source`"
+    },
+    {
+      "id": "kndo-ba362e401ca4",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "spring7-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring7/transaction/SpringTransactionEntityTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "SpringTransactionEntityTest",
+            "name": "test01"
+          }
+        },
+        "span": {
+          "start": 2555,
+          "end": 2892
+        }
+      },
+      "message": "structural clone of spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/SpringTransactionEntityTest.kt:SpringTransactionEntityTest.test01"
+    },
+    {
+      "id": "kndo-00c5563209fe",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "spring7-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring7/transaction/SpringTransactionManagerTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "SpringTransactionManagerTest",
+            "name": "`set right transaction manager when two transaction manager with nested transaction template`"
+          }
+        },
+        "span": {
+          "start": 2480,
+          "end": 2978
+        }
+      },
+      "message": "structural clone of spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/SpringTransactionManagerTest.kt:SpringTransactionManagerTest.`set right transaction manager when two transaction manager with nested transaction template`"
     },
     {
       "id": "kndo-0e952ad64b35",
@@ -13327,6 +16627,27 @@
       "message": "structural clone of spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/SpringTransactionManagerTest.kt:SpringTransactionManagerTest.`requires new with commit`"
     },
     {
+      "id": "kndo-42f49af37ae6",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "spring7-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring7/transaction/SpringTransactionManagerTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "SpringTransactionManagerTest",
+            "name": "`transaction rollback with lazy connection data source proxy`"
+          }
+        },
+        "span": {
+          "start": 6006,
+          "end": 6460
+        }
+      },
+      "message": "structural clone of spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/SpringTransactionManagerTest.kt:SpringTransactionManagerTest.`transaction rollback with lazy connection data source proxy`"
+    },
+    {
       "id": "kndo-4954cfb682e1",
       "category": "duplicate",
       "severity": "info",
@@ -13346,6 +16667,27 @@
         }
       },
       "message": "structural clone of spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/SpringTransactionManagerTest.kt:SpringTransactionManagerTest.`transaction exception on commit and rollback on commit failure`"
+    },
+    {
+      "id": "kndo-527ce225ff8f",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "spring7-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring7/transaction/SpringTransactionManagerTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "SpringTransactionManagerTest",
+            "name": "`support with transaction`"
+          }
+        },
+        "span": {
+          "start": 12484,
+          "end": 12945
+        }
+      },
+      "message": "structural clone of spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/SpringTransactionManagerTest.kt:SpringTransactionManagerTest.`mandatory with transaction`"
     },
     {
       "id": "kndo-5c4700527c94",
@@ -13411,6 +16753,27 @@
       "message": "structural clone of spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/SpringTransactionManagerTest.kt:SpringTransactionManagerTest.`transaction rollback with transaction aware data source proxy`"
     },
     {
+      "id": "kndo-6c41a6e9c992",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "spring7-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring7/transaction/SpringTransactionManagerTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "SpringTransactionManagerTest",
+            "name": "`connection rollback and close when transaction fail`"
+          }
+        },
+        "span": {
+          "start": 3311,
+          "end": 3746
+        }
+      },
+      "message": "structural clone of spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/SpringTransactionManagerTest.kt:SpringTransactionManagerTest.`connection rollback and close when transaction fail`"
+    },
+    {
       "id": "kndo-8e80b310b92b",
       "category": "duplicate",
       "severity": "info",
@@ -13430,6 +16793,27 @@
         }
       },
       "message": "structural clone of spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/SpringTransactionManagerTest.kt:SpringTransactionManagerTest.`connection rollback and closed when two different transaction manager with nested transaction failed`"
+    },
+    {
+      "id": "kndo-b57ac88df54e",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "spring7-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring7/transaction/SpringTransactionManagerTest.kt",
+        "selector": {
+          "Member": {
+            "owner": "SpringTransactionManagerTest",
+            "name": "`mandatory with transaction`"
+          }
+        },
+        "span": {
+          "start": 11740,
+          "end": 12204
+        }
+      },
+      "message": "structural clone of spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/SpringTransactionManagerTest.kt:SpringTransactionManagerTest.`mandatory with transaction`"
     },
     {
       "id": "kndo-b75aded5fecc",
@@ -14424,39 +17808,6 @@
       "subject": {
         "kind": "file",
         "path": "documentation-website/Writerside/snippets/get-started-with-exposed-dao/src/main/kotlin/org/example/Task.kt"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-5f908d9b1307",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/ops/AllAnyOps.kt"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-8546d91095ab",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/ops/InListOps.kt"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-55aa12fb98b0",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/ops/InTableOp.kt"
       },
       "message": "production-reachable, but no test reaches this file"
     },

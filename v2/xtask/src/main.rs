@@ -130,8 +130,9 @@ fn corpus(args: &[String]) -> Result<()> {
          Regenerate with `cargo xtask corpus --corpus-dir <clones>`; the oracle to\n\
          compare against is `oracle/`. A repo with zero claimed files speaks a\n\
          language no default adapter claims yet; an `unused` abstention means the\n\
-         graph has no roots (root evidence arrives with manifest capabilities), so\n\
-         the analysis declines to judge rather than accuse everything.\n\n\
+         graph has no roots — nothing in the tree (manifest entries, convention\n\
+         roots, dispatch anchors) said where execution starts, so the analysis\n\
+         declines to judge rather than accuse everything.\n\n\
          | repo | discovered | claimed | decls | refs | import edges | unresolved | findings | abstentions | diagnostics |\n\
          |---|---|---|---|---|---|---|---|---|---|\n",
     );
@@ -190,7 +191,7 @@ fn corpus(args: &[String]) -> Result<()> {
 }
 
 /// Rewrites the committed report schema from the types — the deliberate act the
-/// `report_schema_is_current` gate demands after an envelope change.
+/// `report_schema_is_generated_and_valid` gate demands after an envelope change.
 fn gen_schema() -> Result<()> {
     let dir = workspace_root().join("schemas");
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;

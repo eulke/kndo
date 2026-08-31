@@ -16,7 +16,7 @@
 
 use kndo_contract::adapter::{PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{
-    self as ev, CoverageRecords, EvidenceSink, EvidenceStream, EvidenceStreams, FileEvidence,
+    self as ev, CoverageRecords, EvidenceSink, EvidenceStream, FileEvidence,
 };
 use kndo_contract::extension::{
     Activation, ActivationRule, ConductSink, ContentAccess, Extension, ExtensionSpec, GraphAccess,
@@ -43,20 +43,15 @@ pub use bindings::kndo::vocab::types as wire;
 // ---------------------------------------------------------------- contract → wire
 
 pub fn spec_to_wire(spec: &ExtensionSpec) -> wire::ExtensionSpec {
-    // `EvidenceStreams` exposes membership, not iteration; the SDK versions with
-    // the contract, so enumerating the known streams here is the pairing rule's
-    // wire spelling, not a second source.
-    let known = [EvidenceStream::Comments, EvidenceStream::Metrics];
     wire::ExtensionSpec {
         coordinate: spec.coordinate().to_string(),
         version: spec.version(),
         extensions: spec.extensions().iter().map(|s| s.to_string()).collect(),
         claims: spec.claims().iter().map(|s| s.to_string()).collect(),
-        emits: known
-            .into_iter()
-            .filter(|s| spec.emits().contains(*s))
-            .map(stream_to_wire)
-            .collect(),
+        // The declared set itself is the wire spelling — no second list to
+        // forget when the contract grows a stream; a variant this SDK build
+        // does not know yet degrades by omission, not by silent stripping.
+        emits: spec.emits().iter().filter_map(stream_to_wire).collect(),
         manifests: spec.manifests().iter().map(|s| s.to_string()).collect(),
         conducts: spec.declares_conduct(),
         activation: activation_to_wire(spec.activation()),
@@ -98,11 +93,14 @@ fn activation_to_wire(activation: &Activation) -> wire::Activation {
     }
 }
 
-fn stream_to_wire(stream: EvidenceStream) -> wire::EvidenceStream {
+fn stream_to_wire(stream: EvidenceStream) -> Option<wire::EvidenceStream> {
     match stream {
-        EvidenceStream::Comments => wire::EvidenceStream::Comments,
-        EvidenceStream::Metrics => wire::EvidenceStream::Metrics,
-        _ => unreachable!("the SDK enumerates only streams it knows"),
+        EvidenceStream::Comments => Some(wire::EvidenceStream::Comments),
+        EvidenceStream::Metrics => Some(wire::EvidenceStream::Metrics),
+        // A stream this SDK build predates cannot cross this wire: omitted from
+        // the declaration, so host-side pairing stays truthful (writes to it
+        // would drop with a diagnostic rather than lie).
+        _ => None,
     }
 }
 
@@ -373,6 +371,11 @@ fn project_snapshot() -> &'static ProjectSnapshot {
     })
 }
 
+/// EXTRACTION-PHASE CODE MUST NOT CALL THIS: the file listing is project data,
+/// gated off during `extract` (evidence is cached by file content alone, so an
+/// extraction that read the file SET would go stale invisibly) — the host traps
+/// the call as a phase violation. Use it from `resolve`, `roots`, `packages`
+/// and `unit_mates`, where the project enumerations are the contract.
 /// The real `ResolveContext`, rebuilt from the host's enumerations.
 pub fn resolve_context() -> ResolveContext<'static> {
     let snap = project_snapshot();
@@ -455,7 +458,7 @@ impl<E: Extension + Default> bindings::Guest for ExportedExtension<E> {
             content.len() as u32,
             // The same pairing rule as the engine's own claim wiring: the sink is
             // constructed from the spec's declared streams.
-            streams_of(extension.spec()),
+            extension.spec().emits().clone(),
         );
         extension.extract(
             &SourceFile {
@@ -526,13 +529,13 @@ impl<E: Extension + Default> bindings::Guest for ExportedExtension<E> {
         let content = WireContent::fetch();
         let mut sink = ConductSink::default();
         extension.contribute_roots(&graph, &content, &mut sink);
-        let (roots, _) = sink.into_parts();
+        let (roots, _, _) = sink.into_parts();
         roots
             .into_iter()
-            .map(|(target, kind, confidence)| wire::ContributedRoot {
-                target: plugin_target_to_wire(&target),
-                kind: root_kind_to_wire(kind),
-                confidence: confidence_to_wire(confidence),
+            .map(|r| wire::ContributedRoot {
+                target: plugin_target_to_wire(&r.target),
+                kind: root_kind_to_wire(r.kind),
+                confidence: confidence_to_wire(r.confidence),
             })
             .collect()
     }
@@ -543,17 +546,16 @@ impl<E: Extension + Default> bindings::Guest for ExportedExtension<E> {
         let content = WireContent::fetch();
         let mut sink = ConductSink::default();
         extension.report_findings(&graph, &content, &mut sink);
-        let (_, findings) = sink.into_parts();
+        let (_, findings, _) = sink.into_parts();
         findings
             .into_iter()
-            .map(
-                |(rule, severity, target, message)| wire::ContributedFinding {
-                    rule: rule.to_string(),
-                    severity: severity_to_wire(severity),
-                    target: plugin_target_to_wire(&target),
-                    message,
-                },
-            )
+            .map(|f| wire::ContributedFinding {
+                rule: f.rule.to_string(),
+                severity: severity_to_wire(f.severity),
+                target: plugin_target_to_wire(&f.target),
+                confidence: confidence_to_wire(f.confidence),
+                message: f.message,
+            })
             .collect()
     }
 
@@ -563,16 +565,6 @@ impl<E: Extension + Default> bindings::Guest for ExportedExtension<E> {
             .as_ref()
             .map(records_to_wire)
     }
-}
-
-fn streams_of(spec: &ExtensionSpec) -> EvidenceStreams {
-    let known = [EvidenceStream::Comments, EvidenceStream::Metrics];
-    EvidenceStreams::of(
-        &known
-            .into_iter()
-            .filter(|s| spec.emits().contains(*s))
-            .collect::<Vec<_>>(),
-    )
 }
 
 /// Export a real [`Extension`] as this component's `kndo:vocab/extension` world.

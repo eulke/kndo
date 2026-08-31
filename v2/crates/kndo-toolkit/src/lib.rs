@@ -14,6 +14,33 @@ pub fn parse(language: &Language, source: &[u8]) -> Option<Tree> {
     parser.parse(source, None)
 }
 
+/// The whole parse-and-report opening every extraction shares: `None` came with
+/// its diagnostic, a tree with syntax errors came with its warning — the two
+/// user-facing strings exist once, so per-language output cannot drift.
+pub fn parse_reporting(
+    language: &Language,
+    source: &[u8],
+    out: &mut kndo_contract::evidence::EvidenceSink,
+) -> Option<Tree> {
+    use kndo_contract::evidence::DiagnosticLevel;
+    let Some(tree) = parse(language, source) else {
+        out.diagnostic(
+            DiagnosticLevel::Warn,
+            "parse produced no tree — no evidence extracted from this file",
+            None,
+        );
+        return None;
+    };
+    if tree.root_node().has_error() {
+        out.diagnostic(
+            DiagnosticLevel::Info,
+            "syntax errors in file — evidence may be partial",
+            None,
+        );
+    }
+    Some(tree)
+}
+
 /// A node's extent as the contract's byte span — tree-sitter yields bytes natively,
 /// which is exactly why the contract stores them.
 pub fn span(node: Node<'_>) -> Span {
@@ -103,9 +130,10 @@ pub fn walk_pruned(node: Node<'_>, skip: &[&str], f: &mut dyn FnMut(Node<'_>)) {
 /// The comment markers one grammar declares — the language fact, stated at the
 /// call site. WHICH nodes are comments is also the adapter's (it matches its
 /// grammar's kinds); this is the BYTES that open and close one, so the text
-/// span can exclude them. An adapter whose comment markers carry more meaning
-/// than text (Rust's doc markers) keeps its own extraction instead — that
-/// difference is grammar knowledge too.
+/// span can exclude them. Doc-comment markers that carry meaning beyond the
+/// opener (Rust's `//!`/`/*!`) ride the `line_doc`/`block_doc` fields — the
+/// helper strips them like any other marker; what they MEAN stays the
+/// adapter's business.
 pub struct CommentMarkers<'a> {
     /// Line-comment openers, checked in order.
     pub line: &'a [&'a str],
@@ -169,17 +197,23 @@ pub fn comment_evidence(
     out.comment(span, text);
 }
 
+/// The marker convention shared across ecosystems whose tools stamp generated
+/// output (`@generated`, protobuf/codegen banners): the one needle list the
+/// marker-scanning adapters declare. Go's own scan stays stricter and separate —
+/// its convention is line-anchored by the toolchain itself.
+pub const GENERATED_NEEDLES: &[&str] = &["@generated", "Code generated", "DO NOT EDIT"];
+
 /// A generated-file marker scan over the head of a source file: any of the
-/// declared needles inside a comment-shaped line marks the whole file. The
-/// mechanics; the needles are the adapter's declaration (Go keeps its own
-/// stricter convention-anchored scan — that difference is its own knowledge).
-pub fn generated_marked(source: &[u8], needles: &[&str]) -> bool {
+/// declared needles inside a comment line marks the whole file. The mechanics;
+/// the needles AND the language's comment openers are the adapter's declaration —
+/// a `#`-commented language passes its own openers rather than inheriting
+/// C-family ones that could never match.
+pub fn generated_marked(source: &[u8], needles: &[&str], openers: &[&str]) -> bool {
     let head = &source[..source.len().min(2048)];
     std::str::from_utf8(head).is_ok_and(|s| {
         s.lines().take(24).any(|l| {
             let l = l.trim();
-            (l.starts_with("//") || l.starts_with("/*") || l.starts_with('*'))
-                && needles.iter().any(|n| l.contains(n))
+            openers.iter().any(|o| l.starts_with(o)) && needles.iter().any(|n| l.contains(n))
         })
     })
 }
@@ -196,22 +230,14 @@ pub mod jvm_manifest {
     use kndo_contract::adapter::SourceFile;
     use smol_str::SmolStr;
 
-    /// A JVM language's spec differs only in identity: same evidence streams,
-    /// same build system's manifests. One spelling of that fact.
+    /// A JVM language's spec differs only in identity — the general fact
+    /// ([`crate::source_adapter_spec`]) plus the one build system's manifests.
     pub fn jvm_spec(
         coordinate: &'static str,
         version: u32,
         extensions: &[&'static str],
     ) -> kndo_contract::extension::ExtensionSpec {
-        use kndo_contract::evidence::{EvidenceStream, EvidenceStreams};
-        kndo_contract::extension::ExtensionSpec::builder(coordinate, version)
-            .extensions(extensions)
-            .emits(EvidenceStreams::of(&[
-                EvidenceStream::Comments,
-                EvidenceStream::Metrics,
-            ]))
-            .manifests(MANIFEST_GLOBS)
-            .build()
+        crate::source_adapter_spec(coordinate, version, extensions, MANIFEST_GLOBS)
     }
 
     /// The one build system's manifest names — the shared half of every JVM
@@ -366,4 +392,74 @@ pub fn nearest_suffix_match(
         }
     }
     best.map(|(_, p)| p.clone())
+}
+
+/// Winnowing parameters — one concept: core pools fingerprint sets across the
+/// whole graph, so every adapter must hash and window identically or clones stop
+/// matching across languages.
+pub const WINNOW_K: usize = 5;
+pub const WINNOW_WINDOW: usize = 4;
+
+/// The grammar knowledge a metrics walk needs, as two small functions the
+/// adapter declares; everything else — the walk, leaf hashing, winnowing, the
+/// line count — is mechanics and lives here once.
+pub struct MetricsSpec {
+    /// True when this node adds a decision path. The shared rule every adapter
+    /// follows: an arm that requires a NEW predicate counts; the arm that
+    /// catches the rest (default/else/`_`) does not, and value-producing
+    /// null-coalescing operators (`??`, `?:`) are not control forks.
+    pub is_branch: fn(&Node<'_>, &[u8]) -> bool,
+    /// The token class of one LEAF node: `None` skips it (comments), `Some`
+    /// hashes the class — `"id"`/`"str"`/`"num"` for the normalized families,
+    /// the node's own kind for everything else.
+    pub token_class: fn(&Node<'_>) -> Option<&'static str>,
+}
+
+/// Metrics over one declaration — the WHOLE node, signature included: what the
+/// reader sees is what fingerprints, identically in every language.
+pub fn function_metrics(
+    item: Node<'_>,
+    spec: &MetricsSpec,
+    source: &[u8],
+) -> kndo_contract::evidence::FunctionMetrics {
+    let mut token_hashes: Vec<u64> = Vec::new();
+    let mut cyclomatic = 1u32;
+    walk(item, &mut |n| {
+        if (spec.is_branch)(&n, source) {
+            cyclomatic += 1;
+        }
+        if n.child_count() == 0
+            && let Some(class) = (spec.token_class)(&n)
+        {
+            token_hashes.push(fnv1a(class.as_bytes()));
+        }
+    });
+    let loc = (item.end_position().row - item.start_position().row + 1) as u32;
+    kndo_contract::evidence::FunctionMetrics {
+        cyclomatic,
+        loc,
+        token_count: token_hashes.len() as u32,
+        fingerprints: winnow(&token_hashes, WINNOW_K, WINNOW_WINDOW),
+    }
+}
+
+/// A source-language adapter's spec differs only in identity: suffixes, the
+/// ecosystem's manifests, and the same two optional streams every built-in
+/// emits (comments for suppression, metrics for duplication). One spelling —
+/// an adapter that emits differently writes its own builder chain instead.
+pub fn source_adapter_spec(
+    coordinate: &'static str,
+    version: u32,
+    extensions: &[&'static str],
+    manifests: &[&'static str],
+) -> kndo_contract::extension::ExtensionSpec {
+    use kndo_contract::evidence::{EvidenceStream, EvidenceStreams};
+    kndo_contract::extension::ExtensionSpec::builder(coordinate, version)
+        .extensions(extensions)
+        .emits(EvidenceStreams::of(&[
+            EvidenceStream::Comments,
+            EvidenceStream::Metrics,
+        ]))
+        .manifests(manifests)
+        .build()
 }

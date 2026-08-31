@@ -10,19 +10,7 @@
       }
     ]
   },
-  "findings": [
-    {
-      "id": "kndo-8bddb0d6dfb5",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "schema.generated.ts"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    }
-  ],
+  "findings": [],
   "fixed": [],
   "baselined": 0,
   "abstained": [

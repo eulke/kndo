@@ -17,9 +17,9 @@ use crate::convert;
 use crate::engine::{budgeted_store, guest_limits, shared_engine};
 use kndo_contract::adapter::{PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{CoverageRecords, DiagnosticLevel, EvidenceSink};
+use kndo_contract::extension::is_reserved_coordinate;
 use kndo_contract::extension::{ConductSink, ContentAccess, Extension, ExtensionSpec, GraphAccess};
 use kndo_contract::vocab::ProjectPath;
-use kndo_core::plugin::is_reserved_coordinate;
 use std::collections::BTreeMap;
 use std::path::Path;
 use wasmtime::component::{Component, Linker};
@@ -27,6 +27,8 @@ use wasmtime::component::{Component, Linker};
 /// Which phase a store was built for — the authority every import checks.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Phase {
+    /// Manifest-dependency reads: bytes in, names out, no project surface.
+    Manifest,
     Spec,
     Extract,
     Project,
@@ -38,6 +40,7 @@ impl Phase {
     fn describe(self) -> &'static str {
         match self {
             Phase::Spec => "spec load",
+            Phase::Manifest => "the manifest read",
             Phase::Extract => "extraction",
             Phase::Project => "project queries",
             Phase::Conduct => "the conduct round",
@@ -185,6 +188,17 @@ impl WasmExtension {
                 coordinate: spec.coordinate().to_string(),
             });
         }
+        // Coordinates legally contain `/`; rule names must not, or two
+        // (coordinate, rule) pairs could spell one `ext:` category — an identity
+        // collision in a stability contract. Natives assert this at the builder;
+        // the wire validates here, at the same door as the namespace check.
+        if let Some(rule) = spec.rules().iter().find(|r| r.name.contains('/')) {
+            return Err(LoadError::Component(format!(
+                "rule name `{}` contains '/' — rule names must not (categories join \
+                 coordinate and rule on '/')",
+                rule.name
+            )));
+        }
         Ok(WasmExtension {
             component,
             linker,
@@ -269,9 +283,10 @@ impl Extension for WasmExtension {
     }
 
     fn manifest_dependencies(&self, manifest: &SourceFile<'_>) -> Vec<smol_str::SmolStr> {
-        // No project data: the world's manifest hook takes only the bytes, and a
-        // bare Project store keeps the phase gates meaningful.
-        self.call(StoreData::bare(Phase::Project), |guest, store| {
+        // The manifest hook gets bytes and NOTHING else — its own phase, so a
+        // guest reaching for `known-files` here trips a named violation instead
+        // of silently reading an empty snapshot.
+        self.call(StoreData::bare(Phase::Manifest), |guest, store| {
             guest.call_manifest_dependencies(store, manifest.path.as_str(), manifest.content)
         })
         .map(|names| names.into_iter().map(smol_str::SmolStr::new).collect())
@@ -292,10 +307,14 @@ impl Extension for WasmExtension {
         content: &dyn ContentAccess,
         out: &mut ConductSink,
     ) {
-        let Ok(roots) = self.call(StoreData::conduct(graph, content), |guest, store| {
+        let roots = match self.call(StoreData::conduct(graph, content), |guest, store| {
             guest.call_contribute_roots(store)
-        }) else {
-            return;
+        }) {
+            Ok(roots) => roots,
+            Err(reason) => {
+                out.note(trap_line("contribute-roots", reason));
+                return;
+            }
         };
         for root in roots {
             out.root(
@@ -312,16 +331,21 @@ impl Extension for WasmExtension {
         content: &dyn ContentAccess,
         out: &mut ConductSink,
     ) {
-        let Ok(findings) = self.call(StoreData::conduct(graph, content), |guest, store| {
+        let findings = match self.call(StoreData::conduct(graph, content), |guest, store| {
             guest.call_report_findings(store)
-        }) else {
-            return;
+        }) {
+            Ok(findings) => findings,
+            Err(reason) => {
+                out.note(trap_line("report-findings", reason));
+                return;
+            }
         };
         for finding in findings {
             out.finding(
                 &finding.rule,
                 convert::plugin_severity(finding.severity),
                 convert::plugin_target(finding.target),
+                convert::confidence(finding.confidence),
                 finding.message,
             );
         }
@@ -379,5 +403,17 @@ fn copy_into(evidence: kndo_contract::evidence::FileEvidence, out: &mut Evidence
     }
     for d in evidence.diagnostics {
         out.diagnostic(d.level, d.message, d.span);
+    }
+}
+
+/// The honesty line a trapped conduct call leaves on its contribution: the
+/// violated gate's own words when one fired, or the anonymous-trap wording
+/// (fuel, memory, a guest panic) — never silence.
+fn trap_line(hook: &str, reason: Option<String>) -> String {
+    match reason {
+        Some(v) => format!("{hook} call refused: {v}"),
+        None => format!(
+            "{hook} call trapped (guest panic, fuel or memory exhaustion) — its contribution is lost"
+        ),
     }
 }

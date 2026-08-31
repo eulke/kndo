@@ -80,18 +80,21 @@ fn misdirected_contributions_drop_with_described_lines() {
             "ghost",
             PluginSeverity::Info,
             file("main.kmock"),
+            Confidence::Probable,
             "scripted",
         );
         out.finding(
             "hello",
             PluginSeverity::Info,
             file("missing.kmock"),
+            Confidence::Probable,
             "scripted",
         );
         out.finding(
             "hello",
             PluginSeverity::Info,
             symbol("lib.kmock", "helper"),
+            Confidence::Probable,
             "scripted",
         );
     });
@@ -210,6 +213,7 @@ fn plugin_findings_ride_the_same_suppression_pass() {
             "hello",
             PluginSeverity::Info,
             symbol("lib.kmock", "helper"),
+            Confidence::Probable,
             "scripted",
         );
     });

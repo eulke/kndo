@@ -72,9 +72,9 @@ internal-only 7,983 (guava 7,014, vapor 383, Alamofire 216, Exposed 163, vite 14
 ripgrep 59, gin 1) plus private-type-leak 43 — the largest unbuilt category, bigger
 than everything v2 reports today combined. Supply: three languages shipped on binary
 `Reach` alone, and NONE of M4's false-positive fixes wanted a rung between private and
-exported — every one wanted scope SHAPE: Go's package scope landed as
-`ReferenceScope::Directory` (a capability, not a rung), and Rust's module-tree privacy
-landed as bindings-keep-whatever-the-reach. That is the hypothesis confirmed early and
+exported — every one wanted scope SHAPE: Go's package scope landed as what is now
+`unit_mates` (a capability, not a rung; it retired the interim `ReferenceScope`), and
+Rust's module-tree privacy landed as bindings-keep-whatever-the-reach. That is the hypothesis confirmed early and
 partially absorbed: the linear part of the ladder is what remains, its consumer is the
 internal-only analysis, and it does not exist yet — so the ladder waits for it
 (consumer rule; DECISIONS 2026-08-30 M4.d has the verdict).
@@ -85,6 +85,33 @@ belongs inside the exported side of the visibility type — today it rides besid
 inert, a recorded shape debt by the repo's own "Reach for the type" bar. Folding it in
 is a deliberate contract change: fingerprint moves, the pinned conformance reports
 diff, DECISIONS gets the entry.
+
+**Worked design (2026-08-31, audit round — pending owner decision as M6.c):** the
+region, not the rung. New demand since the entry above: kotlin measured 19 unused vs
+the oracle's 277 (public-by-default meets library-mode roots — only `private` is
+individually judgeable), rust folds `pub(crate)` to Exported, and swift (M6.b.3) has
+`internal` as its DEFAULT. A linear rung cannot compare "module" (kotlin) with
+"package" (go) with "crate" (rust) without core learning what those words mean — the
+coupling the ignorance rule exists to prevent. A REGION can: visibility for judgment
+is not an ordering but the SET of files that could legally name the declaration.
+
+Shape: `Reach` grows `Scoped { scope: SmolStr }` — the token is the adapter's own
+word ("package", "module", "crate", "in:a::b"), core never parses it (the
+`SymbolKind::Other` posture). The adapter grows one capability:
+`scope_of(path, scope, cx) -> Option<files>` — path- and manifest-computable, never
+content-dependent (the `unit_mates` stability class, so the persisted graph can trust
+it), `None` = unboundable, treated exactly as Exported (keep-alive). Engine judgment
+becomes evidence-shaped, ignorant of every language word: Private pools over
+file+unit; Scoped pools over its region, is NOT part of the `entry_surface` handed-out
+surface (`unused.rs`), and namespace/glob importers keep it only from inside the
+region; Exported unchanged. The same region machinery is what `internal-only` (the
+7,983) needs to classify uses as inside/outside — one mechanism, two named consumers,
+and it absorbs the recorded `exported_as` shape debt (the alias moves into the
+non-Private variants, killing the representable-but-inert `Private`+`Some`). Cost:
+`Reach` is documented closed-by-design, so this is a deliberate semantic contract
+change — fingerprint moves, WIT variant + pin-abi toll, adapters bump when they start
+emitting it. Conformance case: kotlin `internal` fixtures (unused internal accused;
+cross-package-same-module use keeps it; `protected` stays Unknown→Exported).
 
 ### Import-shape debt: the `use`-leaf pair (recorded 2026-08-30, M4)
 A plain Rust `use` leaf emits TWO import records over the same target: a
@@ -142,3 +169,22 @@ ever comes, arrives by another mechanism.
 - The oracle (`oracle/`) is the baseline; every emitting milestone diffs against it.
 - An experiment's result — kill, defer, or build — lands in `DECISIONS.md` with its
   number, and killed entries move up into this file's killed section.
+
+### Honesty-channel gaps recorded by the 2026-08-31 audit round
+
+Conduct traps now land on the contribution (`ConductSink::note` → `dropped`), but two
+sibling calls still degrade silently: a trapped `ingest` returns `None`
+(indistinguishable from "report unparseable"), and a trapped `manifest_dependencies`
+returns no names (activation stays off — safe direction, wrong silence). Both want the
+same shape: a bridge note on something report-visible. The ingest one also wants the
+winning ingester's coordinate on the run. Waiting on a channel design, not on demand.
+
+### Declared-but-unjudged evidence (consumer rule, recorded 2026-08-31)
+
+`Reference.kind` (six variants every adapter computes), `Import.confidence` (always
+`Certain`), and root confidence (read only by dedup ordering) currently have no
+analysis consumer. Kept, not cut: `RefKind::TypeUse` is `private-type-leak`'s input
+and `Extend` is dispatch analysis's, both censused; cutting and re-adding would churn
+the fingerprint twice for nothing. The rule stands: the next analysis that wants
+confidence-carried-through starts by naming one of these as its input (the
+`test_only.rs` comment about carried uncertainty becomes true then, not before).

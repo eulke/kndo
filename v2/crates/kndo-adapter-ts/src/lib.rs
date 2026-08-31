@@ -12,9 +12,7 @@ mod manifest;
 mod resolve;
 
 use kndo_contract::adapter::{PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile};
-use kndo_contract::evidence::{
-    DiagnosticLevel, EvidenceSink, EvidenceStream, EvidenceStreams, RootKind, RootTarget,
-};
+use kndo_contract::evidence::{EvidenceSink, RootKind, RootTarget};
 use kndo_contract::extension::{Extension, ExtensionSpec};
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use smol_str::SmolStr;
@@ -35,16 +33,12 @@ pub struct TypeScriptAdapter {
 
 impl TypeScriptAdapter {
     pub fn new() -> Self {
-        // semantics_version 2: the adapter emits Metrics (winnowing fingerprints,
-        // cyclomatic, loc) for every function-shaped declaration.
-        let spec = ExtensionSpec::builder("kndo:js-ts", 2)
-            .extensions(&["ts", "tsx", "js", "jsx", "mjs", "cjs"])
-            .emits(EvidenceStreams::of(&[
-                EvidenceStream::Comments,
-                EvidenceStream::Metrics,
-            ]))
-            .manifests(&["**/package.json"])
-            .build();
+        let spec = kndo_toolkit::source_adapter_spec(
+            "kndo:js-ts",
+            3,
+            &["ts", "tsx", "js", "jsx", "mjs", "cjs"],
+            &["**/package.json"],
+        );
         let mut resolution_exts = Vec::new();
         for ext in spec.extensions() {
             resolution_exts.push(format!(".{ext}"));
@@ -87,22 +81,8 @@ impl Extension for TypeScriptAdapter {
         // would turn into an unreachable-file accusation.
         convention_roots(file, out);
         let language = language_for(file.path);
-        match kndo_toolkit::parse(&language, file.content) {
-            Some(tree) => {
-                if tree.root_node().has_error() {
-                    out.diagnostic(
-                        DiagnosticLevel::Info,
-                        "syntax errors in file — evidence may be partial",
-                        None,
-                    );
-                }
-                extract::extract(file.content, &tree, out);
-            }
-            None => out.diagnostic(
-                DiagnosticLevel::Warn,
-                "parse produced no tree — no evidence extracted from this file",
-                None,
-            ),
+        if let Some(tree) = kndo_toolkit::parse_reporting(&language, file.content, out) {
+            extract::extract(file.content, &tree, out);
         }
     }
 

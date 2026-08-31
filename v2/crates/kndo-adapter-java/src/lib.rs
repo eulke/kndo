@@ -16,7 +16,7 @@ mod extract;
 mod resolve;
 
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
-use kndo_contract::evidence::{DiagnosticLevel, EvidenceSink};
+use kndo_contract::evidence::EvidenceSink;
 use kndo_contract::extension::{Extension, ExtensionSpec};
 use kndo_contract::vocab::ProjectPath;
 use smol_str::SmolStr;
@@ -28,7 +28,7 @@ pub struct JavaAdapter {
 impl JavaAdapter {
     pub fn new() -> Self {
         JavaAdapter {
-            spec: kndo_toolkit::jvm_manifest::jvm_spec("kndo:java", 1, &["java"]),
+            spec: kndo_toolkit::jvm_manifest::jvm_spec("kndo:java", 2, &["java"]),
         }
     }
 }
@@ -46,22 +46,8 @@ impl Extension for JavaAdapter {
 
     fn extract(&self, file: &SourceFile<'_>, out: &mut EvidenceSink) {
         let language = tree_sitter_java::LANGUAGE.into();
-        match kndo_toolkit::parse(&language, file.content) {
-            Some(tree) => {
-                if tree.root_node().has_error() {
-                    out.diagnostic(
-                        DiagnosticLevel::Info,
-                        "syntax errors in file — evidence may be partial",
-                        None,
-                    );
-                }
-                extract::extract(file.path, file.content, &tree, out);
-            }
-            None => out.diagnostic(
-                DiagnosticLevel::Warn,
-                "parse produced no tree — no evidence extracted from this file",
-                None,
-            ),
+        if let Some(tree) = kndo_toolkit::parse_reporting(&language, file.content, out) {
+            extract::extract(file.path, file.content, &tree, out);
         }
     }
 

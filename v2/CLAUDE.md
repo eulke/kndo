@@ -1,7 +1,8 @@
 # Working in this repo
 
-The law of this repo is executable: the gates (`kndo-gates` enumerates them) and the
-registries (config keys, categories, and CI steps are generated from them). This file is
+The law of this repo is executable: the gates (`kndo-gates` enumerates them, and the CI
+steps are generated from that registry; finding categories live once as
+`Category::FIRST_PARTY`). This file is
 the judgment layer — the decisions no gate can make for you. When it disagrees with a
 gate, the gate wins and this file is stale: fix it in the same PR. The best fate of any
 line here is to be retired by a type or a gate that makes it unnecessary.
@@ -20,7 +21,7 @@ Two deliberate version knobs exist; shape changes use neither.
 
 - A contract type changed shape → already done: `CONTRACT_FINGERPRINT` moved on its own.
 - This adapter now emits different evidence from the same source → bump its
-  `semantics_version!`.
+  version (the second argument of its `ExtensionSpec::builder`).
 - The same evidence now assembles into a different graph → bump
   `GRAPH_SEMANTICS_VERSION`.
 

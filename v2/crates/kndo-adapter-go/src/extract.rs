@@ -60,7 +60,7 @@ pub fn extract(
                     let name = tk::text(n, source);
                     let id =
                         out.declaration(name, SymbolKind::Function, tk::span(item), reach_of(name));
-                    out.metrics(id, function_metrics(item));
+                    out.metrics(id, function_metrics(item, source));
                     if package_main && name == "main" {
                         out.root(
                             RootTarget::Declaration(id),
@@ -263,43 +263,28 @@ fn classify(n: Node<'_>, parent: Node<'_>) -> RefKind {
 /// Metrics over one function-shaped node, normalized as the other adapters
 /// normalize: identifiers, strings and numbers collapse to their kind so Type-2
 /// clones fingerprint identically; comments never count.
-fn function_metrics(node: Node<'_>) -> kndo_contract::evidence::FunctionMetrics {
-    let mut token_hashes: Vec<u64> = Vec::new();
-    let mut cyclomatic = 1u32;
-    tk::walk(node, &mut |n| {
-        match n.kind() {
-            "if_statement" | "for_statement" | "expression_case" | "type_case"
-            | "communication_case" | "default_case" => {
-                cyclomatic += 1;
-            }
-            "binary_expression" => {
-                let mut c = n.walk();
-                if n.children(&mut c)
-                    .any(|ch| matches!(ch.kind(), "&&" | "||"))
-                {
-                    cyclomatic += 1;
-                }
-            }
-            _ => {}
+const METRICS: tk::MetricsSpec = tk::MetricsSpec {
+    // `default_case` is deliberately absent: the catch-the-rest arm is not a
+    // new predicate — the shared rule in the spec's contract.
+    is_branch: |n, _| match n.kind() {
+        "if_statement" | "for_statement" | "expression_case" | "type_case"
+        | "communication_case" => true,
+        "binary_expression" => {
+            let mut c = n.walk();
+            n.children(&mut c)
+                .any(|ch| matches!(ch.kind(), "&&" | "||"))
         }
-        if n.child_count() == 0 {
-            let class = match n.kind() {
-                "identifier" | "field_identifier" | "type_identifier" | "package_identifier" => {
-                    "id"
-                }
-                "interpreted_string_literal_content" | "raw_string_literal_content" => "str",
-                "int_literal" | "float_literal" | "imaginary_literal" => "num",
-                "comment" => return,
-                other => other,
-            };
-            token_hashes.push(tk::fnv1a(class.as_bytes()));
-        }
-    });
-    let loc = (node.end_position().row - node.start_position().row + 1) as u32;
-    kndo_contract::evidence::FunctionMetrics {
-        cyclomatic,
-        loc,
-        token_count: token_hashes.len() as u32,
-        fingerprints: tk::winnow(&token_hashes, 5, 4),
-    }
+        _ => false,
+    },
+    token_class: |n| match n.kind() {
+        "identifier" | "field_identifier" | "type_identifier" | "package_identifier" => Some("id"),
+        "interpreted_string_literal_content" | "raw_string_literal_content" => Some("str"),
+        "int_literal" | "float_literal" | "imaginary_literal" => Some("num"),
+        "comment" => None,
+        other => Some(other),
+    },
+};
+
+fn function_metrics(node: Node<'_>, source: &[u8]) -> kndo_contract::evidence::FunctionMetrics {
+    tk::function_metrics(node, &METRICS, source)
 }

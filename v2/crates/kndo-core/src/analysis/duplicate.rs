@@ -118,9 +118,12 @@ impl Analysis for Duplicate {
 fn render(g: &crate::graph::Graph, (file, decl): (usize, usize)) -> String {
     let f = &g.files[file];
     let d = &f.evidence.declarations[decl];
-    let name = match d.owner {
-        Some(owner) => format!("{}.{}", f.evidence.declarations[owner.index()].name, d.name),
-        None => d.name.to_string(),
+    let selector = match d.owner {
+        Some(owner) => kndo_contract::subject::SymbolSelector::Member {
+            owner: f.evidence.declarations[owner.index()].name.clone(),
+            name: d.name.clone(),
+        },
+        None => kndo_contract::subject::SymbolSelector::Free(d.name.clone()),
     };
-    format!("{}:{}", f.path.as_str(), name)
+    format!("{}:{}", f.path.as_str(), selector.render())
 }

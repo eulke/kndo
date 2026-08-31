@@ -263,11 +263,14 @@ interface types {
         rule: string,
         severity: plugin-severity,
         target: plugin-target,
+        /// The extension's own claim about this finding — a fact parsed from a
+        /// lockfile is certain, a heuristic possible; carried verbatim.
+        confidence: confidence,
         message: string,
     }
 
     /// One line or function record as the coverage report states it — the wire
-    /// level of `kndo-coverage`'s `CoverageRecords`. Paths are the report's own,
+    /// level of the contract's `CoverageRecords` (re-exported by `kndo-coverage`). Paths are the report's own,
     /// separator-normalized; the host maps them against the project and builds the
     /// line tables (a guest never sees source contents).
     record coverage-record {

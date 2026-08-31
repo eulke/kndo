@@ -8,7 +8,6 @@ publish.workspace = true
 
 [dependencies]
 kndo-contract = { path = "../kndo-contract" }
-kndo-core = { path = "../kndo-core" }
 smol_str = { version = "0.3", features = ["serde"] }
 thiserror = "2"
 wasmtime = { version = "=27.0.0", default-features = false, features = [
@@ -20,6 +19,7 @@ wasmtime = { version = "=27.0.0", default-features = false, features = [
 ] }
 
 [dev-dependencies]
+kndo-core = { path = "../kndo-core" }
 kndo = { path = "../kndo" }
 kndo-testkit = { path = "../kndo-testkit" }
 tempfile = "3"

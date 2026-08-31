@@ -182,14 +182,14 @@ report ZERO — reached differently. Go bent the contract twice, and both bends 
 now capabilities with fixtures:
 
 **The package is the unit.** A directory of `.go` files shares one namespace with
-no imports between siblings, so `AdapterSpec` grew `ReferenceScope::Directory`
-(default `File` — the default-compatibility rule; `unused` is the named consumer;
-`multi-file-package` the conformance case): analyses pool references per
-directory. Every file also carries a synthetic `"."` edge to its non-test
-siblings — reachability travels, `_test.go` stays out of the production color —
-and imports resolve through the longest go.mod module-path prefix to
-`Resolution::Files`, M4.a's directory-unit variant doing exactly what it was
-grown for.
+no imports between siblings, so the adapter answers `unit_mates` — the files a
+path can see with no import naming them (every non-test sibling; a test file
+sees the whole package). The engine draws one reachability edge per mate and
+pools references over that visibility, `_test.go` stays out of the production
+color, and imports resolve through the longest go.mod module-path prefix to
+`Resolution::Files` — M4.a's directory-unit variant doing exactly what it was
+grown for. (`unit_mates` is the retirement of an earlier `ReferenceScope`
+capability plus a synthetic sibling edge — one mechanism where two were.)
 
 **What the grammar cannot prove, it never accuses.** Three Go facts, each pinned
 by a fixture: `internal/` is the language's own visibility fence, so a bin-less
@@ -233,8 +233,9 @@ remain, as they should — v1 sees the same graph truth.
 ## M6.b.1 — guava speaks: the first Java measurement
 
 `kndo:java` lands on the unified door and guava claims 3,277 of 3,352 files.
-v2 reports 5,621 findings; the oracle (minus its 7,014 `internal-only`, which
-v2 does not build until M6.c) reports 13,230. Category by category:
+v2 reports 6,369 findings (5,621 before the 2026-08-31 audit round unified the
+metrics rule — see the duplicate section); the oracle (minus its 7,014
+`internal-only`, which v2 does not build until M6.c) reports 13,230. Category by category:
 
 **unused 766 vs 6,525 — and 5,485 of the oracle's are false positives its own
 subject proves.** 84% of v1's guava `unused` findings are `enum-member` rows
@@ -250,11 +251,18 @@ classes, 41 files, 37 enums, 49 annotations) against v2's 766 — v2's pooled
 name matching and its library-mode file roots keep more alive by design, in
 the keep-alive direction.
 
-**duplicate 4,708 vs 3,564 — the surplus is real and v1 could not see it.**
+**duplicate 5,456 vs 3,564 — the surplus is real and v1 could not see it.**
 1,326 of v2's are FILE-level: guava vendors byte-identical parallel trees
 (`android/guava/**` mirrors, the `futures/listenablefuture1` copy), and v1 had
-no file-granularity duplicate at all. The symbol-level remainder (3,382) sits
-under v1's 3,564 with the same 60-token floor.
+no file-granularity duplicate at all. The symbol-level remainder (4,130) sits
+above v1's 3,564 at the same 60-token floor since the audit round unified the
+metrics rule across all five adapters (the WHOLE declaration node fingerprints,
+signature included, and arrow `switch_rule` arms count): parallel overrides and
+delegation overloads whose bodies alone sat under the floor now clear it —
+sampled, they are the android/-mirror and overload-boilerplate families, the
+same real duplication at a finer floor. `unused` (766) and `untested` (147)
+are BYTE-IDENTICAL before and after the round — the metrics rule moved only
+what it measures.
 
 **untested 147 (file) vs 2,559 (symbol), test-only 0 vs 570** — the two known
 granularity gaps, recorded since rally and gin: without coverage v2's untested
@@ -273,12 +281,17 @@ harvested fixture exactly as v1 did.
 
 ## M6.b.2 — Exposed speaks: the first Kotlin measurement
 
-`kndo:kotlin` lands and Exposed claims 809 files, measuring 774 findings
-against the oracle's 1,037 (of which 163 are `internal-only`, unbuilt until
+`kndo:kotlin` lands and Exposed claims 809 files, measuring 936 findings
+(774 before the audit round; the deltas are called out below) against the
+oracle's 1,037 (of which 163 are `internal-only`, unbuilt until
 M6.c, and 22 more sit in unbuilt categories — test-only 14, cyclic 4,
 version-skew 4).
 
-**duplicate 646 vs 91 — the surplus is real, maintained-in-parallel code.**
+**duplicate 812 vs 91 — the surplus is real, maintained-in-parallel code.**
+(646 before the audit round's unified metrics rule; the +166 are the same two
+families at the finer whole-declaration floor — overload/override delegation
+pairs like `ModOp.invoke`'s and the TRUE/FALSE mirror overrides — plus the
+grammar-true classifier finally normalizing Kotlin number literals.)
 Exposed keeps TWO test suites in lockstep: `exposed-tests` (JDBC) and
 `exposed-r2dbc-tests` (R2DBC) hold structurally identical test methods
 duplicated pair-by-pair (`SelectTests.testCompoundOp`,
@@ -288,7 +301,11 @@ granularity; the recorded presentation question (grouping clone families)
 applies, and v1's far smaller count is v1's weaker Kotlin metrics, not a
 v2 false-positive flood.
 
-**unused 19 vs 277 — Kotlin's public-by-default meets library-mode roots.**
+**unused 18 vs 277 — Kotlin's public-by-default meets library-mode roots**
+(19 before the audit round: the corrected resolve order — exact package dir
+before the peeled parent — and the joint-compilation main-set mirror keep one
+more declaration alive; keep-alive is the direction these fixes are allowed to
+move things). Untested moved 109→106 the same way.**
 The engine's whole-file root hands a file's EXPORTED surface to its
 consumers, and in Kotlin everything unmodified is public — so only `private`
 declarations are individually judgeable today (the kotlin fixtures pin

@@ -93,6 +93,13 @@ impl EvidenceStreams {
     pub fn contains(&self, stream: EvidenceStream) -> bool {
         self.set.contains(&stream)
     }
+
+    /// The declared streams, sorted — what a wire spelling serializes; membership
+    /// and iteration come from the ONE set, so a new stream variant can never be
+    /// silently stripped by an enumeration someone else kept.
+    pub fn iter(&self) -> impl Iterator<Item = EvidenceStream> + '_ {
+        self.set.iter().copied()
+    }
 }
 
 /// Grows as languages need it; a consumer's wildcard arm treats an unknown kind as a
@@ -364,17 +371,41 @@ impl EvidenceSink {
         id
     }
 
+    /// True when `id` names a declaration this sink issued; otherwise the write is
+    /// dropped with a diagnostic — the same posture the wire boundary promises, so
+    /// a stale id from another file's sink degrades instead of panicking.
+    fn valid_id(&mut self, id: DeclarationId, what: &str) -> bool {
+        if id.index() < self.out.declarations.len() {
+            return true;
+        }
+        self.out.diagnostics.push(AdapterDiagnostic {
+            level: DiagnosticLevel::Warn,
+            message: format!(
+                "{what} names declaration index {} outside this file's {} — dropped \
+                 (adapter defect: a DeclarationId from another sink?)",
+                id.index(),
+                self.out.declarations.len()
+            ),
+            span: None,
+        });
+        false
+    }
+
     /// Membership by id: no name lookup, no span matching, nothing to mis-resolve.
     pub fn member_of(&mut self, member: DeclarationId, owner: DeclarationId) {
         debug_assert_ne!(member, owner, "a declaration cannot own itself");
-        debug_assert!(owner.index() < self.out.declarations.len());
+        if !self.valid_id(member, "member_of") || !self.valid_id(owner, "member_of owner") {
+            return;
+        }
         self.out.declarations[member.index()].owner = Some(owner);
     }
 
     /// The exported alias, when it differs from the local name — by id, so the alias
     /// can never attach to the wrong declaration.
     pub fn exported_as(&mut self, of: DeclarationId, name: impl Into<SmolStr>) {
-        debug_assert!(of.index() < self.out.declarations.len());
+        if !self.valid_id(of, "exported_as") {
+            return;
+        }
         self.out.declarations[of.index()].exported_as = Some(name.into());
     }
 
@@ -398,7 +429,9 @@ impl EvidenceSink {
     /// Metrics attach to the declaration they describe — by id. (v1 matched by name
     /// against last-wins symbol tables and reported a method as a clone of itself.)
     pub fn metrics(&mut self, of: DeclarationId, m: FunctionMetrics) {
-        debug_assert!(of.index() < self.out.declarations.len());
+        if !self.valid_id(of, "metrics") {
+            return;
+        }
         if self.declared(EvidenceStream::Metrics) {
             self.out.metrics.push((of, m));
         }
@@ -430,8 +463,10 @@ impl EvidenceSink {
     }
 
     pub fn root(&mut self, target: RootTarget, kind: RootKind, confidence: Confidence) {
-        if let RootTarget::Declaration(id) = target {
-            debug_assert!(id.index() < self.out.declarations.len());
+        if let RootTarget::Declaration(id) = target
+            && !self.valid_id(id, "root")
+        {
+            return;
         }
         self.out.roots.push(Root {
             target,

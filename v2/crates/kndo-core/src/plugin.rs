@@ -9,27 +9,20 @@ use crate::graph::{Graph, GraphFile};
 use kndo_contract::evidence::{Root, RootTarget};
 use kndo_contract::finding::Finding;
 use kndo_contract::subject::{Subject, SymbolSelector};
-use kndo_contract::vocab::{Category, Confidence, ProjectPath};
+use kndo_contract::vocab::{Category, ProjectPath};
 use serde::Serialize;
 use smol_str::SmolStr;
 use std::collections::{BTreeMap, BTreeSet};
 
 /// The conduct vocabulary is contract vocabulary (`kndo-contract`'s extension
 /// module — the one door); re-exported here where the engine that enforces it
-/// lives. `PluginSink` is the same type as `ConductSink`, under the name the
-/// native trait's hooks spell.
+/// lives.
 pub use kndo_contract::extension::{
-    Activation, ActivationRule, CONTENT_MAX_BYTES, CONTENT_MAX_FILES, ConductSink,
-    ConductSink as PluginSink, ContentView, Extension, GraphAccess, PluginSeverity, PluginTarget,
-    RuleDescriptor,
+    Activation, ActivationRule, CONTENT_MAX_BYTES, CONTENT_MAX_FILES, ConductSink, ContentView,
+    Extension, GraphAccess, PluginSeverity, PluginTarget, RuleDescriptor,
 };
 
-/// `kndo:` is the built-in namespace: an external component carrying it is
-/// rejected at load, which is what makes `dependencies: ["kndo:express"]`
-/// unambiguous from any source.
-pub fn is_reserved_coordinate(coordinate: &str) -> bool {
-    coordinate.starts_with("kndo:")
-}
+pub use kndo_contract::extension::is_reserved_coordinate;
 
 /// The graph as a plugin may see it: paths and membership, no internals. The
 /// engine-side implementation of the contract's [`GraphAccess`].
@@ -68,6 +61,17 @@ const WELL_KNOWN_MAX_BYTES: u64 = CONTENT_MAX_BYTES as u64;
 
 impl WellKnown<'_> {
     pub fn read(&self, relative: &str) -> Option<String> {
+        // `relative` is wire data when the extension is a loaded component: an
+        // absolute path would REPLACE the root in `join`, and `..` would climb out
+        // of it — both must stay unreadable, not merely undocumented.
+        let candidate = std::path::Path::new(relative);
+        if candidate.is_absolute()
+            || candidate
+                .components()
+                .any(|c| !matches!(c, std::path::Component::Normal(_)))
+        {
+            return None;
+        }
         let path = self.root.join(relative);
         let meta = std::fs::metadata(&path).ok()?;
         if !meta.is_file() || meta.len() > WELL_KNOWN_MAX_BYTES {
@@ -130,7 +134,8 @@ pub fn activate(
             active.push((ix, reason));
         }
     }
-    // Dependency closure, deterministic: scan until fixpoint in coordinate order.
+    // Dependency closure, deterministic: scan until fixpoint in the (sorted)
+    // composition order the loader established.
     loop {
         let mut grew = false;
         for (ix, extension) in extensions.iter().enumerate() {
@@ -226,9 +231,13 @@ pub fn run_round(
             extension.report_findings(&view, &content, &mut sink);
         }
 
-        let (sunk_roots, sunk_findings) = sink.into_parts();
+        let (sunk_roots, sunk_findings, notes) = sink.into_parts();
+        // Bridge honesty lines (a trapped call, a violated gate) reach the
+        // report through the same described-drop channel.
+        dropped.extend(notes);
         let mut applied_roots = 0u32;
-        for (target, kind, confidence) in sunk_roots {
+        for r in sunk_roots {
+            let (target, kind, confidence) = (r.target, r.kind, r.confidence);
             // The sink is shared between hooks, so an extension whose spec
             // declares `mutates_graph == false` can still CALL `root()` from
             // `report_findings` — those drop with a described line instead of
@@ -257,25 +266,28 @@ pub fn run_round(
         }
 
         let mut applied_findings = 0u32;
-        for (rule, severity, target, message) in sunk_findings {
-            if !spec.rules().iter().any(|r| r.name == rule) {
-                dropped.push(format!("finding under undeclared rule `{rule}`"));
+        for f in sunk_findings {
+            if !spec.rules().iter().any(|r| r.name == f.rule) {
+                dropped.push(format!("finding under undeclared rule `{}`", f.rule));
                 continue;
             }
-            let Some(subject) = target_subject(graph, &target) else {
+            let Some(subject) = target_subject(graph, &f.target) else {
                 dropped.push(format!(
                     "finding not applied: {} does not resolve in the graph",
-                    describe_target(&target)
+                    describe_target(&f.target)
                 ));
                 continue;
             };
+            // The message is the discriminator: two findings under one rule on one
+            // subject are distinct exactly when they say different things. The
+            // confidence is the extension's own claim, carried verbatim.
             findings.push(Finding::new(
-                Category::extension(spec.coordinate(), &rule),
-                severity.advisory(),
-                Confidence::Probable,
+                Category::extension(spec.coordinate(), &f.rule),
+                f.severity.advisory(),
+                f.confidence,
                 subject,
-                "",
-                message,
+                &f.message.clone(),
+                f.message,
             ));
             applied_findings += 1;
         }

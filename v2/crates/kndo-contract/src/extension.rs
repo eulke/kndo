@@ -68,6 +68,13 @@ impl MutatesGraph {
     }
 }
 
+/// `kndo:` is the built-in namespace: an external component carrying it is
+/// rejected at load, which is what makes `dependencies: ["kndo:express"]`
+/// unambiguous from any source.
+pub fn is_reserved_coordinate(coordinate: &str) -> bool {
+    coordinate.starts_with("kndo:")
+}
+
 /// What an extension IS, as data — the one manifest for every capability. Fields
 /// come in three clusters with one gate each: extraction (gated by `claims`),
 /// conduct (gated by `activation` + `mutates_graph`), ingestion (gated by
@@ -322,6 +329,11 @@ pub struct ConductBuilder {
 
 impl ConductBuilder {
     pub fn rule(mut self, name: &'static str, description: &'static str) -> Self {
+        assert!(
+            !name.contains('/'),
+            "rule names must not contain '/': coordinates legally do, so a slash \
+             here would let two (coordinate, rule) pairs spell one category"
+        );
         self.spec.rules.push(RuleDescriptor {
             name: SmolStr::new_static(name),
             description: SmolStr::new_static(description),
@@ -399,10 +411,32 @@ pub trait GraphAccess {
 }
 
 /// The write side of one extension's conduct round.
+/// One liveness anchor a conduct round contributed — the wire record's native
+/// twin, so consumers name fields instead of destructuring positions.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContributedRoot {
+    pub target: PluginTarget,
+    pub kind: RootKind,
+    pub confidence: Confidence,
+}
+
+/// One advisory finding a conduct round contributed. `confidence` is the
+/// extension's own claim — a fact parsed from a lockfile is `Certain`, a
+/// heuristic is `Possible`; the engine carries it into the finding verbatim.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContributedFinding {
+    pub rule: SmolStr,
+    pub severity: PluginSeverity,
+    pub target: PluginTarget,
+    pub confidence: Confidence,
+    pub message: String,
+}
+
 #[derive(Default)]
 pub struct ConductSink {
-    roots: Vec<(PluginTarget, RootKind, Confidence)>,
-    findings: Vec<(SmolStr, PluginSeverity, PluginTarget, String)>,
+    roots: Vec<ContributedRoot>,
+    findings: Vec<ContributedFinding>,
+    notes: Vec<String>,
 }
 
 impl ConductSink {
@@ -412,7 +446,11 @@ impl ConductSink {
     /// that fills this is only invoked on those; anything smuggled through the
     /// shared sink drops with a described line.
     pub fn root(&mut self, target: PluginTarget, kind: RootKind, confidence: Confidence) {
-        self.roots.push((target, kind, confidence));
+        self.roots.push(ContributedRoot {
+            target,
+            kind,
+            confidence,
+        });
     }
 
     /// An advisory finding under one of the spec's declared rules; undeclared
@@ -422,22 +460,30 @@ impl ConductSink {
         rule: &str,
         severity: PluginSeverity,
         target: PluginTarget,
+        confidence: Confidence,
         message: impl Into<String>,
     ) {
-        self.findings
-            .push((SmolStr::new(rule), severity, target, message.into()));
+        self.findings.push(ContributedFinding {
+            rule: SmolStr::new(rule),
+            severity,
+            target,
+            confidence,
+            message: message.into(),
+        });
     }
 
-    /// Everything the round wrote, for the engine to judge: roots first,
-    /// findings second, each in emission order.
-    #[allow(clippy::type_complexity)]
-    pub fn into_parts(
-        self,
-    ) -> (
-        Vec<(PluginTarget, RootKind, Confidence)>,
-        Vec<(SmolStr, PluginSeverity, PluginTarget, String)>,
-    ) {
-        (self.roots, self.findings)
+    /// A bridge-level honesty line: something went wrong OUTSIDE the guest's
+    /// declared surface (a trap mid-conduct, a violated phase gate) and the
+    /// contribution must say so — a vanished call and a clean empty round must
+    /// never look alike. Lands in the contribution's dropped list.
+    pub fn note(&mut self, line: impl Into<String>) {
+        self.notes.push(line.into());
+    }
+
+    /// Everything the round wrote, for the engine to judge: roots, findings,
+    /// then bridge notes, each in emission order.
+    pub fn into_parts(self) -> (Vec<ContributedRoot>, Vec<ContributedFinding>, Vec<String>) {
+        (self.roots, self.findings, self.notes)
     }
 }
 
@@ -710,7 +756,7 @@ mod tests {
         let mut sink = ConductSink::default();
         bare.contribute_roots(&NoGraph, &view, &mut sink);
         bare.report_findings(&NoGraph, &view, &mut sink);
-        let (roots, findings) = sink.into_parts();
+        let (roots, findings, _) = sink.into_parts();
         assert!(roots.is_empty() && findings.is_empty() && !view.budget_cut());
     }
 

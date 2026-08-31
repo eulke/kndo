@@ -328,13 +328,12 @@ fn a_two_cluster_extension_speaks_a_language_and_conducts() {
     );
 }
 
-#[test]
-fn a_conduct_import_during_extraction_traps_with_a_named_violation() {
-    // The hand-rolled tier: rude-probe bypasses the SDK and calls `graph-paths`
-    // from its extract export. The host's phase scoping must answer with a trap
-    // that surfaces as a described diagnostic — never with data.
+/// Drives rude-probe over one claimed file whose CONTENT selects the
+/// misbehavior, and asserts the named phase violation surfaces as a described
+/// diagnostic on that file — never as data, never as a crash.
+fn assert_extraction_violation(file_content: &str, violated_import: &str) {
     let p = TempProject::new();
-    p.file("app.rude", "anything\n");
+    p.file("app.rude", file_content);
 
     let rude = WasmExtension::load(&component("rude_probe")).expect("rude probe loads");
     let session = Session::open(
@@ -354,9 +353,51 @@ fn a_conduct_import_during_extraction_traps_with_a_named_violation() {
         report.diagnostics.iter().any(|d| {
             d.path.as_str() == "app.rude"
                 && d.message.contains("phase contract violation")
-                && d.message.contains("`graph-paths`")
+                && d.message.contains(violated_import)
         }),
         "the violation is named on the file it happened to: {:#?}",
         report.diagnostics
+    );
+}
+
+#[test]
+fn a_conduct_import_during_extraction_traps_with_a_named_violation() {
+    // The hand-rolled tier: rude-probe bypasses the SDK and calls `graph-paths`
+    // from its extract export.
+    assert_extraction_violation("anything\n", "`graph-paths`");
+}
+
+#[test]
+fn a_project_enumeration_during_extraction_traps_the_same_way() {
+    // `extract` imports NOTHING: evidence caches by file content alone, so the
+    // file SET may not influence it — `known-files` must trap exactly like a
+    // conduct import, not answer.
+    assert_extraction_violation("files\n", "`known-files`");
+}
+
+#[test]
+fn the_manifest_hook_gets_bytes_and_no_project_surface() {
+    // `manifest-dependencies` is bytes-in names-out. Before the manifest phase
+    // existed it ran under a bare project store, where `known-files` PASSED the
+    // gate and read an empty snapshot — silently wrong data. Now it traps as a
+    // named violation, and the engine degrades to no names (activation stays
+    // off), never to a lie.
+    let p = TempProject::new();
+    p.file("app.rude", "anything\n");
+    p.file("manifest.rude", "files\n");
+
+    let rude = WasmExtension::load(&component("rude_probe")).expect("rude probe loads");
+    // The rude spec declares no manifests, so drive the hook directly: the
+    // phase gate is the subject, not the engine's manifest routing.
+    let names = kndo_core::Extension::manifest_dependencies(
+        &rude,
+        &kndo_contract::adapter::SourceFile {
+            path: &kndo_contract::vocab::ProjectPath::new("manifest.rude"),
+            content: b"files\n",
+        },
+    );
+    assert!(
+        names.is_empty(),
+        "a trapped manifest read degrades to no names, never to data"
     );
 }

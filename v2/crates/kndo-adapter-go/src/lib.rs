@@ -16,7 +16,7 @@ mod manifest;
 mod resolve;
 
 use kndo_contract::adapter::{PackageEntry, Resolution, ResolveContext, SourceFile};
-use kndo_contract::evidence::{DiagnosticLevel, EvidenceSink, EvidenceStream, EvidenceStreams};
+use kndo_contract::evidence::EvidenceSink;
 use kndo_contract::extension::{Extension, ExtensionSpec};
 use kndo_contract::vocab::ProjectPath;
 use smol_str::SmolStr;
@@ -27,17 +27,9 @@ pub struct GoAdapter {
 
 impl GoAdapter {
     pub fn new() -> Self {
-        // semantics_version 2: evidence carries no synthetic package edge — the
-        // unit fact moved to `unit_mates`, out of content-keyed cache entries.
-        let spec = ExtensionSpec::builder("kndo:go", 2)
-            .extensions(&["go"])
-            .emits(EvidenceStreams::of(&[
-                EvidenceStream::Comments,
-                EvidenceStream::Metrics,
-            ]))
-            .manifests(&["**/go.mod"])
-            .build();
-        GoAdapter { spec }
+        GoAdapter {
+            spec: kndo_toolkit::source_adapter_spec("kndo:go", 3, &["go"], &["**/go.mod"]),
+        }
     }
 }
 
@@ -54,22 +46,8 @@ impl Extension for GoAdapter {
 
     fn extract(&self, file: &SourceFile<'_>, out: &mut EvidenceSink) {
         let language = tree_sitter_go::LANGUAGE.into();
-        match kndo_toolkit::parse(&language, file.content) {
-            Some(tree) => {
-                if tree.root_node().has_error() {
-                    out.diagnostic(
-                        DiagnosticLevel::Info,
-                        "syntax errors in file — evidence may be partial",
-                        None,
-                    );
-                }
-                extract::extract(file.path, file.content, &tree, out);
-            }
-            None => out.diagnostic(
-                DiagnosticLevel::Warn,
-                "parse produced no tree — no evidence extracted from this file",
-                None,
-            ),
+        if let Some(tree) = kndo_toolkit::parse_reporting(&language, file.content, out) {
+            extract::extract(file.path, file.content, &tree, out);
         }
     }
 

@@ -1,5 +1,3 @@
-// kndo:allow-file duplicate -- parallel per-language conformance: the java
-// twin asserts the same intents; each language keeps its own literals.
 //! Resolution: suffix with the `.java` and package-directory fallbacks, and
 //! the directory-plus-mirrors unit.
 
@@ -93,8 +91,11 @@ fn the_unit_is_the_directory_plus_both_main_mirrors() {
     let main_mates = a.unit_mates(&path("src/main/kotlin/com/foo/Widget.kt"), &cx);
     assert_eq!(
         main_mates,
-        vec![path("src/main/kotlin/com/foo/Helper.kt")],
-        "production sees its own directory only"
+        vec![
+            path("src/main/java/com/foo/Legacy.java"),
+            path("src/main/kotlin/com/foo/Helper.kt"),
+        ],
+        "joint compilation: production sees its package across BOTH main spellings"
     );
 
     let test_mates = a.unit_mates(&path("src/test/kotlin/com/foo/WidgetTest.kt"), &cx);

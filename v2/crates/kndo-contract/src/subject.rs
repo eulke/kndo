@@ -55,6 +55,25 @@ pub enum Subject {
 }
 
 impl Subject {
+    /// The one display spelling of WHERE a finding points — path plus whatever
+    /// the variant knows beyond it. Frontends print this instead of keeping
+    /// their own (lossy) tables: a dependency finding keeps its dependency
+    /// NAME, not just its manifest.
+    pub fn render(&self) -> String {
+        match self {
+            Subject::File { path } | Subject::Directory { path } => path.as_str().to_string(),
+            Subject::Symbol { path, selector, .. } => {
+                format!("{} — {}", path.as_str(), selector.render())
+            }
+            Subject::Package { manifest, name } => format!("{} ({name})", manifest.as_str()),
+            Subject::Dependency {
+                owner_manifest,
+                name,
+            } => format!("{} ({name})", owner_manifest.as_str()),
+            Subject::Suppression { path, .. } => format!("{} — allow", path.as_str()),
+        }
+    }
+
     pub fn kind(&self) -> SubjectKind {
         match self {
             Subject::File { .. } => SubjectKind::File,

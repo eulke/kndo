@@ -1,10 +1,10 @@
-// kndo:allow-file duplicate -- parallel per-language conformance: the java
-// twin asserts the same intents; each language keeps its own literals.
+// kndo:allow-file duplicate -- parallel per-language conformance: the java twin
+// asserts the same intents; each language keeps its own literals.
 //! Extraction facts: Kotlin's public-by-default reach, promoted constructor
 //! properties, dispatch roots, import shapes, and the never-declare postures.
 
 use kndo_adapter_kotlin::KotlinAdapter;
-use kndo_contract::evidence::{ImportShape, ImportTarget, Reach, RootKind, RootTarget};
+use kndo_contract::evidence::{ImportShape, ImportTarget, Reach, RefKind, RootKind, RootTarget};
 use kndo_testkit::{declaration_named, extract_evidence, import_named};
 
 fn ev(path: &str, source: &str) -> kndo_contract::evidence::FileEvidence {
@@ -138,6 +138,38 @@ fn enum_entries_and_secondary_constructors_are_never_declared() {
     );
     // The secondary constructor's body still contributes references.
     assert!(ev.references.iter().any(|r| r.name == "helper"));
+}
+
+#[test]
+fn calls_classify_as_calls_in_the_pinned_grammar() {
+    // kotlin-ng has no `navigation_suffix` and no fields on `call_expression`;
+    // the classifier reads the REAL shapes (callee = first child; member = last
+    // child of `navigation_expression`) — this pins that against grammar bumps.
+    let ev = ev(
+        "src/main/kotlin/com/foo/Main.kt",
+        "package com.foo
+\
+         fun run(g: Greeter) {
+\
+             help()
+\
+             g.greet()
+\
+             val n = g.name
+\
+         }
+",
+    );
+    let kind_of = |name: &str| {
+        ev.references
+            .iter()
+            .find(|r| r.name == name)
+            .unwrap_or_else(|| panic!("reference `{name}` missing"))
+            .kind
+    };
+    assert_eq!(kind_of("help"), RefKind::Call, "plain call");
+    assert_eq!(kind_of("greet"), RefKind::Call, "member call");
+    assert_eq!(kind_of("name"), RefKind::Read, "member read");
 }
 
 #[test]

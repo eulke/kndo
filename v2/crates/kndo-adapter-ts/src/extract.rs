@@ -16,8 +16,22 @@ use tree_sitter::Node;
 
 pub fn extract(source: &[u8], tree: &tree_sitter::Tree, out: &mut EvidenceSink) {
     let root = tree.root_node();
-    let aliases = export_aliases(root, source);
-    declarations(root, source, &aliases, out);
+    // The `@generated`/`DO NOT EDIT` convention (graphql-codegen, protobuf):
+    // generated code is the generator's business — it declares nothing
+    // accusable and the FILE is the generator's output, rooted Tooling so it is
+    // never accused of being unimported; its imports and references still keep
+    // the rest of the project alive. Same needles as the JVM adapters, whose
+    // library-mode roots already cover the file half.
+    if tk::generated_marked(source, tk::GENERATED_NEEDLES, &["//", "/*", "*"]) {
+        out.root(
+            kndo_contract::evidence::RootTarget::WholeFile,
+            kndo_contract::evidence::RootKind::Tooling,
+            kndo_contract::vocab::Confidence::Probable,
+        );
+    } else {
+        let aliases = export_aliases(root, source);
+        declarations(root, source, &aliases, out);
+    }
     imports(root, source, out);
     references_and_comments(root, source, out);
 }
@@ -176,14 +190,12 @@ fn class_members(class: Node<'_>, source: &[u8], class_id: DeclarationId, out: &
     for m in body.named_children(&mut c) {
         let is_method = match m.kind() {
             "method_definition" => true,
-            "public_field_definition" | "field_definition" => {
-                m.child_by_field_name("value").is_some_and(|v| {
-                    matches!(
-                        v.kind(),
-                        "arrow_function" | "function_expression" | "generator_function"
-                    )
-                })
-            }
+            "public_field_definition" => m.child_by_field_name("value").is_some_and(|v| {
+                matches!(
+                    v.kind(),
+                    "arrow_function" | "function_expression" | "generator_function"
+                )
+            }),
             _ => false,
         };
         if !is_method {
@@ -212,47 +224,33 @@ fn class_members(class: Node<'_>, source: &[u8], class_id: DeclarationId, out: &
 /// identifiers, strings and numbers collapse to their kind — so Type-2 clones
 /// (renamed, re-valued) fingerprint identically; everything else keeps its literal
 /// kind. Comments never count.
+const METRICS: tk::MetricsSpec = tk::MetricsSpec {
+    is_branch: |n, _| match n.kind() {
+        "if_statement" | "for_statement" | "for_in_statement" | "while_statement"
+        | "do_statement" | "switch_case" | "catch_clause" | "ternary_expression" => true,
+        // `??` is deliberately absent: value-producing, not a control fork —
+        // the shared rule in the spec's contract.
+        "binary_expression" => n
+            .child_by_field_name("operator")
+            .is_some_and(|op| matches!(op.kind(), "&&" | "||")),
+        _ => false,
+    },
+    token_class: |n| match n.kind() {
+        "identifier"
+        | "property_identifier"
+        | "private_property_identifier"
+        | "type_identifier"
+        | "shorthand_property_identifier"
+        | "shorthand_property_identifier_pattern" => Some("id"),
+        "string_fragment" => Some("str"),
+        "number" => Some("num"),
+        "comment" => None,
+        other => Some(other),
+    },
+};
+
 fn function_metrics(node: Node<'_>, source: &[u8]) -> kndo_contract::evidence::FunctionMetrics {
-    let _ = source;
-    let mut token_hashes: Vec<u64> = Vec::new();
-    let mut cyclomatic = 1u32;
-    tk::walk(node, &mut |n| {
-        match n.kind() {
-            "if_statement" | "for_statement" | "for_in_statement" | "while_statement"
-            | "do_statement" | "switch_case" | "catch_clause" | "ternary_expression" => {
-                cyclomatic += 1;
-            }
-            "binary_expression"
-                if n.child_by_field_name("operator")
-                    .is_some_and(|op| matches!(op.kind(), "&&" | "||" | "??")) =>
-            {
-                cyclomatic += 1;
-            }
-            _ => {}
-        }
-        if n.child_count() == 0 {
-            let class = match n.kind() {
-                "identifier"
-                | "property_identifier"
-                | "private_property_identifier"
-                | "type_identifier"
-                | "shorthand_property_identifier"
-                | "shorthand_property_identifier_pattern" => "id",
-                "string_fragment" => "str",
-                "number" => "num",
-                "comment" => return,
-                other => other,
-            };
-            token_hashes.push(tk::fnv1a(class.as_bytes()));
-        }
-    });
-    let loc = (node.end_position().row - node.start_position().row + 1) as u32;
-    kndo_contract::evidence::FunctionMetrics {
-        cyclomatic,
-        loc,
-        token_count: token_hashes.len() as u32,
-        fingerprints: tk::winnow(&token_hashes, 5, 4),
-    }
+    tk::function_metrics(node, &METRICS, source)
 }
 
 fn imports(root: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
@@ -494,7 +492,6 @@ fn is_use(n: Node<'_>, parent: Node<'_>) -> bool {
                     | "variable_declarator"
                     | "method_definition"
                     | "public_field_definition"
-                    | "field_definition"
                     | "property_signature"
                     | "method_signature"
                     | "enum_assignment"

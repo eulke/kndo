@@ -75,6 +75,7 @@ impl Extension for ProbePlugin {
             "note",
             PluginSeverity::Info,
             PluginTarget::File(first),
+            Confidence::Certain,
             seen,
         );
         // Under a rule the spec never declared — the host must drop it.
@@ -82,6 +83,7 @@ impl Extension for ProbePlugin {
             "ghost",
             PluginSeverity::Info,
             PluginTarget::File(ProjectPath::new("wired.kmini")),
+            Confidence::Possible,
             "never lands",
         );
     }

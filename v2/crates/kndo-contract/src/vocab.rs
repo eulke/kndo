@@ -113,8 +113,35 @@ impl Category {
     pub const UNUSED: Category = Category(SmolStr::new_static("unused"));
     pub const VERSION_SKEW: Category = Category(SmolStr::new_static("version-skew"));
 
-    /// The namespaced category of a plugin rule.
+    /// Every first-party category — the ONE list [`Category::parse`] validates
+    /// against; a new constant that misses this slice is unparseable, which its
+    /// test catches.
+    pub const FIRST_PARTY: &'static [Category] = &[
+        Category::CRAP,
+        Category::CYCLIC,
+        Category::DEEP_IMPORT,
+        Category::DUPLICATE,
+        Category::INTERNAL_ONLY,
+        Category::PRIVATE_TYPE_LEAK,
+        Category::STALE,
+        Category::TEST_ONLY,
+        Category::UNDECLARED,
+        Category::UNRESOLVED,
+        Category::UNTESTED,
+        Category::UNUSED,
+        Category::VERSION_SKEW,
+    ];
+
+    /// The namespaced category of a plugin rule. The rule name must not contain
+    /// `/`: coordinates legally do (`github.com/acme/x`), so a slash in the rule
+    /// would make two different (coordinate, rule) pairs spell one category — an
+    /// identity collision. Rule names are validated at declaration; this guards
+    /// the invariant at the join.
     pub fn extension(coordinate: &str, rule: &str) -> Self {
+        debug_assert!(
+            !rule.contains('/'),
+            "rule names must not contain '/' (validated at declaration)"
+        );
         Category(SmolStr::from(format!("ext:{coordinate}/{rule}")))
     }
 
@@ -122,22 +149,7 @@ impl Category {
     /// value): a first-party name or a well-formed `ext:<coordinate>/<rule>`.
     /// The frontier never constructs a raw string category.
     pub fn parse(s: &str) -> Option<Category> {
-        const FIRST_PARTY: [Category; 13] = [
-            Category::CRAP,
-            Category::CYCLIC,
-            Category::DEEP_IMPORT,
-            Category::DUPLICATE,
-            Category::INTERNAL_ONLY,
-            Category::PRIVATE_TYPE_LEAK,
-            Category::STALE,
-            Category::TEST_ONLY,
-            Category::UNDECLARED,
-            Category::UNRESOLVED,
-            Category::UNTESTED,
-            Category::UNUSED,
-            Category::VERSION_SKEW,
-        ];
-        if let Some(known) = FIRST_PARTY.iter().find(|c| c.as_str() == s) {
+        if let Some(known) = Category::FIRST_PARTY.iter().find(|c| c.as_str() == s) {
             return Some(known.clone());
         }
         let rest = s.strip_prefix("ext:")?;

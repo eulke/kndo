@@ -10,6 +10,7 @@ use crate::graph::Graph;
 use crate::plugin::PluginContribution;
 use crate::report::{ExtensionRun, Report, ReportDiagnostic, RunInfo, SCHEMA};
 use crate::{discover, extract};
+use kndo_contract::evidence::DiagnosticLevel;
 use kndo_contract::extension::Extension;
 use kndo_contract::finding::{Finding, Severity};
 use kndo_contract::vocab::ProjectPath;
@@ -318,6 +319,8 @@ impl Session {
         );
         timings.analyze = analyze_start.elapsed();
 
+        let mut composition = self.composition_diagnostics.clone();
+        let baseline = self.read_baseline(&mut composition);
         Snapshot {
             graph,
             findings,
@@ -325,9 +328,9 @@ impl Session {
             suppressed: suppressed.summary,
             plugins: round.contributions,
             pragma_problems: suppressed.problems,
-            composition_diagnostics: self.composition_diagnostics.clone(),
+            composition_diagnostics: composition,
             timings,
-            baseline: self.read_baseline(),
+            baseline,
             files_discovered: files.len() as u32,
         }
     }
@@ -336,11 +339,43 @@ impl Session {
         self.root.join(".kndo/baseline.json")
     }
 
-    /// A missing or unparseable baseline degrades to none — the run never fails on
-    /// its own memory.
-    fn read_baseline(&self) -> Option<Vec<Finding>> {
-        let bytes = std::fs::read(self.baseline_path()).ok()?;
-        serde_json::from_slice(&bytes).ok()
+    /// A missing baseline is none; an unreadable or wrong-schema one is none PLUS a
+    /// diagnostic — the run never fails on its own memory, but a baseline that
+    /// silently stopped applying would make every finding "new" with no explanation.
+    fn read_baseline(&self, problems: &mut Vec<ReportDiagnostic>) -> Option<Vec<Finding>> {
+        let path = self.baseline_path();
+        let bytes = std::fs::read(&path).ok()?;
+        match serde_json::from_slice::<BaselineFile>(&bytes) {
+            Ok(b) if b.schema == BASELINE_SCHEMA => Some(b.findings),
+            Ok(b) => {
+                problems.push(ReportDiagnostic {
+                    path: ProjectPath::new(".kndo/baseline.json"),
+                    level: DiagnosticLevel::Warn,
+                    message: format!(
+                        "baseline schema `{}` is not `{BASELINE_SCHEMA}` — treated as absent; \
+                         re-run `kndo baseline`",
+                        b.schema
+                    ),
+                });
+                None
+            }
+            Err(e) => {
+                // A v1 baseline (`schema_version`) is another product's memory
+                // living at the shared path — absent, not corrupt: warning about
+                // a file v1 rightfully owns would be noise in every migrating
+                // repo. Anything else unreadable is loud.
+                let v1 = serde_json::from_slice::<serde_json::Value>(&bytes)
+                    .is_ok_and(|v| v.get("schema_version").is_some());
+                if !v1 {
+                    problems.push(ReportDiagnostic {
+                        path: ProjectPath::new(".kndo/baseline.json"),
+                        level: DiagnosticLevel::Warn,
+                        message: format!("baseline unreadable ({e}) — treated as absent"),
+                    });
+                }
+                None
+            }
+        }
     }
 
     /// The one baseline effect: accept the snapshot's current findings as known.
@@ -351,7 +386,11 @@ impl Session {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        let json = serde_json::to_string_pretty(&snap.findings).expect("findings serialize");
+        let file = BaselineFile {
+            schema: BASELINE_SCHEMA.into(),
+            findings: snap.findings.clone(),
+        };
+        let json = serde_json::to_string_pretty(&file).expect("findings serialize");
         std::fs::write(path, json)
     }
 }
@@ -432,4 +471,14 @@ impl Snapshot {
             RunOutcome::FailFindings { at_or_above }
         }
     }
+}
+
+/// The baseline's persisted shape, versioned like the report envelope: a serde
+/// change to `Finding` must announce itself, not silently void the memory.
+const BASELINE_SCHEMA: &str = "kndo-baseline/1";
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct BaselineFile {
+    schema: String,
+    findings: Vec<Finding>,
 }

@@ -46,15 +46,23 @@ pub fn extract(
 ) {
     let p = path.as_str();
     let file_name = p.rsplit('/').next().unwrap_or(p);
-    let is_test = p.starts_with("src/test/kotlin/")
-        || p.contains("/src/test/kotlin/")
-        || file_name.ends_with("Test.kt")
+    // The standard layout's test directory is the build tool's own boundary —
+    // Certain, and not published surface. A test-shaped NAME outside it is
+    // convention only: Probable, and the file keeps its library-mode Production
+    // root — a `LoadTest.kt` on the main source path is still importable surface.
+    let test_dir = ["src/test/kotlin", "src/test/java"]
+        .iter()
+        .any(|m| p.starts_with(&format!("{m}/")) || p.contains(&format!("/{m}/")));
+    let test_name = file_name.ends_with("Test.kt")
         || file_name.ends_with("Tests.kt")
         || file_name.ends_with("TestCase.kt");
 
-    if is_test {
+    if test_dir {
         out.root(RootTarget::WholeFile, RootKind::Test, Confidence::Certain);
     } else {
+        if test_name {
+            out.root(RootTarget::WholeFile, RootKind::Test, Confidence::Probable);
+        }
         // Library mode, Go's and Java's stance: any non-test file is importable
         // published surface. Probable — convention, not this file's statement.
         out.root(
@@ -87,12 +95,8 @@ struct Ctx {
     owner: Option<DeclarationId>,
 }
 
-/// The JVM ecosystem's generated-file needles, declared here; the scan is the
-/// toolkit's.
-const GENERATED_NEEDLES: &[&str] = &["@generated", "Code generated", "DO NOT EDIT"];
-
 fn is_generated(source: &[u8]) -> bool {
-    tk::generated_marked(source, GENERATED_NEEDLES)
+    tk::generated_marked(source, tk::GENERATED_NEEDLES, &["//", "/*", "*"])
 }
 
 /// No modifier means public. `internal`/`protected` fold to Exported;
@@ -265,8 +269,8 @@ fn handle_function(item: Node<'_>, source: &[u8], ctx: &Ctx, out: &mut EvidenceS
     if let Some(owner) = ctx.owner {
         out.member_of(id, owner);
     }
-    if let Some(body) = tk::child_of_kind(item, "function_body") {
-        out.metrics(id, function_metrics(item, body));
+    if tk::child_of_kind(item, "function_body").is_some() {
+        out.metrics(id, function_metrics(item, source));
     }
 
     // Top-level `fun main` — the canonical Kotlin JVM entry point.
@@ -418,53 +422,52 @@ fn is_use(n: Node<'_>, parent: Node<'_>) -> bool {
 
 fn classify(n: Node<'_>, parent: Node<'_>) -> RefKind {
     match parent.kind() {
-        "call_expression" if parent.child_by_field_name("function") == Some(n) => RefKind::Call,
+        // kotlin-ng's `call_expression` has no fields: the callee is its first
+        // child (`foo()`), the rest are argument lists.
+        "call_expression" if parent.child(0) == Some(n) => RefKind::Call,
         "callable_reference" => RefKind::Call,
         "delegation_specifier" | "constructor_invocation" | "explicit_delegation" => {
             RefKind::Extend
         }
-        "navigation_suffix" => {
+        // Member access is `navigation_expression` (expression `.` identifier):
+        // the accessed member is its LAST child, and it is a call when the whole
+        // navigation sits as a `call_expression`'s callee.
+        "navigation_expression" => {
+            let last = parent.child(parent.child_count().saturating_sub(1));
+            if last != Some(n) {
+                return RefKind::Read;
+            }
             let called = parent
                 .parent()
-                .and_then(|nav| nav.parent())
-                .is_some_and(|gp| gp.kind() == "call_expression");
+                .is_some_and(|gp| gp.kind() == "call_expression" && gp.child(0) == Some(parent));
             if called { RefKind::Call } else { RefKind::Read }
         }
-        _ if n.kind() == "type_identifier" || parent.kind() == "user_type" => RefKind::TypeUse,
+        _ if parent.kind() == "user_type" => RefKind::TypeUse,
         _ => RefKind::Read,
     }
 }
 
-/// Metrics over one function, normalized as the other adapters normalize.
-/// `when_entry` counts once per arm; elvis (`?:`) and not-null (`!!`) are
-/// deliberately NOT branches — value-producing operators, not control forks.
-fn function_metrics(item: Node<'_>, body: Node<'_>) -> kndo_contract::evidence::FunctionMetrics {
-    let mut token_hashes: Vec<u64> = Vec::new();
-    let mut cyclomatic = 1u32;
-    tk::walk(body, &mut |n| {
-        match n.kind() {
-            "if_expression" | "when_entry" | "for_statement" | "while_statement"
-            | "do_while_statement" | "catch_block" => cyclomatic += 1,
-            "&&" | "||" => cyclomatic += 1,
-            _ => {}
-        }
-        if n.child_count() == 0 {
-            let class = match n.kind() {
-                "identifier" | "type_identifier" => "id",
-                "string_content" | "character_literal" => "str",
-                "integer_literal" | "long_literal" | "hex_literal" | "bin_literal"
-                | "real_literal" => "num",
-                "line_comment" | "block_comment" => return,
-                other => other,
-            };
-            token_hashes.push(tk::fnv1a(class.as_bytes()));
-        }
-    });
-    let loc = (item.end_position().row - item.start_position().row + 1) as u32;
-    kndo_contract::evidence::FunctionMetrics {
-        cyclomatic,
-        loc,
-        token_count: token_hashes.len() as u32,
-        fingerprints: tk::winnow(&token_hashes, 5, 4),
-    }
+const METRICS: tk::MetricsSpec = tk::MetricsSpec {
+    is_branch: |n, _| match n.kind() {
+        // A `when` else-arm has no condition field: the catch-the-rest, not a
+        // new predicate. Elvis (`?:`) and not-null (`!!`) are deliberately NOT
+        // branches — value-producing operators, not control forks (the shared
+        // rule in the spec's contract).
+        "when_entry" => n.child_by_field_name("condition").is_some(),
+        "if_expression" | "for_statement" | "while_statement" | "do_while_statement"
+        | "catch_block" => true,
+        "&&" | "||" => true,
+        _ => false,
+    },
+    token_class: |n| match n.kind() {
+        "identifier" => Some("id"),
+        "string_content" | "character_literal" => Some("str"),
+        "number_literal" | "float_literal" => Some("num"),
+        "line_comment" | "block_comment" => None,
+        other => Some(other),
+    },
+};
+
+fn function_metrics(item: Node<'_>, source: &[u8]) -> kndo_contract::evidence::FunctionMetrics {
+    tk::function_metrics(item, &METRICS, source)
 }

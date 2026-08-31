@@ -100,7 +100,7 @@ impl EvidenceCache {
 /// can tell whether they still hold.
 #[derive(Serialize, Deserialize)]
 pub struct PersistedGraph {
-    /// Hash over every discovered manifest file's (path, content hash), in path
+    /// Hash over every discovered manifest file's path and raw content, in path
     /// order — anchored roots and the package map are pure functions of it.
     pub manifest_state: [u8; 32],
     pub graph: Graph,

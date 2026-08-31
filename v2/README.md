@@ -1,9 +1,10 @@
-# v2 seed — M-1 groundwork
+# v2 — the kndo greenfield rebuild
 
-This directory is the pre-work for the kndo greenfield rebuild ("M-1" in the redesign
-plan): everything the v2 needs harvested from v1 before its first real commit. The v2 is
-built **in this repository, in place** — v1 becomes the read-only quarry it is being
-harvested from. Product name: **kndo** (confirmed 2026-08-29).
+The full v2 workspace, built **in this repository, in place** — v1 is the read-only
+quarry it was harvested from, and the `M-1` groundwork below (corpus, oracle, harvest,
+spikes) still anchors every measurement. Product name: **kndo** (confirmed 2026-08-29).
+The root swap (this tree becoming the repository root) is a later mechanical step, by
+the owner's M0 decision in `DECISIONS.md`.
 
 The full redesign report (diagnosis with evidence, architecture, contracts, data shapes,
 plan M-1→M6) lives as a published page; the decisions extracted from it start in
@@ -13,7 +14,7 @@ plan M-1→M6) lives as a published page; the decisions extracted from it start 
 
 | Path | What it is |
 |---|---|
-| `CLAUDE.md` | The day-0 agent judgment file for the v2 — destined verbatim for the repo root at M0. |
+| `CLAUDE.md` | The agent judgment file for the v2, living here and evolving with the tree; it moves to the repo root with the M0 root swap. |
 | `DECISIONS.md` | Append-only decision log, seeded with the start decisions and the v1 decisions worth carrying (each with its measurement). |
 | `EXPERIMENTS.md` | The measure-first backlog: every candidate feature with its prior data, including the ones v1's measurements killed (so nobody rebuilds them). |
 | `corpus/corpus.toml` | The oracle corpus: 8 pinned open-source repos spanning the 6 languages, chosen because v1's own precision incidents anchor them. |
@@ -234,9 +235,10 @@ Complete (CI verification pending only the credits reset, like M0–M2):
   capability (js, rust, go), plus the dependency closure to fixpoint. Coverage
   re-homed: `kndo-coverage` is a no-I/O parser crate and `kndo:coverage-lcov`
   the first built-in ingester — byte-identical findings everywhere. Envelope
-  grew `plugins` (SCHEMA `kndo-v2/m5`); gates eleven and twelve:
-  `builtin_plugin_proofs` (closed over `default_plugins()`) and
-  `plugin_dependency_implication`.
+  grew `plugins` (SCHEMA `kndo-v2/m5`); gates eleven and twelve landed here and
+  carry their post-M6.a spellings: `builtin_plugin_proofs` closed over the
+  conduct subset of `default_extensions()`, and
+  `extension_dependency_implication`.
 - **M5.c — the WASM ABI, done**: `kndo:vocab@1.0.0` under `wit/` — one types
   interface, three worlds (`adapter` born COMPLETE: extraction, resolve,
   manifests, unit mates; `plugin` with mandatory `mutates-graph` and inherited
@@ -289,7 +291,7 @@ Complete (CI verification pending only the credits reset, like M0–M2):
   constructors and enum constants (reflection reaches constants namelessly —
   guava's own `@SuppressWarnings("unused")` on its enum benchmark proves 84% of
   the oracle's guava `unused` were false positives). Six v1 fixtures replay;
-  guava claims 3,277 files and measures 5,621 findings with every category
+  guava claims 3,277 files and measures 6,369 findings with every category
   delta explained in `corpus-findings/COMPARISON.md`.
 - **M6.b.2 — kndo:kotlin.** The fifth built-in: public-by-default reach (the
   opposite of Java, load-bearing — `internal` folds to Exported until the
@@ -300,9 +302,19 @@ Complete (CI verification pending only the credits reset, like M0–M2):
   doesn't need: the `.java` extension and the package directory (Kotlin file
   names are free). The JVM manifest scanners promoted to
   `kndo-toolkit::jvm_manifest` (second-copy rule — one build system, two
-  languages). Five v1 fixtures replay; Exposed claims 809 files, 774
-  findings — including 641 REAL method-level clones between its parallel
+  languages). Five v1 fixtures replay; Exposed claims 809 files, 936
+  findings — including the REAL method-level clone families between its parallel
   JDBC/R2DBC test suites — with every delta explained in COMPARISON.
+- **M6.b.3 — swift (next).** The sixth built-in, closing the oracle census's
+  language set: vapor and Alamofire already sit pinned and unmeasured in the
+  corpus. Swift's DEFAULT visibility is `internal` — module scope — which makes
+  the scope-shape mechanism (M6.c) this milestone's natural companion.
+- **M6.c — internal-only + scope shape.** The census's reason: 7,983 oracle
+  `internal-only` findings plus the recorded kotlin/rust granularity gaps wait
+  on declarations that can carry a BOUNDED visibility region (EXPERIMENTS,
+  "Visibility-ladder shape").
+- **M6.d — measured parity, M6.e — close-out.** Per the census order in
+  `DECISIONS.md`.
 - **M6.b.4 — python (planned, owner decision 2026-08-31).** The first
   fresh-baseline language: v1 never spoke it, so there is no quarry, no
   harvested fixtures and no oracle row — acceptance is corpus measurement

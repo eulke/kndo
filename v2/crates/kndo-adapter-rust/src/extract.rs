@@ -23,8 +23,22 @@ pub fn extract(
     out: &mut EvidenceSink,
 ) {
     let root = tree.root_node();
+    // The `@generated`/`DO NOT EDIT` convention (prost, bindgen): generated code
+    // declares nothing accusable and the FILE is the generator's output, rooted
+    // Tooling so it is never accused of being unimported; its imports and
+    // references still keep the rest of the project alive. Same needles as the
+    // JVM adapters, whose library-mode roots already cover the file half.
+    let generated = tk::generated_marked(source, tk::GENERATED_NEEDLES, &["//", "/*", "*"]);
+    if generated {
+        out.root(
+            RootTarget::WholeFile,
+            RootKind::Tooling,
+            Confidence::Probable,
+        );
+    }
     let mut cx = ItemPass {
         source,
+        generated,
         main_root_kind: main_root_kind(path),
         unimportable_root: unimportable_crate_root(path),
         types: BTreeMap::new(),
@@ -78,6 +92,7 @@ fn unimportable_crate_root(path: &kndo_contract::vocab::ProjectPath) -> bool {
 
 struct ItemPass<'a, 'o> {
     source: &'a [u8],
+    generated: bool,
     main_root_kind: RootKind,
     unimportable_root: bool,
     /// Type name → its declaration, for wiring `impl` members to their owner.
@@ -107,6 +122,14 @@ impl<'a> ItemPass<'a, '_> {
     }
 
     fn item(&mut self, item: Node<'a>) {
+        if self.generated
+            && !matches!(
+                item.kind(),
+                "use_declaration" | "mod_item" | "attribute_item"
+            )
+        {
+            return;
+        }
         let attrs = attributes_of(item, self.source);
         let reach = if has_visibility(item) {
             Reach::Exported
@@ -120,7 +143,7 @@ impl<'a> ItemPass<'a, '_> {
                     let id =
                         self.out
                             .declaration(name, SymbolKind::Function, tk::span(item), reach);
-                    self.out.metrics(id, function_metrics(item));
+                    self.out.metrics(id, function_metrics(item, self.source));
                     root_for_attrs(&attrs, id, self.out);
                     // A top-level `fn main` is the language's entry convention: in
                     // any target the runtime calls it, and extraction cannot see
@@ -264,7 +287,7 @@ impl<'a> ItemPass<'a, '_> {
             );
             self.out.member_of(id, owner);
             if m.child_by_field_name("body").is_some() {
-                self.out.metrics(id, function_metrics(m));
+                self.out.metrics(id, function_metrics(m, self.source));
             }
         }
     }
@@ -275,6 +298,9 @@ impl<'a> ItemPass<'a, '_> {
     /// impls (`impl T for X`) declare nothing: their bodies are the trait's shape,
     /// and accusing a required method would accuse the trait bound.
     fn impl_members(&mut self, impl_item: Node<'a>) {
+        if self.generated {
+            return;
+        }
         if impl_item.child_by_field_name("trait").is_some() {
             return;
         }
@@ -308,7 +334,7 @@ impl<'a> ItemPass<'a, '_> {
                 self.out.member_of(id, owner);
             }
             if has_metrics {
-                self.out.metrics(id, function_metrics(m));
+                self.out.metrics(id, function_metrics(m, self.source));
             }
             let attrs = attributes_of(m, self.source);
             root_for_attrs(&attrs, id, self.out);
@@ -623,7 +649,7 @@ fn root_for_attrs(attrs: &[String], id: DeclarationId, out: &mut EvidenceSink) {
             );
             return;
         }
-        if path == "cfg" && attr.contains("test") && !attr.contains("not(test)") {
+        if path == "cfg" && cfg_names_bare_test(attr) {
             out.root(
                 RootTarget::Declaration(id),
                 RootKind::Test,
@@ -638,46 +664,35 @@ fn root_for_attrs(attrs: &[String], id: DeclarationId, out: &mut EvidenceSink) {
 /// identifiers, strings and numbers collapse to their kind — so Type-2 clones
 /// (renamed, re-valued) fingerprint identically; everything else keeps its literal
 /// kind. Comments never count.
-fn function_metrics(node: Node<'_>) -> kndo_contract::evidence::FunctionMetrics {
-    let mut token_hashes: Vec<u64> = Vec::new();
-    let mut cyclomatic = 1u32;
-    tk::walk(node, &mut |n| {
-        match n.kind() {
-            "if_expression" | "while_expression" | "for_expression" | "loop_expression"
-            | "match_arm" | "try_expression" => {
-                cyclomatic += 1;
-            }
-            "binary_expression" => {
-                let mut c = n.walk();
-                if n.children(&mut c)
-                    .any(|ch| matches!(ch.kind(), "&&" | "||"))
-                {
-                    cyclomatic += 1;
-                }
-            }
-            _ => {}
+const METRICS: tk::MetricsSpec = tk::MetricsSpec {
+    is_branch: |n, _| match n.kind() {
+        "if_expression" | "while_expression" | "for_expression" | "loop_expression"
+        | "try_expression" => true,
+        // The `_` arm is the catch-the-rest, not a new predicate — the shared
+        // rule in the spec's contract.
+        "match_arm" => n
+            .child_by_field_name("pattern")
+            .is_none_or(|pat| pat.kind() != "_"),
+        "binary_expression" => {
+            let mut c = n.walk();
+            n.children(&mut c)
+                .any(|ch| matches!(ch.kind(), "&&" | "||"))
         }
-        if n.child_count() == 0 {
-            let class = match n.kind() {
-                "identifier"
-                | "field_identifier"
-                | "type_identifier"
-                | "shorthand_field_identifier" => "id",
-                "string_content" => "str",
-                "integer_literal" | "float_literal" => "num",
-                "line_comment" | "block_comment" => return,
-                other => other,
-            };
-            token_hashes.push(tk::fnv1a(class.as_bytes()));
+        _ => false,
+    },
+    token_class: |n| match n.kind() {
+        "identifier" | "field_identifier" | "type_identifier" | "shorthand_field_identifier" => {
+            Some("id")
         }
-    });
-    let loc = (node.end_position().row - node.start_position().row + 1) as u32;
-    kndo_contract::evidence::FunctionMetrics {
-        cyclomatic,
-        loc,
-        token_count: token_hashes.len() as u32,
-        fingerprints: tk::winnow(&token_hashes, 5, 4),
-    }
+        "string_content" => Some("str"),
+        "integer_literal" | "float_literal" => Some("num"),
+        "line_comment" | "block_comment" => None,
+        other => Some(other),
+    },
+};
+
+fn function_metrics(node: Node<'_>, source: &[u8]) -> kndo_contract::evidence::FunctionMetrics {
+    tk::function_metrics(node, &METRICS, source)
 }
 
 fn references_and_comments(root: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
@@ -896,3 +911,25 @@ const COMMENT_MARKERS: tk::CommentMarkers<'static> = tk::CommentMarkers {
     line_doc: b"/!",
     block_doc: b"*!",
 };
+
+/// True when a `cfg(...)` argument names the bare `test` predicate — the token,
+/// not a substring: `feature = "integration-tests"` and a feature literally
+/// named "test" (string contents are stripped first) must not color production
+/// items as Certain tests. `not(test)` still refuses.
+fn cfg_names_bare_test(attr: &str) -> bool {
+    let mut stripped = String::with_capacity(attr.len());
+    let mut in_str = false;
+    for ch in attr.chars() {
+        match ch {
+            '"' => in_str = !in_str,
+            c if !in_str => stripped.push(c),
+            _ => {}
+        }
+    }
+    if stripped.contains("not(test)") {
+        return false;
+    }
+    stripped
+        .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+        .any(|tok| tok == "test")
+}

@@ -5,7 +5,7 @@
 //! reachability) exercise it through imports; `main` stays one call deep.
 
 use clap::{Parser, Subcommand, ValueEnum};
-use kndo::{Config, GatePolicy, Report, RunMode, RunOutcome, Severity, Subject, Threads};
+use kndo::{Config, GatePolicy, Report, RunMode, RunOutcome, Severity, Threads};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -257,21 +257,11 @@ fn render_text(report: &Report) -> String {
 }
 
 fn render_finding(finding: &kndo::Finding) -> String {
-    let severity = match finding.severity {
-        Severity::Error => "error",
-        Severity::Warning => "warning",
-        Severity::Info => "info",
-    };
-    let subject = match &finding.subject {
-        Subject::File { path } => path.as_str().to_string(),
-        Subject::Symbol { path, selector, .. } => {
-            format!("{} — {}", path.as_str(), selector.render())
-        }
-        other => other.path().as_str().to_string(),
-    };
     format!(
-        "{severity} {} {subject}: {}\n",
+        "{} {} {}: {}\n",
+        finding.severity.as_str(),
         finding.category.as_str(),
+        finding.subject.render(),
         finding.message
     )
 }

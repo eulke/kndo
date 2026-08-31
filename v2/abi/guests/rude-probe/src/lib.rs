@@ -34,10 +34,17 @@ impl bindings::Guest for RudeProbe {
         }
     }
 
-    fn extract(_path: String, _content: Vec<u8>) -> wire::FileEvidence {
-        // The misbehavior under test: a conduct import during extraction. The
-        // host must trap here — this call never returns.
-        let _ = bindings::graph_paths();
+    fn extract(_path: String, content: Vec<u8>) -> wire::FileEvidence {
+        // The misbehavior under test, chosen by the claimed file's content: a
+        // conduct import during extraction, or a PROJECT enumeration during
+        // extraction (evidence caches by content alone, so the file set is
+        // off-limits here too). The host must trap either — the call never
+        // returns.
+        if content.starts_with(b"files") {
+            let _ = bindings::known_files();
+        } else {
+            let _ = bindings::graph_paths();
+        }
         wire::FileEvidence {
             declarations: Vec::new(),
             references: Vec::new(),
@@ -61,7 +68,13 @@ impl bindings::Guest for RudeProbe {
         Vec::new()
     }
 
-    fn manifest_dependencies(_manifest_path: String, _content: Vec<u8>) -> Vec<String> {
+    fn manifest_dependencies(_manifest_path: String, content: Vec<u8>) -> Vec<String> {
+        // Same discipline for the manifest hook: bytes in, names out — reaching
+        // for the file set here must trap as a named violation, never read an
+        // empty snapshot as if it were the project.
+        if content.starts_with(b"files") {
+            let _ = bindings::known_files();
+        }
         Vec::new()
     }
 

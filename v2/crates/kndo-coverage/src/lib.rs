@@ -62,19 +62,34 @@ pub fn parse_lcov_records(text: &str) -> Option<CoverageRecords> {
                 }
             } else if line == "end_of_record" {
                 let (path, fc) = current.take().unwrap();
-                files.insert(path, fc);
+                merge_record(&mut files, path, fc);
                 fn_lines.clear();
             }
         }
     }
     if let Some((path, fc)) = current.take() {
-        files.insert(path, fc);
+        merge_record(&mut files, path, fc);
     }
     (!files.is_empty()).then_some(CoverageRecords { files })
 }
 
+/// Repeated `SF:` blocks for one path ACCUMULATE — sharded runs concatenated into
+/// one report mean "more executions", never "replace the earlier shard". The wire
+/// conversion merges the same way; the two ingestion routes must agree.
+fn merge_record(
+    files: &mut std::collections::BTreeMap<ProjectPath, FileRecords>,
+    path: ProjectPath,
+    fc: FileRecords,
+) {
+    let slot = files.entry(path).or_default();
+    for (line, hits) in fc.lines {
+        *slot.lines.entry(line).or_insert(0) += hits;
+    }
+    slot.functions.extend(fc.functions);
+}
+
 static SPEC: LazyLock<ExtensionSpec> = LazyLock::new(|| {
-    ExtensionSpec::builder("kndo:coverage-lcov", 1)
+    ExtensionSpec::builder("kndo:coverage-lcov", 2)
         // MutatesGraph::No is load-bearing: an ingester contributes analysis
         // input, never graph facts, and Yes here would turn the persisted graph
         // cache off for every project, because this extension is always on.

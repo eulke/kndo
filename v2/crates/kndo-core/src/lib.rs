@@ -22,8 +22,8 @@ pub use kndo_contract::extension::{
 pub use plugin::{
     Activation, ActivationReason, ActivationRule, CONTENT_MAX_BYTES, CONTENT_MAX_FILES,
     ConductSink, ContentView, Extension, GraphAccess, GraphView, PluginContribution,
-    PluginSeverity, PluginSink, PluginTarget, RuleDescriptor, WellKnown, activate,
-    is_reserved_coordinate, run_round,
+    PluginSeverity, PluginTarget, RuleDescriptor, WellKnown, activate, is_reserved_coordinate,
+    run_round,
 };
 pub use report::{Report, ReportDiagnostic};
 pub use session::{

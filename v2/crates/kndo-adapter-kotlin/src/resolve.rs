@@ -18,18 +18,25 @@ pub fn resolve(from: &ProjectPath, specifier: &str, cx: &ResolveContext<'_>) -> 
             return Resolution::File(file);
         }
     }
-    // The named thing may be a top-level function/property in ANY file of the
-    // package, or the specifier may be a wildcard's package: the directory's
-    // sources, all of them — keep-alive over precision.
+    // The named thing may be a wildcard's package (the EXACT directory — tried
+    // first, or `import a.b.*` would grab package `a` whenever `a` holds any
+    // source), a top-level function or property in ANY file of its package (the
+    // parent directory), or a nested type whose outer class is the file (the
+    // peel step, Java's chain) — keep-alive over precision throughout.
+    let dir_members = package_dir_files(&path, cx);
+    if !dir_members.is_empty() {
+        return Resolution::Files(dir_members);
+    }
     if let Some((parent, _)) = path.rsplit_once('/') {
         let dir_members = package_dir_files(parent, cx);
         if !dir_members.is_empty() {
             return Resolution::Files(dir_members);
         }
-    }
-    let dir_members = package_dir_files(&path, cx);
-    if !dir_members.is_empty() {
-        return Resolution::Files(dir_members);
+        for ext in [".kt", ".java"] {
+            if let Some(file) = tk::nearest_suffix_match(&format!("{parent}{ext}"), from, cx) {
+                return Resolution::File(file);
+            }
+        }
     }
     Resolution::Unresolved
 }
@@ -92,20 +99,34 @@ pub fn unit_mates(path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPat
     mates
 }
 
-/// For a test-set directory, the main-set directories it shares a package
-/// with; empty for anything else.
+/// For a test-set directory (either standard spelling — Kotlin sources live
+/// under `src/test/java` in plenty of mixed projects), the main-set
+/// directories it shares a package with; for a MAIN-set directory, the sibling
+/// main spelling — joint compilation makes `src/main/kotlin/<pkg>` and
+/// `src/main/java/<pkg>` one namespace; empty for anything else.
 fn mirrored_main_dirs(dir: &str) -> Vec<String> {
-    let marker = "src/test/kotlin";
-    let Some(ix) = dir.find(marker) else {
-        return Vec::new();
-    };
-    if ix != 0 && dir.as_bytes()[ix - 1] != b'/' {
-        return Vec::new();
+    for marker in ["src/test/kotlin", "src/test/java"] {
+        if let Some((head, tail)) = split_on_set(dir, marker) {
+            return vec![
+                format!("{head}src/main/kotlin{tail}"),
+                format!("{head}src/main/java{tail}"),
+            ];
+        }
     }
-    let tail = &dir[ix + marker.len()..];
-    let head = &dir[..ix];
-    vec![
-        format!("{head}src/main/kotlin{tail}"),
-        format!("{head}src/main/java{tail}"),
-    ]
+    if let Some((head, tail)) = split_on_set(dir, "src/main/kotlin") {
+        return vec![format!("{head}src/main/java{tail}")];
+    }
+    if let Some((head, tail)) = split_on_set(dir, "src/main/java") {
+        return vec![format!("{head}src/main/kotlin{tail}")];
+    }
+    Vec::new()
+}
+
+/// `head` and `tail` around a `/`-anchored source-set marker, or None.
+fn split_on_set<'a>(dir: &'a str, marker: &str) -> Option<(&'a str, &'a str)> {
+    let ix = dir.find(marker)?;
+    if ix != 0 && dir.as_bytes()[ix - 1] != b'/' {
+        return None;
+    }
+    Some((&dir[..ix], &dir[ix + marker.len()..]))
 }

@@ -971,3 +971,81 @@ measurement with sampled, explained findings and fixtures authored fresh
 defensible). Corpus candidate flask (BSD-3), license reviewed and pinned at
 kickoff. Swift (M6.b.3) stays ahead of it in order — vapor and Alamofire
 already sit unmeasured in the corpus.
+
+## 2026-08-31 — The pre-Swift audit round: four auditors, one enumerated sweep
+
+Owner-ordered audit (architecture, ergonomics, plan alignment, "no warts") before
+M6.b.3. Everything below landed in one sweep; measurements are the corpus re-run in
+the same commit.
+
+**Correctness.** (1) `WellKnown::read` refuses absolute and `..` paths — a loaded
+component's `reads_reports` is wire data and could climb out of the project root.
+(2) Discovery closes over the TREE: the walker's global-gitignore, `.git/info/exclude`
+and parent-directory sources are off (they made two checkouts of one tree discover
+different sets; two fixture projects immediately gained a file the repo's own
+`.gitignore` had been hiding — the committed `files_discovered` bumps are that leak
+sealed). (3) A multi-line `kndo:allow` comment anchors "next line" at its LAST line.
+(4) Repeated lcov `SF:` blocks accumulate (the wire path's semantics; shards no longer
+overwrite). (5) A files-scoped abstention no longer disables stale-allow detection for
+its category run-wide — only a whole-run abstention is the flicker case. (6) The
+native `EvidenceSink` degrades out-of-range ids with a diagnostic exactly like the
+wire boundary, instead of release-panicking. (7) Finding identity: the discriminator
+is now real where subjects underdetermine it — stale allows carry a per-file ordinal,
+conduct findings carry their message — two stale pragmas in one file no longer share
+an id (baselining one silently baselined the other). (8) Baselines are versioned
+envelopes (`kndo-baseline/1`); an unreadable one is a loud diagnostic, a v1 baseline
+at the shared path is quietly another product's memory.
+
+**The knob discipline, applied to ourselves.** Metrics mechanics moved to the toolkit
+once (`MetricsSpec` — two grammar functions per adapter; `WINNOW_K`/`WINNOW_WINDOW`
+named once), the walk unified on the WHOLE declaration node, and the branch rule
+unified: a default/else/`_` arm is not a new predicate, null-coalescing operators are
+not control forks (TS drops `??`, Go drops `default_case`, Java counts arrow
+`switch_rule` but not default arms, Kotlin counts conditioned `when_entry` only, Rust
+skips the `_` match arm). Kotlin's classifier was rewritten against the PINNED grammar
+— `navigation_suffix`/`type_identifier`/five literal kinds do not exist in kotlin-ng
+1.1.0; calls and literals now classify (the census's structural-gate lesson: verify
+kind strings against the grammar you pin). Kotlin resolution tries the exact package
+dir before the peeled parent (a wildcard import no longer grabs the parent package)
+and gains Java's peel-to-file for nested types; source sets mirror BOTH spellings both
+ways (joint compilation is one namespace). Generated-file posture unified across all
+five (shared needles + per-language comment openers in the toolkit; TS/Rust root
+generated files Tooling — their fixture said v1 did this and pinned the opposite).
+Test roots: standard-layout dirs stay Certain; filename-only convention is Probable
+and keeps the library-mode Production root. Every adapter bumped its version;
+`kndo:coverage-lcov` too.
+
+**One surface, then the toll.** The retired `AdapterSpec`/`LanguageAdapter` pair is
+deleted (M6.a's unification, finished). `is_reserved_coordinate` lives in the
+contract; the WASM host depends on contract + engine-as-dev-dep only. Conduct results
+are typed records (`ContributedRoot`/`ContributedFinding`) and carry the extension's
+own `confidence` (WIT record field + pins rebuilt via `cargo xtask pin-abi` — the
+enumerated ABI toll of this round). A trapped conduct call lands as a described line
+on its contribution (`ConductSink::note`) — a vanished call and a clean empty round no
+longer look alike. `manifest-dependencies` runs under its own phase: reaching for
+`known-files` there traps as a named violation instead of reading an empty snapshot
+(extract's no-project-data rule is now stated correctly in the WIT and on the SDK's
+`resolve_context`, with rude-probe compliance cases for both). The SDK derives its
+wire streams from the ONE declared set (`EvidenceStreams::iter`), so a future stream
+cannot be silently stripped. `Category::FIRST_PARTY` is the one list `parse` reads;
+rule names reject `/` at declaration and at load (category identity is injective).
+`Severity::as_str` and `Subject::render` are contract surface — the CLI's dependency
+findings keep their dependency NAME. The dead `PluginSink` alias is gone.
+
+**Doc truth restored** (the auditors' drift list): README speaks the living tree (not
+the M-1 seed), the real gate names, and the full M6 order (swift M6.b.3 → M6.c scope
+shape → M6.d/M6.e → python M6.b.4); COMPARISON's gin section explains `unit_mates`
+(the mechanism that produces its committed numbers); EXPERIMENTS' ladder entry points
+at `unit_mates` and now carries the worked region design (pending owner decision as
+M6.c); the corpus SUMMARY template stops attributing abstentions to a pre-M2 gap.
+Superseded prose recorded rather than silently outgrown: no `CacheEnvelope` ever
+existed (bincode behind `KNE1`/`KNG1` magic with the fingerprint folded covers the
+rkyv-version concern it named); `RunOutcome` shipped without `FailBudget`, and
+`PluginContext`/`DiagnosticCode` became `GraphAccess`/`ContentView` and plain
+diagnostics; the `unit_mates` entry's "55 conformance reports" was a miscount of the
+56 on disk.
+
+**Deferred to the owner, deliberately:** renaming the conduct cluster's `Plugin*`
+family and `ExtensionSpec::extensions` (file suffixes) — identity-scale renames that
+belong to a toll commit like M6.a tanda 2; the scope-shape contract change (M6.c);
+`ingest`'s trap-honesty channel (EXPERIMENTS has both debts).

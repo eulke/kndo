@@ -14,9 +14,17 @@ pub struct DiscoveredFile {
 
 pub fn discover(root: &Path) -> Vec<DiscoveredFile> {
     let mut files = Vec::new();
+    // Determinism closes over the TREE: the committed `.gitignore`/`.ignore` files
+    // inside it. The walker's other default sources — the user's global excludes,
+    // the uncommitted `.git/info/exclude`, and ignore files in parent directories —
+    // are machine state, and honoring them lets two checkouts of one tree discover
+    // different file sets.
     let walker = ignore::WalkBuilder::new(root)
         .hidden(true)
         .follow_links(false)
+        .git_global(false)
+        .git_exclude(false)
+        .parents(false)
         .build();
     for entry in walker.flatten() {
         if !entry.file_type().is_some_and(|t| t.is_file()) {

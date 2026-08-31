@@ -4,15 +4,16 @@ The default adapter set over the corpus pinned in `corpus/corpus.toml`.
 Regenerate with `cargo xtask corpus --corpus-dir <clones>`; the oracle to
 compare against is `oracle/`. A repo with zero claimed files speaks a
 language no default adapter claims yet; an `unused` abstention means the
-graph has no roots (root evidence arrives with manifest capabilities), so
-the analysis declines to judge rather than accuse everything.
+graph has no roots — nothing in the tree (manifest entries, convention
+roots, dispatch anchors) said where execution starts, so the analysis
+declines to judge rather than accuse everything.
 
 | repo | discovered | claimed | decls | refs | import edges | unresolved | findings | abstentions | diagnostics |
 |---|---|---|---|---|---|---|---|---|---|
 | Alamofire | 555 | 10 | 6 | 33326 | 0 | 0 | 5 | 3 | 0 |
-| Exposed | 5476 | 809 | 11673 | 236954 | 28993 | 0 | 774 | 0 | 61 |
+| Exposed | 5476 | 809 | 11673 | 236954 | 29499 | 0 | 936 | 0 | 61 |
 | gin | 118 | 99 | 1205 | 43995 | 230 | 0 | 108 | 0 | 0 |
-| guava | 3352 | 3277 | 66898 | 890419 | 13063 | 0 | 5621 | 0 | 13 |
+| guava | 3352 | 3277 | 66898 | 890419 | 13063 | 0 | 6369 | 0 | 13 |
 | lodash | 146 | 54 | 133 | 134577 | 34 | 8 | 21 | 0 | 0 |
 | ripgrep | 231 | 110 | 2447 | 61733 | 306 | 54 | 143 | 0 | 0 |
 | vapor | 273 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |

@@ -43,9 +43,13 @@ pub fn extract(
     let p = path.as_str();
     let file_name = p.rsplit('/').next().unwrap_or(p);
     let is_tooling = matches!(file_name, "package-info.java" | "module-info.java");
-    let is_test = p.starts_with("src/test/java/")
-        || p.contains("/src/test/java/")
-        || file_name.ends_with("Test.java")
+    // The standard layout's test directory is the build tool's own boundary —
+    // Certain, and not published surface. A test-shaped NAME outside it is
+    // convention only: Probable, and the file keeps its library-mode Production
+    // root — a `LoadTest.java` on the main source path is still importable
+    // surface.
+    let test_dir = p.starts_with("src/test/java/") || p.contains("/src/test/java/");
+    let test_name = file_name.ends_with("Test.java")
         || file_name.ends_with("Tests.java")
         || file_name.ends_with("TestCase.java");
 
@@ -55,9 +59,12 @@ pub fn extract(
             RootKind::Tooling,
             Confidence::Certain,
         );
-    } else if is_test {
+    } else if test_dir {
         out.root(RootTarget::WholeFile, RootKind::Test, Confidence::Certain);
     } else {
+        if test_name {
+            out.root(RootTarget::WholeFile, RootKind::Test, Confidence::Probable);
+        }
         // Library mode: any non-test class on the source path is importable
         // published surface, whether or not this repository imports it.
         // Probable — convention, not this file's statement.
@@ -106,12 +113,8 @@ struct Ctx {
     implicit_public: bool,
 }
 
-/// The JVM ecosystem's generated-file needles, declared here; the scan is the
-/// toolkit's.
-const GENERATED_NEEDLES: &[&str] = &["@generated", "Code generated", "DO NOT EDIT"];
-
 fn is_generated(source: &[u8]) -> bool {
-    tk::generated_marked(source, GENERATED_NEEDLES)
+    tk::generated_marked(source, tk::GENERATED_NEEDLES, &["//", "/*", "*"])
 }
 
 /// `public`/`protected` → Exported; `private`/package-private → Private, unless
@@ -252,8 +255,8 @@ fn handle_method(item: Node<'_>, source: &[u8], ctx: &Ctx, out: &mut EvidenceSin
     if let Some(owner) = ctx.owner {
         out.member_of(id, owner);
     }
-    if let Some(body) = item.child_by_field_name("body") {
-        out.metrics(id, function_metrics(item, body));
+    if item.child_by_field_name("body").is_some() {
+        out.metrics(id, function_metrics(item, source));
     }
 
     // The JVM entry point, any class.
@@ -450,53 +453,45 @@ fn classify(n: Node<'_>, parent: Node<'_>) -> RefKind {
     }
 }
 
-/// Metrics over one method, normalized as the other adapters normalize:
-/// identifiers, strings and numbers collapse to their kind so Type-2 clones
-/// fingerprint identically; comments never count.
-fn function_metrics(item: Node<'_>, body: Node<'_>) -> kndo_contract::evidence::FunctionMetrics {
-    let mut token_hashes: Vec<u64> = Vec::new();
-    let mut cyclomatic = 1u32;
-    tk::walk(body, &mut |n| {
-        match n.kind() {
-            "if_statement"
-            | "for_statement"
-            | "enhanced_for_statement"
-            | "while_statement"
-            | "do_statement"
-            | "catch_clause"
-            | "switch_block_statement_group"
-            | "ternary_expression" => cyclomatic += 1,
-            "binary_expression" => {
-                let mut c = n.walk();
-                if n.children(&mut c)
-                    .any(|ch| matches!(ch.kind(), "&&" | "||"))
-                {
-                    cyclomatic += 1;
-                }
-            }
-            _ => {}
+const METRICS: tk::MetricsSpec = tk::MetricsSpec {
+    is_branch: |n, source| match n.kind() {
+        "if_statement"
+        | "for_statement"
+        | "enhanced_for_statement"
+        | "while_statement"
+        | "do_statement"
+        | "catch_clause"
+        | "ternary_expression" => true,
+        // Colon groups AND arrow rules; either counts only when it carries a
+        // real case label — the default arm is the catch-the-rest, not a new
+        // predicate (the shared rule in the spec's contract).
+        "switch_block_statement_group" | "switch_rule" => {
+            let mut c = n.walk();
+            n.children(&mut c).any(|ch| {
+                ch.kind() == "switch_label" && !tk::text(ch, source).starts_with("default")
+            })
         }
-        if n.child_count() == 0 {
-            let class = match n.kind() {
-                "identifier" | "type_identifier" => "id",
-                "string_fragment" | "multiline_string_fragment" | "character_literal" => "str",
-                "decimal_integer_literal"
-                | "hex_integer_literal"
-                | "octal_integer_literal"
-                | "binary_integer_literal"
-                | "decimal_floating_point_literal"
-                | "hex_floating_point_literal" => "num",
-                "line_comment" | "block_comment" => return,
-                other => other,
-            };
-            token_hashes.push(tk::fnv1a(class.as_bytes()));
+        "binary_expression" => {
+            let mut c = n.walk();
+            n.children(&mut c)
+                .any(|ch| matches!(ch.kind(), "&&" | "||"))
         }
-    });
-    let loc = (item.end_position().row - item.start_position().row + 1) as u32;
-    kndo_contract::evidence::FunctionMetrics {
-        cyclomatic,
-        loc,
-        token_count: token_hashes.len() as u32,
-        fingerprints: tk::winnow(&token_hashes, 5, 4),
-    }
+        _ => false,
+    },
+    token_class: |n| match n.kind() {
+        "identifier" | "type_identifier" => Some("id"),
+        "string_fragment" | "multiline_string_fragment" | "character_literal" => Some("str"),
+        "decimal_integer_literal"
+        | "hex_integer_literal"
+        | "octal_integer_literal"
+        | "binary_integer_literal"
+        | "decimal_floating_point_literal"
+        | "hex_floating_point_literal" => Some("num"),
+        "line_comment" | "block_comment" => None,
+        other => Some(other),
+    },
+};
+
+fn function_metrics(item: Node<'_>, source: &[u8]) -> kndo_contract::evidence::FunctionMetrics {
+    tk::function_metrics(item, &METRICS, source)
 }

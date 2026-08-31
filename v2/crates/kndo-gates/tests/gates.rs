@@ -460,6 +460,7 @@ fn extension_dependency_implication() {
                 "probe",
                 PluginSeverity::Info,
                 PluginTarget::File(path),
+                Confidence::Probable,
                 message,
             );
         })

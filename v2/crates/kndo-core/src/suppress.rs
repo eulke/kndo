@@ -30,8 +30,11 @@ enum Scope {
 struct Pragma {
     path: ProjectPath,
     span: Span,
-    /// 1-based line the pragma sits on.
+    /// 1-based line the pragma's comment starts on — the trailing same-line case.
     line: u32,
+    /// 1-based line the comment ends on: "the next line" for a multi-line comment
+    /// is the line after its LAST line, not the line after its first.
+    end_line: u32,
     categories: Vec<Category>,
     scope: Scope,
 }
@@ -89,7 +92,15 @@ pub fn apply(
         }
     }
 
-    let abstained_categories: BTreeSet<&Category> = abstained.iter().map(|a| &a.category).collect();
+    // Only a WHOLE-RUN abstention protects allows of its category from staleness:
+    // that is the flicker rule's own case (nothing was judged anywhere). A files-
+    // scoped abstention means the analysis ran — one unmeasured file elsewhere must
+    // not make every allow of that category un-judgeable forever.
+    let abstained_categories: BTreeSet<&Category> = abstained
+        .iter()
+        .filter(|a| matches!(a.scope, crate::analysis::AbstentionScope::WholeRun))
+        .map(|a| &a.category)
+        .collect();
     let line_index: BTreeMap<&ProjectPath, Vec<u32>> = graph
         .files
         .iter()
@@ -115,7 +126,7 @@ pub fn apply(
                         .get(finding.subject.path())
                         .is_some_and(|starts| {
                             let line = line_of(starts, span.start);
-                            line == pragma.line || line == pragma.line + 1
+                            line == pragma.line || line == pragma.end_line + 1
                         }),
                     // File-shaped subjects have no line; only allow-file reaches them.
                     _ => false,
@@ -135,6 +146,7 @@ pub fn apply(
     // Stale allows — only over categories this run actually JUDGED (the flicker
     // rule: an abstained or not-yet-built category makes its allows un-judgeable,
     // never stale).
+    let mut stale_ordinal: BTreeMap<ProjectPath, u32> = BTreeMap::new();
     for (ix, pragma) in pragmas.iter().enumerate() {
         if matched[ix] > 0 {
             continue;
@@ -152,6 +164,13 @@ pub fn apply(
             .map(Category::as_str)
             .collect::<Vec<_>>()
             .join(", ");
+        // Ordinal among this file's stale allows: the Suppression subject has no
+        // selector, so two stale allows in one file would otherwise share an id —
+        // and baselining one would silently baseline every later one.
+        let ordinal = *stale_ordinal
+            .entry(pragma.path.clone())
+            .and_modify(|n| *n += 1)
+            .or_insert(0u32);
         kept.push(Finding::new(
             Category::STALE,
             Severity::Warning,
@@ -160,7 +179,7 @@ pub fn apply(
                 path: pragma.path.clone(),
                 span: pragma.span,
             },
-            "",
+            &format!("{listed}#{ordinal}"),
             format!("this allow suppresses nothing ({listed})"),
         ));
     }
@@ -222,6 +241,7 @@ fn parse_pragma(
         path: path.clone(),
         span,
         line: line_of(starts, span.start),
+        end_line: line_of(starts, span.end.saturating_sub(1).max(span.start)),
         categories,
         scope,
     });

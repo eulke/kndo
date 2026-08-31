@@ -17,6 +17,18 @@ pub enum Severity {
 }
 
 impl Severity {
+    /// The one text spelling — the same one serde's `lowercase` writes into
+    /// JSON, shared so no frontend keeps its own table (a test ties the two).
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Severity::Error => "error",
+            Severity::Warning => "warning",
+            Severity::Info => "info",
+        }
+    }
+}
+
+impl Severity {
     pub fn at_least(self, floor: Severity) -> bool {
         self <= floor
     }
@@ -54,8 +66,9 @@ impl Finding {
 }
 
 /// The canonical display/serialization order — one source, used by every frontend and
-/// by the byte-identity gates: severity, then category, then path, then rendered
-/// selector, then id as the total tie-break.
+/// by the byte-identity gates: severity, then category, then path, then id as the
+/// total tie-break (the id already folds the selector, so same-file symbols order
+/// stably, if opaquely).
 pub fn sort_findings(findings: &mut [Finding]) {
     findings.sort_by(|a, b| {
         (a.severity, a.category.as_str(), a.subject.path().as_str())
