@@ -1054,6 +1054,7 @@ dependencies = [
  "kndo-contract-fingerprint",
  "schemars",
  "serde",
+ "serde_json",
  "smol_str",
 ]
 
@@ -1101,6 +1102,7 @@ dependencies = [
  "kndo-host-wasm",
  "kndo-testkit",
  "serde_json",
+ "smol_str",
  "toml",
 ]
 

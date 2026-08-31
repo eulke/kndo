@@ -309,7 +309,7 @@
           "minimum": 0
         },
         "schema": {
-          "description": "Stamped as a CONST in the generated schema, from the same `SCHEMA` the report\nwrites — a report from any other envelope version fails validation instead of\ndrifting through.",
+          "description": "Stamped as a CONST in the generated schema, from the same `REPORT_SCHEMA` the report\nwrites — a report from any other envelope version fails validation instead of\ndrifting through.",
           "const": "kndo-v2/m6"
         }
       },

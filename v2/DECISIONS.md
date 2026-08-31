@@ -1316,3 +1316,46 @@ corpus at nine repos — v2 12,928 findings against the eight-repo oracle's
 24,459, every cell decomposed in COMPARISON — and the standing ledgers
 (unbuilt categories with dispositions, the export-narrowing and
 dependency-family demands) pinned in EXPERIMENTS with their numbers.
+
+## 2026-08-31 — The surface law, and the render toll that opens it
+
+**Owner directive.** v2 must never ship less value than v1: every v1 capability is
+either present, carried in EXPERIMENTS' new v1-surface ledger with a disposition, or
+dead with its vice named here. And nothing lands as a transliteration — each item is
+rebuilt from v2's contracts, copied only if v1's version would survive v2's laws
+untouched (none has yet). The law joins CLAUDE.md's quarry section as its floor.
+
+**The first gap, measured.** The render census: v1 ships four formats (human, json,
+agent, sarif) plus flag > `KNDO_FORMAT` > tty selection; v2 had two (text, `--json`).
+Shipped, v2-native — each divergence from v1 carries its own reason:
+
+- `Report::to_agent` (agent format 1): token-frugal text for LLM windows, core-side as
+  a PURE projection of the report — no clock, no env — so the envelope's byte-identity
+  gates cover it for free. v1's per-run numbering died: the stable `FindingId` is the
+  reference handle, which no `#5` can be across runs. Version-free header (the format
+  version and envelope schema, never the crate version), which is what lets the new
+  `agent_format_matches_its_committed_golden` gate pin it byte-for-byte (gate #14,
+  everything-specimen, KNDO_CONFORMANCE=overwrite to regenerate deliberately).
+- `Report::to_sarif`: SARIF 2.1.0 with the contract's own vocabulary — category→rule,
+  severity→level (info speaks SARIF's `note`), FindingId→partialFingerprints (result
+  matching is what fingerprints exist for, and v2 ids are span-free by design), every
+  subject's path→artifactLocation (v2 subjects always anchor — v1's optional-location
+  branch has nothing to guard). Spans are bytes in this contract, so regions are
+  SARIF's binary form (byteOffset/byteLength) — no invented lines; the line-numbers
+  gap is the ledger's one open CONTRACT decision, not a render patch.
+- CLI `--format human|json|agent|sarif` on `check` only (`baseline` has no report — the
+  shape makes the flag unrepresentable there); `--json` died unreplaced by any shim.
+  The binary reads tty + `KNDO_FORMAT` once and hands them in as `Host` data — the
+  library stays deterministic and every path testable. Piped default is now json
+  (`kndo | jq` is the designed pipeline; the terminal gets human). Malformed
+  `KNDO_FORMAT` warns and falls to the terminal default — ambient config is never a
+  refusal.
+- One-source completions the toll forced: `Confidence::as_str` joins `Severity`'s
+  pattern in the contract (tie-test pins both spellings to serde's); the facade now
+  exports the envelope's full Rust vocabulary (`RunInfo`, `ExtensionRun`,
+  `ReportDiagnostic`, `DiagnosticLevel`, `REPORT_SCHEMA` — renamed from `SCHEMA` for
+  its life at the crate root).
+
+**Deliberate regenerations.** `gen-ci` (the new gate's step), `gen-schema` — the diff
+is one doc-string (schemars embeds rustdoc; the const value never moved). 193 tests,
+14 gates, clippy clean.

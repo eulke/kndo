@@ -356,6 +356,19 @@ Complete (CI verification pending only the credits reset, like M0–M2):
   (imports collected wherever the language allows them; submodule probes for
   `from X import a`).
 
+## Post-M6 — the surface toll
+
+The census closed with a floor law (CLAUDE.md, quarry section): v1's shipped surface
+is inherited value — present in v2, in EXPERIMENTS' v1-surface ledger with a
+disposition, or dead with its vice named. First row paid: the **render toll**.
+`kndo check --format human|json|agent|sarif`, selected flag > `KNDO_FORMAT` > terminal
+(human on a tty, json piped — `kndo | jq` is the designed pipeline). `to_agent`
+(format 1: id-as-handle, no per-run numbering, golden-pinned by gate #14) and
+`to_sarif` (byte-offset regions — the contract's spans, no invented lines) render
+core-side as pure projections of `Report`, byte-identical from any frontend. The
+ledger's one open contract decision: line numbers in findings, named consumers SARIF
+text regions and `path:line` in the human render.
+
 ## Name verification (2026-08-29)
 
 - npm: `kndo` still taken by an unrelated DeFi package (unchanged since the v1 check);

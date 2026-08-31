@@ -18,6 +18,13 @@ oracle, the COMPARISON explains the difference by naming v1's defect or v2's dec
 in either direction, including v2 reporting MORE. A sentence of the form "same as v1"
 is never a rationale; at best it is a coincidence worth noting.
 
+The law has a floor as well as a ceiling: v1's shipped surface is inherited value. A
+capability v1 offers — a verb, a format, a flag, an ergonomic default — is either
+present in v2, carried in EXPERIMENTS' v1-surface ledger with a disposition, or dead
+with its vice named in DECISIONS. Quietly shipping less than v1 is as much a failure as
+copying it; and when an item lands, it is rebuilt from v2's contracts, never
+transliterated.
+
 ## Measure first
 
 Any work that claims to improve findings — a new analysis, a plugin, an adapter

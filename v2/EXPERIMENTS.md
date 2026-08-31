@@ -200,6 +200,29 @@ a forced decision: either an experiment by then justifies the variant, or the
 set {production, test, tooling} is declared closed and docs-liveness, if it
 ever comes, arrives by another mechanism.
 
+## The v1 surface ledger (owner directive, 2026-08-31)
+
+v1's shipped surface is a floor: every capability it offers is either present in v2,
+carried here with a disposition, or dead with its vice named in `DECISIONS.md`. Nothing
+falls off quietly. The renders row landed first (the directive's own example); the rest
+is inventory awaiting its turn — an `open` disposition is a claim of value, not a
+commitment to v1's design: each item is rebuilt v2-native when it lands.
+
+| v1 surface | v2 state | disposition |
+|---|---|---|
+| formats: human, json, agent, sarif + flag > `KNDO_FORMAT` > tty selection | shipped | the render toll (2026-08-31): `--format`, agent format 1, SARIF with byte regions |
+| line/column in findings and output | absent — spans are byte offsets | open contract decision, the render toll's one deliberate gap: named consumers are SARIF text regions (`startLine` for code-scanning UIs) and `path:line` in the human render; touches `Finding` serialization, so it regenerates schema + every conformance fixture in one loud commit |
+| `--staged` / `--diff <ref>` change-scoped runs | absent | open — the diff workflow is v1 value (gate on what a commit touches); needs its v2 design (RunMode grows, baseline interplay) |
+| `health` verb (score + per-category breakdown) | absent | open — measure whether a grade earns its keep beyond the envelope's counts before rebuilding it |
+| navigation verbs (`find`/`describe`/`uses`/`used-by`/`trace`/`impact`, batched `query`) | absent | open — the graph is queryable; the verbs are agent value; design against `kndo serve` so CLI and MCP share one query contract |
+| `explain <id>` (evidence chain behind one finding) | absent | open — pairs with the navigation verbs |
+| `doctor` (what kndo sees: extensions, cache, config) | absent | open — small, honest introspection; waits on config existing |
+| `init` + `kndo.toml` + pre-commit hook | absent — v2 has no config file at all | open — config lands with v1's lesson kept: only keys the engine reads ship |
+| `plugin` manager verb (install/list/new/build/wit/verify) | absent — `.kndo/plugins/` loads, nothing manages | open — authoring exists (`docs`), management waits for demand |
+| `--only` / `--skip` / `--strict` category filters | absent | open — cheap once Category::parse guards the input |
+| `--quiet` / `--verbose` / `--color` | absent | open — presentation polish for the human render only |
+| SIGPIPE default disposition (`kndo \| head` exits like a filter) | absent — writes ignore EPIPE, exit code keeps the run's verdict | open judgment: v1 restored SIG_DFL for Unix-filter behavior; v2's quiet-ignore never panics but reports the gate code instead of 141 — decide once, on purpose |
+
 ## Standing experiment infrastructure
 
 - The corpus (`corpus/corpus.toml`) is the measuring instrument; keep it pinned.

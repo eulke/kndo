@@ -8,7 +8,7 @@ use crate::analysis::{Abstention, Duplicate, InternalOnly, TestOnly, Untested, U
 use crate::cache::EvidenceCache;
 use crate::conduct::Contribution;
 use crate::graph::Graph;
-use crate::report::{ExtensionRun, Report, ReportDiagnostic, RunInfo, SCHEMA};
+use crate::report::{ExtensionRun, REPORT_SCHEMA, Report, ReportDiagnostic, RunInfo};
 use crate::{discover, extract};
 use kndo_contract::evidence::DiagnosticLevel;
 use kndo_contract::extension::Extension;
@@ -446,7 +446,7 @@ impl Snapshot {
 
         Report {
             run: RunInfo {
-                schema: SCHEMA,
+                schema: REPORT_SCHEMA,
                 files_discovered: self.files_discovered,
                 files_claimed: self.graph.files.len() as u32,
                 extensions: per_extension

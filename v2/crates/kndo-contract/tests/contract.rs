@@ -144,3 +144,23 @@ fn declaring_extensions_is_claiming_them() {
     assert_eq!(spec.suffixes(), ["ts", "tsx"]);
     assert_eq!(spec.claims(), ["**/*.ts", "**/*.tsx", "**/special.conf"]);
 }
+
+#[test]
+fn as_str_spellings_are_the_serde_spellings() {
+    use kndo_contract::finding::Severity;
+    use kndo_contract::vocab::Confidence;
+    // `as_str` exists so no frontend keeps its own severity/confidence table;
+    // this is the tie that keeps it honest against what the envelope writes.
+    for s in [Severity::Error, Severity::Warning, Severity::Info] {
+        let json = serde_json::to_string(&s).unwrap();
+        assert_eq!(json, format!("\"{}\"", s.as_str()));
+    }
+    for c in [
+        Confidence::Possible,
+        Confidence::Probable,
+        Confidence::Certain,
+    ] {
+        let json = serde_json::to_string(&c).unwrap();
+        assert_eq!(json, format!("\"{}\"", c.as_str()));
+    }
+}

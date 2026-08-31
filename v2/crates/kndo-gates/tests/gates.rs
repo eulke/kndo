@@ -764,3 +764,151 @@ fn frontends_import_only_the_facade() {
         }
     }
 }
+
+#[test]
+fn agent_format_matches_its_committed_golden() {
+    // The agent format is a versioned contract: agents parse these lines, so their
+    // grammar cannot drift silently. The specimen is built by hand to hold every
+    // section and every subject shape at once — its job is to pin the FORMAT, not
+    // the engine (the conformance fixtures pin that). A diff is either your bug or
+    // a deliberate format change: regenerate with KNDO_CONFORMANCE=overwrite, and
+    // if the grammar changed meaning, bump AGENT_FORMAT in the same commit.
+    use kndo::{
+        Abstention, AbstentionReason, AbstentionScope, Category, Confidence, Contribution,
+        DiagnosticLevel, ExtensionRun, Finding, ProjectPath, REPORT_SCHEMA, Report,
+        ReportDiagnostic, RunInfo, Severity, Span, Subject, SuppressedSummary, SymbolSelector,
+        sort_findings,
+    };
+    use smol_str::SmolStr;
+
+    let mut findings = vec![
+        Finding::new(
+            Category::UNUSED,
+            Severity::Warning,
+            Confidence::Certain,
+            Subject::File {
+                path: ProjectPath::new("src/orphan.py"),
+            },
+            "",
+            "no root anchors this file and no reachable file imports it",
+        ),
+        Finding::new(
+            Category::UNUSED,
+            Severity::Warning,
+            Confidence::Probable,
+            Subject::Symbol {
+                path: ProjectPath::new("src/store.py"),
+                selector: SymbolSelector::Member {
+                    owner: SmolStr::new("Store"),
+                    name: SmolStr::new("_drop"),
+                },
+                span: Span::new(120, 180),
+            },
+            "",
+            "`Store._drop` is declared but nothing in the project uses it",
+        ),
+        Finding::new(
+            Category::INTERNAL_ONLY,
+            Severity::Info,
+            Confidence::Probable,
+            Subject::Symbol {
+                path: ProjectPath::new("src/scope.swift"),
+                selector: SymbolSelector::Free(SmolStr::new("Helper")),
+                span: Span::new(0, 64),
+            },
+            "",
+            "declared `module`-scoped, but every use is within its own file",
+        ),
+        Finding::new(
+            Category::UNUSED,
+            Severity::Warning,
+            Confidence::Certain,
+            Subject::Dependency {
+                owner_manifest: ProjectPath::new("package.json"),
+                name: SmolStr::new("left-pad"),
+            },
+            "",
+            "declared but never imported by any claimed file",
+        ),
+    ];
+    sort_findings(&mut findings);
+    let mut fixed = vec![Finding::new(
+        Category::UNUSED,
+        Severity::Warning,
+        Confidence::Certain,
+        Subject::Symbol {
+            path: ProjectPath::new("src/gone.py"),
+            selector: SymbolSelector::Free(SmolStr::new("_gone")),
+            span: Span::new(5, 25),
+        },
+        "",
+        "`_gone` is declared but nothing in the project uses it",
+    )];
+    sort_findings(&mut fixed);
+    let report = Report {
+        run: RunInfo {
+            schema: REPORT_SCHEMA,
+            files_discovered: 12,
+            files_claimed: 11,
+            extensions: vec![
+                ExtensionRun {
+                    id: SmolStr::new("kndo:python"),
+                    files: 7,
+                },
+                ExtensionRun {
+                    id: SmolStr::new("kndo:swift"),
+                    files: 4,
+                },
+            ],
+        },
+        findings,
+        fixed,
+        baselined: 3,
+        abstained: vec![Abstention {
+            category: Category::UNTESTED,
+            reason: AbstentionReason::NoTestRootsAnywhere,
+            scope: AbstentionScope::WholeRun,
+        }],
+        suppressed: SuppressedSummary {
+            total: 3,
+            by_category: vec![(Category::STALE, 1), (Category::UNUSED, 2)],
+        },
+        plugins: vec![
+            Contribution {
+                coordinate: SmolStr::new("kndo:coverage-lcov"),
+                roots: 0,
+                findings: 0,
+                dropped: Vec::new(),
+                content_budget_cut: false,
+            },
+            Contribution {
+                coordinate: SmolStr::new("demo:probe"),
+                roots: 1,
+                findings: 2,
+                dropped: vec!["root target `missing.cfg` resolved to nothing".to_string()],
+                content_budget_cut: true,
+            },
+        ],
+        diagnostics: vec![ReportDiagnostic {
+            path: ProjectPath::new("src/broken.py"),
+            level: DiagnosticLevel::Warn,
+            message: "parse error: unexpected indent".to_string(),
+        }],
+    };
+
+    let rendered = report.to_agent();
+    let golden_path =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/expected/agent-format.txt");
+    if std::env::var_os("KNDO_CONFORMANCE").is_some_and(|v| v == "overwrite") {
+        std::fs::write(&golden_path, &rendered).expect("write agent golden");
+        return;
+    }
+    let golden = std::fs::read_to_string(&golden_path)
+        .expect("tests/expected/agent-format.txt exists — regenerate deliberately");
+    assert_eq!(
+        rendered, golden,
+        "\nthe agent format's bytes moved. If deliberate, regenerate with \
+         KNDO_CONFORMANCE=overwrite and say so in the PR — and if the grammar \
+         changed meaning, bump AGENT_FORMAT in the same commit.\n"
+    );
+}

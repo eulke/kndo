@@ -4,7 +4,7 @@
 //! components are the pinned compat-matrix binaries: what a third party would
 //! have on disk, not something this test builds.
 
-use kndo_cli::run_args;
+use kndo_cli::{Host, run_args};
 use kndo_testkit::TempProject;
 use std::path::Path;
 
@@ -28,7 +28,13 @@ fn a_wasm_language_and_plugin_run_from_kndo_plugins_through_the_cli() {
     p.file("config.probe", "sixteen bytes!!\n");
 
     let root = p.root().to_string_lossy().into_owned();
-    let out = run_args(["kndo", "check", &root, "--json", "--no-cache"]);
+    let out = run_args(
+        ["kndo", "check", &root, "--no-cache"],
+        Host {
+            tty: false,
+            format_env: None,
+        },
+    );
     let report: serde_json::Value = serde_json::from_str(&out.stdout).expect("stdout is JSON");
 
     // The kmini language exists to this binary only through the component.
@@ -84,7 +90,13 @@ fn a_broken_component_degrades_to_a_visible_diagnostic() {
     p.file("package.json", r#"{ "name": "demo", "main": "index.js" }"#);
 
     let root = p.root().to_string_lossy().into_owned();
-    let out = run_args(["kndo", "check", &root, "--no-cache"]);
+    let out = run_args(
+        ["kndo", "check", &root, "--no-cache"],
+        Host {
+            tty: true,
+            format_env: None,
+        },
+    );
     assert_eq!(out.code, 0, "{}{}", out.stdout, out.stderr);
     assert!(
         out.stdout.contains(

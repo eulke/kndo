@@ -1,0 +1,25 @@
+kndo agent format 1 (kndo-v2/m6)
+result: findings 4 · baselined 3 · fixed 1 · files 11/12 claimed
+extensions: kndo:python 7 · kndo:swift 4
+findings:
+[kndo-efd2ed08e471] warning unused · dependency package.json (left-pad) · certain
+  declared but never imported by any claimed file
+[kndo-728e436b9cfe] warning unused · file src/orphan.py · certain
+  no root anchors this file and no reachable file imports it
+[kndo-c4258d23a768] warning unused · symbol src/store.py — Store._drop · probable
+  `Store._drop` is declared but nothing in the project uses it
+[kndo-d097bb9361f9] info internal-only · symbol src/scope.swift — Helper · probable
+  declared `module`-scoped, but every use is within its own file
+fixed:
+[kndo-c8ea51c36443] warning unused · symbol src/gone.py — _gone · certain
+  `_gone` is declared but nothing in the project uses it
+abstained:
+- untested: no test root anchors any file in this graph
+suppressed: 3 · stale 1 · unused 2
+plugins:
+- kndo:coverage-lcov: roots 0 · findings 0
+- demo:probe: roots 1 · findings 2
+  dropped: root target `missing.cfg` resolved to nothing
+  content budget cut — its findings may be partial
+diagnostics:
+- [warn] src/broken.py: parse error: unexpected indent

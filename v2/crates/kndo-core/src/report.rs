@@ -11,7 +11,7 @@ use kndo_contract::vocab::ProjectPath;
 use serde::Serialize;
 use smol_str::SmolStr;
 
-pub const SCHEMA: &str = "kndo-v2/m6";
+pub const REPORT_SCHEMA: &str = "kndo-v2/m6";
 
 #[derive(Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -23,7 +23,7 @@ pub struct ExtensionRun {
 #[derive(Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct RunInfo {
-    /// Stamped as a CONST in the generated schema, from the same `SCHEMA` the report
+    /// Stamped as a CONST in the generated schema, from the same `REPORT_SCHEMA` the report
     /// writes — a report from any other envelope version fails validation instead of
     /// drifting through.
     #[cfg_attr(feature = "schema", schemars(schema_with = "schema_version_const"))]
@@ -35,7 +35,7 @@ pub struct RunInfo {
 
 #[cfg(feature = "schema")]
 fn schema_version_const(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
-    schemars::json_schema!({ "const": SCHEMA })
+    schemars::json_schema!({ "const": REPORT_SCHEMA })
 }
 
 #[derive(Debug, Clone, Serialize)]

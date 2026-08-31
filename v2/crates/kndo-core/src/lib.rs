@@ -10,6 +10,7 @@ pub mod coverage;
 mod discover;
 mod extract;
 mod graph;
+mod render;
 mod report;
 mod session;
 mod suppress;
@@ -24,7 +25,7 @@ pub use graph::{Graph, GraphFile};
 pub use kndo_contract::extension::{
     ConductBuilder, ExtensionSpec, ExtensionSpecBuilder, ExtensionSpecParts, MutatesGraph,
 };
-pub use report::{Report, ReportDiagnostic};
+pub use report::{ExtensionRun, REPORT_SCHEMA, Report, ReportDiagnostic, RunInfo};
 pub use session::{
     Config, GatePolicy, PhaseTimings, Refusal, RunMode, RunOutcome, Session, Snapshot, Threads,
 };

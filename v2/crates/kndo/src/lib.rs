@@ -5,7 +5,7 @@
 //! a stock kndo run speaks and runs — languages and conduct alike, one door.
 
 pub use kndo_contract::adapter::{ResolveContext, SourceFile};
-pub use kndo_contract::evidence::RootKind;
+pub use kndo_contract::evidence::{DiagnosticLevel, RootKind};
 pub use kndo_contract::extension::{
     Extension, ExtensionSpec, ExtensionSpecBuilder, GraphAccess, MutatesGraph,
 };
@@ -15,8 +15,9 @@ pub use kndo_contract::vocab::{Category, Confidence, ProjectPath, Span, SubjectK
 pub use kndo_core::{
     Abstention, AbstentionReason, AbstentionScope, Activation, ActivationRule, CONTENT_MAX_BYTES,
     CONTENT_MAX_FILES, ConductSeverity, ConductSink, ConductTarget, Config, ContentView,
-    Contribution, GatePolicy, Graph, GraphView, PhaseTimings, Refusal, Report, RuleDescriptor,
-    RunMode, RunOutcome, Session, Snapshot, SuppressedSummary, Threads, is_reserved_coordinate,
+    Contribution, ExtensionRun, GatePolicy, Graph, GraphView, PhaseTimings, REPORT_SCHEMA, Refusal,
+    Report, ReportDiagnostic, RuleDescriptor, RunInfo, RunMode, RunOutcome, Session, Snapshot,
+    SuppressedSummary, Threads, is_reserved_coordinate,
 };
 
 use kndo_adapter_go::GoAdapter;

@@ -22,18 +22,25 @@ pub struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Analyze a project and report its findings (the default)
-    Check(RunArgs),
+    Check(CheckArgs),
     /// Accept the current findings as the baseline future runs diff against
     Baseline(RunArgs),
+}
+
+#[derive(clap::Args)]
+struct CheckArgs {
+    #[command(flatten)]
+    run: RunArgs,
+    /// Report format; unset, KNDO_FORMAT decides, else human on a terminal and
+    /// json when piped
+    #[arg(long, value_enum)]
+    format: Option<Format>,
 }
 
 #[derive(clap::Args)]
 struct RunArgs {
     /// Project root (defaults to the current directory)
     path: Option<PathBuf>,
-    /// Emit the full report as JSON instead of text
-    #[arg(long)]
-    json: bool,
     /// Ignore and bypass the on-disk caches for this run
     #[arg(long)]
     no_cache: bool,
@@ -43,6 +50,16 @@ struct RunArgs {
     /// Lowest severity that fails the run
     #[arg(long, value_enum, default_value_t = FailOn::Warning)]
     fail_on: FailOn,
+}
+
+/// The renderings `check` offers. `human` is this frontend's presentation; the
+/// other three are core's render contracts, byte-identical from any frontend.
+#[derive(ValueEnum, Clone, Copy)]
+enum Format {
+    Human,
+    Json,
+    Agent,
+    Sarif,
 }
 
 #[derive(ValueEnum, Clone, Copy)]
@@ -74,7 +91,18 @@ pub struct CliOutput {
     pub code: i32,
 }
 
-pub fn run_args<I, T>(args: I) -> CliOutput
+/// What the host process knows beyond the arguments: the facts that decide the
+/// default format. The binary reads them once at the edge; carrying them as data
+/// keeps the library deterministic and every path testable. No `Default` on
+/// purpose — there is no honest default terminal, so the caller states both.
+pub struct Host {
+    /// Whether stdout is a terminal — humans get text, pipes get json.
+    pub tty: bool,
+    /// The `KNDO_FORMAT` environment value, if set. The `--format` flag wins.
+    pub format_env: Option<String>,
+}
+
+pub fn run_args<I, T>(args: I, host: Host) -> CliOutput
 where
     I: IntoIterator<Item = T>,
     T: Into<std::ffi::OsString> + Clone,
@@ -100,20 +128,48 @@ where
             };
         }
     };
-    run(cli)
+    run(cli, host)
 }
 
-pub fn run(cli: Cli) -> CliOutput {
-    let command = cli.command.unwrap_or(Command::Check(RunArgs {
-        path: None,
-        json: false,
-        no_cache: false,
-        threads: None,
-        fail_on: FailOn::Warning,
+pub fn run(cli: Cli, host: Host) -> CliOutput {
+    let command = cli.command.unwrap_or(Command::Check(CheckArgs {
+        run: RunArgs {
+            path: None,
+            no_cache: false,
+            threads: None,
+            fail_on: FailOn::Warning,
+        },
+        format: None,
     }));
     match command {
-        Command::Check(args) => check(args),
+        Command::Check(args) => check(args, &host),
         Command::Baseline(args) => baseline(args),
+    }
+}
+
+/// Flag > `KNDO_FORMAT` > the terminal. A malformed environment value cannot be
+/// a refusal — the invoker of a pipeline did not necessarily set it — so it warns
+/// on stderr and falls through to the terminal default. An empty value is unset.
+fn resolve_format(flag: Option<Format>, host: &Host) -> (Format, Option<String>) {
+    if let Some(format) = flag {
+        return (format, None);
+    }
+    let by_tty = if host.tty {
+        Format::Human
+    } else {
+        Format::Json
+    };
+    match host.format_env.as_deref() {
+        None | Some("") => (by_tty, None),
+        Some(raw) => match <Format as ValueEnum>::from_str(raw, true) {
+            Ok(format) => (format, None),
+            Err(_) => (
+                by_tty,
+                Some(format!(
+                    "kndo: unknown KNDO_FORMAT `{raw}` (human, json, agent, sarif) — choosing by terminal\n"
+                )),
+            ),
+        },
     }
 }
 
@@ -140,23 +196,33 @@ fn refused(refusal: kndo::Refusal) -> CliOutput {
     }
 }
 
-fn check(args: RunArgs) -> CliOutput {
-    let (_, snapshot) = match open_and_analyze(&args) {
+fn check(args: CheckArgs, host: &Host) -> CliOutput {
+    let (format, warning) = resolve_format(args.format, host);
+    let (_, snapshot) = match open_and_analyze(&args.run) {
         Ok(pair) => pair,
         Err(refusal) => return refused(refusal),
     };
     let report = snapshot.report();
-    let code = snapshot.gate(&args.fail_on.policy()).exit_code();
-    let stdout = if args.json {
-        let mut json = report.to_json();
-        json.push('\n');
-        json
-    } else {
-        render_text(&report)
+    let code = snapshot.gate(&args.run.fail_on.policy()).exit_code();
+    // Text documents arrive newline-terminated from their renders; JSON values
+    // are framed here.
+    let stdout = match format {
+        Format::Human => render_text(&report),
+        Format::Json => {
+            let mut json = report.to_json();
+            json.push('\n');
+            json
+        }
+        Format::Agent => report.to_agent(),
+        Format::Sarif => {
+            let mut sarif = report.to_sarif();
+            sarif.push('\n');
+            sarif
+        }
     };
     CliOutput {
         stdout,
-        stderr: String::new(),
+        stderr: warning.unwrap_or_default(),
         code,
     }
 }

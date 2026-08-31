@@ -90,6 +90,18 @@ pub enum Confidence {
     Certain,
 }
 
+impl Confidence {
+    /// The one text spelling — the same one serde's `lowercase` writes into
+    /// JSON, shared so no frontend keeps its own table (a test ties the two).
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Confidence::Possible => "possible",
+            Confidence::Probable => "probable",
+            Confidence::Certain => "certain",
+        }
+    }
+}
+
 /// A finding category: a validated string newtype, not an enum, because the
 /// `ext:<coordinate>/<rule>` namespace is open. First-party categories are the
 /// associated constants.

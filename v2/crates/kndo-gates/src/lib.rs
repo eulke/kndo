@@ -55,6 +55,10 @@ pub const GATES: &[Gate] = &[
         invariant: "the committed schema is derived from the types and validates real reports",
     },
     Gate {
+        name: "agent_format_matches_its_committed_golden",
+        invariant: "the agent render of the everything-specimen report is byte-pinned",
+    },
+    Gate {
         name: "frontends_import_only_the_facade",
         invariant: "a frontend's production dependencies contain exactly one kndo crate: kndo",
     },
