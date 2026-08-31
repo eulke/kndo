@@ -1064,6 +1064,19 @@ fn query_contract_is_generated_and_pinned() {
             inputs: vec!["lib.kmock#helper".to_string()],
             options: Options::default(),
         },
+        Request {
+            verb: Verb::Trace,
+            inputs: vec!["lib.kmock#helper".to_string(), "orphan.kmock".to_string()],
+            options: Options::default(),
+        },
+        Request {
+            verb: Verb::Impact,
+            inputs: vec!["lib.kmock".to_string()],
+            options: Options {
+                if_deleted: true,
+                ..Options::default()
+            },
+        },
     ];
     let rendered: String = script
         .iter()
@@ -1076,6 +1089,37 @@ fn query_contract_is_generated_and_pinned() {
         std::fs::write(&golden_path, &rendered).expect("write query golden");
         return;
     }
+    // explain closes the loop finding-id -> subject -> why, asserted live: the
+    // id is stable, but quoting it here would duplicate what the fixture pins.
+    let unused_id = snapshot
+        .findings
+        .iter()
+        .find(|f| {
+            f.category.as_str() == "unused" && matches!(f.subject, kndo::Subject::Symbol { .. })
+        })
+        .map(|f| f.id.as_str().to_string())
+        .expect("the fixture has a symbol unused finding");
+    let explained = snapshot.query(&Request {
+        verb: Verb::Explain,
+        inputs: vec![unused_id.clone(), "kndo-000000000000".to_string()],
+        options: Options::default(),
+    });
+    match &explained.results[0] {
+        Outcome::Ok { answer } => {
+            let json = serde_json::to_value(answer).unwrap();
+            assert_eq!(json["finding"]["id"], unused_id.as_str());
+            assert_eq!(
+                json["subject"]["kept_by"]["entries"]
+                    .as_array()
+                    .map(|k| k.len()),
+                Some(0),
+                "explain of an unused finding shows the empty keeper preview"
+            );
+        }
+        _ => panic!("a real finding id explains"),
+    }
+    assert!(matches!(&explained.results[1], Outcome::NotFound { .. }));
+
     let golden = std::fs::read_to_string(&golden_path)
         .expect("tests/expected/query-agent.txt exists — regenerate deliberately");
     assert_eq!(

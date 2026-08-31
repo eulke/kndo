@@ -31,3 +31,23 @@ verb: used-by
   - binding main.kmock:2
   elided: 0
 next: kndo describe lib.kmock#helper
+---
+kndo agent format 2 (kndo-query/1)
+verb: trace
+[lib.kmock#helper] function · production · 1-1
+  from Production root main.kmock
+  → lib.kmock via import (certain)
+  kept there by binding main.kmock:2
+[orphan.kmock] file · unreachable
+  not reachable from the requested roots
+next: kndo impact lib.kmock#helper --if-deleted
+---
+kndo agent format 2 (kndo-query/1)
+verb: impact
+[lib.kmock] file · production
+  affected by-color: production 1
+  - depth 1 main.kmock
+  elided: 0
+  affected-roots: [Production]
+  if-deleted elided: 0
+next: kndo trace lib.kmock

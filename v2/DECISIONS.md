@@ -1624,3 +1624,40 @@ one-source moves: `SymbolKind::as_str` (the adapter's own word carried) and
 `ReachColor` (the single projection of the three floods). 210 tests, 15 gates,
 clippy clean; smoke on the demo shows the loop: the dead symbol answers
 `kept-by: nothing` with its finding id beside it.
+
+## 2026-08-31 — Query Q3 shipped: trace, impact --if-deleted, explain
+
+The judgment verbs land on the same door, and each answer is graph evidence, never
+narrative:
+
+- **`trace` is a liveness proof.** The shortest root→node path over forward edges
+  (imports + sees), from the production root set first, falling back test → tooling
+  when the requested set was not pinned — reporting WHICH set anchored the path
+  (`roots: production`) rather than silently mixing them. Each hop names the edge
+  that led into it: `import` carries the resolution's recorded confidence, `sees`
+  is structural and carries none — the chain's weakest link is visible, not
+  averaged. For a symbol target the final hop is the in-file keeper, in the same
+  keeper vocabulary `used-by` speaks (one `navigate::keepers` spelling). `path:
+  null` is itself the answer — and the CLI exits 1 for it, so
+  `kndo trace x && rm x` cannot delete something reachable.
+- **`impact` is the reverse closure, and `--if-deleted` simulates, never fabricates.**
+  Affected files nearest-first with by-color totals and the root kinds whose reach
+  passes through the set. The simulation reports typed reachability flips: for a
+  file subject, a re-flood with the file masked (newly-unreachable /
+  newly-test-only); for a symbol subject, the declarations whose EVERY reference
+  site lives inside the deleted span — a precise orphan subset, not a re-judgment,
+  because findings that don't exist until the edit does must not be minted by a
+  query.
+- **`explain` closes finding-id → subject → why.** The brief (id, category,
+  severity, confidence, message, location) plus the FULL describe of the subject —
+  for `unused` the empty keeper preview IS the explanation; category-specific
+  evidence deepens per analysis as they grow. An id from nowhere is a not-found,
+  never a crash.
+
+The gate's golden script grew trace (live + orphan) and impact (--if-deleted)
+blocks, and the certificate gained explain's live half: the unused finding's id
+explains to a subject whose keeper preview is empty, and an unknown id is its own
+not-found. One dogfood catch during the build: `Verb::as_str` as a 7-arm match
+was a structural clone of an existing describe ladder — reshaped to a
+discriminant-indexed array tied to serde's spelling by a test, because the tool
+flagged its own author. 212 tests, 15 gates, clippy clean.

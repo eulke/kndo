@@ -564,3 +564,89 @@ fn the_query_verbs_speak_the_contract_end_to_end() {
         found.stdout
     );
 }
+
+#[test]
+fn trace_impact_and_explain_close_the_loop_end_to_end() {
+    let p = project_with_findings();
+    let root = p.root().to_string_lossy().into_owned();
+
+    // trace names the rooted file, the edge into each hop, and the in-file
+    // keeper — the whole liveness proof in one answer.
+    let live = run_args(
+        ["kndo", "trace", "src/used.js#used", "--root", &root],
+        piped(),
+    );
+    assert_eq!(live.code, 0, "{}{}", live.stdout, live.stderr);
+    let response: serde_json::Value = serde_json::from_str(&live.stdout).expect("json");
+    let path = &response["results"][0]["path"];
+    assert_eq!(path["roots"], "production", "{}", live.stdout);
+    assert_eq!(path["root"]["selector"], "src/index.js");
+    assert_eq!(path["hops"][0]["node"]["selector"], "src/used.js");
+    assert_eq!(path["hops"][0]["via"], "import");
+    assert!(path["keeper"]["kind"].is_string(), "{}", live.stdout);
+
+    // trace of the orphan: ok-status truth with a null path — and exit 1, so
+    // `kndo trace x && rm x` cannot delete something reachable.
+    let orphan = run_args(["kndo", "trace", "src/orphan.js", "--root", &root], piped());
+    assert_eq!(orphan.code, 1, "{}", orphan.stdout);
+    let response: serde_json::Value = serde_json::from_str(&orphan.stdout).expect("json");
+    assert_eq!(response["results"][0]["status"], "ok");
+    assert!(
+        response["results"][0]["path"].is_null(),
+        "{}",
+        orphan.stdout
+    );
+
+    // impact --if-deleted: the reverse closure plus the simulated removal.
+    let impact = run_args(
+        [
+            "kndo",
+            "impact",
+            "src/used.js",
+            "--if-deleted",
+            "--root",
+            &root,
+        ],
+        piped(),
+    );
+    assert_eq!(impact.code, 0, "{}{}", impact.stdout, impact.stderr);
+    let response: serde_json::Value = serde_json::from_str(&impact.stdout).expect("json");
+    let answer = &response["results"][0];
+    assert_eq!(answer["affected"][0]["node"]["selector"], "src/index.js");
+    assert_eq!(answer["affected"][0]["depth"], 1);
+    assert_eq!(answer["by_color"]["production"], 1);
+    assert_eq!(answer["affected_roots"][0], "production");
+    // index.js is itself a root: deleting used.js orphans nothing upstream.
+    assert_eq!(
+        answer["if_deleted"]["newly_unreachable"]
+            .as_array()
+            .map(|n| n.len()),
+        Some(0),
+        "{}",
+        impact.stdout
+    );
+
+    // explain closes finding-id -> subject -> why: the id from check answers
+    // with the finding brief and the full description of its subject.
+    let report = check(&p, &["--format", "json"], piped());
+    let report: serde_json::Value = serde_json::from_str(&report.stdout).expect("json");
+    let id = report["findings"][0]["id"].as_str().expect("a finding id");
+    let explained = run_args(["kndo", "explain", id, "--root", &root], piped());
+    assert_eq!(
+        explained.code, 0,
+        "{}{}",
+        explained.stdout, explained.stderr
+    );
+    let response: serde_json::Value = serde_json::from_str(&explained.stdout).expect("json");
+    let answer = &response["results"][0];
+    assert_eq!(answer["finding"]["id"], id);
+    assert_eq!(answer["finding"]["category"], "unused");
+    assert_eq!(answer["subject"]["node"]["selector"], "src/orphan.js");
+
+    // An id from nowhere is not-found, not a crash.
+    let unknown = run_args(
+        ["kndo", "explain", "kndo-000000000000", "--root", &root],
+        piped(),
+    );
+    assert_eq!(unknown.code, 1, "{}", unknown.stdout);
+}

@@ -43,6 +43,12 @@ enum Command {
     /// What keeps a node alive — the deletion question, with sites
     #[command(name = "used-by")]
     UsedBy(QueryArgs),
+    /// Why is this alive: the shortest root-to-node path
+    Trace(QueryArgs),
+    /// What transitively depends on a node; --if-deleted simulates the removal
+    Impact(QueryArgs),
+    /// Everything behind one finding id: the finding and its subject described
+    Explain(QueryArgs),
 }
 
 #[derive(clap::Args)]
@@ -63,9 +69,33 @@ struct QueryArgs {
     /// find: keep only this reachability color
     #[arg(long, value_enum)]
     color: Option<ColorArg>,
+    /// trace: root set to trace from (default: production, then test, tooling)
+    #[arg(long, value_enum)]
+    roots: Option<RootsArg>,
+    /// impact: also simulate the removal and report the reachability flips
+    #[arg(long)]
+    if_deleted: bool,
     /// json (piped default) or agent (terminal default)
     #[arg(long, value_enum)]
     format: Option<QueryFormat>,
+}
+
+#[derive(Debug, ValueEnum, Clone, Copy)]
+enum RootsArg {
+    Production,
+    Test,
+    Tooling,
+}
+
+impl RootsArg {
+    fn into_core(self) -> kndo::query::RootSet {
+        use kndo::query::RootSet as R;
+        match self {
+            RootsArg::Production => R::Production,
+            RootsArg::Test => R::Test,
+            RootsArg::Tooling => R::Tooling,
+        }
+    }
 }
 
 #[derive(Debug, ValueEnum, Clone, Copy)]
@@ -259,6 +289,9 @@ pub fn run(cli: Cli, host: Host) -> CliOutput {
         Command::Describe(args) => query_verb(kndo::query::Verb::Describe, args, &host),
         Command::Uses(args) => query_verb(kndo::query::Verb::Uses, args, &host),
         Command::UsedBy(args) => query_verb(kndo::query::Verb::UsedBy, args, &host),
+        Command::Trace(args) => query_verb(kndo::query::Verb::Trace, args, &host),
+        Command::Impact(args) => query_verb(kndo::query::Verb::Impact, args, &host),
+        Command::Explain(args) => query_verb(kndo::query::Verb::Explain, args, &host),
     }
 }
 
@@ -286,10 +319,12 @@ fn query_verb(verb: kndo::query::Verb, args: QueryArgs, host: &Host) -> CliOutpu
             limit: args.limit,
             kind: args.kind.clone(),
             color: args.color.map(ColorArg::into_core),
+            roots: args.roots.map(RootsArg::into_core),
+            if_deleted: args.if_deleted,
         },
     };
     let response = snapshot.query(&request);
-    let code = response
+    let mut code = response
         .results
         .iter()
         .map(|r| match r {
@@ -299,6 +334,19 @@ fn query_verb(verb: kndo::query::Verb, args: QueryArgs, host: &Host) -> CliOutpu
         })
         .max()
         .unwrap_or(0);
+    // `trace` with no path is scripting truth: the node is NOT reachable that
+    // way — exit 1, matching not-found's tier, without failing its siblings.
+    if verb == kndo::query::Verb::Trace {
+        for outcome in &response.results {
+            if let kndo::query::Outcome::Ok {
+                answer: kndo::query::Answer::Trace(t),
+            } = outcome
+                && t.path.is_none()
+            {
+                code = code.max(1);
+            }
+        }
+    }
     let format = args.format.unwrap_or({
         if host.tty {
             QueryFormat::Agent

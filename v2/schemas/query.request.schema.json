@@ -39,6 +39,10 @@
             }
           ]
         },
+        "if-deleted": {
+          "description": "`impact`: additionally simulate the deletion and report the typed\nreachability flips — never fabricated findings.",
+          "type": "boolean"
+        },
         "kind": {
           "description": "`find`: keep only this kind (a symbol kind, or `file`).",
           "type": [
@@ -54,6 +58,17 @@
           ],
           "format": "uint32",
           "minimum": 0
+        },
+        "roots": {
+          "description": "`trace`: which root set to trace from. Default: production, falling\nback to test, then tooling — the first set that reaches the node.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RootSet"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false
@@ -68,13 +83,24 @@
         "unreachable"
       ]
     },
+    "RootSet": {
+      "type": "string",
+      "enum": [
+        "production",
+        "test",
+        "tooling"
+      ]
+    },
     "Verb": {
       "type": "string",
       "enum": [
         "find",
         "describe",
         "uses",
-        "used-by"
+        "used-by",
+        "trace",
+        "impact",
+        "explain"
       ]
     }
   }

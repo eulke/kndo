@@ -52,15 +52,38 @@ pub enum Verb {
     Describe,
     Uses,
     UsedBy,
+    Trace,
+    Impact,
+    Explain,
 }
 
 impl Verb {
+    /// The one text spelling — indexed by discriminant, tied to serde's
+    /// kebab-case output by a test so a reorder cannot drift silently.
     pub fn as_str(self) -> &'static str {
-        match self {
-            Verb::Find => "find",
-            Verb::Describe => "describe",
-            Verb::Uses => "uses",
-            Verb::UsedBy => "used-by",
+        [
+            "find", "describe", "uses", "used-by", "trace", "impact", "explain",
+        ][self as usize]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Verb;
+
+    #[test]
+    fn verb_spelling_is_the_serde_spelling() {
+        for verb in [
+            Verb::Find,
+            Verb::Describe,
+            Verb::Uses,
+            Verb::UsedBy,
+            Verb::Trace,
+            Verb::Impact,
+            Verb::Explain,
+        ] {
+            let json = serde_json::to_string(&verb).unwrap();
+            assert_eq!(json, format!("\"{}\"", verb.as_str()));
         }
     }
 }
@@ -81,6 +104,23 @@ pub struct Options {
     /// `find`: keep only nodes of this reachability color.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<ReachColor>,
+    /// `trace`: which root set to trace from. Default: production, falling
+    /// back to test, then tooling — the first set that reaches the node.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub roots: Option<RootSet>,
+    /// `impact`: additionally simulate the deletion and report the typed
+    /// reachability flips — never fabricated findings.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub if_deleted: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub enum RootSet {
+    Production,
+    Test,
+    Tooling,
 }
 
 #[derive(Serialize)]
@@ -119,6 +159,9 @@ pub enum Answer {
     Describe(Box<DescribeAnswer>),
     Uses(UsesAnswer),
     UsedBy(UsedByAnswer),
+    Trace(TraceAnswer),
+    Impact(Box<ImpactAnswer>),
+    Explain(Box<ExplainAnswer>),
 }
 
 /// A node, addressable: feed `selector` straight back into any verb.
@@ -252,6 +295,102 @@ pub struct UsedByAnswer {
     pub elided: u32,
 }
 
+#[derive(Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct TraceAnswer {
+    pub node: NodeRef,
+    /// The shortest root-to-node path — `null` means NOT reachable from the
+    /// requested root set, which is itself the answer.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<TracePath>,
+}
+
+#[derive(Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct TracePath {
+    /// Which root set anchors this path.
+    pub roots: RootSet,
+    /// The rooted file the path starts from.
+    pub root: NodeRef,
+    /// File hops, root-side first; each names the edge that led into it.
+    pub hops: Vec<TraceHop>,
+    /// For symbol targets: the in-file evidence that finally keeps it — the
+    /// same keeper vocabulary `used-by` speaks.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub keeper: Option<EdgeRef>,
+}
+
+#[derive(Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct TraceHop {
+    pub node: NodeRef,
+    /// `import` (with its recorded confidence) or `sees` (structural).
+    pub via: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<kndo_contract::vocab::Confidence>,
+}
+
+#[derive(Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct ImpactAnswer {
+    pub node: NodeRef,
+    /// The reverse closure: everything that transitively depends on the
+    /// node's file, nearest first.
+    pub affected: Vec<Affected>,
+    pub by_color: BTreeMap<&'static str, u32>,
+    pub elided: u32,
+    /// Root kinds whose reach passes through the affected set.
+    pub affected_roots: Vec<RootSet>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub if_deleted: Option<IfDeleted>,
+}
+
+#[derive(Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct Affected {
+    pub node: NodeRef,
+    pub depth: u32,
+}
+
+/// Typed reachability flips from simulating the removal — graph facts, never
+/// fabricated finding objects: those findings don't exist until the edit does.
+#[derive(Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct IfDeleted {
+    /// Files no color reaches once the node is gone (file subjects).
+    pub newly_unreachable: Vec<NodeRef>,
+    pub newly_unreachable_elided: u32,
+    /// Files production no longer reaches but tests still do.
+    pub newly_test_only: Vec<NodeRef>,
+    pub newly_test_only_elided: u32,
+    /// Symbol subjects: declarations whose EVERY reference lives inside the
+    /// deleted declaration's span — they lose their last reference with it.
+    /// A precise subset, not a re-judgment.
+    pub orphans: Vec<NodeRef>,
+    pub orphans_elided: u32,
+}
+
+#[derive(Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct ExplainAnswer {
+    pub finding: FindingBrief,
+    /// The subject, described in full — for `unused` the empty keeper preview
+    /// IS the why; for `internal-only` the scoped reach and in-file keepers
+    /// are; category-specific evidence deepens per analysis over time.
+    pub subject: DescribeAnswer,
+}
+
+#[derive(Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct FindingBrief {
+    pub id: String,
+    pub category: String,
+    pub severity: kndo_contract::finding::Severity,
+    pub confidence: kndo_contract::vocab::Confidence,
+    pub message: String,
+    pub location: String,
+}
+
 // ------------------------------------------------------------------ selectors
 
 enum Selector {
@@ -370,6 +509,13 @@ impl Snapshot {
                 Verb::Describe => node_verb(&cx, input, describe),
                 Verb::Uses => node_verb(&cx, input, |cx, sel| uses(cx, sel, limit)),
                 Verb::UsedBy => node_verb(&cx, input, |cx, sel| used_by(cx, sel, limit)),
+                Verb::Trace => {
+                    node_verb(&cx, input, |cx, sel| trace(cx, sel, request.options.roots))
+                }
+                Verb::Impact => node_verb(&cx, input, |cx, sel| {
+                    impact(cx, sel, request.options.if_deleted, limit)
+                }),
+                Verb::Explain => explain(&cx, input),
             })
             .collect();
         Response {
@@ -813,6 +959,386 @@ fn keeper_site(keeper: &Keeper) -> Option<navigate::Site> {
         | Keeper::SurfaceImport { site }
         | Keeper::OwnerBinding { site } => Some(*site),
         Keeper::Root { .. } | Keeper::EntrySurface => None,
+    }
+}
+
+// ------------------------------------------------------------------ Q3 verbs
+
+/// Reverse file adjacency (imports + sees), sorted — built per call, pure.
+fn reverse_edges(graph: &Graph) -> Vec<Vec<u32>> {
+    let mut reverse: Vec<Vec<u32>> = vec![Vec::new(); graph.files.len()];
+    for (i, f) in graph.files.iter().enumerate() {
+        for &t in &f.imports {
+            reverse[t as usize].push(i as u32);
+        }
+        for &t in &f.sees {
+            reverse[t as usize].push(i as u32);
+        }
+    }
+    for edges in &mut reverse {
+        edges.sort_unstable();
+        edges.dedup();
+    }
+    reverse
+}
+
+/// BFS shortest path over forward edges (imports + sees) from any file in
+/// `from` to `to`; deterministic because adjacency is sorted and the frontier
+/// is scanned in insertion order.
+fn shortest_path(graph: &Graph, from: &[u32], to: u32) -> Option<Vec<u32>> {
+    let n = graph.files.len();
+    let mut prev: Vec<Option<u32>> = vec![None; n];
+    let mut seen = vec![false; n];
+    if from.contains(&to) {
+        return Some(vec![to]);
+    }
+    let mut frontier: Vec<u32> = from.to_vec();
+    for &f in from {
+        seen[f as usize] = true;
+    }
+    while !frontier.is_empty() {
+        let mut next = Vec::new();
+        for &at in &frontier {
+            let f = &graph.files[at as usize];
+            for &t in f.imports.iter().chain(&f.sees) {
+                if !seen[t as usize] {
+                    seen[t as usize] = true;
+                    prev[t as usize] = Some(at);
+                    if t == to {
+                        let mut path = vec![to, at];
+                        let mut cursor = at;
+                        while let Some(p) = prev[cursor as usize] {
+                            path.push(p);
+                            cursor = p;
+                        }
+                        path.reverse();
+                        return Some(path);
+                    }
+                    next.push(t);
+                }
+            }
+        }
+        frontier = next;
+    }
+    None
+}
+
+/// The edge kind and confidence between two adjacent files on a path: an
+/// import (with its recorded confidence) wins over `sees` when both exist.
+fn edge_between(
+    graph: &Graph,
+    from: u32,
+    to: u32,
+) -> (&'static str, Option<kndo_contract::vocab::Confidence>) {
+    let f = &graph.files[from as usize];
+    for (import, targets) in f.evidence.imports.iter().zip(&f.import_targets) {
+        if targets.contains(&to) {
+            return ("import", Some(import.confidence));
+        }
+    }
+    ("sees", None)
+}
+
+fn rooted_files(graph: &Graph, kind: kndo_contract::evidence::RootKind) -> Vec<u32> {
+    graph
+        .files
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| {
+            f.evidence
+                .roots
+                .iter()
+                .chain(&f.anchored)
+                .any(|r| r.kind == kind)
+        })
+        .map(|(i, _)| i as u32)
+        .collect()
+}
+
+fn trace(cx: &QueryContext<'_>, selector: Selector, roots: Option<RootSet>) -> Answer {
+    use kndo_contract::evidence::RootKind;
+    let (file, decl) = match selector {
+        Selector::File(f) => (f, None),
+        Selector::Symbol { file, decl } => (file, Some(decl)),
+    };
+    let node = node_ref(cx, file, decl);
+    let sets: Vec<RootSet> = match roots {
+        Some(set) => vec![set],
+        None => vec![RootSet::Production, RootSet::Test, RootSet::Tooling],
+    };
+    for set in sets {
+        let kind = match set {
+            RootSet::Production => RootKind::Production,
+            RootSet::Test => RootKind::Test,
+            RootSet::Tooling => RootKind::Tooling,
+        };
+        let from = rooted_files(cx.graph, kind);
+        if from.is_empty() {
+            continue;
+        }
+        if let Some(path) = shortest_path(cx.graph, &from, file as u32) {
+            let root = node_ref(cx, path[0] as usize, None);
+            let hops: Vec<TraceHop> = path
+                .windows(2)
+                .map(|pair| {
+                    let (via, confidence) = edge_between(cx.graph, pair[0], pair[1]);
+                    TraceHop {
+                        node: node_ref(cx, pair[1] as usize, None),
+                        via,
+                        confidence,
+                    }
+                })
+                .collect();
+            let keeper = decl.and_then(|d| {
+                navigate::keepers(cx.graph, &cx.index, file, d, 1)
+                    .first()
+                    .map(|k| edge_ref(cx, k))
+            });
+            return Answer::Trace(TraceAnswer {
+                node,
+                path: Some(TracePath {
+                    roots: set,
+                    root,
+                    hops,
+                    keeper,
+                }),
+            });
+        }
+    }
+    Answer::Trace(TraceAnswer { node, path: None })
+}
+
+fn impact(cx: &QueryContext<'_>, selector: Selector, if_deleted: bool, limit: usize) -> Answer {
+    use kndo_contract::evidence::RootKind;
+    let (file, decl) = match selector {
+        Selector::File(f) => (f, None),
+        Selector::Symbol { file, decl } => (file, Some(decl)),
+    };
+    let node = node_ref(cx, file, decl);
+    let reverse = reverse_edges(cx.graph);
+    let mut depth: Vec<Option<u32>> = vec![None; cx.graph.files.len()];
+    let mut frontier = vec![file as u32];
+    depth[file] = Some(0);
+    let mut level = 0u32;
+    let mut affected: Vec<Affected> = Vec::new();
+    while !frontier.is_empty() {
+        level += 1;
+        let mut next = Vec::new();
+        for &at in &frontier {
+            for &dependent in &reverse[at as usize] {
+                if depth[dependent as usize].is_none() {
+                    depth[dependent as usize] = Some(level);
+                    affected.push(Affected {
+                        node: node_ref(cx, dependent as usize, None),
+                        depth: level,
+                    });
+                    next.push(dependent);
+                }
+            }
+        }
+        frontier = next;
+    }
+    let mut by_color: BTreeMap<&'static str, u32> = BTreeMap::new();
+    let mut affected_roots: Vec<RootSet> = Vec::new();
+    for (i, d) in depth.iter().enumerate() {
+        if d.is_none() || i == file {
+            continue;
+        }
+        *by_color
+            .entry(ReachColor::of(&cx.reach, i).as_str())
+            .or_insert(0) += 1;
+        for r in cx.graph.files[i]
+            .evidence
+            .roots
+            .iter()
+            .chain(&cx.graph.files[i].anchored)
+        {
+            let set = match r.kind {
+                RootKind::Production => RootSet::Production,
+                RootKind::Test => RootSet::Test,
+                RootKind::Tooling => RootSet::Tooling,
+            };
+            if !affected_roots.contains(&set) {
+                affected_roots.push(set);
+            }
+        }
+    }
+    let elided = affected.len().saturating_sub(limit) as u32;
+    affected.truncate(limit);
+
+    let if_deleted = if_deleted.then(|| simulate_deletion(cx, file, decl, limit));
+    Answer::Impact(Box::new(ImpactAnswer {
+        node,
+        affected,
+        by_color,
+        elided,
+        affected_roots,
+        if_deleted,
+    }))
+}
+
+/// File subjects: re-flood the graph with the file (its edges and roots)
+/// masked, and report which files flip. Symbol subjects: declarations whose
+/// EVERY reference site lives inside the deleted declaration's span.
+fn simulate_deletion(
+    cx: &QueryContext<'_>,
+    file: usize,
+    decl: Option<usize>,
+    limit: usize,
+) -> IfDeleted {
+    use kndo_contract::evidence::RootKind;
+    let mut newly_unreachable = Vec::new();
+    let mut newly_test_only = Vec::new();
+    let mut orphans = Vec::new();
+    match decl {
+        None => {
+            let flood = |kind: RootKind| -> Vec<bool> {
+                let n = cx.graph.files.len();
+                let mut alive = vec![false; n];
+                let mut frontier: Vec<u32> = Vec::new();
+                for (i, f) in cx.graph.files.iter().enumerate() {
+                    if i != file
+                        && f.evidence
+                            .roots
+                            .iter()
+                            .chain(&f.anchored)
+                            .any(|r| r.kind == kind)
+                    {
+                        alive[i] = true;
+                        frontier.push(i as u32);
+                    }
+                }
+                while let Some(at) = frontier.pop() {
+                    if at as usize == file {
+                        continue;
+                    }
+                    let f = &cx.graph.files[at as usize];
+                    for &t in f.imports.iter().chain(&f.sees) {
+                        if t as usize != file && !alive[t as usize] {
+                            alive[t as usize] = true;
+                            frontier.push(t);
+                        }
+                    }
+                }
+                alive
+            };
+            let production = flood(RootKind::Production);
+            let test = flood(RootKind::Test);
+            let tooling = flood(RootKind::Tooling);
+            for i in 0..cx.graph.files.len() {
+                if i == file || !cx.index.reachable(i as u32) {
+                    continue;
+                }
+                let now = (production[i], test[i], tooling[i]);
+                let before = ReachColor::of(&cx.reach, i);
+                match (before, now) {
+                    (_, (false, false, false)) => newly_unreachable.push(node_ref(cx, i, None)),
+                    (ReachColor::Production, (false, true, _)) => {
+                        newly_test_only.push(node_ref(cx, i, None));
+                    }
+                    _ => {}
+                }
+            }
+        }
+        Some(d_ix) => {
+            let span = cx.graph.files[file].evidence.declarations[d_ix].span;
+            // Names whose EVERY reachable site sits inside the deleted span
+            // lose their last reference; their unambiguous resolutions are
+            // the orphans.
+            let mut inside: Vec<&SmolStr> = Vec::new();
+            for r in &cx.graph.files[file].evidence.references {
+                if span.contains(&r.span) {
+                    inside.push(&r.name);
+                }
+            }
+            inside.sort();
+            inside.dedup();
+            for name in inside {
+                let all = cx.index.reference_sites(name.as_str());
+                let in_span_here =
+                    |s: &navigate::Site| s.file as usize == file && span.contains(&s.span);
+                if !all.is_empty()
+                    && all.iter().all(in_span_here)
+                    && let Some(target) = resolve_name(cx, file, name)
+                {
+                    orphans.push(target);
+                }
+            }
+            orphans.sort_by(|a, b| a.selector.cmp(&b.selector));
+            orphans.dedup_by(|a, b| a.selector == b.selector);
+        }
+    }
+    let cap = |list: &mut Vec<NodeRef>| -> u32 {
+        let elided = list.len().saturating_sub(limit) as u32;
+        list.truncate(limit);
+        elided
+    };
+    let newly_unreachable_elided = cap(&mut newly_unreachable);
+    let newly_test_only_elided = cap(&mut newly_test_only);
+    let orphans_elided = cap(&mut orphans);
+    IfDeleted {
+        newly_unreachable,
+        newly_unreachable_elided,
+        newly_test_only,
+        newly_test_only_elided,
+        orphans,
+        orphans_elided,
+    }
+}
+
+fn explain(cx: &QueryContext<'_>, input: &str) -> Outcome {
+    use kndo_contract::subject::Subject;
+    let Some(finding) = cx.findings.iter().find(|f| f.id.as_str() == input) else {
+        return Outcome::NotFound {
+            input: input.to_string(),
+        };
+    };
+    let subject = match &finding.subject {
+        Subject::File { path } => match cx.graph.files.iter().position(|f| &f.path == path) {
+            Some(file) => describe(cx, Selector::File(file)),
+            None => {
+                return Outcome::Error {
+                    input: input.to_string(),
+                    message: "the finding's file is not in the current graph".to_string(),
+                };
+            }
+        },
+        Subject::Symbol { path, selector, .. } => {
+            let raw = format!("{}#{}", path.as_str(), selector.render());
+            match resolve(cx.graph, &raw) {
+                Resolve::Hit(sel) => describe(cx, sel),
+                _ => {
+                    return Outcome::Error {
+                        input: input.to_string(),
+                        message: format!(
+                            "the finding's subject `{raw}` is not in the current graph"
+                        ),
+                    };
+                }
+            }
+        }
+        _ => {
+            return Outcome::Error {
+                input: input.to_string(),
+                message: "explain covers file and symbol subjects today".to_string(),
+            };
+        }
+    };
+    let Answer::Describe(subject) = subject else {
+        unreachable!("describe answers describe");
+    };
+    Outcome::Ok {
+        answer: Answer::Explain(Box::new(ExplainAnswer {
+            finding: FindingBrief {
+                id: finding.id.as_str().to_string(),
+                category: finding.category.as_str().to_string(),
+                severity: finding.severity,
+                confidence: finding.confidence,
+                message: finding.message.clone(),
+                location: finding.location(),
+            },
+            subject: *subject,
+        })),
     }
 }
 

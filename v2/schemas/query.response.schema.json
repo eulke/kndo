@@ -24,6 +24,32 @@
     "results"
   ],
   "$defs": {
+    "Affected": {
+      "type": "object",
+      "properties": {
+        "depth": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "node": {
+          "$ref": "#/$defs/NodeRef"
+        }
+      },
+      "required": [
+        "node",
+        "depth"
+      ]
+    },
+    "Confidence": {
+      "description": "Ordered by strength, so `max()` and threshold comparisons read naturally.\nClosed by design: a fourth tier would change what every existing threshold means —\nthat is a semantic contract change, not growth.",
+      "type": "string",
+      "enum": [
+        "possible",
+        "probable",
+        "certain"
+      ]
+    },
     "DeclarationFacts": {
       "type": "object",
       "properties": {
@@ -123,6 +149,22 @@
         "kind"
       ]
     },
+    "ExplainAnswer": {
+      "type": "object",
+      "properties": {
+        "finding": {
+          "$ref": "#/$defs/FindingBrief"
+        },
+        "subject": {
+          "description": "The subject, described in full — for `unused` the empty keeper preview\nIS the why; for `internal-only` the scoped reach and in-file keepers\nare; category-specific evidence deepens per analysis over time.",
+          "$ref": "#/$defs/DescribeAnswer"
+        }
+      },
+      "required": [
+        "finding",
+        "subject"
+      ]
+    },
     "FileFacts": {
       "type": "object",
       "properties": {
@@ -172,6 +214,139 @@
       "required": [
         "matches",
         "elided"
+      ]
+    },
+    "FindingBrief": {
+      "type": "object",
+      "properties": {
+        "category": {
+          "type": "string"
+        },
+        "confidence": {
+          "$ref": "#/$defs/Confidence"
+        },
+        "id": {
+          "type": "string"
+        },
+        "location": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity"
+        }
+      },
+      "required": [
+        "id",
+        "category",
+        "severity",
+        "confidence",
+        "message",
+        "location"
+      ]
+    },
+    "IfDeleted": {
+      "description": "Typed reachability flips from simulating the removal — graph facts, never\nfabricated finding objects: those findings don't exist until the edit does.",
+      "type": "object",
+      "properties": {
+        "newly_test_only": {
+          "description": "Files production no longer reaches but tests still do.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NodeRef"
+          }
+        },
+        "newly_test_only_elided": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "newly_unreachable": {
+          "description": "Files no color reaches once the node is gone (file subjects).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NodeRef"
+          }
+        },
+        "newly_unreachable_elided": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "orphans": {
+          "description": "Symbol subjects: declarations whose EVERY reference lives inside the\ndeleted declaration's span — they lose their last reference with it.\nA precise subset, not a re-judgment.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NodeRef"
+          }
+        },
+        "orphans_elided": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "newly_unreachable",
+        "newly_unreachable_elided",
+        "newly_test_only",
+        "newly_test_only_elided",
+        "orphans",
+        "orphans_elided"
+      ]
+    },
+    "ImpactAnswer": {
+      "type": "object",
+      "properties": {
+        "affected": {
+          "description": "The reverse closure: everything that transitively depends on the\nnode's file, nearest first.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Affected"
+          }
+        },
+        "affected_roots": {
+          "description": "Root kinds whose reach passes through the affected set.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RootSet"
+          }
+        },
+        "by_color": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          }
+        },
+        "elided": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "if_deleted": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IfDeleted"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "node": {
+          "$ref": "#/$defs/NodeRef"
+        }
+      },
+      "required": [
+        "node",
+        "affected",
+        "by_color",
+        "elided",
+        "affected_roots"
       ]
     },
     "ImportUse": {
@@ -284,6 +459,15 @@
             },
             {
               "$ref": "#/$defs/UsedByAnswer"
+            },
+            {
+              "$ref": "#/$defs/TraceAnswer"
+            },
+            {
+              "$ref": "#/$defs/ImpactAnswer"
+            },
+            {
+              "$ref": "#/$defs/ExplainAnswer"
             }
           ],
           "required": [
@@ -370,6 +554,23 @@
         "count"
       ]
     },
+    "RootSet": {
+      "type": "string",
+      "enum": [
+        "production",
+        "test",
+        "tooling"
+      ]
+    },
+    "Severity": {
+      "description": "Declared worst-first so `Ord` is display order; gates compare via\n[`Severity::at_least`], the one place the inversion lives.",
+      "type": "string",
+      "enum": [
+        "error",
+        "warning",
+        "info"
+      ]
+    },
     "SiteRef": {
       "type": "object",
       "properties": {
@@ -389,6 +590,90 @@
       },
       "required": [
         "path"
+      ]
+    },
+    "TraceAnswer": {
+      "type": "object",
+      "properties": {
+        "node": {
+          "$ref": "#/$defs/NodeRef"
+        },
+        "path": {
+          "description": "The shortest root-to-node path — `null` means NOT reachable from the\nrequested root set, which is itself the answer.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TracePath"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "node"
+      ]
+    },
+    "TraceHop": {
+      "type": "object",
+      "properties": {
+        "confidence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Confidence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "node": {
+          "$ref": "#/$defs/NodeRef"
+        },
+        "via": {
+          "description": "`import` (with its recorded confidence) or `sees` (structural).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "node",
+        "via"
+      ]
+    },
+    "TracePath": {
+      "type": "object",
+      "properties": {
+        "hops": {
+          "description": "File hops, root-side first; each names the edge that led into it.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TraceHop"
+          }
+        },
+        "keeper": {
+          "description": "For symbol targets: the in-file evidence that finally keeps it — the\nsame keeper vocabulary `used-by` speaks.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EdgeRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "root": {
+          "description": "The rooted file the path starts from.",
+          "$ref": "#/$defs/NodeRef"
+        },
+        "roots": {
+          "description": "Which root set anchors this path.",
+          "$ref": "#/$defs/RootSet"
+        }
+      },
+      "required": [
+        "roots",
+        "root",
+        "hops"
       ]
     },
     "UsedByAnswer": {
@@ -465,7 +750,10 @@
         "find",
         "describe",
         "uses",
-        "used-by"
+        "used-by",
+        "trace",
+        "impact",
+        "explain"
       ]
     }
   }

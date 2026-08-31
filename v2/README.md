@@ -392,15 +392,23 @@ stale against it), health follows judgment, and the envelope's `run.selection` r
 the ask verbatim — what a narrowed run does not list, it did not judge. `kndo health`
 prints the measurement alone (line on a tty, JSON piped, always exit 0).
 
-Seventh row (in flight): **the query contract**. `kndo find/describe/uses/used-by` —
-one request/response contract (`kndo-query/1`, generated schemas, gate-pinned agent
-grammar) answered from the SAME navigation index the `unused` judgment runs on:
-`navigate::keepers` is the one spelling of the keep rules, so `used-by` lists exactly
-the evidence the judge counted, and the gate certifies it — used-by comes back empty
-precisely where unused accused. Selectors are the Subject vocabulary (`path`,
-`path#name`, `path#Owner.member`); listings are capped with explicit elision; a bad
-selector is its own not-found, never its siblings' failure; `next:` affordances close
-every agent response. trace/impact/explain and the serve tools are the remainder.
+Seventh row: **the query contract**. All seven verbs —
+`kndo find/describe/uses/used-by/trace/impact/explain` — on one request/response
+contract (`kndo-query/1`, generated schemas,
+gate-pinned agent grammar) answered from the SAME navigation index the `unused`
+judgment runs on: `navigate::keepers` is the one spelling of the keep rules, so
+`used-by` lists exactly the evidence the judge counted, and the gate certifies it —
+used-by comes back empty precisely where unused accused. Selectors are the Subject
+vocabulary (`path`, `path#name`, `path#Owner.member`); listings are capped with
+explicit elision; a bad selector is its own not-found, never its siblings' failure;
+`next:` affordances close every agent response. `trace` is a liveness proof (the
+rooted file, each hop's edge with its recorded confidence, the in-file keeper last —
+and `path: null` exits 1, so `kndo trace x && rm x` cannot delete something
+reachable); `impact --if-deleted` simulates the removal as typed reachability flips
+(newly-unreachable, newly-test-only, orphaned symbols), never fabricated findings;
+`explain` closes finding-id → subject → why, where for `unused` the empty keeper
+preview IS the why. The serve tools (one MCP tool per verb, same `Request` types)
+are the remainder.
 
 Sixth row: **`kndo.toml` and `init`**. The CLI's persisted invocation defaults —
 `[check]` `fail-on`/`format`/`only`/`skip`, only keys with living consumers — with

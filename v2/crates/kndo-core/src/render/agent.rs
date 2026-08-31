@@ -231,6 +231,110 @@ impl crate::query::Response {
                             first_selector = Some(a.node.selector.clone());
                         }
                     }
+                    Answer::Trace(a) => {
+                        out.push_str(&node_line(&a.node));
+                        out.push('\n');
+                        match &a.path {
+                            None => out.push_str("  not reachable from the requested roots\n"),
+                            Some(p) => {
+                                out.push_str(&format!(
+                                    "  from {:?} root {}\n",
+                                    p.roots, p.root.selector
+                                ));
+                                for hop in &p.hops {
+                                    out.push_str(&format!(
+                                        "  → {} via {}{}\n",
+                                        hop.node.selector,
+                                        hop.via,
+                                        match hop.confidence {
+                                            Some(c) => format!(" ({})", c.as_str()),
+                                            None => String::new(),
+                                        }
+                                    ));
+                                }
+                                if let Some(keeper) = &p.keeper {
+                                    out.push_str(&format!(
+                                        "  kept there by {}\n",
+                                        edge_text(keeper)
+                                    ));
+                                }
+                            }
+                        }
+                        if first_selector.is_none() {
+                            first_selector = Some(a.node.selector.clone());
+                        }
+                    }
+                    Answer::Impact(a) => {
+                        out.push_str(&node_line(&a.node));
+                        out.push('\n');
+                        if !a.by_color.is_empty() {
+                            let colors: Vec<String> =
+                                a.by_color.iter().map(|(c, n)| format!("{c} {n}")).collect();
+                            out.push_str(&format!("  affected by-color: {}\n", colors.join(" · ")));
+                        }
+                        for e in &a.affected {
+                            out.push_str(&format!("  - depth {} {}\n", e.depth, e.node.selector));
+                        }
+                        out.push_str(&format!("  elided: {}\n", a.elided));
+                        if !a.affected_roots.is_empty() {
+                            out.push_str(&format!("  affected-roots: {:?}\n", a.affected_roots));
+                        }
+                        if let Some(sim) = &a.if_deleted {
+                            for n in &sim.newly_unreachable {
+                                out.push_str(&format!(
+                                    "  if-deleted unreachable: {}\n",
+                                    n.selector
+                                ));
+                            }
+                            for n in &sim.newly_test_only {
+                                out.push_str(&format!("  if-deleted test-only: {}\n", n.selector));
+                            }
+                            for n in &sim.orphans {
+                                out.push_str(&format!("  if-deleted orphans: {}\n", n.selector));
+                            }
+                            out.push_str(&format!(
+                                "  if-deleted elided: {}\n",
+                                sim.newly_unreachable_elided
+                                    + sim.newly_test_only_elided
+                                    + sim.orphans_elided
+                            ));
+                        }
+                        if first_selector.is_none() {
+                            first_selector = Some(a.node.selector.clone());
+                        }
+                    }
+                    Answer::Explain(a) => {
+                        out.push_str(&format!(
+                            "[{}] {} {} · {} · {}\n  {}\n",
+                            a.finding.id,
+                            a.finding.severity.as_str(),
+                            a.finding.category,
+                            a.finding.location,
+                            a.finding.confidence.as_str(),
+                            a.finding.message,
+                        ));
+                        out.push_str(&node_line(&a.subject.node));
+                        out.push('\n');
+                        if let Some(d) = &a.subject.declaration {
+                            out.push_str(&format!("  reach: {}\n", d.reach));
+                        }
+                        if let Some(kept) = &a.subject.kept_by {
+                            out.push_str("  kept-by:");
+                            if kept.entries.is_empty() {
+                                out.push_str(" nothing");
+                            }
+                            for e in &kept.entries {
+                                out.push_str(&format!(" {}", edge_text(e)));
+                            }
+                            if kept.more {
+                                out.push_str(" · more");
+                            }
+                            out.push('\n');
+                        }
+                        if first_selector.is_none() {
+                            first_selector = Some(a.subject.node.selector.clone());
+                        }
+                    }
                     Answer::UsedBy(a) => {
                         out.push_str(&node_line(&a.node));
                         out.push('\n');
@@ -263,6 +367,15 @@ impl crate::query::Response {
                 }
                 crate::query::Verb::Uses | crate::query::Verb::UsedBy => {
                     format!("kndo describe {selector}")
+                }
+                crate::query::Verb::Trace => {
+                    format!("kndo impact {selector} --if-deleted")
+                }
+                crate::query::Verb::Impact => {
+                    format!("kndo trace {selector}")
+                }
+                crate::query::Verb::Explain => {
+                    format!("kndo used-by {selector} · kndo trace {selector}")
                 }
             };
             out.push_str(&format!("next: {next}\n"));
