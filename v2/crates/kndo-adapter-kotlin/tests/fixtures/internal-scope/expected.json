@@ -1,0 +1,79 @@
+{
+  "run": {
+    "schema": "kndo-v2/m6",
+    "files_discovered": 3,
+    "files_claimed": 2,
+    "extensions": [
+      {
+        "id": "kndo:kotlin",
+        "files": 2
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "kndo-2c0355f26de7",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "src/main/kotlin/com/pkga/Util.kt",
+        "selector": {
+          "Free": "fileGhost"
+        },
+        "span": {
+          "start": 335,
+          "end": 361
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-ce13fb204517",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "src/main/kotlin/com/pkga/Util.kt",
+        "selector": {
+          "Free": "lonely"
+        },
+        "span": {
+          "start": 309,
+          "end": 333
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    }
+  ],
+  "fixed": [],
+  "baselined": 0,
+  "abstained": [
+    {
+      "category": "test-only",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    },
+    {
+      "category": "untested",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    }
+  ],
+  "suppressed": {
+    "total": 0,
+    "by_category": []
+  },
+  "plugins": [
+    {
+      "coordinate": "kndo:coverage-lcov",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    }
+  ],
+  "diagnostics": []
+}

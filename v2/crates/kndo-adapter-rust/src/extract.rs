@@ -131,11 +131,7 @@ impl<'a> ItemPass<'a, '_> {
             return;
         }
         let attrs = attributes_of(item, self.source);
-        let reach = if has_visibility(item) {
-            Reach::Exported
-        } else {
-            Reach::Private
-        };
+        let reach = reach_of(item, self.source);
         match item.kind() {
             "function_item" => {
                 if let Some(n) = item.child_by_field_name("name") {
@@ -163,9 +159,9 @@ impl<'a> ItemPass<'a, '_> {
             "struct_item" | "enum_item" | "union_item" | "trait_item" | "type_item" => {
                 if let Some(n) = item.child_by_field_name("name") {
                     let name = tk::text(n, self.source);
-                    let id = self
-                        .out
-                        .declaration(name, SymbolKind::Type, tk::span(item), reach);
+                    let id =
+                        self.out
+                            .declaration(name, SymbolKind::Type, tk::span(item), reach.clone());
                     self.types.entry(name.to_string()).or_insert(id);
                     root_for_attrs(&attrs, id, self.out);
                     if item.kind() == "trait_item" {
@@ -283,7 +279,7 @@ impl<'a> ItemPass<'a, '_> {
                 tk::text(n, self.source),
                 SymbolKind::Method,
                 tk::span(m),
-                reach,
+                reach.clone(),
             );
             self.out.member_of(id, owner);
             if m.child_by_field_name("body").is_some() {
@@ -322,11 +318,7 @@ impl<'a> ItemPass<'a, '_> {
             let Some(n) = m.child_by_field_name("name") else {
                 continue;
             };
-            let reach = if has_visibility(m) {
-                Reach::Exported
-            } else {
-                Reach::Private
-            };
+            let reach = reach_of(m, self.source);
             let id = self
                 .out
                 .declaration(tk::text(n, self.source), kind, tk::span(m), reach);
@@ -576,9 +568,33 @@ fn type_name(node: Node<'_>, source: &[u8]) -> Option<String> {
 }
 
 fn has_visibility(item: Node<'_>) -> bool {
+    visibility_node(item).is_some()
+}
+
+fn visibility_node(item: Node<'_>) -> Option<Node<'_>> {
     let mut c = item.walk();
     item.named_children(&mut c)
-        .any(|ch| ch.kind() == "visibility_modifier")
+        .find(|ch| ch.kind() == "visibility_modifier")
+}
+
+/// `pub` → Exported; `pub(crate)` is the compiler's crate boundary —
+/// `Scoped("crate")`, the region [`crate::resolve`] bounds from the package
+/// map. `pub(super)`/`pub(in …)` keep Exported for now: their regions are
+/// module-tree shapes the resolver cannot yet enumerate from paths alone, and
+/// an unanswerable bound must stay keep-alive (recorded in EXPERIMENTS).
+fn reach_of(item: Node<'_>, source: &[u8]) -> Reach {
+    match visibility_node(item) {
+        None => Reach::Private,
+        Some(v) => {
+            if tk::text(v, source).trim() == "pub(crate)" {
+                Reach::Scoped {
+                    scope: smol_str::SmolStr::new_static("crate"),
+                }
+            } else {
+                Reach::Exported
+            }
+        }
+    }
 }
 
 /// `path = "foo/bar.rs"` from a `#[path]` attribute, as module-path segments

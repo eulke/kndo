@@ -20,7 +20,7 @@ fn import<'e>(ev: &'e FileEvidence, specifier: &str) -> &'e kndo_contract::evide
 }
 
 #[test]
-fn declarations_and_binary_reach() {
+fn declarations_and_reach_shapes() {
     let ev = extract(
         "src/lib.rs",
         r#"
@@ -37,8 +37,14 @@ pub mod outer { pub fn inner() {} }
     );
     assert_eq!(decl(&ev, "visible").reach, Reach::Exported);
     assert_eq!(decl(&ev, "hidden").reach, Reach::Private);
-    // Any `pub` form is nameable beyond this file — binary reach by design.
-    assert_eq!(decl(&ev, "crate_wide").reach, Reach::Exported);
+    // `pub(crate)` is the compiler's crate boundary — a bounded region;
+    // `pub(super)` keeps Exported until module-tree regions are enumerable.
+    assert_eq!(
+        decl(&ev, "crate_wide").reach,
+        Reach::Scoped {
+            scope: "crate".into()
+        }
+    );
     assert_eq!(decl(&ev, "super_wide").reach, Reach::Exported);
     assert_eq!(decl(&ev, "Config").kind, SymbolKind::Type);
     assert_eq!(decl(&ev, "Runner").kind, SymbolKind::Type);

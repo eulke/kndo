@@ -117,14 +117,22 @@ fn is_generated(source: &[u8]) -> bool {
     tk::generated_marked(source, tk::GENERATED_NEEDLES, &["//", "/*", "*"])
 }
 
-/// `public`/`protected` → Exported; `private`/package-private → Private, unless
-/// the body makes members implicitly public.
+/// `public` → Exported; `protected` folds to Exported (subclasses are
+/// unboundable statically); `private` → Private; NO modifier is the compiler's
+/// own package boundary — `Scoped("package")`, whose region equals the sight
+/// set (dir + standard-layout mirrors), which made this migration a measured
+/// no-op on findings. `implicit_public` (interface bodies) overrides absence.
 fn reach_of(item: Node<'_>, ctx: &Ctx) -> Reach {
+    fn package_scoped() -> Reach {
+        Reach::Scoped {
+            scope: smol_str::SmolStr::new_static("package"),
+        }
+    }
     let Some(modifiers) = modifiers_node(item) else {
         return if ctx.implicit_public {
             Reach::Exported
         } else {
-            Reach::Private
+            package_scoped()
         };
     };
     let mut c = modifiers.walk();
@@ -139,7 +147,7 @@ fn reach_of(item: Node<'_>, ctx: &Ctx) -> Reach {
     explicit.unwrap_or(if ctx.implicit_public {
         Reach::Exported
     } else {
-        Reach::Private
+        package_scoped()
     })
 }
 
@@ -298,7 +306,7 @@ fn handle_field(item: Node<'_>, source: &[u8], ctx: &Ctx, out: &mut EvidenceSink
         } else {
             SymbolKind::Variable
         };
-        let id = out.declaration(name, kind, tk::span(declarator), reach);
+        let id = out.declaration(name, kind, tk::span(declarator), reach.clone());
         if let Some(owner) = ctx.owner {
             out.member_of(id, owner);
         }

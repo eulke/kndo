@@ -156,3 +156,34 @@ fn manifest_dependencies_carry_both_spellings() {
     assert!(deps.iter().any(|d| d == "io.vertx:vertx-core"));
     assert!(deps.iter().any(|d| d == "vertx-core"));
 }
+
+#[test]
+fn the_package_region_adds_test_viewers_one_way() {
+    let files = [
+        "src/main/java/com/foo/A.java",
+        "src/main/java/com/foo/B.java",
+        "src/test/java/com/foo/ATest.java",
+        "src/main/java/com/bar/C.java",
+    ];
+    let known: BTreeSet<ProjectPath> = files.iter().map(|p| ProjectPath::new(*p)).collect();
+    let cx = ResolveContext::new(&known);
+    let a = JavaAdapter::new();
+
+    // A main-set package-private is nameable by its dir AND its test mirror.
+    let main_region = a
+        .seen_from(&path("src/main/java/com/foo/A.java"), "package", &cx)
+        .expect("package is bounded");
+    assert_eq!(
+        main_region,
+        vec![
+            path("src/main/java/com/foo/A.java"),
+            path("src/main/java/com/foo/B.java"),
+            path("src/test/java/com/foo/ATest.java"),
+        ]
+    );
+    // A test-set package-private is NOT nameable from main: one way only.
+    let test_region = a
+        .seen_from(&path("src/test/java/com/foo/ATest.java"), "package", &cx)
+        .expect("package is bounded");
+    assert_eq!(test_region, vec![path("src/test/java/com/foo/ATest.java")]);
+}

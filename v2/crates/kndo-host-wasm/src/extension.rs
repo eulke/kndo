@@ -301,6 +301,21 @@ impl Extension for WasmExtension {
         .unwrap_or_default()
     }
 
+    fn seen_from(
+        &self,
+        path: &ProjectPath,
+        scope: &str,
+        cx: &ResolveContext<'_>,
+    ) -> Option<Vec<ProjectPath>> {
+        // A trap or violation degrades to None — Exported treatment, keep-alive.
+        self.call(StoreData::project(cx), |guest, store| {
+            guest.call_seen_from(store, path.as_str(), scope)
+        })
+        .ok()
+        .flatten()
+        .map(|paths| paths.into_iter().map(ProjectPath::new).collect())
+    }
+
     fn contribute_roots(
         &self,
         graph: &dyn GraphAccess,
@@ -367,7 +382,7 @@ fn copy_into(evidence: kndo_contract::evidence::FileEvidence, out: &mut Evidence
     let ids: Vec<_> = evidence
         .declarations
         .iter()
-        .map(|d| out.declaration(d.name.clone(), d.kind.clone(), d.span, d.reach))
+        .map(|d| out.declaration(d.name.clone(), d.kind.clone(), d.span, d.reach.clone()))
         .collect();
     for (ix, d) in evidence.declarations.iter().enumerate() {
         if let Some(owner) = d.owner {

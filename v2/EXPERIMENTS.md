@@ -86,7 +86,7 @@ inert, a recorded shape debt by the repo's own "Reach for the type" bar. Folding
 is a deliberate contract change: fingerprint moves, the pinned conformance reports
 diff, DECISIONS gets the entry.
 
-**Worked design (2026-08-31, audit round — pending owner decision as M6.c):** the
+**Worked design (2026-08-31; SHIPPED as M6.c first half — see DECISIONS):** the
 region, not the rung. New demand since the entry above: kotlin measured 19 unused vs
 the oracle's 277 (public-by-default meets library-mode roots — only `private` is
 individually judgeable), rust folds `pub(crate)` to Exported, and swift (M6.b.3) has

@@ -192,8 +192,9 @@ pub fn evidence_to_wire(evidence: &FileEvidence) -> wire::FileEvidence {
                 name: d.name.to_string(),
                 kind: symbol_kind_to_wire(&d.kind),
                 span: span_to_wire(d.span),
-                reach: match d.reach {
+                reach: match &d.reach {
                     ev::Reach::Private => wire::Reach::Private,
+                    ev::Reach::Scoped { scope } => wire::Reach::Scoped(scope.to_string()),
                     ev::Reach::Exported => wire::Reach::Exported,
                 },
                 owner: d.owner.map(|id| id.index() as u32),
@@ -521,6 +522,13 @@ impl<E: Extension + Default> bindings::Guest for ExportedExtension<E> {
             .iter()
             .map(|p| p.as_str().to_string())
             .collect()
+    }
+
+    fn seen_from(path: String, scope: String) -> Option<Vec<String>> {
+        let path = ProjectPath::new(path);
+        E::default()
+            .seen_from(&path, &scope, &resolve_context())
+            .map(|files| files.iter().map(|p| p.as_str().to_string()).collect())
     }
 
     fn contribute_roots() -> Vec<wire::ContributedRoot> {

@@ -73,6 +73,9 @@ world extension {
     /// The files whose names `path` can see without an import — must depend only
     /// on the path and the file set (the same purity the native contract demands).
     export sees: func(path: string) -> list<string>;
+    /// The region behind one scope token at `path` — none when the adapter
+    /// cannot bound it (those declarations judge as exported, keep-alive).
+    export seen-from: func(path: string, scope: string) -> option<list<string>>;
 
     /// Liveness the language cannot know. Invoked only when the spec declares
     /// `mutates-graph` (and any active mutating extension bypasses the persisted

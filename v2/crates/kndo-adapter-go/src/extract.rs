@@ -146,12 +146,17 @@ fn is_generated(source: &[u8]) -> bool {
     })
 }
 
-/// Capitalization IS the visibility ladder's shared half in Go.
+/// Capitalization IS Go's whole visibility story: uppercase exports, lowercase
+/// reaches exactly the package — a bounded region, not a private name. The
+/// region equals the sight set here, which is what made this migration a
+/// measured no-op on findings.
 fn reach_of(name: &str) -> Reach {
     if name.chars().next().is_some_and(|c| c.is_uppercase()) {
         Reach::Exported
     } else {
-        Reach::Private
+        Reach::Scoped {
+            scope: smol_str::SmolStr::new_static("package"),
+        }
     }
 }
 

@@ -111,6 +111,27 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
+      "id": "kndo-b61f8f3e2e52",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/transactions/TransactionManagersContainer.kt",
+        "selector": {
+          "Member": {
+            "owner": "TransactionManagersContainer",
+            "name": "getCurrentTransactionManager"
+          }
+        },
+        "span": {
+          "start": 678,
+          "end": 735
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
       "id": "kndo-b5918a7fef67",
       "category": "unused",
       "severity": "warning",
@@ -124,6 +145,42 @@
         "span": {
           "start": 5356,
           "end": 5450
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-94d002616055",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-dao/src/main/kotlin/org/jetbrains/exposed/v1/dao/Entity.kt",
+        "selector": {
+          "Free": "isPersistedIn"
+        },
+        "span": {
+          "start": 4261,
+          "end": 4499
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-73d156f006ec",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-dao/src/main/kotlin/org/jetbrains/exposed/v1/dao/References.kt",
+        "selector": {
+          "Free": "allReferencesMatch"
+        },
+        "span": {
+          "start": 20992,
+          "end": 21265
         }
       },
       "message": "nothing references, roots, or imports this declaration"
@@ -295,6 +352,339 @@
         "span": {
           "start": 1365,
           "end": 1836
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-166c4694eef4",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "samples/springboot3-exposed-r2dbc/src/main/kotlin/com/example/config/ExposedConfig.kt",
+        "selector": {
+          "Member": {
+            "owner": "ExposedConfig",
+            "name": "r2dbcDatabase"
+          }
+        },
+        "span": {
+          "start": 912,
+          "end": 1414
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-5763455f4a85",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "samples/springboot3-exposed-r2dbc/src/main/kotlin/com/example/config/ExposedConfig.kt",
+        "selector": {
+          "Free": "ExposedConfig"
+        },
+        "span": {
+          "start": 651,
+          "end": 1416
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-0ba613941f87",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "samples/springboot3-exposed-r2dbc/src/main/kotlin/com/example/controller/HelloController.kt",
+        "selector": {
+          "Free": "HelloController"
+        },
+        "span": {
+          "start": 936,
+          "end": 2439
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-861d7d1a1e3d",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "samples/springboot3-exposed-r2dbc/src/main/kotlin/com/example/controller/HelloController.kt",
+        "selector": {
+          "Member": {
+            "owner": "HelloController",
+            "name": "download"
+          }
+        },
+        "span": {
+          "start": 1363,
+          "end": 2437
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-94c18ea22983",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "samples/springboot3-exposed-r2dbc/src/main/kotlin/com/example/controller/HelloController.kt",
+        "selector": {
+          "Member": {
+            "owner": "HelloController",
+            "name": "emailUser"
+          }
+        },
+        "span": {
+          "start": 1030,
+          "end": 1062
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-e426fb819fbb",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "samples/springboot3-exposed-r2dbc/src/main/kotlin/com/example/controller/UserController.kt",
+        "selector": {
+          "Free": "UserController"
+        },
+        "span": {
+          "start": 694,
+          "end": 2090
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-75ed82cb28ca",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "samples/springboot3-exposed-r2dbc/src/main/kotlin/com/example/dao/impl/UserDaoImpl.kt",
+        "selector": {
+          "Free": "UserDaoImpl"
+        },
+        "span": {
+          "start": 751,
+          "end": 2918
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-db277e9ba2cc",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "samples/springboot3-exposed-r2dbc/src/main/kotlin/com/example/processor/EmailEnvironmentPostProcessor.kt",
+        "selector": {
+          "Free": "EmailEnvironmentPostProcessor"
+        },
+        "span": {
+          "start": 474,
+          "end": 1357
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-7c99530511eb",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "samples/springboot3-exposed-r2dbc/src/main/kotlin/com/example/service/impl/UserServiceImpl.kt",
+        "selector": {
+          "Free": "UserServiceImpl"
+        },
+        "span": {
+          "start": 290,
+          "end": 1120
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-5478509d007b",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "samples/springboot3-exposed-r2dbc/src/main/kotlin/com/example/support/SchemaInitializer.kt",
+        "selector": {
+          "Free": "SchemaInitializer"
+        },
+        "span": {
+          "start": 349,
+          "end": 1359
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-2e066dc38915",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "samples/springboot3-exposed-r2dbc/src/test/kotlin/com/example/Springboot3ExposedR2dbcApplicationTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "Springboot3ExposedR2dbcApplicationTests",
+            "name": "`find all`"
+          }
+        },
+        "span": {
+          "start": 1167,
+          "end": 1618
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-305c5336b1ba",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "samples/springboot3-exposed-r2dbc/src/test/kotlin/com/example/Springboot3ExposedR2dbcApplicationTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "Springboot3ExposedR2dbcApplicationTests",
+            "name": "contextLoads"
+          }
+        },
+        "span": {
+          "start": 909,
+          "end": 1161
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-5998b3975786",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "samples/springboot3-exposed-r2dbc/src/test/kotlin/com/example/Springboot3ExposedR2dbcApplicationTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "Springboot3ExposedR2dbcApplicationTests",
+            "name": "`add user`"
+          }
+        },
+        "span": {
+          "start": 1624,
+          "end": 2126
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-5ea7b466823a",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "samples/springboot3-exposed-r2dbc/src/test/kotlin/com/example/Springboot3ExposedR2dbcApplicationTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "Springboot3ExposedR2dbcApplicationTests",
+            "name": "`update user`"
+          }
+        },
+        "span": {
+          "start": 2132,
+          "end": 2618
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-a9d38c43a234",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "samples/springboot3-exposed-r2dbc/src/test/kotlin/com/example/Springboot3ExposedR2dbcApplicationTests.kt",
+        "selector": {
+          "Free": "Springboot3ExposedR2dbcApplicationTests"
+        },
+        "span": {
+          "start": 603,
+          "end": 3322
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-b4df5aa64dfe",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "samples/springboot3-exposed-r2dbc/src/test/kotlin/com/example/Springboot3ExposedR2dbcApplicationTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "Springboot3ExposedR2dbcApplicationTests",
+            "name": "`find user`"
+          }
+        },
+        "span": {
+          "start": 2624,
+          "end": 3061
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-eeae8297d603",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "samples/springboot3-exposed-r2dbc/src/test/kotlin/com/example/Springboot3ExposedR2dbcApplicationTests.kt",
+        "selector": {
+          "Member": {
+            "owner": "Springboot3ExposedR2dbcApplicationTests",
+            "name": "`delete user`"
+          }
+        },
+        "span": {
+          "start": 3067,
+          "end": 3320
         }
       },
       "message": "nothing references, roots, or imports this declaration"

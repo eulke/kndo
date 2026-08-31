@@ -650,6 +650,24 @@ pub trait Extension: Send + Sync {
         Vec::new()
     }
 
+    /// The files a `Scoped { scope }` declaration at `path` can legally be seen
+    /// FROM — the region behind the adapter's own scope word, enumerated from
+    /// paths and manifests only, never contents (the `sees` stability class: a
+    /// persisted graph trusts it while contents change). `None` = this adapter
+    /// cannot bound that token — the declaration is treated exactly as Exported,
+    /// keep-alive. The default answers nothing, reproducing pre-capability
+    /// behavior; `unused` (and `internal-only` when it lands) are the consumers,
+    /// and the Kotlin `internal` fixtures the conformance case.
+    fn seen_from(
+        &self,
+        path: &ProjectPath,
+        scope: &str,
+        cx: &ResolveContext<'_>,
+    ) -> Option<Vec<ProjectPath>> {
+        let _ = (path, scope, cx);
+        None
+    }
+
     // ---- conduct: post-graph, once; gated by activation ----
 
     /// Liveness the language cannot know. Invoked only when the spec declares

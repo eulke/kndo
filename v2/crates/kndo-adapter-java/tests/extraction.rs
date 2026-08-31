@@ -24,7 +24,12 @@ fn visibility_folds_to_binary_reach() {
     assert_eq!(declaration_named(&ev, "Widget").reach, Reach::Exported);
     assert_eq!(declaration_named(&ev, "a").reach, Reach::Exported);
     assert_eq!(declaration_named(&ev, "b").reach, Reach::Exported);
-    assert_eq!(declaration_named(&ev, "c").reach, Reach::Private);
+    assert_eq!(
+        declaration_named(&ev, "c").reach,
+        Reach::Scoped {
+            scope: "package".into()
+        }
+    );
     assert_eq!(declaration_named(&ev, "d").reach, Reach::Private);
 }
 
@@ -34,7 +39,12 @@ fn interface_members_are_implicitly_public_and_members_are_owned() {
         "src/main/java/com/foo/Api.java",
         "package com.foo;\ninterface Api {\n  int limit = 3;\n  void call();\n}\n",
     );
-    assert_eq!(declaration_named(&ev, "Api").reach, Reach::Private);
+    assert_eq!(
+        declaration_named(&ev, "Api").reach,
+        Reach::Scoped {
+            scope: "package".into()
+        }
+    );
     assert_eq!(declaration_named(&ev, "call").reach, Reach::Exported);
     assert_eq!(declaration_named(&ev, "limit").reach, Reach::Exported);
     let api = ev

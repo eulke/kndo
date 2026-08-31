@@ -62,4 +62,13 @@ impl Extension for JavaAdapter {
     fn sees(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
         resolve::sees(path, cx)
     }
+
+    fn seen_from(
+        &self,
+        path: &ProjectPath,
+        scope: &str,
+        cx: &ResolveContext<'_>,
+    ) -> Option<Vec<ProjectPath>> {
+        (scope == "package").then(|| resolve::package_region(path, cx))
+    }
 }

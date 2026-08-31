@@ -130,3 +130,33 @@ fn split_on_set<'a>(dir: &'a str, marker: &str) -> Option<(&'a str, &'a str)> {
     }
     Some((&dir[..ix], &dir[ix + marker.len()..]))
 }
+
+/// The module region behind `internal`: every `.kt`/`.java` source under the
+/// same module root — the path prefix before the first `/src/` segment (the
+/// standard layout every mirror rule here already leans on). A file outside
+/// any `src/` tree bounds to the whole project's sources: single-module
+/// reality, still a bounded region.
+pub fn module_region(path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
+    let p = path.as_str();
+    let module_head = p
+        .find("/src/")
+        .map(|ix| &p[..ix + 1])
+        .or_else(|| p.starts_with("src/").then_some(""));
+    let mut out: Vec<ProjectPath> = cx
+        .known_files()
+        .filter(|f| {
+            let s = f.as_str();
+            if !(s.ends_with(".kt") || s.ends_with(".java")) {
+                return false;
+            }
+            match module_head {
+                Some(head) => s.starts_with(head) && s[head.len()..].starts_with("src/"),
+                None => true,
+            }
+        })
+        .cloned()
+        .collect();
+    out.sort();
+    out.dedup();
+    out
+}

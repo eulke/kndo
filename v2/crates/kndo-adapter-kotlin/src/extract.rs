@@ -99,20 +99,27 @@ fn is_generated(source: &[u8]) -> bool {
     tk::generated_marked(source, tk::GENERATED_NEEDLES, &["//", "/*", "*"])
 }
 
-/// No modifier means public. `internal`/`protected` fold to Exported;
+/// No modifier means public. `internal` is the compiler's module boundary —
+/// `Scoped("module")`, the region the resolver enumerates from the source-set
+/// layout; `protected` folds to Exported (subclasses are unboundable);
 /// `private` alone is Private.
 fn reach_of(item: Node<'_>) -> Reach {
     let Some(modifiers) = tk::child_of_kind(item, "modifiers") else {
         return Reach::Exported;
     };
     let mut private = false;
-    tk::walk(modifiers, &mut |n| {
-        if n.kind() == "private" {
-            private = true;
-        }
+    let mut internal = false;
+    tk::walk(modifiers, &mut |n| match n.kind() {
+        "private" => private = true,
+        "internal" => internal = true,
+        _ => {}
     });
     if private {
         Reach::Private
+    } else if internal {
+        Reach::Scoped {
+            scope: smol_str::SmolStr::new_static("module"),
+        }
     } else {
         Reach::Exported
     }

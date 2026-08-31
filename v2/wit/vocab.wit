@@ -45,8 +45,11 @@ interface types {
     }
 
     /// Mirrors `Reach` — the binary half every language shares.
-    enum reach {
+    /// Not a ladder: `scoped` carries the adapter's own token for a bounded
+    /// region; the host asks `seen-from` for its files and judges by the set.
+    variant reach {
         private,
+        scoped(string),
         exported,
     }
 

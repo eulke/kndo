@@ -1624,6 +1624,2337 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
+      "id": "kndo-aac8572ffd56",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-testlib/test/com/google/common/testing/anotherpackage/SomeClassThatDoesNotUseNullable.java",
+        "selector": {
+          "Member": {
+            "owner": "SomeClassThatDoesNotUseNullable",
+            "name": "packagePrivateButDoesNotCheckNull"
+          }
+        },
+        "span": {
+          "start": 848,
+          "end": 899
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-2ee792432334",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/base/AsciiBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "AsciiBenchmark",
+            "name": "equalsIgnoreCaseStringOnly"
+          }
+        },
+        "span": {
+          "start": 3683,
+          "end": 4010
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-73985c337fc5",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/base/AsciiBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "AsciiBenchmark",
+            "name": "equalsIgnoreCaseCharSequence"
+          }
+        },
+        "span": {
+          "start": 3055,
+          "end": 3679
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-89b1e5eed06b",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/base/AsciiBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "AsciiBenchmark",
+            "name": "stringToUpperCase"
+          }
+        },
+        "span": {
+          "start": 2784,
+          "end": 3051
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-cc28fbdf98d2",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/base/AsciiBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "AsciiBenchmark",
+            "name": "equalsIgnoreCaseJDK"
+          }
+        },
+        "span": {
+          "start": 4014,
+          "end": 4327
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-e87e4f7e0970",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/base/AsciiBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "AsciiBenchmark",
+            "name": "asciiStringToUpperCase"
+          }
+        },
+        "span": {
+          "start": 2230,
+          "end": 2494
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-f0e0c34169b3",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/base/AsciiBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "AsciiBenchmark",
+            "name": "asciiCharSequenceToUpperCase"
+          }
+        },
+        "span": {
+          "start": 2498,
+          "end": 2780
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-00df43494158",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/base/CharMatcherBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "CharMatcherBenchmark",
+            "name": "trimAndCollapseFromString"
+          }
+        },
+        "span": {
+          "start": 2397,
+          "end": 2601
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-2857d64dcb45",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/base/JoinerBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "JoinerBenchmark",
+            "name": "stringBuilderIsEmpty"
+          }
+        },
+        "span": {
+          "start": 3068,
+          "end": 3438
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-5186bbe6ee14",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/base/JoinerBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "JoinerBenchmark",
+            "name": "joinerInlined"
+          }
+        },
+        "span": {
+          "start": 2401,
+          "end": 2880
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-83e619c620ab",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/base/JoinerBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "JoinerBenchmark",
+            "name": "assignDelimiter"
+          }
+        },
+        "span": {
+          "start": 4156,
+          "end": 4526
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-92869dbc2225",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/base/JoinerBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "JoinerBenchmark",
+            "name": "alwaysAppendThenBackUp"
+          }
+        },
+        "span": {
+          "start": 4685,
+          "end": 5114
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-cdcfc199ebd4",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/base/JoinerBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "JoinerBenchmark",
+            "name": "joinerWithCharacterDelimiter"
+          }
+        },
+        "span": {
+          "start": 2053,
+          "end": 2256
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-cf117be898e6",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/base/JoinerBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "JoinerBenchmark",
+            "name": "joinerWithStringDelimiter"
+          }
+        },
+        "span": {
+          "start": 1800,
+          "end": 1997
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-f0a27b421f53",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/base/JoinerBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "JoinerBenchmark",
+            "name": "booleanIfFirst"
+          }
+        },
+        "span": {
+          "start": 3634,
+          "end": 4042
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-1f52c5157d1a",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/base/ObjectsBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ObjectsBenchmark",
+            "name": "hashString_4"
+          }
+        },
+        "span": {
+          "start": 1689,
+          "end": 1863
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-8b4a4f940fbd",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/base/ObjectsBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ObjectsBenchmark",
+            "name": "hashMixed_5"
+          }
+        },
+        "span": {
+          "start": 2049,
+          "end": 2279
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-ad51e07b43ce",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/base/ObjectsBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ObjectsBenchmark",
+            "name": "hashString_2"
+          }
+        },
+        "span": {
+          "start": 1345,
+          "end": 1511
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-d31af1bd775a",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/base/ObjectsBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ObjectsBenchmark",
+            "name": "hashString_3"
+          }
+        },
+        "span": {
+          "start": 1515,
+          "end": 1685
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-f57e2fab4540",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/base/ObjectsBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ObjectsBenchmark",
+            "name": "hashString_5"
+          }
+        },
+        "span": {
+          "start": 1867,
+          "end": 2045
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-57e8ebe5e112",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/base/SplitterBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "SplitterBenchmark",
+            "name": "stringSplitter"
+          }
+        },
+        "span": {
+          "start": 1690,
+          "end": 1880
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-7954809bebed",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/base/SplitterBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "SplitterBenchmark",
+            "name": "charSplitter"
+          }
+        },
+        "span": {
+          "start": 1500,
+          "end": 1686
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-18cee3f0e0d6",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/base/StopwatchBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "StopwatchBenchmark",
+            "name": "manual"
+          }
+        },
+        "span": {
+          "start": 1313,
+          "end": 1560
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-14a2c2cbc5e8",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/cache/MapMakerComparisonBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "MapMakerComparisonBenchmark",
+            "name": "concurrentHashMap"
+          }
+        },
+        "span": {
+          "start": 1602,
+          "end": 1719
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-3303759698f9",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/cache/MapMakerComparisonBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "MapMakerComparisonBenchmark",
+            "name": "cacheBuilder_stats"
+          }
+        },
+        "span": {
+          "start": 1723,
+          "end": 1852
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-8b6da2e424ef",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/cache/MapMakerComparisonBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "MapMakerComparisonBenchmark",
+            "name": "cacheBuilder"
+          }
+        },
+        "span": {
+          "start": 1856,
+          "end": 1986
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-698e4f011156",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/collect/ComparatorDelegationOverheadBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ComparatorDelegationOverheadBenchmark",
+            "name": "arraysSortOrderingNatural"
+          }
+        },
+        "span": {
+          "start": 1868,
+          "end": 2116
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-83571950b125",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/collect/ComparatorDelegationOverheadBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ComparatorDelegationOverheadBenchmark",
+            "name": "arraysSortOrderingFromNatural"
+          }
+        },
+        "span": {
+          "start": 2341,
+          "end": 2605
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-f594e1117bdc",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/collect/ComparatorDelegationOverheadBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ComparatorDelegationOverheadBenchmark",
+            "name": "arraysSortNoComparator"
+          }
+        },
+        "span": {
+          "start": 1639,
+          "end": 1864
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-d17767fe67c1",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/collect/ConcurrentHashMultisetBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ConcurrentHashMultisetBenchmark",
+            "name": "addRemove"
+          }
+        },
+        "span": {
+          "start": 2672,
+          "end": 2952
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-610774e3f666",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/collect/ImmutableListCreationBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ImmutableListCreationBenchmark",
+            "name": "builderAdd"
+          }
+        },
+        "span": {
+          "start": 1076,
+          "end": 1417
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-89886b684c55",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/collect/ImmutableListCreationBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ImmutableListCreationBenchmark",
+            "name": "preSizedBuilderAdd"
+          }
+        },
+        "span": {
+          "start": 1421,
+          "end": 1780
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-bec41d02554b",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/collect/ImmutableListCreationBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ImmutableListCreationBenchmark",
+            "name": "copyArrayList"
+          }
+        },
+        "span": {
+          "start": 1784,
+          "end": 2119
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-deba47b8fc47",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/collect/ImmutableListCreationBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ImmutableListCreationBenchmark",
+            "name": "copyPreSizedArrayList"
+          }
+        },
+        "span": {
+          "start": 2123,
+          "end": 2479
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-18757b1ad9df",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/collect/InternersBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "InternersBenchmark",
+            "name": "weakInterner"
+          }
+        },
+        "span": {
+          "start": 901,
+          "end": 1165
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-4939eb5000eb",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/collect/InternersBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "InternersBenchmark",
+            "name": "stringIntern"
+          }
+        },
+        "span": {
+          "start": 1441,
+          "end": 1636
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-e01b836ae5df",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/collect/InternersBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "InternersBenchmark",
+            "name": "strongInterner"
+          }
+        },
+        "span": {
+          "start": 1169,
+          "end": 1437
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-260f79fcc192",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/collect/IteratorBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "IteratorBenchmark",
+            "name": "arrayIndexedLength"
+          }
+        },
+        "span": {
+          "start": 1786,
+          "end": 2020
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-342f5b7d1d2e",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/collect/IteratorBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "IteratorBenchmark",
+            "name": "arrayListToArrayFor"
+          }
+        },
+        "span": {
+          "start": 2916,
+          "end": 3134
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-37a41ae48274",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/collect/IteratorBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "IteratorBenchmark",
+            "name": "arrayListIndexedLength"
+          }
+        },
+        "span": {
+          "start": 2457,
+          "end": 2707
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-7467bc5474ad",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/collect/IteratorBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "IteratorBenchmark",
+            "name": "arrayIndexed"
+          }
+        },
+        "span": {
+          "start": 1562,
+          "end": 1782
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-85269fbdde50",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/collect/IteratorBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "IteratorBenchmark",
+            "name": "arrayFor"
+          }
+        },
+        "span": {
+          "start": 2024,
+          "end": 2217
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-8e954c1358d2",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/collect/IteratorBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "IteratorBenchmark",
+            "name": "linkedListToArrayFor"
+          }
+        },
+        "span": {
+          "start": 3345,
+          "end": 3565
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-a83f6618996f",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/collect/IteratorBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "IteratorBenchmark",
+            "name": "linkedListFor"
+          }
+        },
+        "span": {
+          "start": 3138,
+          "end": 3341
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-abe757cc28d8",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/collect/IteratorBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "IteratorBenchmark",
+            "name": "arrayListFor"
+          }
+        },
+        "span": {
+          "start": 2711,
+          "end": 2912
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-b97f426efbfd",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/collect/IteratorBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "IteratorBenchmark",
+            "name": "arrayListIndexed"
+          }
+        },
+        "span": {
+          "start": 2221,
+          "end": 2453
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-1b2c71765c4e",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/collect/MapBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "MapBenchmark",
+            "name": "createPopulateAndRemove"
+          }
+        },
+        "span": {
+          "start": 6652,
+          "end": 6944
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-5653afc780aa",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/collect/MapBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "MapBenchmark",
+            "name": "iterateValuesAndGet"
+          }
+        },
+        "span": {
+          "start": 7580,
+          "end": 7984
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-649c8f1ee25d",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/collect/MapBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "MapBenchmark",
+            "name": "createAndPopulate"
+          }
+        },
+        "span": {
+          "start": 6475,
+          "end": 6648
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-d2decc5ecff6",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/collect/MapBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "MapBenchmark",
+            "name": "iterateWithEntrySet"
+          }
+        },
+        "span": {
+          "start": 6948,
+          "end": 7262
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-ee75fe94c921",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/collect/MapBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "MapBenchmark",
+            "name": "iterateWithKeySetAndGet"
+          }
+        },
+        "span": {
+          "start": 7266,
+          "end": 7576
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-13f3d14745a2",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/collect/MinMaxPriorityQueueBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "MinMaxPriorityQueueBenchmark",
+            "name": "pollAndAdd"
+          }
+        },
+        "span": {
+          "start": 1698,
+          "end": 1880
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-afb7517bf886",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/collect/PowerSetBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "PowerSetBenchmark",
+            "name": "iteration"
+          }
+        },
+        "span": {
+          "start": 1262,
+          "end": 1506
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-b05ca190375d",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/collect/SetCreationBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "SetCreationBenchmark",
+            "name": "creation"
+          }
+        },
+        "span": {
+          "start": 1667,
+          "end": 1858
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-0819a70c3dce",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/collect/SetIterationBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "SetIterationBenchmark",
+            "name": "iteration"
+          }
+        },
+        "span": {
+          "start": 1794,
+          "end": 1994
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-c54d19be069c",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/collect/SortedCopyBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "SortedCopyBenchmark",
+            "name": "collections"
+          }
+        },
+        "span": {
+          "start": 2396,
+          "end": 2883
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-fe57f1085f36",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/eventbus/EventBusBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "EventBusBenchmark",
+            "name": "postStrings"
+          }
+        },
+        "span": {
+          "start": 1049,
+          "end": 1173
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-dfce5cfc2ba8",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/hash/HashFunctionBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "HashFunctionBenchmark",
+            "name": "hashFunctionWithOffset"
+          }
+        },
+        "span": {
+          "start": 2112,
+          "end": 2407
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-173b1b9e2a23",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/hash/HashStringBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "HashStringBenchmark",
+            "name": "hashUtf8GetBytesHasher"
+          }
+        },
+        "span": {
+          "start": 5016,
+          "end": 5392
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-48156130dbd0",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/hash/HashStringBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "HashStringBenchmark",
+            "name": "hashUtf8GetBytes"
+          }
+        },
+        "span": {
+          "start": 4698,
+          "end": 5012
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-8a072b19b6c6",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/hash/HashStringBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "HashStringBenchmark",
+            "name": "hashUtf8Hasher"
+          }
+        },
+        "span": {
+          "start": 4334,
+          "end": 4694
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-8527de72ab5a",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/hash/MessageDigestAlgorithmBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "MessageDigestAlgorithmBenchmark",
+            "name": "hashing"
+          }
+        },
+        "span": {
+          "start": 3308,
+          "end": 3580
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-7ebc2cfe04ed",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/math/ApacheBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ApacheBenchmark",
+            "name": "longMulOverflow"
+          }
+        },
+        "span": {
+          "start": 6790,
+          "end": 7035
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-8655a72746a1",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/math/ApacheBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ApacheBenchmark",
+            "name": "intMulOverflow"
+          }
+        },
+        "span": {
+          "start": 6544,
+          "end": 6786
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-896f32758f03",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/math/ApacheBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ApacheBenchmark",
+            "name": "intGCD"
+          }
+        },
+        "span": {
+          "start": 5388,
+          "end": 5593
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-a541d2f6433c",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/math/ApacheBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ApacheBenchmark",
+            "name": "intAddOverflow"
+          }
+        },
+        "span": {
+          "start": 6049,
+          "end": 6291
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-cead31c1921d",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/math/ApacheBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ApacheBenchmark",
+            "name": "longAddOverflow"
+          }
+        },
+        "span": {
+          "start": 6295,
+          "end": 6540
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-f960f9de45d5",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/math/ApacheBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ApacheBenchmark",
+            "name": "longGCD"
+          }
+        },
+        "span": {
+          "start": 5597,
+          "end": 5808
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-1c2c21a80369",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/math/BigIntegerMathBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "BigIntegerMathBenchmark",
+            "name": "slowFactorial"
+          }
+        },
+        "span": {
+          "start": 2909,
+          "end": 3122
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-be3b987da8ab",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/math/DoubleMathRoundingBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "DoubleMathRoundingBenchmark",
+            "name": "log2Round"
+          }
+        },
+        "span": {
+          "start": 2530,
+          "end": 2734
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-903b3fb875b3",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/math/IntMathBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "IntMathBenchmark",
+            "name": "gCD"
+          }
+        },
+        "span": {
+          "start": 2541,
+          "end": 2738
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-0f5056bec114",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/math/LessThanBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "LessThanBenchmark",
+            "name": "branchFreeLtLongInlined"
+          }
+        },
+        "span": {
+          "start": 2999,
+          "end": 3295
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-442d7ed92d5d",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/math/LessThanBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "LessThanBenchmark",
+            "name": "ternaryLtLongAddOutsideTernary"
+          }
+        },
+        "span": {
+          "start": 3590,
+          "end": 3875
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-66cf1670da6f",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/math/LessThanBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "LessThanBenchmark",
+            "name": "branchFreeLtLong"
+          }
+        },
+        "span": {
+          "start": 3299,
+          "end": 3586
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-6c193cde6c53",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/math/LessThanBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "LessThanBenchmark",
+            "name": "ternaryLtLongAddInsideTernary"
+          }
+        },
+        "span": {
+          "start": 3879,
+          "end": 4161
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-88a3f959ce48",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/math/LessThanBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "LessThanBenchmark",
+            "name": "branchFreeLtIntInlined"
+          }
+        },
+        "span": {
+          "start": 1857,
+          "end": 2145
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-a36ab2501209",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/math/LessThanBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "LessThanBenchmark",
+            "name": "ternaryLtIntAddOutsideTernary"
+          }
+        },
+        "span": {
+          "start": 2434,
+          "end": 2714
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-d871af3f0d76",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/math/LessThanBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "LessThanBenchmark",
+            "name": "ternaryLtIntAddInsideTernary"
+          }
+        },
+        "span": {
+          "start": 2718,
+          "end": 2995
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-e465729545a9",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/math/LessThanBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "LessThanBenchmark",
+            "name": "branchFreeLtInt"
+          }
+        },
+        "span": {
+          "start": 2149,
+          "end": 2430
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-685ff03ed2e7",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/math/LongMathBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "LongMathBenchmark",
+            "name": "gCD"
+          }
+        },
+        "span": {
+          "start": 2762,
+          "end": 2960
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-0035a3a9b1f7",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/math/QuantilesBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "QuantilesBenchmark",
+            "name": "threePercentiles"
+          }
+        },
+        "span": {
+          "start": 2793,
+          "end": 3028
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-40b21adcbc05",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/math/QuantilesBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "QuantilesBenchmark",
+            "name": "allDeciles"
+          }
+        },
+        "span": {
+          "start": 3032,
+          "end": 3250
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-4e1e169f5da2",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/math/QuantilesBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "QuantilesBenchmark",
+            "name": "percentile99"
+          }
+        },
+        "span": {
+          "start": 2357,
+          "end": 2552
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-5fe31a34eaea",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/math/QuantilesBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "QuantilesBenchmark",
+            "name": "percentiles90And99"
+          }
+        },
+        "span": {
+          "start": 2556,
+          "end": 2789
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-c41990d9311e",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/math/QuantilesBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "QuantilesBenchmark",
+            "name": "percentile90"
+          }
+        },
+        "span": {
+          "start": 2158,
+          "end": 2353
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-984b3ecc8c34",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/math/StatsBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "StatsBenchmark",
+            "name": "meanAndVariance"
+          }
+        },
+        "span": {
+          "start": 4596,
+          "end": 4805
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-04254ba7827b",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/primitives/UnsignedBytesBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "UnsignedBytesBenchmark",
+            "name": "longEqualJava"
+          }
+        },
+        "span": {
+          "start": 1918,
+          "end": 2106
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-87ce4b272736",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/primitives/UnsignedBytesBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "UnsignedBytesBenchmark",
+            "name": "diffLastJava"
+          }
+        },
+        "span": {
+          "start": 2306,
+          "end": 2493
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-8f2db5933241",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/primitives/UnsignedBytesBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "UnsignedBytesBenchmark",
+            "name": "longEqualUnsafe"
+          }
+        },
+        "span": {
+          "start": 2110,
+          "end": 2302
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-bb98f5164b91",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/primitives/UnsignedBytesBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "UnsignedBytesBenchmark",
+            "name": "diffLastUnsafe"
+          }
+        },
+        "span": {
+          "start": 2497,
+          "end": 2688
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-1408ab260da4",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/primitives/UnsignedLongsBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "UnsignedLongsBenchmark",
+            "name": "parseDecode16"
+          }
+        },
+        "span": {
+          "start": 3106,
+          "end": 3318
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-182ebc8e6c54",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/primitives/UnsignedLongsBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "UnsignedLongsBenchmark",
+            "name": "parseDecode10"
+          }
+        },
+        "span": {
+          "start": 2894,
+          "end": 3102
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-63fa43dea60f",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/util/concurrent/CycleDetectingLockFactoryBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "CycleDetectingLockFactoryBenchmark",
+            "name": "unorderedPlainLocks"
+          }
+        },
+        "span": {
+          "start": 1674,
+          "end": 1773
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-726b9750ba7f",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/util/concurrent/CycleDetectingLockFactoryBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "CycleDetectingLockFactoryBenchmark",
+            "name": "orderedCycleDetectingLocks"
+          }
+        },
+        "span": {
+          "start": 2146,
+          "end": 2253
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-7cf97a7aa292",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/util/concurrent/CycleDetectingLockFactoryBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "CycleDetectingLockFactoryBenchmark",
+            "name": "orderedPlainLocks"
+          }
+        },
+        "span": {
+          "start": 2048,
+          "end": 2142
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-8e8194d16667",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/util/concurrent/CycleDetectingLockFactoryBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "CycleDetectingLockFactoryBenchmark",
+            "name": "unorderedCycleDetectingLocks"
+          }
+        },
+        "span": {
+          "start": 1777,
+          "end": 1897
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-75f831dd5a83",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/util/concurrent/ExecutionListBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ExecutionListBenchmark",
+            "name": "executeThenAdd_multiThreaded"
+          }
+        },
+        "span": {
+          "start": 9351,
+          "end": 10363
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-8262792e3ab6",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/util/concurrent/ExecutionListBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ExecutionListBenchmark",
+            "name": "addThenExecute_singleThreaded"
+          }
+        },
+        "span": {
+          "start": 7240,
+          "end": 7707
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-da016617cfb3",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/util/concurrent/ExecutionListBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ExecutionListBenchmark",
+            "name": "executeThenAdd_singleThreaded"
+          }
+        },
+        "span": {
+          "start": 7711,
+          "end": 8178
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-e358e260676a",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/util/concurrent/ExecutionListBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ExecutionListBenchmark",
+            "name": "addThenExecute_multiThreaded"
+          }
+        },
+        "span": {
+          "start": 8336,
+          "end": 9347
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-7e057b4109e4",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/util/concurrent/FuturesGetCheckedBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "FuturesGetCheckedBenchmark",
+            "name": "addOtherEntries"
+          }
+        },
+        "span": {
+          "start": 4406,
+          "end": 5203
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-f66a8baa7846",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/util/concurrent/FuturesGetCheckedBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "FuturesGetCheckedBenchmark",
+            "name": "benchmarkGetChecked"
+          }
+        },
+        "span": {
+          "start": 5207,
+          "end": 5681
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-eaa169845f25",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/util/concurrent/MonitorBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "MonitorBenchmark",
+            "name": "addsAndRemoves"
+          }
+        },
+        "span": {
+          "start": 1772,
+          "end": 2137
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-2527a63b9119",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/util/concurrent/MoreExecutorsDirectExecutorBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "MoreExecutorsDirectExecutorBenchmark",
+            "name": "timeUncontendedExecute"
+          }
+        },
+        "span": {
+          "start": 2848,
+          "end": 3133
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-b8c7c7a92eae",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/util/concurrent/MoreExecutorsDirectExecutorBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "MoreExecutorsDirectExecutorBenchmark",
+            "name": "measureSize"
+          }
+        },
+        "span": {
+          "start": 2784,
+          "end": 2844
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-ba29094d16b0",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/util/concurrent/MoreExecutorsDirectExecutorBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "MoreExecutorsDirectExecutorBenchmark",
+            "name": "timeContendedExecute"
+          }
+        },
+        "span": {
+          "start": 3137,
+          "end": 3525
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-0978ef0cb045",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/util/concurrent/StripedBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "StripedBenchmark",
+            "name": "timeGetAt"
+          }
+        },
+        "span": {
+          "start": 3517,
+          "end": 3831
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-51f4762f0fcb",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/util/concurrent/StripedBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "StripedBenchmark",
+            "name": "sizeOfPopulatedStriped"
+          }
+        },
+        "span": {
+          "start": 3045,
+          "end": 3253
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-94ba01406670",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/util/concurrent/StripedBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "StripedBenchmark",
+            "name": "timeBulkGet"
+          }
+        },
+        "span": {
+          "start": 3835,
+          "end": 4121
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-d252a51dae69",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/util/concurrent/StripedBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "StripedBenchmark",
+            "name": "timeConstruct"
+          }
+        },
+        "span": {
+          "start": 3257,
+          "end": 3513
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-d58ffc273afa",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/benchmark/com/google/common/util/concurrent/StripedBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "StripedBenchmark",
+            "name": "sizeOfStriped"
+          }
+        },
+        "span": {
+          "start": 2813,
+          "end": 2887
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
       "id": "kndo-a010245aea24",
       "category": "unused",
       "severity": "warning",
@@ -1655,27 +3986,6 @@
         "span": {
           "start": 777,
           "end": 1308
-        }
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-dafeab07bea2",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "android/guava-tests/test/com/google/common/cache/TestingRemovalListeners.java",
-        "selector": {
-          "Member": {
-            "owner": "CountingRemovalListener",
-            "name": "getLastNotification"
-          }
-        },
-        "span": {
-          "start": 3007,
-          "end": 3103
         }
       },
       "message": "nothing references, roots, or imports this declaration"
@@ -2365,6 +4675,90 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
+      "id": "kndo-f586ec85a5a0",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/test/com/google/common/collect/MapsCollectionTest.java",
+        "selector": {
+          "Member": {
+            "owner": "MapsCollectionTest",
+            "name": "NOT_NULL_ENTRY"
+          }
+        },
+        "span": {
+          "start": 25868,
+          "end": 26096
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-0f7fddb377b2",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/test/com/google/common/collect/MultimapsCollectionTest.java",
+        "selector": {
+          "Member": {
+            "owner": "MultimapsCollectionTest",
+            "name": "STRING_TREESET_FACTORY"
+          }
+        },
+        "span": {
+          "start": 4743,
+          "end": 4946
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-4e798e21b2da",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/test/com/google/common/collect/MultimapsCollectionTest.java",
+        "selector": {
+          "Member": {
+            "owner": "MultimapsCollectionTest",
+            "name": "populateMultimapForValues"
+          }
+        },
+        "span": {
+          "start": 5364,
+          "end": 5556
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-03938ad63b92",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/test/com/google/common/collect/SynchronizedNavigableMapTest.java",
+        "selector": {
+          "Member": {
+            "owner": "SynchronizedNavigableMapTest",
+            "name": "TestEntry"
+          }
+        },
+        "span": {
+          "start": 2242,
+          "end": 3304
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
       "id": "kndo-f82f9cb6673d",
       "category": "unused",
       "severity": "warning",
@@ -2543,27 +4937,6 @@
         "span": {
           "start": 2069,
           "end": 2290
-        }
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-4e22834509c4",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "android/guava-tests/test/com/google/common/eventbus/outside/BaseSubscriberFinderTest.java",
-        "selector": {
-          "Member": {
-            "owner": "Subscriber",
-            "name": "notASubscriber"
-          }
-        },
-        "span": {
-          "start": 1119,
-          "end": 1197
         }
       },
       "message": "nothing references, roots, or imports this declaration"
@@ -2753,6 +5126,132 @@
         "span": {
           "start": 1278,
           "end": 1387
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-c612b2545fc3",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/test/com/google/common/graph/AbstractGraphTest.java",
+        "selector": {
+          "Member": {
+            "owner": "AbstractGraphTest",
+            "name": "ERROR_MODIFIABLE_SET"
+          }
+        },
+        "span": {
+          "start": 2936,
+          "end": 3000
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-fcc6c9d107d0",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/test/com/google/common/graph/AbstractGraphTest.java",
+        "selector": {
+          "Member": {
+            "owner": "AbstractGraphTest",
+            "name": "ERROR_ADDED_SELF_LOOP"
+          }
+        },
+        "span": {
+          "start": 3094,
+          "end": 3166
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-765aa009dbf5",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/test/com/google/common/graph/AbstractNetworkTest.java",
+        "selector": {
+          "Member": {
+            "owner": "AbstractNetworkTest",
+            "name": "ERROR_ADDED_PARALLEL_EDGE"
+          }
+        },
+        "span": {
+          "start": 4518,
+          "end": 4593
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-8724db3a8916",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/test/com/google/common/graph/AbstractNetworkTest.java",
+        "selector": {
+          "Member": {
+            "owner": "AbstractNetworkTest",
+            "name": "ERROR_EDGE_NOT_IN_GRAPH"
+          }
+        },
+        "span": {
+          "start": 4290,
+          "end": 4398
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-97d033affd57",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/test/com/google/common/graph/AbstractNetworkTest.java",
+        "selector": {
+          "Member": {
+            "owner": "AbstractNetworkTest",
+            "name": "ERROR_ADDED_EXISTING_EDGE"
+          }
+        },
+        "span": {
+          "start": 4617,
+          "end": 4714
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-a07693ce7e5c",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/test/com/google/common/graph/AbstractNetworkTest.java",
+        "selector": {
+          "Member": {
+            "owner": "AbstractNetworkTest",
+            "name": "ERROR_ADDED_SELF_LOOP"
+          }
+        },
+        "span": {
+          "start": 4422,
+          "end": 4494
         }
       },
       "message": "nothing references, roots, or imports this declaration"
@@ -5932,6 +8431,69 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
+      "id": "kndo-0c5f122e79d9",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/test/com/google/common/util/concurrent/AbstractScheduledServiceTest.java",
+        "selector": {
+          "Member": {
+            "owner": "AbstractScheduledServiceTest",
+            "name": "scheduleCalled"
+          }
+        },
+        "span": {
+          "start": 2760,
+          "end": 2774
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-13dbada7926c",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/test/com/google/common/util/concurrent/AbstractScheduledServiceTest.java",
+        "selector": {
+          "Member": {
+            "owner": "AbstractScheduledServiceTest",
+            "name": "atFixedRateCalled"
+          }
+        },
+        "span": {
+          "start": 2681,
+          "end": 2698
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-3761225c7731",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/test/com/google/common/util/concurrent/AbstractScheduledServiceTest.java",
+        "selector": {
+          "Member": {
+            "owner": "AbstractScheduledServiceTest",
+            "name": "withFixedDelayCalled"
+          }
+        },
+        "span": {
+          "start": 2719,
+          "end": 2739
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
       "id": "kndo-2c6b416b66f3",
       "category": "unused",
       "severity": "warning",
@@ -6634,27 +9196,6 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
-      "id": "kndo-213a736e0d4d",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "android/guava/src/com/google/common/hash/BloomFilterStrategies.java",
-        "selector": {
-          "Member": {
-            "owner": "LockFreeBitArray",
-            "name": "dataLength"
-          }
-        },
-        "span": {
-          "start": 10443,
-          "end": 10495
-        }
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
       "id": "kndo-50cf7e420c18",
       "category": "unused",
       "severity": "warning",
@@ -7219,6 +9760,27 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
+      "id": "kndo-b471d4de4f6c",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava/src/com/google/thirdparty/publicsuffix/PublicSuffixType.java",
+        "selector": {
+          "Member": {
+            "owner": "PublicSuffixType",
+            "name": "fromCode"
+          }
+        },
+        "span": {
+          "start": 1769,
+          "end": 2069
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
       "id": "kndo-20f53dd4285f",
       "category": "unused",
       "severity": "warning",
@@ -7261,6 +9823,69 @@
         "span": {
           "start": 709,
           "end": 1069
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-aa5bf58155ae",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/ImmutableList.java",
+        "selector": {
+          "Member": {
+            "owner": "ImmutableList",
+            "name": "jsOf"
+          }
+        },
+        "span": {
+          "start": 4549,
+          "end": 4656
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-4dde23fa2711",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/ImmutableMap.java",
+        "selector": {
+          "Member": {
+            "owner": "ImmutableMap",
+            "name": "jsOfEntries"
+          }
+        },
+        "span": {
+          "start": 7078,
+          "end": 7289
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-f584673beb8a",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/ImmutableSet.java",
+        "selector": {
+          "Member": {
+            "owner": "ImmutableSet",
+            "name": "jsOf"
+          }
+        },
+        "span": {
+          "start": 3094,
+          "end": 3200
         }
       },
       "message": "nothing references, roots, or imports this declaration"
@@ -9401,6 +12026,27 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
+      "id": "kndo-714ec9ec9896",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-testlib/test/com/google/common/testing/ClassSanityTesterTest.java",
+        "selector": {
+          "Member": {
+            "owner": "GoodEqualsFactory",
+            "name": "badButNotPublic"
+          }
+        },
+        "span": {
+          "start": 2981,
+          "end": 3050
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
       "id": "kndo-8926df298bf7",
       "category": "unused",
       "severity": "warning",
@@ -9417,6 +12063,27 @@
         "span": {
           "start": 32053,
           "end": 32116
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-9f0af15a3745",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-testlib/test/com/google/common/testing/ClassSanityTesterTest.java",
+        "selector": {
+          "Member": {
+            "owner": "NoNullCheckNeededDespiteNotInstantiable",
+            "name": "primitiveOnly"
+          }
+        },
+        "span": {
+          "start": 32406,
+          "end": 32444
         }
       },
       "message": "nothing references, roots, or imports this declaration"
@@ -9443,6 +12110,27 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
+      "id": "kndo-a60d3b099fcb",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-testlib/test/com/google/common/testing/ClassSanityTesterTest.java",
+        "selector": {
+          "Member": {
+            "owner": "NoNullCheckNeededDespiteNotInstantiable",
+            "name": "nullableOnly"
+          }
+        },
+        "span": {
+          "start": 32450,
+          "end": 32500
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
       "id": "kndo-a7e9470ae7b4",
       "category": "unused",
       "severity": "warning",
@@ -9459,6 +12147,27 @@
         "span": {
           "start": 36757,
           "end": 36808
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-a9f97bda0dc3",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-testlib/test/com/google/common/testing/ClassSanityTesterTest.java",
+        "selector": {
+          "Member": {
+            "owner": "NoNullCheckNeededDespiteNotInstantiable",
+            "name": "primitiveAndNullable"
+          }
+        },
+        "span": {
+          "start": 32540,
+          "end": 32605
         }
       },
       "message": "nothing references, roots, or imports this declaration"
@@ -10577,6 +13286,2337 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
+      "id": "kndo-f16199b89261",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-testlib/test/com/google/common/testing/anotherpackage/SomeClassThatDoesNotUseNullable.java",
+        "selector": {
+          "Member": {
+            "owner": "SomeClassThatDoesNotUseNullable",
+            "name": "packagePrivateButDoesNotCheckNull"
+          }
+        },
+        "span": {
+          "start": 848,
+          "end": 899
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-157a0331cbbb",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/base/AsciiBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "AsciiBenchmark",
+            "name": "equalsIgnoreCaseCharSequence"
+          }
+        },
+        "span": {
+          "start": 3055,
+          "end": 3679
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-5beabeb81782",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/base/AsciiBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "AsciiBenchmark",
+            "name": "equalsIgnoreCaseStringOnly"
+          }
+        },
+        "span": {
+          "start": 3683,
+          "end": 4010
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-5e991da08dcc",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/base/AsciiBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "AsciiBenchmark",
+            "name": "stringToUpperCase"
+          }
+        },
+        "span": {
+          "start": 2784,
+          "end": 3051
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-8990ca38e016",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/base/AsciiBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "AsciiBenchmark",
+            "name": "asciiStringToUpperCase"
+          }
+        },
+        "span": {
+          "start": 2230,
+          "end": 2494
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-a16f870f4755",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/base/AsciiBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "AsciiBenchmark",
+            "name": "asciiCharSequenceToUpperCase"
+          }
+        },
+        "span": {
+          "start": 2498,
+          "end": 2780
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-e34bd9d9b5df",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/base/AsciiBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "AsciiBenchmark",
+            "name": "equalsIgnoreCaseJDK"
+          }
+        },
+        "span": {
+          "start": 4014,
+          "end": 4327
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-84c92ddfe045",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/base/CharMatcherBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "CharMatcherBenchmark",
+            "name": "trimAndCollapseFromString"
+          }
+        },
+        "span": {
+          "start": 2397,
+          "end": 2601
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-3e361eac57e1",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/base/JoinerBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "JoinerBenchmark",
+            "name": "booleanIfFirst"
+          }
+        },
+        "span": {
+          "start": 3634,
+          "end": 4042
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-415cdd8edea2",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/base/JoinerBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "JoinerBenchmark",
+            "name": "joinerWithStringDelimiter"
+          }
+        },
+        "span": {
+          "start": 1800,
+          "end": 1997
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-8a78705e2ee9",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/base/JoinerBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "JoinerBenchmark",
+            "name": "joinerWithCharacterDelimiter"
+          }
+        },
+        "span": {
+          "start": 2053,
+          "end": 2256
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-a5e4f6858fc8",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/base/JoinerBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "JoinerBenchmark",
+            "name": "stringBuilderIsEmpty"
+          }
+        },
+        "span": {
+          "start": 3068,
+          "end": 3438
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-b014767d5619",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/base/JoinerBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "JoinerBenchmark",
+            "name": "alwaysAppendThenBackUp"
+          }
+        },
+        "span": {
+          "start": 4685,
+          "end": 5114
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-c91031760cfd",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/base/JoinerBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "JoinerBenchmark",
+            "name": "assignDelimiter"
+          }
+        },
+        "span": {
+          "start": 4156,
+          "end": 4526
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-d1be938e1d91",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/base/JoinerBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "JoinerBenchmark",
+            "name": "joinerInlined"
+          }
+        },
+        "span": {
+          "start": 2401,
+          "end": 2880
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-28be8b3b6d35",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/base/ObjectsBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ObjectsBenchmark",
+            "name": "hashString_2"
+          }
+        },
+        "span": {
+          "start": 1345,
+          "end": 1511
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-8b0264f4af08",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/base/ObjectsBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ObjectsBenchmark",
+            "name": "hashMixed_5"
+          }
+        },
+        "span": {
+          "start": 2049,
+          "end": 2279
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-ad8980d34692",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/base/ObjectsBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ObjectsBenchmark",
+            "name": "hashString_3"
+          }
+        },
+        "span": {
+          "start": 1515,
+          "end": 1685
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-b1f6e5ce3c01",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/base/ObjectsBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ObjectsBenchmark",
+            "name": "hashString_4"
+          }
+        },
+        "span": {
+          "start": 1689,
+          "end": 1863
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-b6853d43c5b0",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/base/ObjectsBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ObjectsBenchmark",
+            "name": "hashString_5"
+          }
+        },
+        "span": {
+          "start": 1867,
+          "end": 2045
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-5f7c917a29e5",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/base/SplitterBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "SplitterBenchmark",
+            "name": "stringSplitter"
+          }
+        },
+        "span": {
+          "start": 1690,
+          "end": 1880
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-e315024155f7",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/base/SplitterBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "SplitterBenchmark",
+            "name": "charSplitter"
+          }
+        },
+        "span": {
+          "start": 1500,
+          "end": 1686
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-7dc6998603df",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/base/StopwatchBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "StopwatchBenchmark",
+            "name": "manual"
+          }
+        },
+        "span": {
+          "start": 1313,
+          "end": 1560
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-0c2db73d6c56",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/cache/MapMakerComparisonBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "MapMakerComparisonBenchmark",
+            "name": "cacheBuilder"
+          }
+        },
+        "span": {
+          "start": 1894,
+          "end": 2024
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-40a6571fc8cc",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/cache/MapMakerComparisonBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "MapMakerComparisonBenchmark",
+            "name": "cacheBuilder_stats"
+          }
+        },
+        "span": {
+          "start": 1761,
+          "end": 1890
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-84796f7f7c44",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/cache/MapMakerComparisonBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "MapMakerComparisonBenchmark",
+            "name": "concurrentHashMap"
+          }
+        },
+        "span": {
+          "start": 1640,
+          "end": 1757
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-36559ae902c2",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/collect/ComparatorDelegationOverheadBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ComparatorDelegationOverheadBenchmark",
+            "name": "arraysSortNoComparator"
+          }
+        },
+        "span": {
+          "start": 1639,
+          "end": 1864
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-c3444b0bb017",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/collect/ComparatorDelegationOverheadBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ComparatorDelegationOverheadBenchmark",
+            "name": "arraysSortOrderingFromNatural"
+          }
+        },
+        "span": {
+          "start": 2341,
+          "end": 2605
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-fe228ae0dc3e",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/collect/ComparatorDelegationOverheadBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ComparatorDelegationOverheadBenchmark",
+            "name": "arraysSortOrderingNatural"
+          }
+        },
+        "span": {
+          "start": 1868,
+          "end": 2116
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-8acdeafa93d0",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/collect/ConcurrentHashMultisetBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ConcurrentHashMultisetBenchmark",
+            "name": "addRemove"
+          }
+        },
+        "span": {
+          "start": 2672,
+          "end": 2952
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-2663e8701569",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/collect/ImmutableListCreationBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ImmutableListCreationBenchmark",
+            "name": "preSizedBuilderAdd"
+          }
+        },
+        "span": {
+          "start": 1421,
+          "end": 1780
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-3d403a446d6c",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/collect/ImmutableListCreationBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ImmutableListCreationBenchmark",
+            "name": "copyArrayList"
+          }
+        },
+        "span": {
+          "start": 1784,
+          "end": 2119
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-5f28577208ac",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/collect/ImmutableListCreationBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ImmutableListCreationBenchmark",
+            "name": "builderAdd"
+          }
+        },
+        "span": {
+          "start": 1076,
+          "end": 1417
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-d6263fdbdc27",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/collect/ImmutableListCreationBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ImmutableListCreationBenchmark",
+            "name": "copyPreSizedArrayList"
+          }
+        },
+        "span": {
+          "start": 2123,
+          "end": 2479
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-4a2f7b2c37a3",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/collect/InternersBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "InternersBenchmark",
+            "name": "strongInterner"
+          }
+        },
+        "span": {
+          "start": 1169,
+          "end": 1437
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-a477dc1207e4",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/collect/InternersBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "InternersBenchmark",
+            "name": "stringIntern"
+          }
+        },
+        "span": {
+          "start": 1441,
+          "end": 1636
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-f989d309b5f2",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/collect/InternersBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "InternersBenchmark",
+            "name": "weakInterner"
+          }
+        },
+        "span": {
+          "start": 901,
+          "end": 1165
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-34e0a0dd6d49",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/collect/IteratorBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "IteratorBenchmark",
+            "name": "linkedListToArrayFor"
+          }
+        },
+        "span": {
+          "start": 4032,
+          "end": 4252
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-6987e56a6244",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/collect/IteratorBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "IteratorBenchmark",
+            "name": "linkedListForEach"
+          }
+        },
+        "span": {
+          "start": 3814,
+          "end": 4028
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-74f72cc38e20",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/collect/IteratorBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "IteratorBenchmark",
+            "name": "arrayListIndexed"
+          }
+        },
+        "span": {
+          "start": 2221,
+          "end": 2453
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-74fbfb5a54db",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/collect/IteratorBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "IteratorBenchmark",
+            "name": "arrayListToArrayFor"
+          }
+        },
+        "span": {
+          "start": 3385,
+          "end": 3603
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-7aad3bb3ee67",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/collect/IteratorBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "IteratorBenchmark",
+            "name": "linkedListFor"
+          }
+        },
+        "span": {
+          "start": 3607,
+          "end": 3810
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-8e2a5ffa0744",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/collect/IteratorBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "IteratorBenchmark",
+            "name": "arrayListFor"
+          }
+        },
+        "span": {
+          "start": 2711,
+          "end": 2912
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-8fbd7a016349",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/collect/IteratorBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "IteratorBenchmark",
+            "name": "arrayListIndexedLength"
+          }
+        },
+        "span": {
+          "start": 2457,
+          "end": 2707
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-b20bcd290ba9",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/collect/IteratorBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "IteratorBenchmark",
+            "name": "arrayIndexed"
+          }
+        },
+        "span": {
+          "start": 1562,
+          "end": 1782
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-c2892c5dfca4",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/collect/IteratorBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "IteratorBenchmark",
+            "name": "arrayIndexedLength"
+          }
+        },
+        "span": {
+          "start": 1786,
+          "end": 2020
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-ca7875209fc9",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/collect/IteratorBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "IteratorBenchmark",
+            "name": "arrayFor"
+          }
+        },
+        "span": {
+          "start": 2024,
+          "end": 2217
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-ddc13c4f87a2",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/collect/IteratorBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "IteratorBenchmark",
+            "name": "arrayListForEachWithHolder"
+          }
+        },
+        "span": {
+          "start": 3159,
+          "end": 3381
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-f5c2e4ad62ab",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/collect/IteratorBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "IteratorBenchmark",
+            "name": "arrayListForWithHolder"
+          }
+        },
+        "span": {
+          "start": 2916,
+          "end": 3155
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-21b394f4e637",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/collect/MapBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "MapBenchmark",
+            "name": "iterateWithKeySetAndGet"
+          }
+        },
+        "span": {
+          "start": 7266,
+          "end": 7576
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-35ba30c3a5bc",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/collect/MapBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "MapBenchmark",
+            "name": "iterateWithEntrySet"
+          }
+        },
+        "span": {
+          "start": 6948,
+          "end": 7262
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-3b4ad42d11e3",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/collect/MapBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "MapBenchmark",
+            "name": "iterateValuesAndGet"
+          }
+        },
+        "span": {
+          "start": 7580,
+          "end": 7984
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-c37866df484e",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/collect/MapBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "MapBenchmark",
+            "name": "createAndPopulate"
+          }
+        },
+        "span": {
+          "start": 6475,
+          "end": 6648
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-ee70ed30cf4b",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/collect/MapBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "MapBenchmark",
+            "name": "createPopulateAndRemove"
+          }
+        },
+        "span": {
+          "start": 6652,
+          "end": 6944
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-e7d24e49b298",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/collect/MinMaxPriorityQueueBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "MinMaxPriorityQueueBenchmark",
+            "name": "pollAndAdd"
+          }
+        },
+        "span": {
+          "start": 1698,
+          "end": 1880
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-f72ebb334c07",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/collect/PowerSetBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "PowerSetBenchmark",
+            "name": "iteration"
+          }
+        },
+        "span": {
+          "start": 1262,
+          "end": 1506
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-173ca853d474",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/collect/SetCreationBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "SetCreationBenchmark",
+            "name": "creation"
+          }
+        },
+        "span": {
+          "start": 1667,
+          "end": 1858
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-221500580581",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/collect/SetIterationBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "SetIterationBenchmark",
+            "name": "iteration"
+          }
+        },
+        "span": {
+          "start": 1794,
+          "end": 1994
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-8990cbf570f8",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/collect/SortedCopyBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "SortedCopyBenchmark",
+            "name": "collections"
+          }
+        },
+        "span": {
+          "start": 2396,
+          "end": 2883
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-15a9b04dc77b",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/collect/StreamsBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "StreamsBenchmark",
+            "name": "runOperation"
+          }
+        },
+        "span": {
+          "start": 2840,
+          "end": 3048
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-5169246ce75a",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/eventbus/EventBusBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "EventBusBenchmark",
+            "name": "postStrings"
+          }
+        },
+        "span": {
+          "start": 1049,
+          "end": 1173
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-5ff3f75bcabd",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/hash/HashFunctionBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "HashFunctionBenchmark",
+            "name": "hashFunctionWithOffset"
+          }
+        },
+        "span": {
+          "start": 2112,
+          "end": 2407
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-236aaf74a706",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/hash/HashStringBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "HashStringBenchmark",
+            "name": "hashUtf8Hasher"
+          }
+        },
+        "span": {
+          "start": 4334,
+          "end": 4694
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-340eddcb5198",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/hash/HashStringBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "HashStringBenchmark",
+            "name": "hashUtf8GetBytesHasher"
+          }
+        },
+        "span": {
+          "start": 5016,
+          "end": 5392
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-ad29adf41a42",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/hash/HashStringBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "HashStringBenchmark",
+            "name": "hashUtf8GetBytes"
+          }
+        },
+        "span": {
+          "start": 4698,
+          "end": 5012
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-c829236482ce",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/hash/MessageDigestAlgorithmBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "MessageDigestAlgorithmBenchmark",
+            "name": "hashing"
+          }
+        },
+        "span": {
+          "start": 3308,
+          "end": 3580
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-170c5e04f9ca",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/math/ApacheBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ApacheBenchmark",
+            "name": "longAddOverflow"
+          }
+        },
+        "span": {
+          "start": 6295,
+          "end": 6540
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-64cb905f4426",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/math/ApacheBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ApacheBenchmark",
+            "name": "intMulOverflow"
+          }
+        },
+        "span": {
+          "start": 6544,
+          "end": 6786
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-6589a9e84973",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/math/ApacheBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ApacheBenchmark",
+            "name": "intAddOverflow"
+          }
+        },
+        "span": {
+          "start": 6049,
+          "end": 6291
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-83873d4d05f3",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/math/ApacheBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ApacheBenchmark",
+            "name": "longGCD"
+          }
+        },
+        "span": {
+          "start": 5597,
+          "end": 5808
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-dafd8066e2af",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/math/ApacheBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ApacheBenchmark",
+            "name": "longMulOverflow"
+          }
+        },
+        "span": {
+          "start": 6790,
+          "end": 7035
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-f4abca90109b",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/math/ApacheBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ApacheBenchmark",
+            "name": "intGCD"
+          }
+        },
+        "span": {
+          "start": 5388,
+          "end": 5593
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-7d435d24328b",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/math/BigIntegerMathBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "BigIntegerMathBenchmark",
+            "name": "slowFactorial"
+          }
+        },
+        "span": {
+          "start": 2909,
+          "end": 3122
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-5fc66de8a1bf",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/math/DoubleMathRoundingBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "DoubleMathRoundingBenchmark",
+            "name": "log2Round"
+          }
+        },
+        "span": {
+          "start": 2530,
+          "end": 2734
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-3a34c36b8a50",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/math/IntMathBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "IntMathBenchmark",
+            "name": "gCD"
+          }
+        },
+        "span": {
+          "start": 2541,
+          "end": 2738
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-335ae39393fe",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/math/LessThanBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "LessThanBenchmark",
+            "name": "ternaryLtLongAddInsideTernary"
+          }
+        },
+        "span": {
+          "start": 3879,
+          "end": 4161
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-4d12c06fe39c",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/math/LessThanBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "LessThanBenchmark",
+            "name": "branchFreeLtLongInlined"
+          }
+        },
+        "span": {
+          "start": 2999,
+          "end": 3295
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-880e142c1987",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/math/LessThanBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "LessThanBenchmark",
+            "name": "ternaryLtLongAddOutsideTernary"
+          }
+        },
+        "span": {
+          "start": 3590,
+          "end": 3875
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-a0960d6a6f9c",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/math/LessThanBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "LessThanBenchmark",
+            "name": "branchFreeLtIntInlined"
+          }
+        },
+        "span": {
+          "start": 1857,
+          "end": 2145
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-aa593fce8019",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/math/LessThanBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "LessThanBenchmark",
+            "name": "branchFreeLtInt"
+          }
+        },
+        "span": {
+          "start": 2149,
+          "end": 2430
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-b28897e340b2",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/math/LessThanBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "LessThanBenchmark",
+            "name": "branchFreeLtLong"
+          }
+        },
+        "span": {
+          "start": 3299,
+          "end": 3586
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-b6abf12f5259",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/math/LessThanBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "LessThanBenchmark",
+            "name": "ternaryLtIntAddOutsideTernary"
+          }
+        },
+        "span": {
+          "start": 2434,
+          "end": 2714
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-f4c833c9e39b",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/math/LessThanBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "LessThanBenchmark",
+            "name": "ternaryLtIntAddInsideTernary"
+          }
+        },
+        "span": {
+          "start": 2718,
+          "end": 2995
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-8468bbcab2c4",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/math/LongMathBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "LongMathBenchmark",
+            "name": "gCD"
+          }
+        },
+        "span": {
+          "start": 2762,
+          "end": 2960
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-01bf54d179bb",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/math/QuantilesBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "QuantilesBenchmark",
+            "name": "allDeciles"
+          }
+        },
+        "span": {
+          "start": 3032,
+          "end": 3250
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-60537c270974",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/math/QuantilesBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "QuantilesBenchmark",
+            "name": "percentiles90And99"
+          }
+        },
+        "span": {
+          "start": 2556,
+          "end": 2789
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-82bf2903e701",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/math/QuantilesBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "QuantilesBenchmark",
+            "name": "percentile90"
+          }
+        },
+        "span": {
+          "start": 2158,
+          "end": 2353
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-c51df933c2b7",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/math/QuantilesBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "QuantilesBenchmark",
+            "name": "percentile99"
+          }
+        },
+        "span": {
+          "start": 2357,
+          "end": 2552
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-d79852796832",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/math/QuantilesBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "QuantilesBenchmark",
+            "name": "threePercentiles"
+          }
+        },
+        "span": {
+          "start": 2793,
+          "end": 3028
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-3257755121dc",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/math/StatsBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "StatsBenchmark",
+            "name": "meanAndVariance"
+          }
+        },
+        "span": {
+          "start": 4596,
+          "end": 4805
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-1bcceee108a3",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/primitives/UnsignedLongsBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "UnsignedLongsBenchmark",
+            "name": "parseDecode16"
+          }
+        },
+        "span": {
+          "start": 3106,
+          "end": 3318
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-ab1152801d4c",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/primitives/UnsignedLongsBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "UnsignedLongsBenchmark",
+            "name": "parseDecode10"
+          }
+        },
+        "span": {
+          "start": 2894,
+          "end": 3102
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-0ab7f94b22df",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/util/concurrent/CycleDetectingLockFactoryBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "CycleDetectingLockFactoryBenchmark",
+            "name": "unorderedPlainLocks"
+          }
+        },
+        "span": {
+          "start": 1674,
+          "end": 1773
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-2b4bd465ebc9",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/util/concurrent/CycleDetectingLockFactoryBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "CycleDetectingLockFactoryBenchmark",
+            "name": "orderedCycleDetectingLocks"
+          }
+        },
+        "span": {
+          "start": 2146,
+          "end": 2253
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-6a8a57cc1bf4",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/util/concurrent/CycleDetectingLockFactoryBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "CycleDetectingLockFactoryBenchmark",
+            "name": "unorderedCycleDetectingLocks"
+          }
+        },
+        "span": {
+          "start": 1777,
+          "end": 1897
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-9548e78a74e0",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/util/concurrent/CycleDetectingLockFactoryBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "CycleDetectingLockFactoryBenchmark",
+            "name": "orderedPlainLocks"
+          }
+        },
+        "span": {
+          "start": 2048,
+          "end": 2142
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-016383595973",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/util/concurrent/ExecutionListBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ExecutionListBenchmark",
+            "name": "executeThenAdd_multiThreaded"
+          }
+        },
+        "span": {
+          "start": 9351,
+          "end": 10363
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-1c6b6138a03f",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/util/concurrent/ExecutionListBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ExecutionListBenchmark",
+            "name": "addThenExecute_singleThreaded"
+          }
+        },
+        "span": {
+          "start": 7240,
+          "end": 7707
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-d36e3ba0384e",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/util/concurrent/ExecutionListBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ExecutionListBenchmark",
+            "name": "executeThenAdd_singleThreaded"
+          }
+        },
+        "span": {
+          "start": 7711,
+          "end": 8178
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-d82a41704117",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/util/concurrent/ExecutionListBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "ExecutionListBenchmark",
+            "name": "addThenExecute_multiThreaded"
+          }
+        },
+        "span": {
+          "start": 8336,
+          "end": 9347
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-1763067c0148",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/util/concurrent/FuturesGetCheckedBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "FuturesGetCheckedBenchmark",
+            "name": "benchmarkGetChecked"
+          }
+        },
+        "span": {
+          "start": 5334,
+          "end": 5808
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-886ee977a7f1",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/util/concurrent/FuturesGetCheckedBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "FuturesGetCheckedBenchmark",
+            "name": "addOtherEntries"
+          }
+        },
+        "span": {
+          "start": 4533,
+          "end": 5330
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-979f7b0381d4",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/util/concurrent/MonitorBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "MonitorBenchmark",
+            "name": "addsAndRemoves"
+          }
+        },
+        "span": {
+          "start": 1772,
+          "end": 2137
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-221a492f2cbc",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/util/concurrent/MoreExecutorsDirectExecutorBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "MoreExecutorsDirectExecutorBenchmark",
+            "name": "timeContendedExecute"
+          }
+        },
+        "span": {
+          "start": 3137,
+          "end": 3525
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-43cf71a56ea1",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/util/concurrent/MoreExecutorsDirectExecutorBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "MoreExecutorsDirectExecutorBenchmark",
+            "name": "measureSize"
+          }
+        },
+        "span": {
+          "start": 2784,
+          "end": 2844
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-51060e9d7e5f",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/util/concurrent/MoreExecutorsDirectExecutorBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "MoreExecutorsDirectExecutorBenchmark",
+            "name": "timeUncontendedExecute"
+          }
+        },
+        "span": {
+          "start": 2848,
+          "end": 3133
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-0afbf0c16708",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/util/concurrent/StripedBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "StripedBenchmark",
+            "name": "timeBulkGet"
+          }
+        },
+        "span": {
+          "start": 3835,
+          "end": 4121
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-51efc980f589",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/util/concurrent/StripedBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "StripedBenchmark",
+            "name": "sizeOfPopulatedStriped"
+          }
+        },
+        "span": {
+          "start": 3045,
+          "end": 3253
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-831b8fb9d461",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/util/concurrent/StripedBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "StripedBenchmark",
+            "name": "timeGetAt"
+          }
+        },
+        "span": {
+          "start": 3517,
+          "end": 3831
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-b465ada8e26d",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/util/concurrent/StripedBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "StripedBenchmark",
+            "name": "timeConstruct"
+          }
+        },
+        "span": {
+          "start": 3257,
+          "end": 3513
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-ed26a354cbbf",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/benchmark/com/google/common/util/concurrent/StripedBenchmark.java",
+        "selector": {
+          "Member": {
+            "owner": "StripedBenchmark",
+            "name": "sizeOfStriped"
+          }
+        },
+        "span": {
+          "start": 2813,
+          "end": 2887
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
       "id": "kndo-ef5f48d9ab0e",
       "category": "unused",
       "severity": "warning",
@@ -10608,27 +15648,6 @@
         "span": {
           "start": 777,
           "end": 1308
-        }
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-219e6b057598",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "guava-tests/test/com/google/common/cache/TestingRemovalListeners.java",
-        "selector": {
-          "Member": {
-            "owner": "CountingRemovalListener",
-            "name": "getLastNotification"
-          }
-        },
-        "span": {
-          "start": 3007,
-          "end": 3103
         }
       },
       "message": "nothing references, roots, or imports this declaration"
@@ -11318,6 +16337,90 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
+      "id": "kndo-361ecc4ff297",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/test/com/google/common/collect/MapsCollectionTest.java",
+        "selector": {
+          "Member": {
+            "owner": "MapsCollectionTest",
+            "name": "NOT_NULL_ENTRY"
+          }
+        },
+        "span": {
+          "start": 25868,
+          "end": 26096
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-3fe142b24f02",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/test/com/google/common/collect/MultimapsCollectionTest.java",
+        "selector": {
+          "Member": {
+            "owner": "MultimapsCollectionTest",
+            "name": "STRING_TREESET_FACTORY"
+          }
+        },
+        "span": {
+          "start": 4870,
+          "end": 5073
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-3feea9310470",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/test/com/google/common/collect/MultimapsCollectionTest.java",
+        "selector": {
+          "Member": {
+            "owner": "MultimapsCollectionTest",
+            "name": "populateMultimapForValues"
+          }
+        },
+        "span": {
+          "start": 5491,
+          "end": 5683
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-b27e209f3513",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/test/com/google/common/collect/SynchronizedNavigableMapTest.java",
+        "selector": {
+          "Member": {
+            "owner": "SynchronizedNavigableMapTest",
+            "name": "TestEntry"
+          }
+        },
+        "span": {
+          "start": 2242,
+          "end": 3304
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
       "id": "kndo-b4900a77bf36",
       "category": "unused",
       "severity": "warning",
@@ -11496,27 +16599,6 @@
         "span": {
           "start": 1835,
           "end": 2063
-        }
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-759f04997a6c",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "guava-tests/test/com/google/common/eventbus/outside/BaseSubscriberFinderTest.java",
-        "selector": {
-          "Member": {
-            "owner": "Subscriber",
-            "name": "notASubscriber"
-          }
-        },
-        "span": {
-          "start": 1119,
-          "end": 1197
         }
       },
       "message": "nothing references, roots, or imports this declaration"
@@ -11706,6 +16788,132 @@
         "span": {
           "start": 1278,
           "end": 1387
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-9efd56155f8a",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/test/com/google/common/graph/AbstractGraphTest.java",
+        "selector": {
+          "Member": {
+            "owner": "AbstractGraphTest",
+            "name": "ERROR_ADDED_SELF_LOOP"
+          }
+        },
+        "span": {
+          "start": 3094,
+          "end": 3166
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-c10c37486de3",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/test/com/google/common/graph/AbstractGraphTest.java",
+        "selector": {
+          "Member": {
+            "owner": "AbstractGraphTest",
+            "name": "ERROR_MODIFIABLE_SET"
+          }
+        },
+        "span": {
+          "start": 2936,
+          "end": 3000
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-9110abefbf1a",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/test/com/google/common/graph/AbstractNetworkTest.java",
+        "selector": {
+          "Member": {
+            "owner": "AbstractNetworkTest",
+            "name": "ERROR_ADDED_EXISTING_EDGE"
+          }
+        },
+        "span": {
+          "start": 4617,
+          "end": 4714
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-d004971eaf34",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/test/com/google/common/graph/AbstractNetworkTest.java",
+        "selector": {
+          "Member": {
+            "owner": "AbstractNetworkTest",
+            "name": "ERROR_ADDED_SELF_LOOP"
+          }
+        },
+        "span": {
+          "start": 4422,
+          "end": 4494
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-efb18cbe2009",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/test/com/google/common/graph/AbstractNetworkTest.java",
+        "selector": {
+          "Member": {
+            "owner": "AbstractNetworkTest",
+            "name": "ERROR_ADDED_PARALLEL_EDGE"
+          }
+        },
+        "span": {
+          "start": 4518,
+          "end": 4593
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-f90e666c3602",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/test/com/google/common/graph/AbstractNetworkTest.java",
+        "selector": {
+          "Member": {
+            "owner": "AbstractNetworkTest",
+            "name": "ERROR_EDGE_NOT_IN_GRAPH"
+          }
+        },
+        "span": {
+          "start": 4290,
+          "end": 4398
         }
       },
       "message": "nothing references, roots, or imports this declaration"
@@ -14885,6 +20093,69 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
+      "id": "kndo-dad5929beaf0",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/test/com/google/common/util/concurrent/AbstractScheduledServiceTest.java",
+        "selector": {
+          "Member": {
+            "owner": "AbstractScheduledServiceTest",
+            "name": "withFixedDelayCalled"
+          }
+        },
+        "span": {
+          "start": 2719,
+          "end": 2739
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-e930b19f3c3c",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/test/com/google/common/util/concurrent/AbstractScheduledServiceTest.java",
+        "selector": {
+          "Member": {
+            "owner": "AbstractScheduledServiceTest",
+            "name": "atFixedRateCalled"
+          }
+        },
+        "span": {
+          "start": 2681,
+          "end": 2698
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-fc880129914c",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/test/com/google/common/util/concurrent/AbstractScheduledServiceTest.java",
+        "selector": {
+          "Member": {
+            "owner": "AbstractScheduledServiceTest",
+            "name": "scheduleCalled"
+          }
+        },
+        "span": {
+          "start": 2760,
+          "end": 2774
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
       "id": "kndo-da6ac1fc26f6",
       "category": "unused",
       "severity": "warning",
@@ -15398,27 +20669,6 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
-      "id": "kndo-4e02c1d6e79c",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "guava/src/com/google/common/hash/BloomFilterStrategies.java",
-        "selector": {
-          "Member": {
-            "owner": "LockFreeBitArray",
-            "name": "dataLength"
-          }
-        },
-        "span": {
-          "start": 10475,
-          "end": 10527
-        }
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
       "id": "kndo-0d2c35eb560b",
       "category": "unused",
       "severity": "warning",
@@ -15765,6 +21015,27 @@
         "span": {
           "start": 3064,
           "end": 3165
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-dd4a2aff7b8b",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava/src/com/google/thirdparty/publicsuffix/PublicSuffixType.java",
+        "selector": {
+          "Member": {
+            "owner": "PublicSuffixType",
+            "name": "fromCode"
+          }
+        },
+        "span": {
+          "start": 1769,
+          "end": 2069
         }
       },
       "message": "nothing references, roots, or imports this declaration"

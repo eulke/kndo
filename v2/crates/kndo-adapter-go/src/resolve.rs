@@ -93,3 +93,25 @@ fn join(dir: &str, rest: &str) -> String {
         format!("{dir}/{rest}")
     }
 }
+
+/// The package region: every `.go` file in the directory, tests included — a
+/// test can legally name a lowercase declaration, so the region is a superset
+/// of production sight.
+pub fn package_region(path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
+    let dir = parent_dir(path.as_str());
+    let prefix = if dir.is_empty() {
+        String::new()
+    } else {
+        format!("{dir}/")
+    };
+    let mut out: Vec<ProjectPath> = cx
+        .files_with_prefix(&prefix)
+        .filter(|p| {
+            let rest = &p.as_str()[prefix.len()..];
+            rest.ends_with(".go") && !rest.contains('/')
+        })
+        .cloned()
+        .collect();
+    out.sort();
+    out
+}

@@ -82,6 +82,10 @@ impl bindings::Guest for RudeProbe {
         Vec::new()
     }
 
+    fn seen_from(_path: String, _scope: String) -> Option<Vec<String>> {
+        None
+    }
+
     fn contribute_roots() -> Vec<wire::ContributedRoot> {
         Vec::new()
     }

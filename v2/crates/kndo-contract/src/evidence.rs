@@ -118,13 +118,24 @@ pub enum SymbolKind {
     Other(SmolStr),
 }
 
-/// Whether a declaration is nameable beyond its file — the half every language
-/// shares. Closed by design: it is binary by meaning; scope SHAPE between the two
-/// (package/module/crate regions) is capability work, not a third rung.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ContractFingerprint)]
+/// How far a declaration's name legally reaches. Not a ladder: `Scoped` carries
+/// the ADAPTER'S OWN WORD for a bounded region ("package", "module", "crate",
+/// "in:a::b") — core never parses or compares tokens, it asks the adapter for
+/// the region's files ([`crate::extension::Extension::seen_from`]) and judges by
+/// the SET. Private and Exported stay the shared halves; an unanswerable token
+/// degrades to Exported treatment (keep-alive). Growing this enum was the
+/// deliberate semantic contract change recorded for M6.c — the 2026-08 audit
+/// measured that no false-positive fix ever wanted a rung; every one wanted
+/// scope SHAPE.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ContractFingerprint)]
 #[serde(rename_all = "lowercase")]
 pub enum Reach {
     Private,
+    /// Nameable beyond its file, only within a region the declaring adapter can
+    /// enumerate from paths and manifests — never from contents.
+    Scoped {
+        scope: SmolStr,
+    },
     Exported,
 }
 
@@ -404,6 +415,22 @@ impl EvidenceSink {
     /// can never attach to the wrong declaration.
     pub fn exported_as(&mut self, of: DeclarationId, name: impl Into<SmolStr>) {
         if !self.valid_id(of, "exported_as") {
+            return;
+        }
+        // The alias is a module-system fact, orthogonal to reach level (Kotlin's
+        // `internal` + `@JvmName` coexist) — except on Private, where nothing can
+        // bind it: that write is a defect, dropped here at the ONE constructor so
+        // the inert combination cannot exist in finished evidence.
+        if matches!(self.out.declarations[of.index()].reach, Reach::Private) {
+            self.out.diagnostics.push(AdapterDiagnostic {
+                level: DiagnosticLevel::Warn,
+                message: format!(
+                    "exported_as on a Private declaration (index {}) dropped — nothing \
+                     can bind a private name (adapter defect)",
+                    of.index()
+                ),
+                span: None,
+            });
             return;
         }
         self.out.declarations[of.index()].exported_as = Some(name.into());

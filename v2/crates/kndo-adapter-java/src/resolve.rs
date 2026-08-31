@@ -139,3 +139,35 @@ fn normalize_test_dir(dir: &str) -> String {
     }
     format!("{}src/main/java{}", &dir[..ix], &dir[ix + marker.len()..])
 }
+
+/// The package region — who can legally NAME a package-private declaration at
+/// `path`: the directory and its release peers, plus (for a main-set file) the
+/// test dirs that mirror onto it. A main file is NOT in a test file's region:
+/// main compilation never sees test classes.
+pub fn package_region(path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
+    let p = path.as_str();
+    let dir = match p.rsplit_once('/') {
+        Some((dir, _)) => dir,
+        None => "",
+    };
+    let my_norm = normalize_release_dir(dir);
+    let mut out: Vec<ProjectPath> = cx
+        .known_files()
+        .filter(|f| {
+            let s = f.as_str();
+            if !s.ends_with(".java") {
+                return false;
+            }
+            let fd = match s.rsplit_once('/') {
+                Some((d, _)) => d,
+                None => "",
+            };
+            let fd_norm = normalize_release_dir(fd);
+            fd_norm == my_norm || normalize_test_dir(&fd_norm) == my_norm
+        })
+        .cloned()
+        .collect();
+    out.sort();
+    out.dedup();
+    out
+}

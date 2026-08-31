@@ -57,6 +57,18 @@ impl Extension for RustAdapter {
         resolve::resolve(from, specifier, cx)
     }
 
+    fn seen_from(
+        &self,
+        path: &ProjectPath,
+        scope: &str,
+        cx: &ResolveContext<'_>,
+    ) -> Option<Vec<ProjectPath>> {
+        if scope != "crate" {
+            return None;
+        }
+        resolve::crate_region(path, cx)
+    }
+
     fn roots(&self, manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<ProjectRoot> {
         manifest::roots(manifest, cx)
     }

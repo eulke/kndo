@@ -37,10 +37,20 @@ var counter = 0
 "#,
     );
     assert_eq!(decl(&ev, "Public").reach, Reach::Exported);
-    assert_eq!(decl(&ev, "private").reach, Reach::Private);
+    assert_eq!(
+        decl(&ev, "private").reach,
+        Reach::Scoped {
+            scope: "package".into()
+        }
+    );
     assert_eq!(decl(&ev, "Config").kind, SymbolKind::Type);
     assert_eq!(decl(&ev, "Config").reach, Reach::Exported);
-    assert_eq!(decl(&ev, "secret").reach, Reach::Private);
+    assert_eq!(
+        decl(&ev, "secret").reach,
+        Reach::Scoped {
+            scope: "package".into()
+        }
+    );
     assert_eq!(decl(&ev, "MaxRetries").kind, SymbolKind::Constant);
     assert_eq!(decl(&ev, "counter").kind, SymbolKind::Variable);
 }

@@ -233,9 +233,10 @@ remain, as they should — v1 sees the same graph truth.
 ## M6.b.1 — guava speaks: the first Java measurement
 
 `kndo:java` lands on the unified door and guava claims 3,277 of 3,352 files.
-v2 reports 6,369 findings (5,621 before the 2026-08-31 audit round unified the
-metrics rule — see the duplicate section); the oracle (minus its 7,014
-`internal-only`, which v2 does not build until M6.c) reports 13,230. Category by category:
+v2 reports 6,620 findings (5,621 before the 2026-08-31 audit round unified the
+metrics rule; 6,369 before M6.c's scope regions — see the unused note); the
+oracle (minus its 7,014 `internal-only`, which v2 does not build until M6.c's
+second half) reports 13,230. Category by category:
 
 **unused 766 vs 6,525 — and 5,485 of the oracle's are false positives its own
 subject proves.** 84% of v1's guava `unused` findings are `enum-member` rows
@@ -260,9 +261,16 @@ metrics rule across all five adapters (the WHOLE declaration node fingerprints,
 signature included, and arrow `switch_rule` arms count): parallel overrides and
 delegation overloads whose bodies alone sat under the floor now clear it —
 sampled, they are the android/-mirror and overload-boilerplate families, the
-same real duplication at a finer floor. `unused` (766) and `untested` (147)
-are BYTE-IDENTICAL before and after the round — the metrics rule moved only
-what it measures.
+same real duplication at a finer floor. `unused` (766 after
+the audit round) and `untested` (147) were BYTE-IDENTICAL through the metrics
+change. M6.c's scope regions then moved unused 766→1,017: package-private is
+`Scoped("package")` now, and a member with a bounded region is no longer part
+of the surface an entry hands out — the +251 are package-private members
+nothing in their package names, concentrated in reflection-driven test
+scaffolding (caliper benchmark bodies, NullPointerTester fixtures): true by
+static reach, reachable only through the reflective escapes v1 accepted too.
+The migration itself was a measured no-op (fixtures byte-identical) — the
+member-surface rule is the only judgment that moved.
 
 **untested 147 (file) vs 2,559 (symbol), test-only 0 vs 570** — the two known
 granularity gaps, recorded since rally and gin: without coverage v2's untested
@@ -301,7 +309,11 @@ granularity; the recorded presentation question (grouping clone families)
 applies, and v1's far smaller count is v1's weaker Kotlin metrics, not a
 v2 false-positive flood.
 
-**unused 18 vs 277 — Kotlin's public-by-default meets library-mode roots**
+**unused 38 vs 277 — Kotlin's public-by-default meets library-mode roots**
+(18 before M6.c: `internal` is `Scoped("module")` now — a bounded region the
+resolver enumerates from the source-set layout — and the +20 are internal
+declarations nothing in their module names. The remaining gap to 277 is public
+surface, M6.c's `internal-only` half.)**
 (19 before the audit round: the corrected resolve order — exact package dir
 before the peeled parent — and the joint-compilation main-set mirror keep one
 more declaration alive; keep-alive is the direction these fixes are allowed to

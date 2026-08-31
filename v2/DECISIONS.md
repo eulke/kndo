@@ -1094,3 +1094,38 @@ reads to a miss, but "mostly degrades" is not a contract — writes now go
 temp-then-rename in the destination directory, so a reader sees old bytes or
 new bytes, never a mix. Failures stay silent by design: a cache that cannot
 write is a cache that misses.
+
+## 2026-08-31 — M6.c first half: the region, not the rung
+
+The visibility mechanism the EXPERIMENTS ladder entry designed, landed:
+`Reach::Scoped { scope }` carries the adapter's own token; `Extension::seen_from`
+answers the region behind it (path- and manifest-computable, the `sees`
+stability class; `None` = Exported treatment, keep-alive); the engine stores
+regions per (file, token) on the graph (GRAPH_SEMANTICS 5) and judges by the
+SET — a Scoped declaration pools its region, is never part of the surface an
+entry or namespace importer hands out from OUTSIDE the region, and a member
+with a bounded region does not ride its owner's hand-out (an `internal` method
+of a public class is uncallable outside the module). Private members never ride
+at all — vite re-proved that restoration byte-identically. The alias question
+the EXPERIMENTS entry carried is answered the other way: `exported_as` does NOT
+fold into the variants — reach level and module-system alias are orthogonal
+axes (Kotlin `internal` + `@JvmName` coexist) — the inert Private+alias
+combination dies at the sink instead, the one constructor.
+
+Migrations measured exactly as designed: go lowercase and java package-private
+became `Scoped("package")` with regions equal to their old pooling sets —
+fixtures and gin byte-identical, the no-op proof. The unlocks: kotlin
+`internal` → `Scoped("module")` (Exposed unused 18→38, each a module-unnamed
+internal; the `internal-scope` fixture pins the FQN-no-import case that only
+the region pool can keep) and rust `pub(crate)` → `Scoped("crate")` via the
+package map (`crate-scoped` fixture; ripgrep unchanged — its crate-scoped
+surface is genuinely used). guava unused 766→1,017 from the member-surface
+rule; the fresh accusations are statically-true package-private members in
+reflection-driven scaffolding (caliper, NullPointerTester), the reflective
+escape v1 accepted too. `pub(super)`/`pub(in …)` stay Exported, recorded in
+the rust adapter: an unanswerable bound must keep alive, and module-tree
+regions are not yet enumerable from paths.
+
+Contract fingerprint moved (regenerated in this commit), WIT `reach` is a
+variant with `scoped(string)` plus a `seen-from` export, pins rebuilt. The
+second half — `internal-only` over the same regions — is next.

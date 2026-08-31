@@ -218,8 +218,11 @@ pub(crate) fn replay_evidence(
                 SmolStr::new(&d.name),
                 symbol_kind(d.kind.clone()),
                 span(d.span),
-                match d.reach {
+                match &d.reach {
                     awire::Reach::Private => ev::Reach::Private,
+                    awire::Reach::Scoped(scope) => ev::Reach::Scoped {
+                        scope: SmolStr::new(scope),
+                    },
                     awire::Reach::Exported => ev::Reach::Exported,
                 },
             )
