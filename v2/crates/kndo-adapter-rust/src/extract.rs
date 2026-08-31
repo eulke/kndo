@@ -42,7 +42,7 @@ pub fn extract(
         main_root_kind: main_root_kind(path),
         unimportable_root: unimportable_crate_root(path),
         types: BTreeMap::new(),
-        declared_free: BTreeMap::new(),
+        free_declarations: BTreeMap::new(),
         impls: Vec::new(),
         redirects: BTreeMap::new(),
         uses: Vec::new(),
@@ -61,8 +61,8 @@ pub fn extract(
     for (node, stack) in uses {
         cx.use_declaration(node, &stack);
     }
-    let declared_free = std::mem::take(&mut cx.declared_free);
-    macro_template_roots(root, source, &declared_free, out);
+    let free_declarations = std::mem::take(&mut cx.free_declarations);
+    macro_template_roots(root, source, &free_declarations, out);
     references_and_comments(root, source, out);
 }
 
@@ -75,7 +75,7 @@ pub fn extract(
 fn macro_template_roots(
     root: Node<'_>,
     source: &[u8],
-    declared_free: &BTreeMap<String, DeclarationId>,
+    free_declarations: &BTreeMap<String, DeclarationId>,
     out: &mut EvidenceSink,
 ) {
     let mut seen: BTreeSet<usize> = BTreeSet::new();
@@ -87,7 +87,7 @@ fn macro_template_roots(
         tk::walk(n, &mut |t| {
             if t.kind() == "identifier"
                 && Some(t) != name_node
-                && let Some(&id) = declared_free.get(tk::text(t, source))
+                && let Some(&id) = free_declarations.get(tk::text(t, source))
                 && seen.insert(id.index())
             {
                 out.root(
@@ -137,7 +137,7 @@ struct ItemPass<'a, 'o> {
     /// Every free declaration by name, for the macro-template pass: names a
     /// `macro_rules!` body references must stay resolvable at every expansion
     /// site, so they root rather than count as file-local uses.
-    declared_free: BTreeMap<String, DeclarationId>,
+    free_declarations: BTreeMap<String, DeclarationId>,
     impls: Vec<Node<'a>>,
     /// `#[path = "…"]`-redirected module names → their real path segments. `use`
     /// paths through the alias substitute these (`use self::imp::*` where `mod imp`
@@ -180,7 +180,7 @@ impl<'a> ItemPass<'a, '_> {
                     let id =
                         self.out
                             .declaration(name, SymbolKind::Function, tk::span(item), reach);
-                    self.declared_free.entry(name.to_string()).or_insert(id);
+                    self.free_declarations.entry(name.to_string()).or_insert(id);
                     self.out.metrics(id, function_metrics(item, self.source));
                     root_for_attrs(&attrs, id, self.out);
                     // A top-level `fn main` is the language's entry convention: in
@@ -205,7 +205,7 @@ impl<'a> ItemPass<'a, '_> {
                         self.out
                             .declaration(name, SymbolKind::Type, tk::span(item), reach.clone());
                     self.types.entry(name.to_string()).or_insert(id);
-                    self.declared_free.entry(name.to_string()).or_insert(id);
+                    self.free_declarations.entry(name.to_string()).or_insert(id);
                     root_for_attrs(&attrs, id, self.out);
                     if item.kind() == "trait_item" {
                         self.trait_members(item, id, reach);
@@ -221,7 +221,7 @@ impl<'a> ItemPass<'a, '_> {
                     };
                     let name = tk::text(n, self.source);
                     let id = self.out.declaration(name, kind, tk::span(item), reach);
-                    self.declared_free.entry(name.to_string()).or_insert(id);
+                    self.free_declarations.entry(name.to_string()).or_insert(id);
                     root_for_attrs(&attrs, id, self.out);
                 }
             }
@@ -236,7 +236,7 @@ impl<'a> ItemPass<'a, '_> {
                                 tk::span(item),
                                 reach,
                             );
-                            self.declared_free.entry(name.to_string()).or_insert(id);
+                            self.free_declarations.entry(name.to_string()).or_insert(id);
                             root_for_attrs(&attrs, id, self.out);
                             self.stack.push(name.to_string());
                             self.items(body);
