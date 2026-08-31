@@ -126,6 +126,20 @@ fn declare(
                     out,
                 );
                 out.metrics(id, function_metrics(node, source));
+                // The promise region: name, parameters, return annotation —
+                // everything before the body. Free callables only: a class or
+                // interface has no body-distinct signature, and treating its
+                // whole body as one would make every member reference a
+                // "signature" reference.
+                if let Some(body) = node.child_by_field_name("body") {
+                    out.signature(
+                        id,
+                        Span {
+                            start: node.start_byte() as u32,
+                            end: body.start_byte() as u32,
+                        },
+                    );
+                }
             }
         }
         "class_declaration" | "abstract_class_declaration" => {

@@ -571,15 +571,21 @@ position is explainable from the findings themselves:
 
 | repo | score | implicated / subjects | counting categories |
 |---|---|---|---|
-| vite | 86.1 | 699 / 5,044 | unused 699 |
+| vite | 85.2 | 747 / 5,052 | unused 703 · cyclic 31 · private-type-leak 30 |
 | lodash | 90.4 | 18 / 187 | unused 18 |
 | Alamofire | 95.4 | 154 / 3,380 | unused 154 |
 | vapor | 97.6 | 77 / 3,149 | unused 77 |
 | guava | 98.6 | 1,017 / 70,175 | unused 1,017 |
+| flask | 99.5 | 6 / 1,187 | unused 3 · cyclic 3 |
 | Exposed | 99.7 | 38 / 12,482 | unused 38 |
-| flask | 99.7 | 3 / 1,187 | unused 3 |
 | ripgrep | 99.9 | 3 / 2,557 | unused 3 |
 | gin | 100.0 | 0 / 1,304 | — |
+
+(The table is refreshed as warning-tier categories land: cyclic and
+private-type-leak joined on 2026-08-31 — vite absorbed both, which is the
+table working as intended; version-skew is info-tier and unresolved's ten
+vite findings are error-tier on Import subjects, which health's
+symbol-and-file universe deliberately does not count.)
 
 Two readings the table forces, both intended:
 
@@ -678,3 +684,21 @@ and swift (single compilation unit) stay `Tolerated` — silence, not findings.
 Self-import edges (Python's `from . import x` inside `__init__.py`) are not
 cycles between modules and neither seed an SCC nor shadow a real loop's
 rendering.
+
+
+## private-type-leak (2026-08-31)
+
+The oracle's 43 were vite 30 + ripgrep 4 + guava 9. v2 reports **vite 30,
+everything else 0** — and the difference is the analysis's own precision
+floor, not lost coverage. ripgrep's four accused `pub(crate)` methods of
+leaking `pub(crate)` types — v1 folded both to "exported", and crate-internal
+callers can name both just fine; v2's Exported-vs-Private-only rule (any
+`Scoped` reach on either side is silence) retires them by construction.
+guava's nine were constructors in `guava-tests`/`guava-testlib` support code
+referencing package-private types: package-private is `Scoped` in v2 (silence
+again), the files carry test roots (a test makes no public promise), and the
+Java adapter does not yet delimit signature spans at all — three independent
+reasons, any one sufficient. vite's thirty are the real shape — exported free
+functions whose parameter or return annotations name file-local types
+(`Needle`, `IdResolver`, `AssetUrlFormat`, …) that consumers can call but
+never name.

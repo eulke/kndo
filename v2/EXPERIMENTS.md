@@ -106,7 +106,8 @@ dimension.
 Measured at M4.d, when the Rust and Go adapters landed (the deferred-until moment).
 Demand: 8,026 oracle findings across the corpus depend on ladder knowledge —
 internal-only 7,983 (guava 7,014, vapor 383, Alamofire 216, Exposed 163, vite 147,
-ripgrep 59, gin 1) plus private-type-leak 43 — the largest unbuilt category, bigger
+ripgrep 59, gin 1) plus private-type-leak 43 (SHIPPED 2026-08-31: vite 30 real, the
+other 13 retired as vices — rung folding, test-support, Scoped comparisons) — the largest unbuilt category, bigger
 than everything v2 reports today combined. Supply: three languages shipped on binary
 `Reach` alone, and NONE of M4's false-positive fixes wanted a rung between private and
 exported — every one wanted scope SHAPE: Go's package scope landed as what is now

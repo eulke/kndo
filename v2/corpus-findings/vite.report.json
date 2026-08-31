@@ -12,12 +12,16 @@
     ]
   },
   "health": {
-    "implicated": 718,
+    "implicated": 747,
     "subjects": 5052,
     "by_category": [
       {
         "category": "cyclic",
         "findings": 31
+      },
+      {
+        "category": "private-type-leak",
+        "findings": 30
       },
       {
         "category": "unused",
@@ -566,6 +570,666 @@
         "path": "playground/ssr/src/forked-deadlock/dynamic-imports/deadlock-fuse-module.js"
       },
       "message": "4 files form an import cycle: playground/ssr/src/forked-deadlock/dynamic-imports/deadlock-fuse-module.js → playground/ssr/src/forked-deadlock/dynamic-imports/fuse-stuck-bridge-module.js → playground/ssr/src/forked-deadlock/dynamic-imports/stuck-module.js → playground/ssr/src/forked-deadlock/dynamic-imports/middle-module.js → playground/ssr/src/forked-deadlock/dynamic-imports/deadlock-fuse-module.js"
+    },
+    {
+      "id": "kndo-78e86fbf5c57",
+      "category": "private-type-leak",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/module-runner/sourcemap/decoder.ts",
+        "selector": {
+          "Free": "getOriginalPosition"
+        },
+        "span": {
+          "start": 1205,
+          "end": 1425
+        }
+      },
+      "lines": {
+        "start": 58,
+        "end": 67
+      },
+      "message": "exported, but its signature references `Needle`, which is private — consumers can call this and never name that type"
+    },
+    {
+      "id": "kndo-a7a72ac56b05",
+      "category": "private-type-leak",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/assetSource.ts",
+        "selector": {
+          "Free": "getNodeAssetAttributes"
+        },
+        "span": {
+          "start": 2694,
+          "end": 4540
+        }
+      },
+      "lines": {
+        "start": 123,
+        "end": 185
+      },
+      "message": "exported, but its signature references `HtmlAssetAttribute`, which is private — consumers can call this and never name that type"
+    },
+    {
+      "id": "kndo-914ba2655494",
+      "category": "private-type-leak",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/build.ts",
+        "selector": {
+          "Free": "resolveLibFilename"
+        },
+        "span": {
+          "start": 31630,
+          "end": 32478
+        }
+      },
+      "lines": {
+        "start": 1018,
+        "end": 1049
+      },
+      "message": "exported, but its signature references `JsExt`, which is private — consumers can call this and never name that type"
+    },
+    {
+      "id": "kndo-f6c3824f2f0a",
+      "category": "private-type-leak",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/asset.ts",
+        "selector": {
+          "Free": "fileToUrl"
+        },
+        "span": {
+          "start": 13382,
+          "end": 13870
+        }
+      },
+      "lines": {
+        "start": 423,
+        "end": 443
+      },
+      "message": "exported, but its signature references `AssetUrlFormat`, which is private — consumers can call this and never name that type"
+    },
+    {
+      "id": "kndo-9af2af4fbcc1",
+      "category": "private-type-leak",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/html.ts",
+        "selector": {
+          "Free": "extractImportExpressionFromClassicScript"
+        },
+        "span": {
+          "start": 38944,
+          "end": 39662
+        }
+      },
+      "lines": {
+        "start": 1131,
+        "end": 1151
+      },
+      "message": "exported, but its signature references `ScriptAssetsUrl`, which is private — consumers can call this and never name that type"
+    },
+    {
+      "id": "kndo-6b9d6094628e",
+      "category": "private-type-leak",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/importMetaGlob.ts",
+        "selector": {
+          "Free": "transformGlobImport"
+        },
+        "span": {
+          "start": 11992,
+          "end": 17816
+        }
+      },
+      "lines": {
+        "start": 418,
+        "end": 604
+      },
+      "message": "exported, but its signature references `IdResolver`, which is private — consumers can call this and never name that type"
+    },
+    {
+      "id": "kndo-6d34f17d8798",
+      "category": "private-type-leak",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/importMetaGlob.ts",
+        "selector": {
+          "Free": "parseImportGlob"
+        },
+        "span": {
+          "start": 7700,
+          "end": 11038
+        }
+      },
+      "lines": {
+        "start": 251,
+        "end": 375
+      },
+      "message": "exported, but its signature references `IdResolver`, which is private — consumers can call this and never name that type"
+    },
+    {
+      "id": "kndo-8292005fffa7",
+      "category": "private-type-leak",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/importMetaGlob.ts",
+        "selector": {
+          "Free": "toAbsoluteGlob"
+        },
+        "span": {
+          "start": 19068,
+          "end": 20308
+        }
+      },
+      "lines": {
+        "start": 644,
+        "end": 690
+      },
+      "message": "exported, but its signature references `IdResolver`, which is private — consumers can call this and never name that type"
+    },
+    {
+      "id": "kndo-5e3228a28546",
+      "category": "private-type-leak",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/index.ts",
+        "selector": {
+          "Free": "getCachedFilterForPlugin"
+        },
+        "span": {
+          "start": 7624,
+          "end": 8747
+        }
+      },
+      "lines": {
+        "start": 246,
+        "end": 285
+      },
+      "message": "exported, but its signature references `FilterForPluginValue`, which is private — consumers can call this and never name that type"
+    },
+    {
+      "id": "kndo-bfb48f58c00b",
+      "category": "private-type-leak",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/oxc.ts",
+        "selector": {
+          "Free": "getRollupJsxPresets"
+        },
+        "span": {
+          "start": 1879,
+          "end": 2333
+        }
+      },
+      "lines": {
+        "start": 49,
+        "end": 68
+      },
+      "message": "exported, but its signature references `OxcJsxOptions`, which is private — consumers can call this and never name that type"
+    },
+    {
+      "id": "kndo-4738727a0fd5",
+      "category": "private-type-leak",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/worker.ts",
+        "selector": {
+          "Free": "generateWorkerEntryUrlExpr"
+        },
+        "span": {
+          "start": 9973,
+          "end": 10221
+        }
+      },
+      "lines": {
+        "start": 320,
+        "end": 328
+      },
+      "message": "exported, but its signature references `WorkerBundle`, which is private — consumers can call this and never name that type"
+    },
+    {
+      "id": "kndo-8a0f5deb92b7",
+      "category": "private-type-leak",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/worker.ts",
+        "selector": {
+          "Free": "recordWorkerReference"
+        },
+        "span": {
+          "start": 9413,
+          "end": 9715
+        }
+      },
+      "lines": {
+        "start": 304,
+        "end": 313
+      },
+      "message": "exported, but its signature references `WorkerBundleId`, which is private — consumers can call this and never name that type"
+    },
+    {
+      "id": "kndo-fbea524c369e",
+      "category": "private-type-leak",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/worker.ts",
+        "selector": {
+          "Free": "workerFileToUrl"
+        },
+        "span": {
+          "start": 14649,
+          "end": 15085
+        }
+      },
+      "lines": {
+        "start": 479,
+        "end": 495
+      },
+      "message": "exported, but its signature references `WorkerBundle`, which is private — consumers can call this and never name that type"
+    },
+    {
+      "id": "kndo-05b995f3e53c",
+      "category": "private-type-leak",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/server/sourcemap.ts",
+        "selector": {
+          "Free": "injectSourcesContent"
+        },
+        "span": {
+          "start": 2231,
+          "end": 4577
+        }
+      },
+      "lines": {
+        "start": 69,
+        "end": 134
+      },
+      "message": "exported, but its signature references `SourceMapLike`, which is private — consumers can call this and never name that type"
+    },
+    {
+      "id": "kndo-b4995d757ab1",
+      "category": "private-type-leak",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/server/transformRequest.ts",
+        "selector": {
+          "Free": "transformRequest"
+        },
+        "span": {
+          "start": 2312,
+          "end": 4931
+        }
+      },
+      "lines": {
+        "start": 78,
+        "end": 148
+      },
+      "message": "exported, but its signature references `TransformOptionsInternal`, which is private — consumers can call this and never name that type"
+    },
+    {
+      "id": "kndo-baba84ae9865",
+      "category": "private-type-leak",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/ssr/runnerImport.ts",
+        "selector": {
+          "Free": "runnerImport"
+        },
+        "span": {
+          "start": 379,
+          "end": 1929
+        }
+      },
+      "lines": {
+        "start": 15,
+        "end": 76
+      },
+      "message": "exported, but its signature references `RunnerImportResult`, which is private — consumers can call this and never name that type"
+    },
+    {
+      "id": "kndo-83b2639a85fe",
+      "category": "private-type-leak",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/ssr/ssrModuleLoader.ts",
+        "selector": {
+          "Free": "ssrLoadModule"
+        },
+        "span": {
+          "start": 706,
+          "end": 1247
+        }
+      },
+      "lines": {
+        "start": 19,
+        "end": 39
+      },
+      "message": "exported, but its signature references `SSRModule`, which is private — consumers can call this and never name that type"
+    },
+    {
+      "id": "kndo-1cf62dbc631c",
+      "category": "private-type-leak",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/utils.ts",
+        "selector": {
+          "Free": "posToNumber"
+        },
+        "span": {
+          "start": 14568,
+          "end": 14882
+        }
+      },
+      "lines": {
+        "start": 496,
+        "end": 505
+      },
+      "message": "exported, but its signature references `Pos`, which is private — consumers can call this and never name that type"
+    },
+    {
+      "id": "kndo-399e931c51ea",
+      "category": "private-type-leak",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/utils.ts",
+        "selector": {
+          "Free": "createDebugger"
+        },
+        "span": {
+          "start": 5570,
+          "end": 6234
+        }
+      },
+      "lines": {
+        "start": 187,
+        "end": 211
+      },
+      "message": "exported, but its signature references `DebuggerOptions`, which is private — consumers can call this and never name that type"
+    },
+    {
+      "id": "kndo-3dbcd21088b7",
+      "category": "private-type-leak",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/utils.ts",
+        "selector": {
+          "Free": "generateCodeFrame"
+        },
+        "span": {
+          "start": 15358,
+          "end": 18057
+        }
+      },
+      "lines": {
+        "start": 525,
+        "end": 603
+      },
+      "message": "exported, but its signature references `Pos`, which is private — consumers can call this and never name that type"
+    },
+    {
+      "id": "kndo-4978dcd86cf7",
+      "category": "private-type-leak",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/utils.ts",
+        "selector": {
+          "Free": "deepClone"
+        },
+        "span": {
+          "start": 36596,
+          "end": 37241
+        }
+      },
+      "lines": {
+        "start": 1212,
+        "end": 1233
+      },
+      "message": "exported, but its signature references `DeepWritable`, which is private — consumers can call this and never name that type"
+    },
+    {
+      "id": "kndo-7133f93dd72d",
+      "category": "private-type-leak",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/utils.ts",
+        "selector": {
+          "Free": "processSrcSet"
+        },
+        "span": {
+          "start": 25001,
+          "end": 25295
+        }
+      },
+      "lines": {
+        "start": 833,
+        "end": 843
+      },
+      "message": "exported, but its signature references `ImageCandidate`, which is private — consumers can call this and never name that type"
+    },
+    {
+      "id": "kndo-71d285c1e878",
+      "category": "private-type-leak",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/utils.ts",
+        "selector": {
+          "Free": "mergeWithDefaults"
+        },
+        "span": {
+          "start": 38792,
+          "end": 39141
+        }
+      },
+      "lines": {
+        "start": 1287,
+        "end": 1294
+      },
+      "message": "exported, but its signature references `MergeWithDefaultsResult`, which is private — consumers can call this and never name that type"
+    },
+    {
+      "id": "kndo-7c593048482e",
+      "category": "private-type-leak",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/utils.ts",
+        "selector": {
+          "Free": "processSrcSetSync"
+        },
+        "span": {
+          "start": 25304,
+          "end": 25554
+        }
+      },
+      "lines": {
+        "start": 845,
+        "end": 855
+      },
+      "message": "exported, but its signature references `ImageCandidate`, which is private — consumers can call this and never name that type"
+    },
+    {
+      "id": "kndo-7d122ac6a973",
+      "category": "private-type-leak",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/utils.ts",
+        "selector": {
+          "Free": "asyncFlatten"
+        },
+        "span": {
+          "start": 50050,
+          "end": 50292
+        }
+      },
+      "lines": {
+        "start": 1691,
+        "end": 1698
+      },
+      "message": "exported, but its signature references `AsyncFlatten`, which is private — consumers can call this and never name that type"
+    },
+    {
+      "id": "kndo-b0ec416efb61",
+      "category": "private-type-leak",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/utils.ts",
+        "selector": {
+          "Free": "mergeWithDefaults"
+        },
+        "span": {
+          "start": 38792,
+          "end": 39141
+        }
+      },
+      "lines": {
+        "start": 1287,
+        "end": 1294
+      },
+      "message": "exported, but its signature references `DeepWritable`, which is private — consumers can call this and never name that type"
+    },
+    {
+      "id": "kndo-b40f848cc6e5",
+      "category": "private-type-leak",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/utils.ts",
+        "selector": {
+          "Free": "parseSrcset"
+        },
+        "span": {
+          "start": 24597,
+          "end": 24992
+        }
+      },
+      "lines": {
+        "start": 820,
+        "end": 831
+      },
+      "message": "exported, but its signature references `ImageCandidate`, which is private — consumers can call this and never name that type"
+    },
+    {
+      "id": "kndo-b5cf7bcfd496",
+      "category": "private-type-leak",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/utils.ts",
+        "selector": {
+          "Free": "numberToPos"
+        },
+        "span": {
+          "start": 14891,
+          "end": 15297
+        }
+      },
+      "lines": {
+        "start": 507,
+        "end": 520
+      },
+      "message": "exported, but its signature references `Pos`, which is private — consumers can call this and never name that type"
+    },
+    {
+      "id": "kndo-e106f3e39d78",
+      "category": "private-type-leak",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/utils.ts",
+        "selector": {
+          "Free": "getPackageManagerCommand"
+        },
+        "span": {
+          "start": 52726,
+          "end": 53345
+        }
+      },
+      "lines": {
+        "start": 1798,
+        "end": 1817
+      },
+      "message": "exported, but its signature references `CommandType`, which is private — consumers can call this and never name that type"
+    },
+    {
+      "id": "kndo-b9b86605a52f",
+      "category": "private-type-leak",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "playground/test-utils.ts",
+        "selector": {
+          "Free": "untilBrowserLogAfter"
+        },
+        "span": {
+          "start": 8720,
+          "end": 9233
+        }
+      },
+      "lines": {
+        "start": 289,
+        "end": 305
+      },
+      "message": "exported, but its signature references `UntilBrowserLogAfterCallback`, which is private — consumers can call this and never name that type"
     },
     {
       "id": "kndo-3e74b12d252b",

@@ -415,6 +415,13 @@ contract's own generated `Options` schema, and answering from a HELD session —
 analysis amortized across a conversation of lookups, refreshed by `check` (the
 tool descriptions say so; a test proves it behaviorally). One contract, two doors.
 
+**`private-type-leak`** closes the visibility pair: an exported callable whose
+signature — the promise region the adapter now marks
+(`Declaration.signature_span`) — names a private type. Exported-vs-Private
+only (`Scoped` on either side is silence, which retires v1's `pub(crate)` and
+package-private vices by construction); corpus vite 30 real, zero elsewhere,
+zero noise.
+
 **`cyclic`** completes the risk family's first member: SCCs over import edges,
 one warning per cycle with the shortest loop as its evidence chain, and hazard
 as the language's OWN declaration (`ExtensionSpec::import_cycles` — js-ts and

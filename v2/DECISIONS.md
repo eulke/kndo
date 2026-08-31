@@ -1879,3 +1879,35 @@ capability, and a versioned world can carry it later.
 219 tests, 15 gates, clippy clean; the harvested cyclic fixture and the
 npm-workspace fixture now pin cycle findings byte-exactly (deliberate,
 called out here).
+
+## 2026-08-31 — private-type-leak ships: only the signature is a promise
+
+An exported callable whose SIGNATURE references a private type — the other
+direction of the visibility pair (`internal-only` finds visibility above use;
+this finds it below). The evidence is new and minimal:
+`Declaration.signature_span: Option<Span>` (set via `EvidenceSink::signature`;
+the fingerprint moved and says so) — the adapter marks the promise region
+itself, absence means silence, and a private type used inside a BODY is
+ordinary encapsulation, never a finding. js-ts emits it for free function
+declarations (everything before the body — name, parameters, return
+annotation; classes and interfaces deliberately not: their "signature" would
+be their whole body, drowning the analysis in member references).
+
+The precision floor, each rule bought with a measured oracle vice:
+**Exported-vs-Private only** — any `Scoped` reach on either side is silence
+(v1 folded rust's `pub(crate)` to exported and accused crate-wide methods of
+leaking crate-wide types: ripgrep, four findings about nothing; Java
+package-private is `Scoped` here and equally silent). **The effective surface
+is the whole owner chain.** **Same-file unique resolution** — a name that
+could mean two declarations accuses neither. **A file carrying its own Test
+root makes no public promise** — guava's nine oracle findings were
+test-support constructors.
+
+Corpus: vite 30 — the oracle's own thirty, the real shape (exported free
+functions naming file-local types consumers can call but never name) — and
+zero everywhere else, zero noise. Scoped-vs-scoped comparison (a region
+strictly wider than another region) is a real future judgment and waits for
+region semantics with a consumer, recorded in EXPERIMENTS beside the ladder
+work. 219 tests, 15 gates, clippy clean; the harvested private-type-leak
+fixture pins the canonical case (signature fires, body use does not), and
+the fingerprint bump is this entry's announcement.

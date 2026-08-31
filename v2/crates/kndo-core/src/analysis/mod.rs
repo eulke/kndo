@@ -10,6 +10,7 @@
 mod cyclic;
 mod duplicate;
 mod internal_only;
+mod private_type_leak;
 mod test_only;
 mod unresolved;
 mod untested;
@@ -19,6 +20,7 @@ mod version_skew;
 pub use cyclic::Cyclic;
 pub use duplicate::Duplicate;
 pub use internal_only::InternalOnly;
+pub use private_type_leak::PrivateTypeLeak;
 pub use test_only::TestOnly;
 pub use unresolved::Unresolved;
 pub use untested::Untested;

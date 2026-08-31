@@ -5,8 +5,8 @@
 //! refusal reappears inside [`RunOutcome`] so `exit_code` covers that path too.
 
 use crate::analysis::{
-    Abstention, Cyclic, Duplicate, InternalOnly, TestOnly, Unresolved, Untested, Unused,
-    VersionSkew, run_all,
+    Abstention, Cyclic, Duplicate, InternalOnly, PrivateTypeLeak, TestOnly, Unresolved, Untested,
+    Unused, VersionSkew, run_all,
 };
 use crate::cache::EvidenceCache;
 use crate::conduct::Contribution;
@@ -449,8 +449,9 @@ impl Session {
             })
             .map(|e| SmolStr::new(e.spec().coordinate()))
             .collect();
-        let all: [&dyn crate::analysis::Analysis; 8] = [
+        let all: [&dyn crate::analysis::Analysis; 9] = [
             &Cyclic,
+            &PrivateTypeLeak,
             &Unused,
             &InternalOnly,
             &TestOnly,

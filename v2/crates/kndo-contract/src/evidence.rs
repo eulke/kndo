@@ -162,6 +162,12 @@ pub struct Declaration {
     pub reach: Reach,
     /// Set via [`EvidenceSink::member_of`] — by id, never by name lookup.
     pub owner: Option<DeclarationId>,
+    /// The region that is a PROMISE to consumers — a callable's parameter and
+    /// return-type text, never its body. Set via [`EvidenceSink::signature`];
+    /// `None` (the default) means the adapter does not delimit signatures for
+    /// this declaration, and signature-scoped analyses (`private-type-leak`)
+    /// stay silent for it — degrade toward silence, never toward accusation.
+    pub signature_span: Option<Span>,
     /// The module-system name this declaration is exported under when it differs
     /// from its local name (`export default`, `export { local as alias }`) — what
     /// importers actually bind. Set via [`EvidenceSink::exported_as`].
@@ -393,6 +399,7 @@ impl EvidenceSink {
             reach,
             owner: None,
             exported_as: None,
+            signature_span: None,
         });
         id
     }
@@ -424,6 +431,14 @@ impl EvidenceSink {
             return;
         }
         self.out.declarations[member.index()].owner = Some(owner);
+    }
+
+    /// The signature region (see [`Declaration::signature_span`]) — by id.
+    pub fn signature(&mut self, of: DeclarationId, span: Span) {
+        if !self.valid_id(of, "signature") {
+            return;
+        }
+        self.out.declarations[of.index()].signature_span = Some(span);
     }
 
     /// The exported alias, when it differs from the local name — by id, so the alias

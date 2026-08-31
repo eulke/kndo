@@ -12,11 +12,39 @@
     ]
   },
   "health": {
-    "implicated": 0,
+    "implicated": 1,
     "subjects": 3,
-    "by_category": []
+    "by_category": [
+      {
+        "category": "private-type-leak",
+        "findings": 1
+      }
+    ]
   },
-  "findings": [],
+  "findings": [
+    {
+      "id": "kndo-285843b1f121",
+      "category": "private-type-leak",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "index.ts",
+        "selector": {
+          "Free": "make"
+        },
+        "span": {
+          "start": 38,
+          "end": 126
+        }
+      },
+      "lines": {
+        "start": 3,
+        "end": 6
+      },
+      "message": "exported, but its signature references `Secret`, which is private — consumers can call this and never name that type"
+    }
+  ],
   "fixed": [],
   "baselined": 0,
   "abstained": [
