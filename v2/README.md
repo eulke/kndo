@@ -415,6 +415,14 @@ contract's own generated `Options` schema, and answering from a HELD session —
 analysis amortized across a conversation of lookups, refreshed by `check` (the
 tool descriptions say so; a test proves it behaviorally). One contract, two doors.
 
+**Package aggregation** lands the unit above files: `Graph.packages` with
+directory-truth ownership (parallel same-named trees stay two packages, told
+apart by manifest), JVM modules from settings/pom self-description,
+`health --by-package` (the envelope always carries the split), and
+package-level `cyclic` over declared sibling dependencies at publish-relevant
+scopes — under which BOTH oracle package-cycles dissolve as vices (guava's
+pair never existed at the pin; Exposed's closes test-scoped, publish-safe).
+
 **`private-type-leak`** closes the visibility pair: an exported callable whose
 signature — the promise region the adapter now marks
 (`Declaration.signature_span`) — names a private type. Exported-vs-Private

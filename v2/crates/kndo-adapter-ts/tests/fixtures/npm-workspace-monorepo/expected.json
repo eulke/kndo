@@ -23,6 +23,20 @@
         "category": "unused",
         "findings": 1
       }
+    ],
+    "by_package": [
+      {
+        "name": "@demo/a",
+        "manifest": "packages/a/package.json",
+        "implicated": 2,
+        "subjects": 4
+      },
+      {
+        "name": "@demo/b",
+        "manifest": "packages/b/package.json",
+        "implicated": 0,
+        "subjects": 2
+      }
     ]
   },
   "findings": [

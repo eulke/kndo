@@ -752,3 +752,39 @@ fn presentation_flags_shape_the_human_render_only() {
     let both = check(&p, &["--quiet", "--verbose"], terminal());
     assert_eq!(both.code, 2, "{}", both.stderr);
 }
+
+#[test]
+fn health_by_package_renders_the_split_on_a_terminal() {
+    let p = TempProject::new();
+    p.file(
+        "package.json",
+        r#"{ "name": "root", "workspaces": ["packages/*"] }"#,
+    );
+    p.file(
+        "packages/a/package.json",
+        r#"{ "name": "a", "main": "index.js" }"#,
+    );
+    p.file("packages/a/index.js", "export const live = 1;\n");
+    p.file("packages/a/orphan.js", "export const floats = 1;\n");
+    p.file(
+        "packages/b/package.json",
+        r#"{ "name": "b", "main": "index.js" }"#,
+    );
+    p.file("packages/b/index.js", "export const fine = 1;\n");
+    let root = p.root().to_string_lossy().into_owned();
+
+    let out = run_args(["kndo", "health", &root, "--by-package"], terminal());
+    assert_eq!(out.code, 0, "{}{}", out.stdout, out.stderr);
+    assert!(out.stdout.contains("\n  a "), "{}", out.stdout);
+    assert!(out.stdout.contains("\n  b "), "{}", out.stdout);
+    // The envelope always carries the split — no flag needed when piped.
+    let json = run_args(["kndo", "health", &root], piped());
+    let health: serde_json::Value = serde_json::from_str(&json.stdout).expect("json");
+    assert!(
+        health["by_package"]
+            .as_array()
+            .is_some_and(|v| v.len() >= 2),
+        "{}",
+        json.stdout
+    );
+}

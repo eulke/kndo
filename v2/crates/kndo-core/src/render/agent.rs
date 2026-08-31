@@ -501,6 +501,7 @@ mod tests {
                 category: Category::UNUSED,
                 findings: 1,
             }],
+            by_package: Vec::new(),
         });
         report.run.extensions.push(ExtensionRun {
             id: SmolStr::new("kndo:python"),

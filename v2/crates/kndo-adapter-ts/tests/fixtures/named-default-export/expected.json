@@ -14,7 +14,15 @@
   "health": {
     "implicated": 0,
     "subjects": 4,
-    "by_category": []
+    "by_category": [],
+    "by_package": [
+      {
+        "name": "named-default-export",
+        "manifest": "package.json",
+        "implicated": 0,
+        "subjects": 4
+      }
+    ]
   },
   "findings": [],
   "fixed": [],

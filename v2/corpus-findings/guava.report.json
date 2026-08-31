@@ -23,6 +23,62 @@
         "category": "unused",
         "findings": 1017
       }
+    ],
+    "by_package": [
+      {
+        "name": "failureaccess",
+        "manifest": "futures/failureaccess/pom.xml",
+        "implicated": 0,
+        "subjects": 7
+      },
+      {
+        "name": "guava",
+        "manifest": "android/guava/pom.xml",
+        "implicated": 61,
+        "subjects": 15256
+      },
+      {
+        "name": "guava",
+        "manifest": "guava/pom.xml",
+        "implicated": 42,
+        "subjects": 15467
+      },
+      {
+        "name": "guava-gwt",
+        "manifest": "guava-gwt/pom.xml",
+        "implicated": 24,
+        "subjects": 822
+      },
+      {
+        "name": "guava-testlib",
+        "manifest": "android/guava-testlib/pom.xml",
+        "implicated": 78,
+        "subjects": 4183
+      },
+      {
+        "name": "guava-testlib",
+        "manifest": "guava-testlib/pom.xml",
+        "implicated": 148,
+        "subjects": 4761
+      },
+      {
+        "name": "guava-tests",
+        "manifest": "android/guava-tests/pom.xml",
+        "implicated": 332,
+        "subjects": 14678
+      },
+      {
+        "name": "guava-tests",
+        "manifest": "guava-tests/pom.xml",
+        "implicated": 332,
+        "subjects": 14998
+      },
+      {
+        "name": "listenablefuture",
+        "manifest": "futures/listenablefuture1/pom.xml",
+        "implicated": 0,
+        "subjects": 3
+      }
     ]
   },
   "findings": [

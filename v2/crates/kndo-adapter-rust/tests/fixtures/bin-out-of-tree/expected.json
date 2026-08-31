@@ -14,7 +14,15 @@
   "health": {
     "implicated": 0,
     "subjects": 12,
-    "by_category": []
+    "by_category": [],
+    "by_package": [
+      {
+        "name": "outoftree",
+        "manifest": "Cargo.toml",
+        "implicated": 0,
+        "subjects": 12
+      }
+    ]
   },
   "findings": [],
   "fixed": [],

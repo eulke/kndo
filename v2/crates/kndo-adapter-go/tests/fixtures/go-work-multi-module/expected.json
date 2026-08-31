@@ -19,6 +19,20 @@
         "category": "unused",
         "findings": 1
       }
+    ],
+    "by_package": [
+      {
+        "name": "example.com/a",
+        "manifest": "moda/go.mod",
+        "implicated": 1,
+        "subjects": 4
+      },
+      {
+        "name": "example.com/b",
+        "manifest": "modb/go.mod",
+        "implicated": 0,
+        "subjects": 2
+      }
     ]
   },
   "findings": [

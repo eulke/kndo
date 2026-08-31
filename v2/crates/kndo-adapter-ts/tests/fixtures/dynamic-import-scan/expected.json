@@ -19,6 +19,14 @@
         "category": "unused",
         "findings": 3
       }
+    ],
+    "by_package": [
+      {
+        "name": "dynamic-import-scan",
+        "manifest": "package.json",
+        "implicated": 3,
+        "subjects": 8
+      }
     ]
   },
   "findings": [

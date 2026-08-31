@@ -19,6 +19,14 @@
         "category": "unused",
         "findings": 1
       }
+    ],
+    "by_package": [
+      {
+        "name": "example.com/demo",
+        "manifest": "go.mod",
+        "implicated": 1,
+        "subjects": 7
+      }
     ]
   },
   "findings": [

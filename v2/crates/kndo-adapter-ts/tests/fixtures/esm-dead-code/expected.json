@@ -19,6 +19,14 @@
         "category": "unused",
         "findings": 2
       }
+    ],
+    "by_package": [
+      {
+        "name": "esm-dead-code",
+        "manifest": "package.json",
+        "implicated": 2,
+        "subjects": 6
+      }
     ]
   },
   "findings": [

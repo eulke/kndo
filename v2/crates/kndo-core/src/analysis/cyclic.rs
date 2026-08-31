@@ -89,9 +89,85 @@ impl Analysis for Cyclic {
                 ),
             ));
         }
+        out.extend(package_cycles(g));
         out.sort_by(|a, b| a.subject.path().cmp(b.subject.path()));
         out
     }
+}
+
+/// Workspace-package cycles over DECLARED sibling dependencies: P → Q when
+/// P's anchoring manifest declares a dependency spelling Q's name at any
+/// scope but `Dev` — a dev-only mutual pair never blocks a publish (npm
+/// ignores devDependencies at install), while an unknown scope (the JVM
+/// name-only stream) counts, which is exactly where the demand lives.
+/// Ecosystem-generic by construction: no language tolerance applies, because
+/// a declared mutual dependency between publishable units breaks publish
+/// ordering wherever packages publish at all.
+fn package_cycles(g: &crate::graph::Graph) -> Vec<Finding> {
+    use kndo_contract::adapter::DependencyScope;
+    if g.packages.len() < 2 {
+        return Vec::new();
+    }
+    let declared_names: Vec<std::collections::BTreeSet<&str>> = g
+        .packages
+        .iter()
+        .map(|p| {
+            g.manifest_declarations
+                .iter()
+                .find(|d| d.manifest == p.manifest)
+                .map(|d| {
+                    d.declarations
+                        .iter()
+                        .filter(|dd| dd.scope != Some(DependencyScope::Dev))
+                        .map(|dd| dd.name.as_str())
+                        .collect()
+                })
+                .unwrap_or_default()
+        })
+        .collect();
+    let adjacency: Vec<Vec<u32>> = (0..g.packages.len())
+        .map(|p| {
+            (0..g.packages.len())
+                .filter(|&q| q != p && declared_names[p].contains(g.packages[q].name.as_str()))
+                .map(|q| q as u32)
+                .collect()
+        })
+        .collect();
+    let slices: Vec<&[u32]> = adjacency.iter().map(|v| v.as_slice()).collect();
+    let mut out = Vec::new();
+    for mut scc in sccs(&slices) {
+        if scc.len() < 2 {
+            continue;
+        }
+        scc.sort_unstable_by(|&a, &b| {
+            g.packages[a as usize]
+                .name
+                .cmp(&g.packages[b as usize].name)
+        });
+        let anchor = &g.packages[scc[0] as usize];
+        let loop_path = shortest_loop(&slices, &scc, scc[0]);
+        let mut names: Vec<&str> = loop_path
+            .iter()
+            .map(|&i| g.packages[i as usize].name.as_str())
+            .collect();
+        names.push(anchor.name.as_str());
+        out.push(Finding::new(
+            Category::CYCLIC,
+            Severity::Warning,
+            Confidence::Certain,
+            Subject::Package {
+                manifest: anchor.manifest.clone(),
+                name: anchor.name.clone(),
+            },
+            "",
+            format!(
+                "{} workspace packages form a dependency cycle: {} — a cycle between                  publishable units breaks publish ordering",
+                scc.len(),
+                names.join(" → ")
+            ),
+        ));
+    }
+    out
 }
 
 /// The strongest-confidence import edge from `from` to `to`, if one exists —

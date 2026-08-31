@@ -702,3 +702,16 @@ reasons, any one sufficient. vite's thirty are the real shape — exported free
 functions whose parameter or return annotations name file-local types
 (`Needle`, `IdResolver`, `AssetUrlFormat`, …) that consumers can call but
 never name.
+## Package-level cyclic (2026-08-31)
+
+The oracle's two package cycles dissolve against their own pins. guava:
+`guava-tests → guava-testlib` exists; the reverse declaration does not —
+guava-testlib's pom (both trees) declares guava, junit, truth, never
+guava-tests. v1 manufactured the loop. Exposed: the cycle closes only through
+`exposed-kotlin-datetime`'s `testImplementation(project(":exposed-tests"))` —
+a test-scoped edge that gradle never publishes, so "breaks publish ordering"
+was false on its face. v2's edge rule (declared sibling dependency at any
+scope but Dev, with gradle configuration words and maven `<scope>test</scope>`
+read as declarations) reports zero on the corpus, and the mechanism is pinned
+by an engine test: a prod mutual pair fires, the same shape dev-side is
+silence.

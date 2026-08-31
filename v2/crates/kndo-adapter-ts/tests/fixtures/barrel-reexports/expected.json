@@ -19,6 +19,14 @@
         "category": "unused",
         "findings": 1
       }
+    ],
+    "by_package": [
+      {
+        "name": "barrel-reexports",
+        "manifest": "package.json",
+        "implicated": 1,
+        "subjects": 7
+      }
     ]
   },
   "findings": [

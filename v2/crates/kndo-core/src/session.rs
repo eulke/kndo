@@ -218,7 +218,11 @@ impl Snapshot {
     pub fn against(&mut self, base: &Snapshot, mode: crate::report::Mode) {
         self.baseline = Some(base.findings.clone());
         self.base_health =
-            crate::health::Health::measure(&base.findings, subjects_of(&base.graph), &base.judged);
+            crate::health::Health::measure(&base.findings, subjects_of(&base.graph), &base.judged)
+                .map(|mut h| {
+                    h.partition(&base.graph, &base.findings);
+                    h
+                });
         self.mode = mode;
     }
 }
@@ -620,7 +624,11 @@ impl Snapshot {
         let baselined = (self.findings.len() - findings.len()) as u32;
 
         let health =
-            crate::health::Health::measure(&self.findings, subjects_of(&self.graph), &self.judged);
+            crate::health::Health::measure(&self.findings, subjects_of(&self.graph), &self.judged)
+                .map(|mut h| {
+                    h.partition(&self.graph, &self.findings);
+                    h
+                });
 
         Report {
             run: RunInfo {

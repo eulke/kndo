@@ -66,3 +66,56 @@ fn package_json_turns_judgment_on() {
     );
     assert_eq!(snap.findings.len(), 2, "{subjects:#?}");
 }
+
+#[test]
+fn package_cycles_fire_on_prod_mutuals_and_never_on_dev_pairs() {
+    use kndo_testkit::TempProject;
+    let run = |a_deps: &str, b_deps: &str| -> Vec<String> {
+        let p = TempProject::new();
+        p.file(
+            "package.json",
+            r#"{ "name": "root", "workspaces": ["packages/*"] }"#,
+        );
+        p.file(
+            "packages/a/package.json",
+            &format!(r#"{{ "name": "a", "main": "index.js", {a_deps} }}"#),
+        );
+        p.file("packages/a/index.js", "export const a = 1;\n");
+        p.file(
+            "packages/b/package.json",
+            &format!(r#"{{ "name": "b", "main": "index.js", {b_deps} }}"#),
+        );
+        p.file("packages/b/index.js", "export const b = 1;\n");
+        let snapshot = kndo::open(p.root().to_path_buf(), kndo::Config::default())
+            .unwrap()
+            .analyze(kndo::RunMode::Full)
+            .unwrap();
+        snapshot
+            .findings
+            .iter()
+            .filter(|f| {
+                f.category.as_str() == "cyclic"
+                    && matches!(f.subject, kndo::Subject::Package { .. })
+            })
+            .map(|f| f.message.clone())
+            .collect()
+    };
+
+    // A mutual prod pair is a publish-ordering break: one finding, both named.
+    let prod = run(
+        r#""dependencies": { "b": "1.0.0" }"#,
+        r#""dependencies": { "a": "1.0.0" }"#,
+    );
+    assert_eq!(prod.len(), 1, "{prod:?}");
+    assert!(
+        prod[0].contains("a → b → a") || prod[0].contains("b → a → b"),
+        "{prod:?}"
+    );
+
+    // The same shape declared dev-side never blocks a publish: silence.
+    let dev = run(
+        r#""devDependencies": { "b": "1.0.0" }"#,
+        r#""devDependencies": { "a": "1.0.0" }"#,
+    );
+    assert!(dev.is_empty(), "{dev:?}");
+}

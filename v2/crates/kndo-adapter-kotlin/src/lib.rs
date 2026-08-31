@@ -59,14 +59,19 @@ impl Extension for KotlinAdapter {
         resolve::resolve(from, specifier, cx)
     }
 
+    fn packages(
+        &self,
+        manifest: &SourceFile<'_>,
+        _cx: &ResolveContext<'_>,
+    ) -> Vec<kndo_contract::adapter::PackageEntry> {
+        kndo_toolkit::jvm_manifest::packages(manifest)
+    }
+
     fn manifest_dependencies(
         &self,
         manifest: &SourceFile<'_>,
     ) -> Vec<kndo_contract::adapter::DependencyDeclaration> {
         kndo_toolkit::jvm_manifest::dependencies(manifest)
-            .into_iter()
-            .map(kndo_contract::adapter::DependencyDeclaration::name_only)
-            .collect()
     }
 
     fn sees(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {

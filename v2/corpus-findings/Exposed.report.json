@@ -23,6 +23,254 @@
         "category": "unused",
         "findings": 38
       }
+    ],
+    "by_package": [
+      {
+        "name": "",
+        "manifest": "",
+        "implicated": 24,
+        "subjects": 474
+      },
+      {
+        "name": "com.example:exposed-modules-maven",
+        "manifest": "documentation-website/Writerside/snippets/exposed-modules-maven/pom.xml",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "exposed-core",
+        "manifest": "settings.gradle.kts",
+        "implicated": 3,
+        "subjects": 2569
+      },
+      {
+        "name": "exposed-crypt",
+        "manifest": "exposed-crypt/build.gradle.kts",
+        "implicated": 0,
+        "subjects": 151
+      },
+      {
+        "name": "exposed-dao",
+        "manifest": "documentation-website/Writerside/snippets/exposed-dao/build.gradle.kts",
+        "implicated": 0,
+        "subjects": 139
+      },
+      {
+        "name": "exposed-dao",
+        "manifest": "exposed-dao/build.gradle.kts",
+        "implicated": 2,
+        "subjects": 210
+      },
+      {
+        "name": "exposed-dao-relationships",
+        "manifest": "documentation-website/Writerside/snippets/exposed-dao-relationships/build.gradle.kts",
+        "implicated": 0,
+        "subjects": 121
+      },
+      {
+        "name": "exposed-data-types",
+        "manifest": "documentation-website/Writerside/snippets/exposed-data-types/build.gradle.kts",
+        "implicated": 0,
+        "subjects": 174
+      },
+      {
+        "name": "exposed-databases-jdbc",
+        "manifest": "documentation-website/Writerside/snippets/exposed-databases-jdbc/build.gradle.kts",
+        "implicated": 0,
+        "subjects": 19
+      },
+      {
+        "name": "exposed-databases-r2dbc",
+        "manifest": "documentation-website/Writerside/snippets/exposed-databases-r2dbc/build.gradle.kts",
+        "implicated": 0,
+        "subjects": 18
+      },
+      {
+        "name": "exposed-dsl",
+        "manifest": "documentation-website/Writerside/snippets/exposed-dsl/build.gradle.kts",
+        "implicated": 0,
+        "subjects": 168
+      },
+      {
+        "name": "exposed-gradle-plugin",
+        "manifest": "documentation-website/Writerside/snippets/settings.gradle.kts",
+        "implicated": 0,
+        "subjects": 13
+      },
+      {
+        "name": "exposed-gradle-plugin",
+        "manifest": "exposed-gradle-plugin/build.gradle.kts",
+        "implicated": 0,
+        "subjects": 116
+      },
+      {
+        "name": "exposed-java-time",
+        "manifest": "exposed-java-time/build.gradle.kts",
+        "implicated": 0,
+        "subjects": 238
+      },
+      {
+        "name": "exposed-jdbc",
+        "manifest": "exposed-jdbc/build.gradle.kts",
+        "implicated": 0,
+        "subjects": 640
+      },
+      {
+        "name": "exposed-jdbc-r2dbc-tests",
+        "manifest": "exposed-jdbc-r2dbc-tests/build.gradle.kts",
+        "implicated": 0,
+        "subjects": 10
+      },
+      {
+        "name": "exposed-jodatime",
+        "manifest": "exposed-jodatime/build.gradle.kts",
+        "implicated": 0,
+        "subjects": 172
+      },
+      {
+        "name": "exposed-json",
+        "manifest": "exposed-json/build.gradle.kts",
+        "implicated": 0,
+        "subjects": 93
+      },
+      {
+        "name": "exposed-kotlin-datetime",
+        "manifest": "exposed-kotlin-datetime/build.gradle.kts",
+        "implicated": 0,
+        "subjects": 322
+      },
+      {
+        "name": "exposed-maven-plugin",
+        "manifest": "exposed-maven-plugin/build.gradle.kts",
+        "implicated": 0,
+        "subjects": 77
+      },
+      {
+        "name": "exposed-migration-core",
+        "manifest": "exposed-migration-core/build.gradle.kts",
+        "implicated": 0,
+        "subjects": 6
+      },
+      {
+        "name": "exposed-migration-jdbc",
+        "manifest": "exposed-migration-jdbc/build.gradle.kts",
+        "implicated": 0,
+        "subjects": 209
+      },
+      {
+        "name": "exposed-migration-r2dbc",
+        "manifest": "exposed-migration-r2dbc/build.gradle.kts",
+        "implicated": 0,
+        "subjects": 171
+      },
+      {
+        "name": "exposed-migrations",
+        "manifest": "documentation-website/Writerside/snippets/exposed-migrations/build.gradle.kts",
+        "implicated": 0,
+        "subjects": 17
+      },
+      {
+        "name": "exposed-modules-groovy-gradle",
+        "manifest": "documentation-website/Writerside/snippets/exposed-modules-groovy-gradle/build.gradle",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "exposed-modules-kotlin-gradle",
+        "manifest": "documentation-website/Writerside/snippets/exposed-modules-kotlin-gradle/build.gradle.kts",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "exposed-money",
+        "manifest": "exposed-money/build.gradle.kts",
+        "implicated": 0,
+        "subjects": 59
+      },
+      {
+        "name": "exposed-plugin-core",
+        "manifest": "exposed-plugin-core/build.gradle.kts",
+        "implicated": 0,
+        "subjects": 120
+      },
+      {
+        "name": "exposed-r2dbc",
+        "manifest": "exposed-r2dbc/build.gradle.kts",
+        "implicated": 2,
+        "subjects": 1105
+      },
+      {
+        "name": "exposed-r2dbc-tests",
+        "manifest": "exposed-r2dbc-tests/build.gradle.kts",
+        "implicated": 4,
+        "subjects": 1769
+      },
+      {
+        "name": "exposed-spring-boot-starter",
+        "manifest": "exposed-spring-boot-starter/build.gradle.kts",
+        "implicated": 0,
+        "subjects": 87
+      },
+      {
+        "name": "exposed-spring-boot4-starter",
+        "manifest": "exposed-spring-boot4-starter/build.gradle.kts",
+        "implicated": 0,
+        "subjects": 87
+      },
+      {
+        "name": "exposed-sql-functions",
+        "manifest": "documentation-website/Writerside/snippets/exposed-sql-functions/build.gradle.kts",
+        "implicated": 0,
+        "subjects": 43
+      },
+      {
+        "name": "exposed-tests",
+        "manifest": "exposed-tests/build.gradle.kts",
+        "implicated": 3,
+        "subjects": 2351
+      },
+      {
+        "name": "exposed-transactions",
+        "manifest": "documentation-website/Writerside/snippets/exposed-transactions/build.gradle.kts",
+        "implicated": 0,
+        "subjects": 35
+      },
+      {
+        "name": "get-started-with-exposed",
+        "manifest": "documentation-website/Writerside/snippets/get-started-with-exposed/build.gradle.kts",
+        "implicated": 0,
+        "subjects": 8
+      },
+      {
+        "name": "get-started-with-exposed-dao",
+        "manifest": "documentation-website/Writerside/snippets/get-started-with-exposed-dao/build.gradle.kts",
+        "implicated": 0,
+        "subjects": 12
+      },
+      {
+        "name": "org.example:exposed-maven-plugin",
+        "manifest": "documentation-website/Writerside/snippets/exposed-maven-plugin/pom.xml",
+        "implicated": 0,
+        "subjects": 13
+      },
+      {
+        "name": "org.example:exposed-maven-plugin",
+        "manifest": "exposed-maven-plugin/src/test/resources/template/pom.xml",
+        "implicated": 0,
+        "subjects": 14
+      },
+      {
+        "name": "spring-transaction",
+        "manifest": "spring-transaction/build.gradle.kts",
+        "implicated": 0,
+        "subjects": 323
+      },
+      {
+        "name": "spring7-transaction",
+        "manifest": "spring7-transaction/build.gradle.kts",
+        "implicated": 0,
+        "subjects": 323
+      }
     ]
   },
   "findings": [

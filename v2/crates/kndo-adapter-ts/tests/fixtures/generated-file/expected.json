@@ -14,7 +14,15 @@
   "health": {
     "implicated": 0,
     "subjects": 3,
-    "by_category": []
+    "by_category": [],
+    "by_package": [
+      {
+        "name": "gen-fixture",
+        "manifest": "package.json",
+        "implicated": 0,
+        "subjects": 3
+      }
+    ]
   },
   "findings": [],
   "fixed": [],

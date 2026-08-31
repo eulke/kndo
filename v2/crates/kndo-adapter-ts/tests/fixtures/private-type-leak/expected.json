@@ -19,6 +19,14 @@
         "category": "private-type-leak",
         "findings": 1
       }
+    ],
+    "by_package": [
+      {
+        "name": "leak-fixture",
+        "manifest": "package.json",
+        "implicated": 1,
+        "subjects": 3
+      }
     ]
   },
   "findings": [

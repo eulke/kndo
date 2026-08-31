@@ -14,7 +14,21 @@
   "health": {
     "implicated": 0,
     "subjects": 8,
-    "by_category": []
+    "by_category": [],
+    "by_package": [
+      {
+        "name": "guest",
+        "manifest": "examples/guest/Cargo.toml",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "hostcrate",
+        "manifest": "Cargo.toml",
+        "implicated": 0,
+        "subjects": 6
+      }
+    ]
   },
   "findings": [
     {

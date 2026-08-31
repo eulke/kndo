@@ -14,7 +14,15 @@
   "health": {
     "implicated": 0,
     "subjects": 1,
-    "by_category": []
+    "by_category": [],
+    "by_package": [
+      {
+        "name": "duplicate-exact-files",
+        "manifest": "package.json",
+        "implicated": 0,
+        "subjects": 1
+      }
+    ]
   },
   "findings": [],
   "fixed": [],

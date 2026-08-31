@@ -19,6 +19,14 @@
         "category": "cyclic",
         "findings": 1
       }
+    ],
+    "by_package": [
+      {
+        "name": "cycle-fixture",
+        "manifest": "package.json",
+        "implicated": 1,
+        "subjects": 6
+      }
     ]
   },
   "findings": [

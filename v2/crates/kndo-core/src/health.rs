@@ -32,6 +32,25 @@ pub struct Health {
     /// Counting findings per category, in category order. More entries than
     /// `implicated` when one subject carries findings from several categories.
     pub by_category: Vec<CategoryCount>,
+    /// The same two integers partitioned by owning package (name-sorted; the
+    /// empty name is the unpackaged remainder). Filled by
+    /// [`Health::partition`] where a graph is in hand; absent on
+    /// graph-free measurements.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub by_package: Vec<PackageHealth>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct PackageHealth {
+    /// The package's declared name; empty for subjects outside every package.
+    pub name: smol_str::SmolStr,
+    /// The anchoring manifest — what tells two same-named packages apart
+    /// (parallel trees legitimately duplicate names); empty for the
+    /// unpackaged bucket.
+    pub manifest: smol_str::SmolStr,
+    pub implicated: u32,
+    pub subjects: u32,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -69,7 +88,51 @@ impl Health {
                     findings,
                 })
                 .collect(),
+            by_package: Vec::new(),
         })
+    }
+
+    /// Partition the measurement by owning package — same universe, same
+    /// counting rule, split by [`crate::graph::Graph::package_of`] on each
+    /// subject's path. The whole always reconciles: every bucket's subjects
+    /// sum to the top-level count.
+    pub fn partition(&mut self, graph: &crate::graph::Graph, findings: &[Finding]) {
+        use smol_str::SmolStr;
+        // Buckets by package INDEX — two same-named packages (parallel trees)
+        // stay two rows, told apart by their manifests.
+        let mut subjects: BTreeMap<Option<u32>, u32> = BTreeMap::new();
+        for f in &graph.files {
+            *subjects
+                .entry(graph.package_of(f.path.as_str()))
+                .or_insert(0) += 1 + f.evidence.declarations.len() as u32;
+        }
+        let mut implicated: BTreeMap<Option<u32>, HashSet<&Subject>> = BTreeMap::new();
+        for finding in findings.iter().filter(|f| counts(f)) {
+            implicated
+                .entry(graph.package_of(finding.subject.path().as_str()))
+                .or_default()
+                .insert(&finding.subject);
+        }
+        let mut rows: Vec<PackageHealth> = subjects
+            .into_iter()
+            .map(|(bucket, subject_count)| {
+                let (name, manifest) = match bucket {
+                    Some(i) => {
+                        let p = &graph.packages[i as usize];
+                        (p.name.clone(), SmolStr::new(p.manifest.as_str()))
+                    }
+                    None => (SmolStr::default(), SmolStr::default()),
+                };
+                PackageHealth {
+                    implicated: implicated.get(&bucket).map_or(0, |s| s.len() as u32),
+                    name,
+                    manifest,
+                    subjects: subject_count,
+                }
+            })
+            .collect();
+        rows.sort_by(|a, b| (&a.name, &a.manifest).cmp(&(&b.name, &b.manifest)));
+        self.by_package = rows;
     }
 
     /// The score as every frontend prints it — `100 × (1 − implicated/subjects)`

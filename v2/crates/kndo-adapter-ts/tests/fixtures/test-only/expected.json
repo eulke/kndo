@@ -14,7 +14,15 @@
   "health": {
     "implicated": 0,
     "subjects": 7,
-    "by_category": []
+    "by_category": [],
+    "by_package": [
+      {
+        "name": "test-only-fixture",
+        "manifest": "package.json",
+        "implicated": 0,
+        "subjects": 7
+      }
+    ]
   },
   "findings": [
     {

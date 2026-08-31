@@ -14,7 +14,21 @@
   "health": {
     "implicated": 0,
     "subjects": 4,
-    "by_category": []
+    "by_category": [],
+    "by_package": [
+      {
+        "name": "",
+        "manifest": "",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "module-maven",
+        "manifest": "module-maven/pom.xml",
+        "implicated": 0,
+        "subjects": 2
+      }
+    ]
   },
   "findings": [],
   "fixed": [],

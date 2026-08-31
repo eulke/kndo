@@ -14,7 +14,15 @@
   "health": {
     "implicated": 0,
     "subjects": 9,
-    "by_category": []
+    "by_category": [],
+    "by_package": [
+      {
+        "name": "namespace-members",
+        "manifest": "package.json",
+        "implicated": 0,
+        "subjects": 9
+      }
+    ]
   },
   "findings": [],
   "fixed": [],

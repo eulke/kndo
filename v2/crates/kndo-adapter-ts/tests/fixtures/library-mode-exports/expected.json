@@ -19,6 +19,14 @@
         "category": "unused",
         "findings": 1
       }
+    ],
+    "by_package": [
+      {
+        "name": "library-mode-exports",
+        "manifest": "package.json",
+        "implicated": 1,
+        "subjects": 3
+      }
     ]
   },
   "findings": [

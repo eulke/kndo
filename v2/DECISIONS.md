@@ -1930,3 +1930,41 @@ unused/test-only, deep-import), and the deferrals' reopening conditions are
 recorded. The remaining open candidates (hollow-test, speculative-abstraction,
 churn×complexity, crap-with-coverage) have no recorded demand and wait for
 their own zero-FP definitions plus a measurement.
+
+## 2026-08-31 — Package aggregation: ownership as directory truth, and both oracle package-cycles retired as vices
+
+The graph learns packages: `Graph.packages` (name, dir, anchoring manifest —
+keyed by name AND dir, because parallel trees legitimately duplicate a name:
+guava's `android/` mirror is two real `guava` packages, told apart by their
+manifests) plus `Graph::package_of` — nearest-boundary ownership by longest
+dir prefix, engine-side, language-free. JVM joins the package world: a
+`settings.gradle(.kts)` names its included modules (colon optional — both
+spellings are the same declaration), a `pom.xml` describes ITSELF (artifactId,
+group-qualified only when the pom states one, matching the bare spelling the
+dependency scan also emits), and gradle build files stay silent — a module's
+name is positional, held by the settings file. `GRAPH_SEMANTICS_VERSION` 6→7.
+
+**Health partitions by package.** `Health.by_package` — same universe, same
+counting rule, split by ownership; the empty name is the unpackaged remainder,
+and the buckets always reconcile to the whole. The envelope carries it always;
+`kndo health --by-package` renders the table on a terminal. guava's split is
+the showcase: both trees visible (`guava` 42/15,467 beside android's
+61/15,256; `guava-tests` 332/14,998), Exposed resolves into its 38 modules.
+
+**Package-level cyclic ships — and finds the oracle's two findings were
+vices.** The edge is a DECLARED dependency on a workspace sibling at any
+scope but Dev: a dev/test-scoped mutual never blocks a publish (npm installs
+without devDependencies; gradle publishes without testImplementation). The
+gradle scan now reads each line's configuration word (`testImplementation` →
+Dev, `implementation`/`api`/… → Prod, unknown → honestly unstated) and maven's
+`<scope>test</scope>` → Dev — declarations, not guesses. Against the real
+pins: guava's pair does not exist (guava-tests → guava-testlib is
+one-directional; v1 manufactured the loop), and Exposed's closes only through
+`testImplementation(project(":exposed-tests"))` — test-scoped, publish-safe,
+exactly the exemption. Corpus package-cycles: zero, each absence explained;
+the mechanism is pinned by an engine test instead (a prod mutual pair fires
+with both names in the loop; the same shape dev-side is silence).
+
+221 tests, 15 gates, clippy clean; every conformance fixture regenerated for
+the one new envelope field (`health.by_package`), the diff audited to contain
+nothing else.

@@ -14,7 +14,15 @@
   "health": {
     "implicated": 0,
     "subjects": 4,
-    "by_category": []
+    "by_category": [],
+    "by_package": [
+      {
+        "name": "example.com/app",
+        "manifest": "go.mod",
+        "implicated": 0,
+        "subjects": 4
+      }
+    ]
   },
   "findings": [],
   "fixed": [],

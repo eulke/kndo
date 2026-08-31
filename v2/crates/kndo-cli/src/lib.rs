@@ -29,7 +29,7 @@ enum Command {
     /// Accept the current findings as the baseline future runs diff against
     Baseline(RunArgs),
     /// Project health only — the same measurement `check` reports, as one block
-    Health(RunArgs),
+    Health(HealthArgs),
     /// Write the kndo.toml template (and, with --hook, a pre-commit gate)
     Init(InitArgs),
     /// What kndo sees here: composition, config, cache, baseline
@@ -128,6 +128,16 @@ impl ReachArg {
 enum QueryFormat {
     Json,
     Agent,
+}
+
+#[derive(clap::Args)]
+struct HealthArgs {
+    #[command(flatten)]
+    run: RunArgs,
+    /// Also print the per-package split (terminal render only; the JSON
+    /// envelope always carries it)
+    #[arg(long)]
+    by_package: bool,
 }
 
 #[derive(clap::Args)]
@@ -591,9 +601,9 @@ fn init(args: InitArgs) -> CliOutput {
 /// The health block alone — a full analysis either way (health is derived from the
 /// whole judgment), a terminal gets the line, a pipe gets the JSON object. Always
 /// exit 0: health is measurement, not a gate.
-fn health(args: RunArgs, host: &Host) -> CliOutput {
-    let root = args.path.clone().unwrap_or_else(|| PathBuf::from("."));
-    let snapshot = match analyze_at(&root, &args, !args.no_cache, &Categories::All) {
+fn health(args: HealthArgs, host: &Host) -> CliOutput {
+    let root = args.run.path.clone().unwrap_or_else(|| PathBuf::from("."));
+    let snapshot = match analyze_at(&root, &args.run, !args.run.no_cache, &Categories::All) {
         Ok(snapshot) => snapshot,
         Err(refusal) => return refused(refusal),
     };
@@ -613,6 +623,25 @@ fn health(args: RunArgs, host: &Host) -> CliOutput {
                 line.push_str(&format!(" · {} {}", c.category.as_str(), c.findings));
             }
             line.push('\n');
+            if args.by_package && !health.by_package.is_empty() {
+                let width = health
+                    .by_package
+                    .iter()
+                    .map(|p| display_package(&p.name).len())
+                    .max()
+                    .unwrap_or(0);
+                for p in &health.by_package {
+                    let score =
+                        100.0 * (1.0 - f64::from(p.implicated) / f64::from(p.subjects.max(1)));
+                    line.push_str(&format!(
+                        "  {:width$}  {:>5.1}  implicated {} of {}\n",
+                        display_package(&p.name),
+                        score,
+                        p.implicated,
+                        p.subjects,
+                    ));
+                }
+            }
             line
         }
         Some(health) => {
@@ -798,6 +827,15 @@ fn git_failed(message: String) -> CliOutput {
         stdout: String::new(),
         stderr: format!("kndo: git: {message}\n"),
         code: 2,
+    }
+}
+
+/// The empty name is the unpackaged remainder — spelled out for humans.
+fn display_package(name: &str) -> &str {
+    if name.is_empty() {
+        "(no package)"
+    } else {
+        name
     }
 }
 

@@ -27,6 +27,752 @@
         "category": "unused",
         "findings": 703
       }
+    ],
+    "by_package": [
+      {
+        "name": "",
+        "manifest": "",
+        "implicated": 600,
+        "subjects": 1818
+      },
+      {
+        "name": "@vite/test-config-entry",
+        "manifest": "packages/vite/src/node/__tests__/fixtures/config/entry/package.json",
+        "implicated": 0,
+        "subjects": 3
+      },
+      {
+        "name": "@vite/test-config-plugin-module-condition",
+        "manifest": "packages/vite/src/node/__tests__/fixtures/config/plugin-module-condition/package.json",
+        "implicated": 0,
+        "subjects": 5
+      },
+      {
+        "name": "@vitejs/child",
+        "manifest": "packages/vite/src/node/__tests__/packages/child/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/cjs-external",
+        "manifest": "packages/vite/src/node/ssr/runtime/__tests__/fixtures/cjs-external/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/esm-external",
+        "manifest": "packages/vite/src/node/ssr/runtime/__tests__/fixtures/esm-external/package.json",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/longfilename-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "manifest": "playground/optimize-deps/longfilename/package.json",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/parent",
+        "manifest": "packages/vite/src/node/__tests__/packages/parent/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/plugin-legacy",
+        "manifest": "packages/plugin-legacy/package.json",
+        "implicated": 1,
+        "subjects": 57
+      },
+      {
+        "name": "@vitejs/require",
+        "manifest": "playground/json/dep-json-require/package.json",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/self-referencing",
+        "manifest": "playground/nested-deps/self-referencing/package.json",
+        "implicated": 0,
+        "subjects": 3
+      },
+      {
+        "name": "@vitejs/test-added-in-entries",
+        "manifest": "playground/optimize-deps/added-in-entries/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/test-alias-original",
+        "manifest": "playground/ssr-alias/alias-original/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/test-browser-exports",
+        "manifest": "playground/ssr-webworker/browser-exports/package.json",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/test-css-dep",
+        "manifest": "playground/css/css-dep/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/test-css-dep-exports",
+        "manifest": "playground/css/css-dep-exports/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/test-css-js-dep",
+        "manifest": "playground/css/css-js-dep/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/test-deep-import",
+        "manifest": "playground/ssr-resolve/deep-import/package.json",
+        "implicated": 0,
+        "subjects": 3
+      },
+      {
+        "name": "@vitejs/test-dep-a",
+        "manifest": "playground/preload/dep-a/package.json",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/test-dep-alias-using-absolute-path",
+        "manifest": "playground/optimize-deps/dep-alias-using-absolute-path/package.json",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/test-dep-cjs-browser-field",
+        "manifest": "playground/optimize-deps/dep-cjs-browser-field/package.json",
+        "implicated": 1,
+        "subjects": 5
+      },
+      {
+        "name": "@vitejs/test-dep-cjs-browser-field-bare",
+        "manifest": "playground/optimize-deps/dep-cjs-browser-field-bare/package.json",
+        "implicated": 1,
+        "subjects": 5
+      },
+      {
+        "name": "@vitejs/test-dep-cjs-compiled-from-cjs",
+        "manifest": "playground/optimize-deps/dep-cjs-compiled-from-cjs/package.json",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/test-dep-cjs-compiled-from-esm",
+        "manifest": "playground/optimize-deps/dep-cjs-compiled-from-esm/package.json",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/test-dep-cjs-external-package-omit-js-suffix",
+        "manifest": "playground/optimize-deps/dep-cjs-external-package-omit-js-suffix/package.json",
+        "implicated": 0,
+        "subjects": 9
+      },
+      {
+        "name": "@vitejs/test-dep-cjs-for-injected-import",
+        "manifest": "playground/optimize-deps/dep-cjs-for-injected-import/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/test-dep-cjs-require-css-main-field",
+        "manifest": "playground/optimize-deps/dep-cjs-require-css-main-field/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/test-dep-cjs-with-assets",
+        "manifest": "playground/optimize-deps/dep-cjs-with-assets/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/test-dep-cjs-with-es-module-flag",
+        "manifest": "playground/optimize-deps/dep-cjs-with-es-module-flag/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/test-dep-cjs-with-external-deps",
+        "manifest": "playground/optimize-deps/dep-cjs-with-external-deps/package.json",
+        "implicated": 0,
+        "subjects": 5
+      },
+      {
+        "name": "@vitejs/test-dep-class-field-sourcemap-babel",
+        "manifest": "playground/js-sourcemap/dep-class-field-sourcemap-babel/package.json",
+        "implicated": 0,
+        "subjects": 3
+      },
+      {
+        "name": "@vitejs/test-dep-class-field-sourcemap-oxc",
+        "manifest": "playground/js-sourcemap/dep-class-field-sourcemap-oxc/package.json",
+        "implicated": 0,
+        "subjects": 3
+      },
+      {
+        "name": "@vitejs/test-dep-conditions",
+        "manifest": "packages/vite/src/node/__tests__/fixtures/test-dep-conditions/package.json",
+        "implicated": 0,
+        "subjects": 6
+      },
+      {
+        "name": "@vitejs/test-dep-css-require",
+        "manifest": "playground/optimize-deps/dep-css-require/package.json",
+        "implicated": 1,
+        "subjects": 3
+      },
+      {
+        "name": "@vitejs/test-dep-esbuild-plugin-transform",
+        "manifest": "playground/optimize-deps/dep-esbuild-plugin-transform/package.json",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/test-dep-esm-dummy-node-builtin",
+        "manifest": "playground/optimize-deps/dep-esm-dummy-node-builtin/package.json",
+        "implicated": 0,
+        "subjects": 3
+      },
+      {
+        "name": "@vitejs/test-dep-esm-external",
+        "manifest": "playground/optimize-deps/dep-esm-external/package.json",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/test-dep-including-a",
+        "manifest": "playground/preload/dep-including-a/package.json",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/test-dep-incompatible",
+        "manifest": "playground/optimize-deps/dep-incompatible/package.json",
+        "implicated": 1,
+        "subjects": 4
+      },
+      {
+        "name": "@vitejs/test-dep-linked",
+        "manifest": "playground/optimize-deps/dep-linked/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/test-dep-linked-include",
+        "manifest": "playground/optimize-deps/dep-linked-include/package.json",
+        "implicated": 0,
+        "subjects": 4
+      },
+      {
+        "name": "@vitejs/test-dep-lodash",
+        "manifest": "playground/optimize-deps/dep-lodash/package.json",
+        "implicated": 0,
+        "subjects": 3
+      },
+      {
+        "name": "@vitejs/test-dep-lodash-es",
+        "manifest": "playground/optimize-deps/dep-lodash-es/package.json",
+        "implicated": 0,
+        "subjects": 3
+      },
+      {
+        "name": "@vitejs/test-dep-lodash.clonedeep",
+        "manifest": "playground/optimize-deps/dep-lodash-clonedeep/package.json",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/test-dep-malicious-sourcemap",
+        "manifest": "playground/js-sourcemap/dep-malicious-sourcemap/package.json",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/test-dep-no-discovery",
+        "manifest": "playground/optimize-deps-no-discovery/dep-no-discovery/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/test-dep-optimize-exports-with-glob",
+        "manifest": "playground/optimize-deps/dep-optimize-exports-with-glob/package.json",
+        "implicated": 0,
+        "subjects": 5
+      },
+      {
+        "name": "@vitejs/test-dep-optimize-exports-with-root-glob",
+        "manifest": "playground/optimize-deps/dep-optimize-exports-with-root-glob/package.json",
+        "implicated": 0,
+        "subjects": 3
+      },
+      {
+        "name": "@vitejs/test-dep-optimized-malicious",
+        "manifest": "playground/js-sourcemap/dep-optimized-malicious/package.json",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/test-dep-relative-to-main",
+        "manifest": "playground/optimize-deps/dep-relative-to-main/package.json",
+        "implicated": 1,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/test-dep-self-reference-url-worker",
+        "manifest": "playground/worker/dep-self-reference-url-worker/package.json",
+        "implicated": 1,
+        "subjects": 3
+      },
+      {
+        "name": "@vitejs/test-dep-to-optimize",
+        "manifest": "playground/worker/dep-to-optimize/package.json",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/test-dep-with-asset-ext1.pdf",
+        "manifest": "playground/optimize-deps/dep-with-asset-ext/dep1/package.json",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/test-dep-with-asset-ext2.pdf",
+        "manifest": "playground/optimize-deps/dep-with-asset-ext/dep2/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/test-dep-with-assets",
+        "manifest": "playground/optimize-deps/dep-with-assets/package.json",
+        "implicated": 1,
+        "subjects": 6
+      },
+      {
+        "name": "@vitejs/test-dep-with-builtin-module-cjs",
+        "manifest": "playground/optimize-deps/dep-with-builtin-module-cjs/package.json",
+        "implicated": 0,
+        "subjects": 3
+      },
+      {
+        "name": "@vitejs/test-dep-with-builtin-module-esm",
+        "manifest": "playground/optimize-deps/dep-with-builtin-module-esm/package.json",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/test-dep-with-dynamic-import",
+        "manifest": "playground/optimize-deps/dep-with-dynamic-import/package.json",
+        "implicated": 0,
+        "subjects": 4
+      },
+      {
+        "name": "@vitejs/test-dep-with-injected-import",
+        "manifest": "playground/optimize-deps/dep-with-injected-import/package.json",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/test-dep-with-optional-peer-dep",
+        "manifest": "playground/optimize-deps/dep-with-optional-peer-dep/package.json",
+        "implicated": 0,
+        "subjects": 3
+      },
+      {
+        "name": "@vitejs/test-dep-with-optional-peer-dep-cjs",
+        "manifest": "playground/optimize-deps/dep-with-optional-peer-dep-cjs/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/test-dep-with-optional-peer-dep-submodule",
+        "manifest": "playground/optimize-deps/dep-with-optional-peer-dep-submodule/package.json",
+        "implicated": 0,
+        "subjects": 3
+      },
+      {
+        "name": "@vitejs/test-dep-with-plus-subpath",
+        "manifest": "playground/optimize-deps/dep-with-plus-subpath/package.json",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/test-external-cjs",
+        "manifest": "playground/ssr-noexternal/external-cjs/package.json",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/test-external-entry",
+        "manifest": "playground/ssr-deps/external-entry/package.json",
+        "implicated": 0,
+        "subjects": 5
+      },
+      {
+        "name": "@vitejs/test-external-using-external-entry",
+        "manifest": "playground/ssr-deps/external-using-external-entry/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/test-forward-console-throw-dep",
+        "manifest": "playground/forward-console/fixtures/throw-dep/package.json",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/test-import-attribute-dep",
+        "manifest": "playground/import-attribute/import-attribute-dep/package.json",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/test-import-meta-glob-pkg",
+        "manifest": "playground/glob-import/root/import-meta-glob-pkg/package.json",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/test-importee-pkg",
+        "manifest": "playground/js-sourcemap/importee-pkg/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/test-inline-package",
+        "manifest": "playground/resolve/inline-package/package.json",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/test-missing-dep",
+        "manifest": "playground/optimize-missing-deps/missing-dep/package.json",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/test-module-condition",
+        "manifest": "playground/ssr-deps/module-condition/package.json",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/test-module-sync",
+        "manifest": "playground/ssr-resolve/pkg-module-sync/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/test-multi-entry-dep",
+        "manifest": "playground/optimize-missing-deps/multi-entry-dep/package.json",
+        "implicated": 1,
+        "subjects": 3
+      },
+      {
+        "name": "@vitejs/test-nested-exclude",
+        "manifest": "playground/optimize-deps/nested-exclude/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/test-nested-exclude",
+        "manifest": "playground/ssr-deps/nested-exclude/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/test-nested-external",
+        "manifest": "playground/ssr-deps/nested-external/package.json",
+        "implicated": 0,
+        "subjects": 4
+      },
+      {
+        "name": "@vitejs/test-nested-external-cjs",
+        "manifest": "playground/ssr-deps/nested-external-cjs/package.json",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/test-nested-include",
+        "manifest": "playground/optimize-deps/nested-include/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/test-nested-include",
+        "manifest": "playground/ssr-deps/nested-include/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/test-non-optimized-with-nested-external",
+        "manifest": "playground/ssr-deps/non-optimized-with-nested-external/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/test-optimized-with-nested-external",
+        "manifest": "playground/ssr-deps/optimized-with-nested-external/package.json",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/test-package-a",
+        "manifest": "playground/nested-deps/test-package-a/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/test-package-b",
+        "manifest": "playground/nested-deps/test-package-b/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/test-package-c",
+        "manifest": "playground/nested-deps/test-package-c/package.json",
+        "implicated": 1,
+        "subjects": 3
+      },
+      {
+        "name": "@vitejs/test-package-d",
+        "manifest": "playground/nested-deps/test-package-d/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/test-package-d-nested",
+        "manifest": "playground/nested-deps/test-package-d/test-package-d-nested/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/test-package-e",
+        "manifest": "playground/nested-deps/test-package-e/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/test-package-e-excluded",
+        "manifest": "playground/nested-deps/test-package-e/test-package-e-excluded/package.json",
+        "implicated": 0,
+        "subjects": 3
+      },
+      {
+        "name": "@vitejs/test-package-e-included",
+        "manifest": "playground/nested-deps/test-package-e/test-package-e-included/package.json",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/test-package-f",
+        "manifest": "playground/nested-deps/test-package-f/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/test-pkg",
+        "manifest": "playground/dynamic-import/pkg/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/test-pkg-dep",
+        "manifest": "playground/css/pkg-dep/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/test-pkg-exports",
+        "manifest": "playground/ssr-deps/pkg-exports/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/test-require-external-cjs",
+        "manifest": "playground/ssr-noexternal/require-external-cjs/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/test-resolve",
+        "manifest": "playground/resolve/package.json",
+        "implicated": 25,
+        "subjects": 69
+      },
+      {
+        "name": "@vitejs/test-resolve-browser-field",
+        "manifest": "playground/resolve/browser-field/package.json",
+        "implicated": 7,
+        "subjects": 10
+      },
+      {
+        "name": "@vitejs/test-resolve-browser-field-bare-import-fail",
+        "manifest": "playground/resolve/browser-field-bare-import-fail/package.json",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/test-resolve-browser-field-bare-import-success",
+        "manifest": "playground/resolve/browser-field-bare-import-success/package.json",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/test-resolve-browser-module-field1",
+        "manifest": "playground/resolve/browser-module-field1/package.json",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/test-resolve-custom-browser-main-field",
+        "manifest": "playground/resolve/custom-browser-main-field/package.json",
+        "implicated": 1,
+        "subjects": 6
+      },
+      {
+        "name": "@vitejs/test-resolve-custom-condition",
+        "manifest": "playground/resolve/custom-condition/package.json",
+        "implicated": 0,
+        "subjects": 4
+      },
+      {
+        "name": "@vitejs/test-resolve-custom-main-field",
+        "manifest": "playground/resolve/custom-main-field/package.json",
+        "implicated": 1,
+        "subjects": 4
+      },
+      {
+        "name": "@vitejs/test-resolve-exports-and-nested-scope",
+        "manifest": "playground/resolve/exports-and-nested-scope/package.json",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/test-resolve-exports-env",
+        "manifest": "playground/resolve/exports-env/package.json",
+        "implicated": 0,
+        "subjects": 8
+      },
+      {
+        "name": "@vitejs/test-resolve-exports-from-root",
+        "manifest": "playground/resolve/exports-from-root/package.json",
+        "implicated": 0,
+        "subjects": 5
+      },
+      {
+        "name": "@vitejs/test-resolve-exports-legacy-fallback",
+        "manifest": "playground/resolve/exports-legacy-fallback/package.json",
+        "implicated": 0,
+        "subjects": 5
+      },
+      {
+        "name": "@vitejs/test-resolve-exports-path",
+        "manifest": "playground/resolve/exports-path/package.json",
+        "implicated": 0,
+        "subjects": 7
+      },
+      {
+        "name": "@vitejs/test-resolve-exports-with-module",
+        "manifest": "playground/resolve/exports-with-module/package.json",
+        "implicated": 0,
+        "subjects": 4
+      },
+      {
+        "name": "@vitejs/test-resolve-exports-with-module-condition",
+        "manifest": "playground/resolve/exports-with-module-condition/package.json",
+        "implicated": 0,
+        "subjects": 5
+      },
+      {
+        "name": "@vitejs/test-resolve-exports-with-module-condition-required",
+        "manifest": "playground/resolve/exports-with-module-condition-required/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/test-resolve-linked",
+        "manifest": "playground/resolve-linked/package.json",
+        "implicated": 0,
+        "subjects": 4
+      },
+      {
+        "name": "@vitejs/test-resolve-pkg-exports",
+        "manifest": "playground/ssr-resolve/pkg-exports/package.json",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/test-resolve-sharp-dir",
+        "manifest": "playground/resolve/sharp-dir/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/test-resolve-sharp-dir-nested",
+        "manifest": "playground/resolve/sharp-dir-nested/package.json",
+        "implicated": 1,
+        "subjects": 2
+      },
+      {
+        "name": "@vitejs/test-resolve-side-effects-glob",
+        "manifest": "playground/resolve/side-effects-glob/package.json",
+        "implicated": 0,
+        "subjects": 3
+      },
+      {
+        "name": "@vitejs/test-ssr-conditions-external",
+        "manifest": "playground/ssr-conditions/external/package.json",
+        "implicated": 0,
+        "subjects": 5
+      },
+      {
+        "name": "@vitejs/test-ssr-conditions-no-external",
+        "manifest": "playground/ssr-conditions/no-external/package.json",
+        "implicated": 0,
+        "subjects": 5
+      },
+      {
+        "name": "@vitejs/test-worker-dep-cjs",
+        "manifest": "playground/worker/dep-cjs/package.json",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "@vitejs/test-worker-exports",
+        "manifest": "playground/ssr-webworker/worker-exports/package.json",
+        "implicated": 0,
+        "subjects": 3
+      },
+      {
+        "name": "create-vite",
+        "manifest": "packages/create-vite/package.json",
+        "implicated": 27,
+        "subjects": 110
+      },
+      {
+        "name": "my-pkg",
+        "manifest": "packages/vite/src/node/__tests__/fixtures/glob-exports/node_modules/my-pkg/package.json",
+        "implicated": 0,
+        "subjects": 3
+      },
+      {
+        "name": "vite",
+        "manifest": "packages/vite/package.json",
+        "implicated": 75,
+        "subjects": 2690
+      }
     ]
   },
   "findings": [

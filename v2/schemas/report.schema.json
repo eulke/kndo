@@ -369,6 +369,13 @@
             "$ref": "#/$defs/CategoryCount"
           }
         },
+        "by_package": {
+          "description": "The same two integers partitioned by owning package (name-sorted; the\nempty name is the unpackaged remainder). Filled by\n[`Health::partition`] where a graph is in hand; absent on\ngraph-free measurements.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PackageHealth"
+          }
+        },
         "implicated": {
           "description": "Distinct universe subjects carrying at least one counting finding.",
           "type": "integer",
@@ -426,6 +433,35 @@
           "type": "string",
           "const": "diff"
         }
+      ]
+    },
+    "PackageHealth": {
+      "type": "object",
+      "properties": {
+        "implicated": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "manifest": {
+          "description": "The anchoring manifest — what tells two same-named packages apart\n(parallel trees legitimately duplicate names); empty for the\nunpackaged bucket.",
+          "type": "string"
+        },
+        "name": {
+          "description": "The package's declared name; empty for subjects outside every package.",
+          "type": "string"
+        },
+        "subjects": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "name",
+        "manifest",
+        "implicated",
+        "subjects"
       ]
     },
     "ProjectPath": {

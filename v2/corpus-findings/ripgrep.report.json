@@ -19,6 +19,80 @@
         "category": "unused",
         "findings": 3
       }
+    ],
+    "by_package": [
+      {
+        "name": "fuzz",
+        "manifest": "fuzz/Cargo.toml",
+        "implicated": 0,
+        "subjects": 1
+      },
+      {
+        "name": "globset",
+        "manifest": "crates/globset/Cargo.toml",
+        "implicated": 0,
+        "subjects": 207
+      },
+      {
+        "name": "grep",
+        "manifest": "crates/grep/Cargo.toml",
+        "implicated": 0,
+        "subjects": 5
+      },
+      {
+        "name": "grep_cli",
+        "manifest": "crates/cli/Cargo.toml",
+        "implicated": 0,
+        "subjects": 104
+      },
+      {
+        "name": "grep_index",
+        "manifest": "crates/index/Cargo.toml",
+        "implicated": 2,
+        "subjects": 97
+      },
+      {
+        "name": "grep_matcher",
+        "manifest": "crates/matcher/Cargo.toml",
+        "implicated": 0,
+        "subjects": 93
+      },
+      {
+        "name": "grep_pcre2",
+        "manifest": "crates/pcre2/Cargo.toml",
+        "implicated": 0,
+        "subjects": 36
+      },
+      {
+        "name": "grep_printer",
+        "manifest": "crates/printer/Cargo.toml",
+        "implicated": 1,
+        "subjects": 447
+      },
+      {
+        "name": "grep_regex",
+        "manifest": "crates/regex/Cargo.toml",
+        "implicated": 0,
+        "subjects": 169
+      },
+      {
+        "name": "grep_searcher",
+        "manifest": "crates/searcher/Cargo.toml",
+        "implicated": 0,
+        "subjects": 331
+      },
+      {
+        "name": "ignore",
+        "manifest": "crates/ignore/Cargo.toml",
+        "implicated": 0,
+        "subjects": 488
+      },
+      {
+        "name": "ripgrep",
+        "manifest": "Cargo.toml",
+        "implicated": 0,
+        "subjects": 579
+      }
     ]
   },
   "findings": [

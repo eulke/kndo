@@ -68,9 +68,12 @@ The definition question resolved as a language capability:
 declare Hazard). Corpus: vite 31 (incl. the real 88-file node tangle), flask 3
 (the package's own 20-file knot — never measured by v1), everything else 0;
 v1's JVM file-cycle findings retired as vice (multi-pass compilation makes
-them routine legal structure). Still open here: package-level cycles (guava's
-maven test-dep loop, Exposed's gradle one) — they need the package dependency
-graph the package-aggregation epic builds, and land with it.
+them routine legal structure). Package-level cycles shipped with the aggregation epic
+(2026-08-31): both oracle findings retired as vices against the real pins —
+guava's pair is one-directional (v1 manufactured the loop) and Exposed's
+closes only through a test-scoped project dependency, which never blocks a
+publish. Corpus zero, mechanism pinned by an engine test (prod mutual fires,
+dev pair is silence).
 
 ### Python ancestor-package import edges
 `import a.b.c` executes `a/__init__.py` and `a/b/__init__.py` on the way down —
@@ -246,7 +249,7 @@ commitment to v1's design: each item is rebuilt v2-native when it lands.
 | formats: human, json, agent, sarif + flag > `KNDO_FORMAT` > tty selection | shipped | the render toll (2026-08-31): `--format`, agent format 1, SARIF with byte regions |
 | line/column in findings and output | lines shipped (2026-08-31): `Finding.lines`, `path:line` in human/agent, SARIF `startLine`/`endLine` | resolved per run from in-memory contents — no cache or graph format learned about lines, and identity never includes them; columns stay deliberately absent (SARIF counts them in UTF-16 units — a slightly-wrong column is worse than none) |
 | `--staged` / `--diff <ref>` change-scoped runs | shipped (2026-08-31): two full analyses over two pinned trees, composed | the engine never learned git — the CLI materializes the base (and, for staged, the index) via `git archive`, and `Snapshot::against` rides the baseline mechanism; envelope carries `run.mode` + `base_health` (a pure function of the pinned base tree, not v1's cross-run `previous`) |
-| health (score + per-category breakdown) | model + verb shipped (2026-08-31) | derived ratio, no weights (see DECISIONS); `kndo health` prints the block alone (line on a tty, JSON piped, always exit 0 — measurement, not a gate); still open: v1's `--by-package` split (waits on package aggregation) |
+| health (score + per-category breakdown) | model + verb shipped (2026-08-31) | derived ratio, no weights (see DECISIONS); `kndo health` prints the block alone (line on a tty, JSON piped, always exit 0 — measurement, not a gate); `--by-package` shipped 2026-08-31 — the same two integers partitioned by directory-truth ownership, parallel same-named trees told apart by manifest |
 | navigation verbs (`find`/`describe`/`uses`/`used-by`/`trace`/`impact`, batched `query`) | all seven verbs shipped (2026-08-31) | one contract (`kndo-query/1`, `Snapshot::query`) answered from the SAME index `unused` judged on — gate-certified: used-by empties exactly where unused accused; `trace` proves liveness (rooted file → import hops with recorded confidence → in-file keeper), `impact --if-deleted` simulates the removal as typed reachability flips, never fabricated findings; serve carries one MCP tool per verb over the same `Request`, answering in the agent grammar from a held session; the directed pair ships as `trace <from> --to <target>` (v1's positional pair would break 1:1 inputs→results; its `--all --max-paths` enumeration is dead — speculative surface, no consumer or measurement); JSONL batch stays out (serve IS the batch amortizer, and it ships) |
 | `explain <id>` (evidence chain behind one finding) | shipped (2026-08-31) | finding brief + the full description of its subject — for `unused` the empty keeper preview IS the why; deepens per category as analyses grow evidence |
 | `doctor` (what kndo sees: extensions, cache, config) | shipped (2026-08-31) | the real composition (WASM load failures included), config as parsed (a broken kndo.toml is doctor's diagnosis, never its crash), cache and baseline as filesystem facts; two facade doors opened for it (`Session::extensions`, `Session::composition_diagnostics`) |

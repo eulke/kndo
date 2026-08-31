@@ -19,6 +19,14 @@
         "category": "unused",
         "findings": 1
       }
+    ],
+    "by_package": [
+      {
+        "name": "dispatch-and-cross-package",
+        "manifest": "pom.xml",
+        "implicated": 1,
+        "subjects": 13
+      }
     ]
   },
   "findings": [

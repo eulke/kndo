@@ -14,7 +14,21 @@
   "health": {
     "implicated": 0,
     "subjects": 4,
-    "by_category": []
+    "by_category": [],
+    "by_package": [
+      {
+        "name": "app",
+        "manifest": "app/Cargo.toml",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "base",
+        "manifest": "base/Cargo.toml",
+        "implicated": 0,
+        "subjects": 2
+      }
+    ]
   },
   "findings": [],
   "fixed": [],

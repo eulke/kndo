@@ -14,7 +14,15 @@
   "health": {
     "implicated": 0,
     "subjects": 5,
-    "by_category": []
+    "by_category": [],
+    "by_package": [
+      {
+        "name": "cjs-dead-object-export",
+        "manifest": "package.json",
+        "implicated": 0,
+        "subjects": 5
+      }
+    ]
   },
   "findings": [],
   "fixed": [],

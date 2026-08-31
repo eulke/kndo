@@ -19,6 +19,14 @@
         "category": "unused",
         "findings": 77
       }
+    ],
+    "by_package": [
+      {
+        "name": "",
+        "manifest": "",
+        "implicated": 77,
+        "subjects": 3149
+      }
     ]
   },
   "findings": [

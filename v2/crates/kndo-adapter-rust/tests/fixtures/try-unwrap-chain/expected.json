@@ -14,7 +14,15 @@
   "health": {
     "implicated": 0,
     "subjects": 11,
-    "by_category": []
+    "by_category": [],
+    "by_package": [
+      {
+        "name": "tryunwrap",
+        "manifest": "Cargo.toml",
+        "implicated": 0,
+        "subjects": 11
+      }
+    ]
   },
   "findings": [],
   "fixed": [],

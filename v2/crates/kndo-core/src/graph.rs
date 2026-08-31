@@ -20,7 +20,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Bump when the SAME evidence assembles into a DIFFERENT graph — resolution
 /// candidate changes, reachability semantics, new assembled fields. Folded into the
 /// graph cache key beside the contract fingerprint and the adapter set.
-pub const GRAPH_SEMANTICS_VERSION: u32 = 6;
+pub const GRAPH_SEMANTICS_VERSION: u32 = 7;
 
 #[derive(Serialize, Deserialize)]
 pub struct GraphFile {
@@ -67,6 +67,26 @@ impl GraphFile {
     }
 }
 
+impl Graph {
+    /// The package owning `path`: the longest package dir that prefixes it —
+    /// nearest-boundary ownership, `None` outside every declared package.
+    pub fn package_of(&self, path: &str) -> Option<u32> {
+        let mut best: Option<(usize, u32)> = None;
+        for (i, p) in self.packages.iter().enumerate() {
+            let d = p.dir.as_str();
+            let owns =
+                d.is_empty() || path.starts_with(d) && path.as_bytes().get(d.len()) == Some(&b'/');
+            if owns {
+                let depth = d.len();
+                if best.is_none_or(|(b, _)| depth > b) {
+                    best = Some((depth, i as u32));
+                }
+            }
+        }
+        best.map(|(_, i)| i)
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct Graph {
     pub files: Vec<GraphFile>,
@@ -79,6 +99,22 @@ pub struct Graph {
     /// saw it. `unresolved` reads it to tell "no such file" (a defect) from "a
     /// file outside the analyzed world" (an asset, a manifest — not missing).
     pub discovered: Vec<ProjectPath>,
+    /// Every manifest-declared package, name-sorted — the aggregation unit
+    /// health partitions by and package-level analyses judge. Built from the
+    /// same `packages()` pipeline bare-import resolution reads.
+    pub packages: Vec<GraphPackage>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct GraphPackage {
+    pub name: SmolStr,
+    /// `/`-separated directory the package owns; empty at the project root.
+    pub dir: SmolStr,
+    /// The manifest that anchors the package for findings: the declaring
+    /// manifest inside the package's own directory when one exists (a gradle
+    /// module's build file), else the manifest that emitted the entry (the
+    /// settings file that named it).
+    pub manifest: ProjectPath,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -159,11 +195,49 @@ pub fn assemble(
     let manifest_declarations = collect_manifest_declarations(files, adapters);
     let mut discovered: Vec<ProjectPath> = files.iter().map(|f| f.path.clone()).collect();
     discovered.sort();
+    let packages = collect_packages(files, adapters, &known, &manifest_declarations);
     Graph {
         files: graph_files,
         manifest_declarations,
         discovered,
+        packages,
     }
+}
+
+/// The declared packages, name-sorted and deduplicated (first declaration
+/// wins, like the resolution map): each anchored to the declaring manifest in
+/// its own directory when one exists, else to the manifest that emitted it.
+fn collect_packages(
+    files: &[DiscoveredFile],
+    adapters: &[Box<dyn Extension>],
+    known: &BTreeSet<ProjectPath>,
+    declarations: &[ManifestDeclarations],
+) -> Vec<GraphPackage> {
+    let files_cx = ResolveContext::new(known);
+    // Keyed by (name, dir): parallel trees legitimately duplicate a package
+    // name (guava's android/ mirror), and ownership is directory truth.
+    let mut out: BTreeMap<(SmolStr, SmolStr), GraphPackage> = BTreeMap::new();
+    for_each_manifest(files, adapters, |adapter, manifest| {
+        for pkg in adapter.packages(&manifest, &files_cx) {
+            out.entry((pkg.name.clone(), pkg.dir.clone()))
+                .or_insert(GraphPackage {
+                    name: pkg.name,
+                    dir: pkg.dir,
+                    manifest: manifest.path.clone(),
+                });
+        }
+    });
+    let mut packages: Vec<GraphPackage> = out.into_values().collect();
+    for p in &mut packages {
+        let own_manifest = declarations
+            .iter()
+            .map(|d| &d.manifest)
+            .find(|m| m.as_str().rsplit_once('/').map(|(d, _)| d).unwrap_or("") == p.dir.as_str());
+        if let Some(m) = own_manifest {
+            p.manifest = m.clone();
+        }
+    }
+    packages
 }
 
 /// One entry per declaring manifest, path-sorted, declarations name-sorted —

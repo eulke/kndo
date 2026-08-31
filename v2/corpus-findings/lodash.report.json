@@ -19,6 +19,14 @@
         "category": "unused",
         "findings": 18
       }
+    ],
+    "by_package": [
+      {
+        "name": "lodash",
+        "manifest": "package.json",
+        "implicated": 18,
+        "subjects": 187
+      }
     ]
   },
   "findings": [

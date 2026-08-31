@@ -260,9 +260,13 @@ pub mod jvm_manifest {
         "**/settings.gradle.kts",
     ];
 
-    /// Dependency NAMES from one manifest, dispatched by file name — the whole
-    /// activation read, shared verbatim by the JVM adapters.
-    pub fn dependencies(manifest: &SourceFile<'_>) -> Vec<SmolStr> {
+    /// Dependency declarations from one manifest, dispatched by file name —
+    /// the whole activation read (names) plus each line's scope where the
+    /// build file states one, shared verbatim by the JVM adapters. Version
+    /// requirements stay `None` until BOM/catalog modeling exists.
+    pub fn dependencies(
+        manifest: &SourceFile<'_>,
+    ) -> Vec<kndo_contract::adapter::DependencyDeclaration> {
         let name = manifest
             .path
             .as_str()
@@ -279,18 +283,182 @@ pub mod jvm_manifest {
             }
             _ => Vec::new(),
         };
-        out.sort();
+        out.sort_by(|a, b| {
+            (a.name.as_str(), a.scope.map(|s| s as u8))
+                .cmp(&(b.name.as_str(), b.scope.map(|s| s as u8)))
+        });
         out.dedup();
         out
     }
 
+    /// The scope a gradle configuration word states: the `test*` family never
+    /// ships (publish-safe), the main compile/runtime families do, and an
+    /// unrecognized configuration honestly says nothing.
+    fn gradle_scope(line: &str) -> Option<kndo_contract::adapter::DependencyScope> {
+        use kndo_contract::adapter::DependencyScope as S;
+        let word = line
+            .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+            .find(|w| !w.is_empty())?;
+        match word {
+            "testImplementation"
+            | "testCompileOnly"
+            | "testRuntimeOnly"
+            | "testApi"
+            | "testFixturesImplementation"
+            | "testFixturesApi" => Some(S::Dev),
+            "implementation"
+            | "api"
+            | "compileOnly"
+            | "runtimeOnly"
+            | "annotationProcessor"
+            | "kapt"
+            | "ksp" => Some(S::Prod),
+            _ => None,
+        }
+    }
+
+    /// The packages one JVM manifest declares. A `settings.gradle(.kts)` names
+    /// every included module (`include(":a", ":b")`) — dir = the module path
+    /// with `:` as `/`, relative to the settings file. A `pom.xml` describes
+    /// ITSELF: its `<artifactId>` (prefixed by `<groupId>` when the pom states
+    /// one — inherited groupIds stay bare, matching the bare spelling
+    /// [`dependencies`] also emits). Build files declare nothing — a gradle
+    /// module's name is positional, held by the settings file.
+    pub fn packages(manifest: &SourceFile<'_>) -> Vec<kndo_contract::adapter::PackageEntry> {
+        let file = manifest
+            .path
+            .as_str()
+            .rsplit('/')
+            .next()
+            .unwrap_or_default();
+        let Ok(text) = std::str::from_utf8(manifest.content) else {
+            return Vec::new();
+        };
+        let dir_of_manifest = manifest
+            .path
+            .as_str()
+            .rsplit_once('/')
+            .map(|(d, _)| d)
+            .unwrap_or("");
+        match file {
+            "settings.gradle" | "settings.gradle.kts" => {
+                let mut out = Vec::new();
+                for line in text.lines() {
+                    let line = line.trim();
+                    if line.starts_with("//") || !line.contains("include") {
+                        continue;
+                    }
+                    for quote in ['"', '\''] {
+                        let mut rest = line;
+                        while let Some(start) = rest.find(quote) {
+                            let after = &rest[start + 1..];
+                            let Some(end) = after.find(quote) else { break };
+                            let literal = &after[..end];
+                            rest = &after[end + 1..];
+                            {
+                                // `include(":a")` and `include("a")` are the
+                                // same declaration; the colon is optional.
+                                let module = literal.strip_prefix(':').unwrap_or(literal);
+                                let ok = !module.is_empty()
+                                    && module
+                                        .chars()
+                                        .all(|c| c.is_alphanumeric() || ".-_:".contains(c));
+                                if ok {
+                                    let name = module.rsplit(':').next().unwrap_or(module);
+                                    let rel = module.replace(':', "/");
+                                    let dir = if dir_of_manifest.is_empty() {
+                                        rel
+                                    } else {
+                                        format!("{dir_of_manifest}/{rel}")
+                                    };
+                                    out.push(kndo_contract::adapter::PackageEntry {
+                                        name: SmolStr::new(name),
+                                        entry: None,
+                                        dir: SmolStr::new(dir),
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+                out.sort_by(|a, b| a.name.cmp(&b.name));
+                out.dedup_by(|a, b| a.name == b.name);
+                out
+            }
+            "pom.xml" => {
+                // The pom's OWN identity: the first artifactId outside any
+                // <parent> or <dependency> block.
+                let mut in_other = 0i32;
+                let mut group: Option<&str> = None;
+                let mut artifact: Option<&str> = None;
+                for line in text.lines() {
+                    let line = line.trim();
+                    for open in ["<parent>", "<dependencies>", "<build>", "<plugins>"] {
+                        if line.contains(open) {
+                            in_other += 1;
+                        }
+                    }
+                    for close in ["</parent>", "</dependencies>", "</build>", "</plugins>"] {
+                        if line.contains(close) {
+                            in_other -= 1;
+                        }
+                    }
+                    if in_other > 0 {
+                        continue;
+                    }
+                    if group.is_none()
+                        && let Some(v) = tag_value(line, "groupId")
+                    {
+                        group = Some(v);
+                    }
+                    if artifact.is_none()
+                        && let Some(v) = tag_value(line, "artifactId")
+                    {
+                        artifact = Some(v);
+                    }
+                }
+                let Some(a) = artifact else {
+                    return Vec::new();
+                };
+                let name = match group {
+                    Some(g) => format!("{g}:{a}"),
+                    None => a.to_string(),
+                };
+                vec![kndo_contract::adapter::PackageEntry {
+                    name: SmolStr::new(name),
+                    entry: None,
+                    dir: SmolStr::new(dir_of_manifest),
+                }]
+            }
+            _ => Vec::new(),
+        }
+    }
+
     /// `<dependency>` blocks inside `<dependencies>`: pair each `<groupId>` with
-    /// its `<artifactId>` in document order.
-    pub fn maven(text: &str) -> Vec<SmolStr> {
+    /// its `<artifactId>` in document order — both the full coordinate and the
+    /// bare artifact spelling, `<scope>test</scope>` marked `Dev` (publish-safe),
+    /// everything else honestly unstated.
+    pub fn maven(text: &str) -> Vec<kndo_contract::adapter::DependencyDeclaration> {
+        use kndo_contract::adapter::{DependencyDeclaration, DependencyScope};
         let mut out = Vec::new();
         let mut in_dependencies = false;
         let mut group: Option<&str> = None;
         let mut artifact: Option<&str> = None;
+        let mut scope: Option<DependencyScope> = None;
+        let mut push = |g: Option<&str>, a: &str, scope: Option<DependencyScope>| {
+            if let Some(g) = g {
+                out.push(DependencyDeclaration {
+                    name: SmolStr::new(format!("{g}:{a}")),
+                    scope,
+                    version_req: None,
+                });
+            }
+            out.push(DependencyDeclaration {
+                name: SmolStr::new(a),
+                scope,
+                version_req: None,
+            });
+        };
         for line in text.lines() {
             let line = line.trim();
             if line.contains("<dependencies>") {
@@ -302,9 +470,10 @@ pub mod jvm_manifest {
             if !in_dependencies {
                 continue;
             }
-            if line.contains("<dependency>") || line.contains("</dependency>") {
+            if line.contains("<dependency>") {
                 group = None;
                 artifact = None;
+                scope = None;
             }
             if let Some(v) = tag_value(line, "groupId") {
                 group = Some(v);
@@ -312,11 +481,16 @@ pub mod jvm_manifest {
             if let Some(v) = tag_value(line, "artifactId") {
                 artifact = Some(v);
             }
-            if let (Some(g), Some(a)) = (group, artifact) {
-                out.push(SmolStr::new(format!("{g}:{a}")));
-                out.push(SmolStr::new(a));
+            if let Some(v) = tag_value(line, "scope") {
+                scope = (v == "test").then_some(DependencyScope::Dev);
+            }
+            if line.contains("</dependency>") {
+                if let Some(a) = artifact {
+                    push(group, a, scope);
+                }
                 group = None;
                 artifact = None;
+                scope = None;
             }
         }
         out
@@ -333,13 +507,15 @@ pub mod jvm_manifest {
     /// Quoted `group:artifact[:version]` coordinates anywhere in the script — the
     /// shape every dependency notation shares (`implementation "g:a:v"`,
     /// `api('g:a')`, version catalogs excluded by their own syntax).
-    pub fn gradle(text: &str) -> Vec<SmolStr> {
+    pub fn gradle(text: &str) -> Vec<kndo_contract::adapter::DependencyDeclaration> {
+        use kndo_contract::adapter::DependencyDeclaration;
         let mut out = Vec::new();
         for line in text.lines() {
             let line = line.trim();
             if line.starts_with("//") {
                 continue;
             }
+            let scope = gradle_scope(line);
             for quote in ['"', '\''] {
                 let mut rest = line;
                 while let Some(start) = rest.find(quote) {
@@ -349,6 +525,25 @@ pub mod jvm_manifest {
                     };
                     let literal = &after[..end];
                     rest = &after[end + 1..];
+                    // `project(":name")` — a dependency on a workspace sibling,
+                    // spelled by module path; the name is the last segment.
+                    if line.contains("project(")
+                        && let Some(module) = literal.strip_prefix(':')
+                    {
+                        let name = module.rsplit(':').next().unwrap_or(module);
+                        if !name.is_empty()
+                            && name
+                                .chars()
+                                .all(|c| c.is_alphanumeric() || ".-_".contains(c))
+                        {
+                            out.push(DependencyDeclaration {
+                                name: SmolStr::new(name),
+                                scope,
+                                version_req: None,
+                            });
+                        }
+                        continue;
+                    }
                     let mut parts = literal.split(':');
                     if let (Some(g), Some(a)) = (parts.next(), parts.next()) {
                         let extra = parts.next();
@@ -359,8 +554,16 @@ pub mod jvm_manifest {
                             && a.chars().all(|c| c.is_alphanumeric() || ".-_".contains(c))
                             && extra.is_none_or(|v| !v.is_empty());
                         if well_formed {
-                            out.push(SmolStr::new(format!("{g}:{a}")));
-                            out.push(SmolStr::new(a));
+                            out.push(DependencyDeclaration {
+                                name: SmolStr::new(format!("{g}:{a}")),
+                                scope,
+                                version_req: None,
+                            });
+                            out.push(DependencyDeclaration {
+                                name: SmolStr::new(a),
+                                scope,
+                                version_req: None,
+                            });
                         }
                     }
                 }
