@@ -291,6 +291,23 @@ Complete (CI verification pending only the credits reset, like M0–M2):
   the oracle's guava `unused` were false positives). Six v1 fixtures replay;
   guava claims 3,277 files and measures 5,621 findings with every category
   delta explained in `corpus-findings/COMPARISON.md`.
+- **M6.b.2 — kndo:kotlin.** The fifth built-in: public-by-default reach (the
+  opposite of Java, load-bearing — `internal` folds to Exported until the
+  ladder can tell module scope apart), promoted primary-constructor
+  properties as real members, `override`/`operator` dispatch roots, companion
+  members attributed to the enclosing class, and the same never-declare
+  postures (constructors, enum entries). Resolution adds two fallbacks Java
+  doesn't need: the `.java` extension and the package directory (Kotlin file
+  names are free). The JVM manifest scanners promoted to
+  `kndo-toolkit::jvm_manifest` (second-copy rule — one build system, two
+  languages). Five v1 fixtures replay; Exposed claims 809 files, 774
+  findings — including 641 REAL method-level clones between its parallel
+  JDBC/R2DBC test suites — with every delta explained in COMPARISON.
+- **M6.b.4 — python (planned, owner decision 2026-08-31).** The first
+  fresh-baseline language: v1 never spoke it, so there is no quarry, no
+  harvested fixtures and no oracle row — acceptance is corpus measurement
+  plus sampled, explained findings, with fixtures authored new. Corpus
+  candidate: flask (BSD-3), pinned at kickoff.
 
 ## Name verification (2026-08-29)
 

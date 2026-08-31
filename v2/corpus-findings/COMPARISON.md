@@ -270,3 +270,40 @@ convention carries their Test roots; multi-release variants
 (`src/main/java16/**`) are unit mates of their base package symmetrically (the
 jar tool merges them), which is what keeps `DefaultMethodSupport` alive in the
 harvested fixture exactly as v1 did.
+
+## M6.b.2 — Exposed speaks: the first Kotlin measurement
+
+`kndo:kotlin` lands and Exposed claims 809 files, measuring 774 findings
+against the oracle's 1,037 (of which 163 are `internal-only`, unbuilt until
+M6.c, and 22 more sit in unbuilt categories — test-only 14, cyclic 4,
+version-skew 4).
+
+**duplicate 646 vs 91 — the surplus is real, maintained-in-parallel code.**
+Exposed keeps TWO test suites in lockstep: `exposed-tests` (JDBC) and
+`exposed-r2dbc-tests` (R2DBC) hold structurally identical test methods
+duplicated pair-by-pair (`SelectTests.testCompoundOp`,
+`UpdateTests`, `UnsignedColumnTypeTests`… — 641 symbol clones at the same
+60-token floor every language uses). guava's android/ mirror at method
+granularity; the recorded presentation question (grouping clone families)
+applies, and v1's far smaller count is v1's weaker Kotlin metrics, not a
+v2 false-positive flood.
+
+**unused 19 vs 277 — Kotlin's public-by-default meets library-mode roots.**
+The engine's whole-file root hands a file's EXPORTED surface to its
+consumers, and in Kotlin everything unmodified is public — so only `private`
+declarations are individually judgeable today (the kotlin fixtures pin
+exactly this: v1's `unused` rows there were public members). Java dodges
+this because its default is package-private → Private. This is the
+library-granularity gap hitting its worst case, and M6.c is its named fix:
+internal-only + the ladder reason about ACTUAL surface consumption, which is
+also where the oracle's 163 internal-only wait.
+
+**untested 109 (file) vs 484 (symbol)** — the known granularity gap, same as
+every language without coverage ingestion; lcov upgrades it wherever reports
+exist.
+
+Layout notes: resolution rides the package/directory convention Kotlin
+recommends but does not enforce (JetBrains' own tree follows it), with two
+fallbacks Java does not need — the `.java` extension (mixed source sets) and
+the package directory (file names are free in Kotlin, so a top-level
+function import may live in any file of its package).

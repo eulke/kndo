@@ -9,3 +9,4 @@ publish.workspace = true
 [dependencies]
 kndo-contract = { path = "../kndo-contract" }
 tree-sitter = "0.25"
+smol_str = { version = "0.3", features = ["serde"] }

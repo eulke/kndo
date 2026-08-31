@@ -13,11 +13,10 @@
 //! so oracle comparisons line up file-for-file.
 
 mod extract;
-mod manifest;
 mod resolve;
 
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
-use kndo_contract::evidence::{DiagnosticLevel, EvidenceSink, EvidenceStream, EvidenceStreams};
+use kndo_contract::evidence::{DiagnosticLevel, EvidenceSink};
 use kndo_contract::extension::{Extension, ExtensionSpec};
 use kndo_contract::vocab::ProjectPath;
 use smol_str::SmolStr;
@@ -28,21 +27,9 @@ pub struct JavaAdapter {
 
 impl JavaAdapter {
     pub fn new() -> Self {
-        let spec = ExtensionSpec::builder("kndo:java", 1)
-            .extensions(&["java"])
-            .emits(EvidenceStreams::of(&[
-                EvidenceStream::Comments,
-                EvidenceStream::Metrics,
-            ]))
-            .manifests(&[
-                "**/pom.xml",
-                "**/build.gradle",
-                "**/build.gradle.kts",
-                "**/settings.gradle",
-                "**/settings.gradle.kts",
-            ])
-            .build();
-        JavaAdapter { spec }
+        JavaAdapter {
+            spec: kndo_toolkit::jvm_manifest::jvm_spec("kndo:java", 1, &["java"]),
+        }
     }
 }
 
@@ -83,7 +70,7 @@ impl Extension for JavaAdapter {
     }
 
     fn manifest_dependencies(&self, manifest: &SourceFile<'_>) -> Vec<SmolStr> {
-        manifest::dependencies(manifest)
+        kndo_toolkit::jvm_manifest::dependencies(manifest)
     }
 
     fn unit_mates(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {

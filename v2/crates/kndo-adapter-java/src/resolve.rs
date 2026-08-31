@@ -15,6 +15,7 @@
 
 use kndo_contract::adapter::{Resolution, ResolveContext};
 use kndo_contract::vocab::ProjectPath;
+use kndo_toolkit as tk;
 
 pub fn resolve(from: &ProjectPath, specifier: &str, cx: &ResolveContext<'_>) -> Resolution {
     // `com.foo.Bar` → a single type's file; `com.foo` (a Glob import's package)
@@ -25,7 +26,7 @@ pub fn resolve(from: &ProjectPath, specifier: &str, cx: &ResolveContext<'_>) -> 
     // the file again.
     let path = specifier.replace('.', "/");
 
-    if let Some(file) = nearest(&format!("{path}.java"), from, cx) {
+    if let Some(file) = tk::nearest_suffix_match(&format!("{path}.java"), from, cx) {
         return Resolution::File(file);
     }
     let dir_members = package_dir_files(&path, cx);
@@ -33,39 +34,11 @@ pub fn resolve(from: &ProjectPath, specifier: &str, cx: &ResolveContext<'_>) -> 
         return Resolution::Files(dir_members);
     }
     if let Some((parent, _)) = path.rsplit_once('/')
-        && let Some(file) = nearest(&format!("{parent}.java"), from, cx)
+        && let Some(file) = tk::nearest_suffix_match(&format!("{parent}.java"), from, cx)
     {
         return Resolution::File(file);
     }
     Resolution::Unresolved
-}
-
-/// The suffix-matching file closest to the importer: longest shared path
-/// prefix, then path order — sibling-module ambiguity resolved toward the
-/// importer's own tree.
-fn nearest(suffix: &str, from: &ProjectPath, cx: &ResolveContext<'_>) -> Option<ProjectPath> {
-    let mut best: Option<(usize, &ProjectPath)> = None;
-    for candidate in cx.known_files() {
-        let c = candidate.as_str();
-        if !(c.ends_with(suffix)
-            && (c.len() == suffix.len() || c.as_bytes()[c.len() - suffix.len() - 1] == b'/'))
-        {
-            continue;
-        }
-        let score = common_prefix(c, from.as_str());
-        let better = match &best {
-            None => true,
-            Some((s, b)) => score > *s || (score == *s && c < b.as_str()),
-        };
-        if better {
-            best = Some((score, candidate));
-        }
-    }
-    best.map(|(_, p)| p.clone())
-}
-
-fn common_prefix(a: &str, b: &str) -> usize {
-    a.bytes().zip(b.bytes()).take_while(|(x, y)| x == y).count()
 }
 
 /// Every direct `.java` child of any directory whose path ends in the package's

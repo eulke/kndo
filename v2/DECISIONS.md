@@ -948,3 +948,26 @@ plus the standard layout's two mirrors: `src/test/java` sees its
 and their base are one unit symmetrically. Third-party packages stay
 Unresolved, deliberately (no package→coordinate mapping exists without a
 classpath; guessing floods `undeclared`).
+
+## 2026-08-31 — kndo:kotlin lands; Python joins the plan as the first fresh-baseline language
+
+M6.b.2 ships on the same playbook with Kotlin's own rules: public-by-default
+reach (the opposite of Java — `internal` folds to Exported until the linear
+ladder can say "module scope"), `override`/`operator` as dispatch roots,
+promoted `val`/`var` constructor parameters as members, companion members on
+the enclosing class, and the never-declare postures carried over (secondary
+constructors; enum entries — the guava-vindicated rule). The JVM manifest
+scanners moved to `kndo-toolkit::jvm_manifest` on the second-copy rule.
+Measured on Exposed: 809 claimed, 774 findings; the 646-vs-91 duplicate
+surplus is real lockstep duplication between its JDBC and R2DBC test suites,
+and the 19-vs-277 unused gap is Kotlin's public default meeting library-mode
+surface — the worst case of the recorded granularity gap, named fix M6.c.
+
+Owner decision: PYTHON enters the plan as M6.b.4 — the first language with no
+v1 quarry, no harvested fixtures and no oracle. Its acceptance bar is
+therefore different by necessity and recorded here up front: corpus
+measurement with sampled, explained findings and fixtures authored fresh
+(same-or-better-than-nothing is not a bar; the bar is every sampled finding
+defensible). Corpus candidate flask (BSD-3), license reviewed and pinned at
+kickoff. Swift (M6.b.3) stays ahead of it in order — vapor and Alamofire
+already sit unmeasured in the corpus.

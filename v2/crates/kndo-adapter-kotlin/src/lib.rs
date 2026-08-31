@@ -1,0 +1,84 @@
+//! Kotlin, through the tree-sitter-kotlin-ng grammar. Kotlin's package is
+//! declared but — unlike Java's — NOT compiler-checked against the directory;
+//! this adapter leans on the convention anyway (JetBrains' own style enforces
+//! it), resolving imports by path suffix with a package-directory fallback for
+//! the file-name freedom Kotlin allows (`import a.b.Foo` may live in any
+//! `a/b/*.kt`). The unit is the directory — mixed `.kt`/`.java` siblings share
+//! one namespace at compile — plus the standard layout's test→main mirror
+//! across BOTH source-set spellings (`src/test/kotlin` sees `src/main/kotlin`
+//! and `src/main/java`).
+//!
+//! Visibility defaults to PUBLIC, the opposite of Java's package-private — a
+//! load-bearing difference. `internal` (module scope) folds to Exported in the
+//! binary reach: wider than a file, narrower than the world, and the analysis
+//! that can tell the difference (internal-only) is exactly what the visibility
+//! ladder waits for.
+//!
+//! The coordinate carries v1's territory (`kotlin`) under the built-in
+//! namespace, so oracle comparisons line up file-for-file.
+
+mod extract;
+mod resolve;
+
+use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
+use kndo_contract::evidence::{DiagnosticLevel, EvidenceSink};
+use kndo_contract::extension::{Extension, ExtensionSpec};
+use kndo_contract::vocab::ProjectPath;
+use smol_str::SmolStr;
+
+pub struct KotlinAdapter {
+    spec: ExtensionSpec,
+}
+
+impl KotlinAdapter {
+    pub fn new() -> Self {
+        KotlinAdapter {
+            spec: kndo_toolkit::jvm_manifest::jvm_spec("kndo:kotlin", 1, &["kt"]),
+        }
+    }
+}
+
+impl Default for KotlinAdapter {
+    fn default() -> Self {
+        KotlinAdapter::new()
+    }
+}
+
+impl Extension for KotlinAdapter {
+    fn spec(&self) -> &ExtensionSpec {
+        &self.spec
+    }
+
+    fn extract(&self, file: &SourceFile<'_>, out: &mut EvidenceSink) {
+        let language = tree_sitter_kotlin_ng::LANGUAGE.into();
+        match kndo_toolkit::parse(&language, file.content) {
+            Some(tree) => {
+                if tree.root_node().has_error() {
+                    out.diagnostic(
+                        DiagnosticLevel::Info,
+                        "syntax errors in file — evidence may be partial",
+                        None,
+                    );
+                }
+                extract::extract(file.path, file.content, &tree, out);
+            }
+            None => out.diagnostic(
+                DiagnosticLevel::Warn,
+                "parse produced no tree — no evidence extracted from this file",
+                None,
+            ),
+        }
+    }
+
+    fn resolve(&self, from: &ProjectPath, specifier: &str, cx: &ResolveContext<'_>) -> Resolution {
+        resolve::resolve(from, specifier, cx)
+    }
+
+    fn manifest_dependencies(&self, manifest: &SourceFile<'_>) -> Vec<SmolStr> {
+        kndo_toolkit::jvm_manifest::dependencies(manifest)
+    }
+
+    fn unit_mates(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
+        resolve::unit_mates(path, cx)
+    }
+}

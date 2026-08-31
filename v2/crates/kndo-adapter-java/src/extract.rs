@@ -106,17 +106,12 @@ struct Ctx {
     implicit_public: bool,
 }
 
+/// The JVM ecosystem's generated-file needles, declared here; the scan is the
+/// toolkit's.
+const GENERATED_NEEDLES: &[&str] = &["@generated", "Code generated", "DO NOT EDIT"];
+
 fn is_generated(source: &[u8]) -> bool {
-    let head = &source[..source.len().min(2048)];
-    std::str::from_utf8(head).is_ok_and(|s| {
-        s.lines().take(24).any(|l| {
-            let l = l.trim();
-            (l.starts_with("//") || l.starts_with("/*") || l.starts_with('*'))
-                && (l.contains("@generated")
-                    || l.contains("Code generated")
-                    || l.contains("DO NOT EDIT"))
-        })
-    })
+    tk::generated_marked(source, GENERATED_NEEDLES)
 }
 
 /// `public`/`protected` → Exported; `private`/package-private → Private, unless

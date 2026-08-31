@@ -9,6 +9,7 @@ publish.workspace = true
 [dependencies]
 kndo-adapter-go = { path = "../kndo-adapter-go" }
 kndo-adapter-java = { path = "../kndo-adapter-java" }
+kndo-adapter-kotlin = { path = "../kndo-adapter-kotlin" }
 kndo-adapter-rust = { path = "../kndo-adapter-rust" }
 kndo-adapter-ts = { path = "../kndo-adapter-ts" }
 kndo-contract = { path = "../kndo-contract" }
