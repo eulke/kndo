@@ -688,7 +688,7 @@ fn references_and_comments(root: Node<'_>, source: &[u8], out: &mut EvidenceSink
         &mut |n| {
             match n.kind() {
                 "line_comment" | "block_comment" => {
-                    comment(n, source, out);
+                    tk::comment_evidence(n, source, &COMMENT_MARKERS, out);
                     return;
                 }
                 "scoped_identifier" | "scoped_type_identifier" => {
@@ -888,33 +888,11 @@ fn classify(n: Node<'_>, parent: Node<'_>) -> RefKind {
     RefKind::Read
 }
 
-fn comment(n: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
-    let mut span = tk::span(n);
-    // This grammar's line_comment swallows the trailing newline; the comment ends
-    // before it.
-    while span.end > span.start
-        && matches!(source.get(span.end as usize - 1), Some(b'\n') | Some(b'\r'))
-    {
-        span = kndo_contract::vocab::Span::new(span.start, span.end - 1);
-    }
-    let bytes = &source[span.start as usize..(span.end as usize).min(source.len())];
-    // `//`, `///`, `//!` and `/*`, `/**`, `/*!` all strip to their text, so pragmas
-    // parse the same in plain and doc comments.
-    let text = if bytes.starts_with(b"//") {
-        let extra = bytes[2..]
-            .iter()
-            .take_while(|&&b| b == b'/' || b == b'!')
-            .count() as u32;
-        kndo_contract::vocab::Span::new(span.start + 2 + extra, span.end)
-    } else if bytes.starts_with(b"/*") && bytes.ends_with(b"*/") && bytes.len() >= 4 {
-        let extra = bytes[2..]
-            .iter()
-            .take_while(|&&b| b == b'*' || b == b'!')
-            .count()
-            .min(bytes.len().saturating_sub(4)) as u32;
-        kndo_contract::vocab::Span::new(span.start + 2 + extra, span.end - 2)
-    } else {
-        span
-    };
-    out.comment(span, text);
-}
+/// Rust's comment markers: `///`, `//!`, `////` and `/**`, `/*!` all strip to
+/// their text — pragmas parse the same in plain and doc comments.
+const COMMENT_MARKERS: tk::CommentMarkers<'static> = tk::CommentMarkers {
+    line: &["//"],
+    block: &[("/*", "*/")],
+    line_doc: b"/!",
+    block_doc: b"*!",
+};

@@ -111,6 +111,13 @@ pub struct CommentMarkers<'a> {
     pub line: &'a [&'a str],
     /// Block-comment (opener, closer) pairs, checked in order.
     pub block: &'a [(&'a str, &'a str)],
+    /// Doc/divider bytes that extend a matched LINE opener: any run of them
+    /// (`///`, `//!`, `////`) belongs to the marker, so a doc comment strips to
+    /// its text and a pragma parses identically in plain and doc form.
+    pub line_doc: &'a [u8],
+    /// Doc bytes that extend a matched BLOCK opener (`/**`, `/*!`), never
+    /// consuming into the closer (`/**/` stays an empty comment).
+    pub block_doc: &'a [u8],
 }
 
 /// Comment evidence: the node's span with any trailing newline the grammar
@@ -133,15 +140,26 @@ pub fn comment_evidence(
         .line
         .iter()
         .find(|m| bytes.starts_with(m.as_bytes()))
-        .map(|m| Span::new(span.start + m.len() as u32, span.end))
+        .map(|m| {
+            let extra = bytes[m.len()..]
+                .iter()
+                .take_while(|b| markers.line_doc.contains(b))
+                .count();
+            Span::new(span.start + (m.len() + extra) as u32, span.end)
+        })
         .or_else(|| {
             markers.block.iter().find_map(|(open, close)| {
                 (bytes.starts_with(open.as_bytes())
                     && bytes.ends_with(close.as_bytes())
                     && bytes.len() >= open.len() + close.len())
                 .then(|| {
+                    let extra = bytes[open.len()..]
+                        .iter()
+                        .take_while(|b| markers.block_doc.contains(b))
+                        .count()
+                        .min(bytes.len() - open.len() - close.len());
                     Span::new(
-                        span.start + open.len() as u32,
+                        span.start + (open.len() + extra) as u32,
                         span.end - close.len() as u32,
                     )
                 })

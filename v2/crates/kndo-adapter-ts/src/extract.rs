@@ -391,7 +391,7 @@ const IDENT_KINDS: [&str; 5] = [
 fn references_and_comments(root: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
     tk::walk(root, &mut |n| {
         if n.kind() == "comment" {
-            comment(n, source, out);
+            tk::comment_evidence(n, source, &COMMENT_MARKERS, out);
             return;
         }
         if n.kind() == "call_expression" {
@@ -527,15 +527,11 @@ fn classify(n: Node<'_>, parent: Node<'_>) -> RefKind {
     }
 }
 
-fn comment(n: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
-    let span = tk::span(n);
-    let bytes = &source[n.start_byte()..n.end_byte().min(source.len())];
-    let text = if bytes.starts_with(b"//") {
-        Span::new(span.start + 2, span.end)
-    } else if bytes.starts_with(b"/*") && bytes.ends_with(b"*/") && bytes.len() >= 4 {
-        Span::new(span.start + 2, span.end - 2)
-    } else {
-        span
-    };
-    out.comment(span, text);
-}
+/// JS/TS comment markers; JSDoc's `/**` strips to its text so a pragma inside
+/// one parses like any other.
+const COMMENT_MARKERS: tk::CommentMarkers<'static> = tk::CommentMarkers {
+    line: &["//"],
+    block: &[("/*", "*/")],
+    line_doc: b"",
+    block_doc: b"*",
+};

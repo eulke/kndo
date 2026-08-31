@@ -191,3 +191,15 @@ fn enum_constants_are_not_declared_but_methods_carry_metrics() {
         .expect("methods carry metrics");
     assert_eq!(m.cyclomatic, 3, "if + && past the base");
 }
+
+#[test]
+fn a_javadoc_pragma_strips_to_its_text() {
+    let ev = ev(
+        "src/main/java/com/foo/Widget.java",
+        "/** kndo:allow-file duplicate -- vendored */\npublic class Widget {}\n",
+    );
+    let c = &ev.comments[0];
+    // The `/**` opener strips whole: the text starts at the pragma, which is
+    // what lets `kndo:allow` START its comment inside a doc block.
+    assert_eq!(c.text.start, 3, "doc star belongs to the marker: {c:#?}");
+}

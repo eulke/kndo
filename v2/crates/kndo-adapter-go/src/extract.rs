@@ -196,6 +196,8 @@ fn string_content(node: Node<'_>, source: &[u8]) -> String {
 const COMMENT_MARKERS: tk::CommentMarkers<'static> = tk::CommentMarkers {
     line: &["//"],
     block: &[("/*", "*/")],
+    line_doc: b"",
+    block_doc: b"*",
 };
 
 fn references_and_comments(root: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
