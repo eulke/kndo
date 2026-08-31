@@ -392,6 +392,14 @@ stale against it), health follows judgment, and the envelope's `run.selection` r
 the ask verbatim — what a narrowed run does not list, it did not judge. `kndo health`
 prints the measurement alone (line on a tty, JSON piped, always exit 0).
 
+Sixth row: **`kndo.toml` and `init`**. The CLI's persisted invocation defaults —
+`[check]` `fail-on`/`format`/`only`/`skip`, only keys with living consumers — with
+v1's lesson as birth law: an unknown key REFUSES the run (a typo is never silently
+ignored), the precedence has one spelling (flag > `KNDO_FORMAT` > file > default,
+merged in one place), and the `init` template and the parse struct are held to one
+list by a test. `init --hook` installs a pre-commit that runs `kndo check --staged` —
+the diff modes' natural home.
+
 Second row: **health**, rebuilt as a derived ratio instead of v1's penalty score. The
 envelope's `health` carries two counted integers and a per-category tally —
 `implicated` (distinct symbols/files with a first-party, warning-or-worse finding; two

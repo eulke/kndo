@@ -216,8 +216,8 @@ commitment to v1's design: each item is rebuilt v2-native when it lands.
 | health (score + per-category breakdown) | model + verb shipped (2026-08-31) | derived ratio, no weights (see DECISIONS); `kndo health` prints the block alone (line on a tty, JSON piped, always exit 0 — measurement, not a gate); still open: v1's `--by-package` split (waits on package aggregation) |
 | navigation verbs (`find`/`describe`/`uses`/`used-by`/`trace`/`impact`, batched `query`) | absent | open — the graph is queryable; the verbs are agent value; design against `kndo serve` so CLI and MCP share one query contract |
 | `explain <id>` (evidence chain behind one finding) | absent | open — pairs with the navigation verbs |
-| `doctor` (what kndo sees: extensions, cache, config) | absent | open — small, honest introspection; waits on config existing |
-| `init` + `kndo.toml` + pre-commit hook | absent — v2 has no config file at all | open — config lands with v1's lesson kept: only keys the engine reads ship |
+| `doctor` (what kndo sees: extensions, cache, config) | absent | open — small, honest introspection; config exists now, so nothing blocks it |
+| `init` + `kndo.toml` + pre-commit hook | shipped (2026-08-31) | `[check]` fail-on/format/only/skip — only keys with living consumers; a typo REFUSES the run (`deny_unknown_fields`); one merge site (flag > `KNDO_FORMAT` > file > default); `init --hook` writes a pre-commit running `kndo check --staged`; template↔struct held one-list by a test |
 | `plugin` manager verb (install/list/new/build/wit/verify) | absent — `.kndo/plugins/` loads, nothing manages | open — authoring exists (`docs`), management waits for demand |
 | `--only` / `--skip` / `--strict` category filters | absent | open — cheap once Category::parse guards the input |
 | `--quiet` / `--verbose` / `--color` | absent | open — presentation polish for the human render only |

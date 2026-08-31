@@ -8,6 +8,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use kndo::{Categories, Config, GatePolicy, Mode, Report, RunMode, RunOutcome, Severity, Threads};
 use std::path::PathBuf;
 
+mod config;
 mod git;
 
 #[derive(Parser)]
@@ -29,6 +30,17 @@ enum Command {
     Baseline(RunArgs),
     /// Project health only — the same measurement `check` reports, as one block
     Health(RunArgs),
+    /// Write the kndo.toml template (and, with --hook, a pre-commit gate)
+    Init(InitArgs),
+}
+
+#[derive(clap::Args)]
+struct InitArgs {
+    /// Project root (defaults to the current directory)
+    path: Option<PathBuf>,
+    /// Also install .git/hooks/pre-commit running `kndo check --staged`
+    #[arg(long)]
+    hook: bool,
 }
 
 #[derive(clap::Args)]
@@ -68,23 +80,25 @@ struct RunArgs {
     /// Worker threads (defaults to all cores)
     #[arg(long)]
     threads: Option<usize>,
-    /// Lowest severity that fails the run
-    #[arg(long, value_enum, default_value_t = FailOn::Warning)]
-    fail_on: FailOn,
+    /// Lowest severity that fails the run (default: warning)
+    #[arg(long, value_enum)]
+    fail_on: Option<FailOn>,
 }
 
 /// The renderings `check` offers. `human` is this frontend's presentation; the
 /// other three are core's render contracts, byte-identical from any frontend.
-#[derive(ValueEnum, Clone, Copy)]
-enum Format {
+#[derive(Debug, ValueEnum, Clone, Copy, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum Format {
     Human,
     Json,
     Agent,
     Sarif,
 }
 
-#[derive(ValueEnum, Clone, Copy)]
-enum FailOn {
+#[derive(Debug, ValueEnum, Clone, Copy, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum FailOn {
     Error,
     Warning,
     Info,
@@ -158,7 +172,7 @@ pub fn run(cli: Cli, host: Host) -> CliOutput {
             path: None,
             no_cache: false,
             threads: None,
-            fail_on: FailOn::Warning,
+            fail_on: None,
         },
         format: None,
         staged: false,
@@ -170,6 +184,66 @@ pub fn run(cli: Cli, host: Host) -> CliOutput {
         Command::Check(args) => check(args, &host),
         Command::Baseline(args) => baseline(args),
         Command::Health(args) => health(args, &host),
+        Command::Init(args) => init(args),
+    }
+}
+
+/// Refuses to overwrite: an existing kndo.toml (or hook) is someone's work.
+fn init(args: InitArgs) -> CliOutput {
+    let root = args.path.clone().unwrap_or_else(|| PathBuf::from("."));
+    let path = root.join("kndo.toml");
+    if path.exists() {
+        return CliOutput {
+            stdout: String::new(),
+            stderr: "kndo: kndo.toml already exists — edit it instead\n".to_string(),
+            code: 2,
+        };
+    }
+    if let Err(e) = std::fs::write(&path, config::TEMPLATE) {
+        return CliOutput {
+            stdout: String::new(),
+            stderr: format!("kndo: could not write kndo.toml: {e}\n"),
+            code: 2,
+        };
+    }
+    let mut stdout = "wrote kndo.toml\n".to_string();
+    if args.hook {
+        let hooks = root.join(".git/hooks");
+        if !hooks.is_dir() {
+            return CliOutput {
+                stdout,
+                stderr: "kndo: --hook needs a git repository (.git/hooks not found)\n".to_string(),
+                code: 2,
+            };
+        }
+        let hook_path = hooks.join("pre-commit");
+        if hook_path.exists() {
+            return CliOutput {
+                stdout,
+                stderr: "kndo: .git/hooks/pre-commit already exists — add `kndo check --staged` to it yourself\n"
+                    .to_string(),
+                code: 2,
+            };
+        }
+        let script = "#!/bin/sh\n# Gate what this commit would commit.\nexec kndo check --staged\n";
+        if let Err(e) = std::fs::write(&hook_path, script) {
+            return CliOutput {
+                stdout,
+                stderr: format!("kndo: could not write the pre-commit hook: {e}\n"),
+                code: 2,
+            };
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&hook_path, std::fs::Permissions::from_mode(0o755));
+        }
+        stdout.push_str("wrote .git/hooks/pre-commit (kndo check --staged)\n");
+    }
+    CliOutput {
+        stdout,
+        stderr: String::new(),
+        code: 0,
     }
 }
 
@@ -213,30 +287,68 @@ fn health(args: RunArgs, host: &Host) -> CliOutput {
     }
 }
 
-/// Flag > `KNDO_FORMAT` > the terminal. A malformed environment value cannot be
-/// a refusal — the invoker of a pipeline did not necessarily set it — so it warns
-/// on stderr and falls through to the terminal default. An empty value is unset.
-fn resolve_format(flag: Option<Format>, host: &Host) -> (Format, Option<String>) {
-    if let Some(format) = flag {
-        return (format, None);
-    }
-    let by_tty = if host.tty {
-        Format::Human
+/// What one `check` invocation resolved to, from every source it may come from.
+struct Effective {
+    format: Format,
+    fail_on: FailOn,
+    categories: Categories,
+}
+
+/// The ONE merge site — no second place ranks these sources: flag >
+/// `KNDO_FORMAT` (format only; the environment has no opinion on gates or
+/// selection) > `kndo.toml` > built-in default. A malformed environment value
+/// cannot be a refusal — the invoker of a pipeline did not necessarily set it —
+/// so it warns on stderr and falls through; a malformed kndo.toml DOES refuse,
+/// upstream in [`config::load`], because the file is this project's own claim.
+fn effective(
+    args: &CheckArgs,
+    host: &Host,
+    file: &config::FileConfig,
+) -> Result<(Effective, Option<String>), CliOutput> {
+    let mut warning = None;
+    let format = args
+        .format
+        .or_else(|| match host.format_env.as_deref() {
+            None | Some("") => None,
+            Some(raw) => match <Format as ValueEnum>::from_str(raw, true) {
+                Ok(format) => Some(format),
+                Err(_) => {
+                    warning = Some(format!(
+                        "kndo: unknown KNDO_FORMAT `{raw}` (human, json, agent, sarif) — falling through\n"
+                    ));
+                    None
+                }
+            },
+        })
+        .or(file.check.format)
+        .unwrap_or(if host.tty { Format::Human } else { Format::Json });
+    let fail_on = args
+        .run
+        .fail_on
+        .or(file.check.fail_on)
+        .unwrap_or(FailOn::Warning);
+    let categories = if !args.only.is_empty() || !args.skip.is_empty() {
+        selection_of(&args.only, &args.skip)?
     } else {
-        Format::Json
+        if !file.check.only.is_empty() && !file.check.skip.is_empty() {
+            return Err(CliOutput {
+                stdout: String::new(),
+                stderr:
+                    "kndo: kndo.toml sets both `only` and `skip` — they are mutually exclusive\n"
+                        .to_string(),
+                code: 2,
+            });
+        }
+        selection_of(&file.check.only, &file.check.skip)?
     };
-    match host.format_env.as_deref() {
-        None | Some("") => (by_tty, None),
-        Some(raw) => match <Format as ValueEnum>::from_str(raw, true) {
-            Ok(format) => (format, None),
-            Err(_) => (
-                by_tty,
-                Some(format!(
-                    "kndo: unknown KNDO_FORMAT `{raw}` (human, json, agent, sarif) — choosing by terminal\n"
-                )),
-            ),
+    Ok((
+        Effective {
+            format,
+            fail_on,
+            categories,
         },
-    }
+        warning,
+    ))
 }
 
 /// The user's category narrowing, validated at the frontier: an unknown name is a
@@ -351,11 +463,22 @@ fn refused(refusal: kndo::Refusal) -> CliOutput {
 }
 
 fn check(args: CheckArgs, host: &Host) -> CliOutput {
-    let (format, warning) = resolve_format(args.format, host);
-    let categories = match selection_of(&args.only, &args.skip) {
-        Ok(categories) => categories,
+    let root = args.run.path.clone().unwrap_or_else(|| PathBuf::from("."));
+    let file = match config::load(&root) {
+        Ok(file) => file,
+        Err(message) => {
+            return CliOutput {
+                stdout: String::new(),
+                stderr: format!("kndo: {message}\n"),
+                code: 2,
+            };
+        }
+    };
+    let (effective, warning) = match effective(&args, host, &file) {
+        Ok(resolved) => resolved,
         Err(failure) => return failure,
     };
+    let (format, fail_on, categories) = (effective.format, effective.fail_on, effective.categories);
     let comparison = if args.staged {
         Some(git::Comparison::Staged)
     } else {
@@ -366,16 +489,13 @@ fn check(args: CheckArgs, host: &Host) -> CliOutput {
             Ok(snapshot) => snapshot,
             Err(failure) => return failure,
         },
-        None => {
-            let root = args.run.path.clone().unwrap_or_else(|| PathBuf::from("."));
-            match analyze_at(&root, &args.run, !args.run.no_cache, &categories) {
-                Ok(snapshot) => snapshot,
-                Err(refusal) => return refused(refusal),
-            }
-        }
+        None => match analyze_at(&root, &args.run, !args.run.no_cache, &categories) {
+            Ok(snapshot) => snapshot,
+            Err(refusal) => return refused(refusal),
+        },
     };
     let report = snapshot.report();
-    let code = snapshot.gate(&args.run.fail_on.policy()).exit_code();
+    let code = snapshot.gate(&fail_on.policy()).exit_code();
     // Text documents arrive newline-terminated from their renders; JSON values
     // are framed here.
     let stdout = match format {

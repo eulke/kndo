@@ -389,3 +389,75 @@ fn the_health_verb_is_the_measurement_alone() {
     assert_eq!(health["implicated"], 1);
     assert!(health["subjects"].as_u64().is_some());
 }
+
+#[test]
+fn kndo_toml_sets_defaults_and_every_flag_beats_it() {
+    let p = project_with_findings();
+    p.file(
+        "kndo.toml",
+        "[check]\nfail-on = \"never\"\nformat = \"agent\"\n",
+    );
+
+    // The file's defaults apply: agent format on a terminal, gate never fails.
+    let out = check(&p, &[], terminal());
+    assert_eq!(out.code, 0, "{}{}", out.stdout, out.stderr);
+    assert!(
+        out.stdout.starts_with("kndo agent format"),
+        "{}",
+        out.stdout
+    );
+
+    // Flags beat the file…
+    let human = check(
+        &p,
+        &["--format", "human", "--fail-on", "warning"],
+        terminal(),
+    );
+    assert_eq!(human.code, 1);
+    assert!(human.stdout.contains("1 finding\n"), "{}", human.stdout);
+
+    // …and KNDO_FORMAT beats the file too, but not the flag.
+    let env = check(
+        &p,
+        &[],
+        Host {
+            tty: true,
+            format_env: Some("json".to_string()),
+        },
+    );
+    assert!(env.stdout.starts_with('{'), "{}", env.stdout);
+}
+
+#[test]
+fn a_kndo_toml_typo_refuses_the_run() {
+    let p = project_with_findings();
+    p.file("kndo.toml", "[check]\nfail-onn = \"never\"\n");
+    let out = check(&p, &[], piped());
+    assert_eq!(out.code, 2);
+    assert!(out.stderr.contains("kndo.toml"), "{}", out.stderr);
+    assert!(out.stderr.contains("fail-onn"), "{}", out.stderr);
+}
+
+#[test]
+fn init_writes_the_template_once_and_the_hook_gates_staged() {
+    let p = project_with_findings();
+    sh_git(p.root(), &["init", "-q"]);
+    let root = p.root().to_string_lossy().into_owned();
+
+    let out = run_args(["kndo", "init", &root, "--hook"], terminal());
+    assert_eq!(out.code, 0, "{}{}", out.stdout, out.stderr);
+    assert!(p.root().join("kndo.toml").is_file());
+    let hook = p.root().join(".git/hooks/pre-commit");
+    assert!(hook.is_file());
+    let script = std::fs::read_to_string(&hook).expect("hook readable");
+    assert!(script.contains("kndo check --staged"), "{script}");
+
+    // The template parses as an empty config: a fresh init changes nothing.
+    let after = check(&p, &[], terminal());
+    assert_eq!(after.code, 1, "{}", after.stdout);
+
+    // A second init refuses — the file is someone's work now.
+    let again = run_args(["kndo", "init", &root], terminal());
+    assert_eq!(again.code, 2);
+    assert!(again.stderr.contains("already exists"), "{}", again.stderr);
+}

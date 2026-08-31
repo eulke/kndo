@@ -1502,3 +1502,27 @@ measurement, not a gate.
 Freight: schema regenerated (`run.selection` + Categories defs; fixtures and
 goldens byte-unmoved — All serializes as absence). 202 tests, 14 gates, clippy
 clean.
+
+## 2026-08-31 — kndo.toml and init: config born with v1's lessons as law
+
+The CLI's persisted invocation defaults, deliberately CLI-side: `[check]`
+`fail-on`, `format`, `only`, `skip` — every key has a living consumer, and nothing
+else exists (a commented-out key is still a promise; the `init` template and the
+parse struct are held to ONE list by a test that parses the template both
+commented and uncommented). Two behaviors are the point:
+
+- **A typo refuses the run.** `deny_unknown_fields`: `fail-onn` is an exit-2
+  error naming the key, never silence — the failure mode v1's LIVE_TABLES check
+  existed to prevent, now structural.
+- **Precedence has one spelling.** flag > `KNDO_FORMAT` (format only — the
+  environment has no opinion on gates or selection) > `kndo.toml` > built-in
+  default, merged in `effective()` and nowhere else (v1's EffectiveConfig lesson).
+  `--fail-on` became `Option` so "user said warning" and "default warning" stopped
+  being the same value. A malformed environment value warns and falls through; a
+  malformed kndo.toml refuses — the file is the project's own claim.
+
+`kndo init` writes the commented template (refuses to overwrite — the file is
+someone's work), and `--hook` installs `.git/hooks/pre-commit` running
+`kndo check --staged` — the diff modes' natural home. 207 tests, 14 gates, clippy
+clean; envelope, fixtures and goldens byte-unmoved (config is invocation, not
+output).
