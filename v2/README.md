@@ -266,7 +266,7 @@ Complete (CI verification pending only the credits reset, like M0–M2):
 - Owner decision (in DECISIONS.md): internal-only — and the visibility ladder
   with it — lands in M6.
 
-## M6 — next
+## M6 — status
 
 - **M6.a — done: the unified extension mechanism.** One species — extension —
   replaced the adapter/plugin/ingester taxonomy: one `ExtensionSpec` with the
@@ -337,7 +337,12 @@ Complete (CI verification pending only the credits reset, like M0–M2):
   expansion site, so they now root `Possible` (the harvested `macro-use-mod`
   fixture had the falsehood pinned; it now pins the contrast, and
   `macro-template-names` pins it end-to-end).
-- **M6.e — close-out.** Per the census order in `DECISIONS.md`.
+- **M6.e — done: the milestone closes.** README and the owner report brought
+  current, DECISIONS carries the milestone entry, `cargo xtask gen-ci` verified
+  drift-free, and `corpus/clone.sh` reads `corpus.toml` so flask rides the CI
+  corpus job with no workflow edit. The census's own scope note: the public
+  release was never in the census order — it waits on the owner's root-swap
+  window, outside M6.
 - **M6.b.4 — python, done (owner decision 2026-08-31).** The first
   fresh-baseline language: v1 never spoke it, so there is no quarry, no
   harvested fixtures and no oracle row — every posture is derived from the

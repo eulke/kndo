@@ -1295,3 +1295,24 @@ deliberately, for exactly this documented reason.
 Also fixed by the reread: Exposed's headline miscalled `test-only` an unbuilt
 category (it is built; its zero is the library-roots mechanism) and now carries
 the tracked 936→987 arithmetic. 182 tests, 13 gates, clippy clean.
+
+## 2026-08-31 — M6.e: the milestone closes
+
+**Decision.** M6 closes complete against the census order (M6.a unified door →
+M6.b java/kotlin/swift + python by the owner's "Python antes" → M6.c regions +
+internal-only → M6.d measured parity → this close-out); the public release was
+never in the census order and stays with the owner's root-swap window. The
+close-out verified the mechanical syncs rather than asserting them: `cargo
+xtask gen-ci` produces zero drift against the committed workflow, and
+`corpus/clone.sh` reads `corpus.toml` as its one source, so flask joined the
+CI corpus job the moment it was pinned — no workflow edit existed to forget.
+README's M6 section speaks the delivered state; the owner report's plan
+section now carries the full M6 close in its Estado callout (republished).
+
+**Where M6 leaves the tree.** Seven built-in languages behind one `Extension`
+door; `Reach` with its middle rung and region-enumerated judgment; the
+quarry-not-target law in CLAUDE.md; 182 tests and 13 named gates green;
+corpus at nine repos — v2 12,928 findings against the eight-repo oracle's
+24,459, every cell decomposed in COMPARISON — and the standing ledgers
+(unbuilt categories with dispositions, the export-narrowing and
+dependency-family demands) pinned in EXPERIMENTS with their numbers.
