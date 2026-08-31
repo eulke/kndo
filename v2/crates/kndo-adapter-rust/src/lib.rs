@@ -37,6 +37,9 @@ impl RustAdapter {
                 &["rs"],
                 &["**/Cargo.toml"],
                 &["crate"],
+                // Modules within a crate reference each other freely — legal,
+                // routine structure, never an initialization hazard.
+                kndo_contract::extension::CycleTolerance::Tolerated,
             ),
         }
     }

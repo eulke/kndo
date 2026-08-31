@@ -5,8 +5,8 @@
 //! refusal reappears inside [`RunOutcome`] so `exit_code` covers that path too.
 
 use crate::analysis::{
-    Abstention, Duplicate, InternalOnly, TestOnly, Unresolved, Untested, Unused, VersionSkew,
-    run_all,
+    Abstention, Cyclic, Duplicate, InternalOnly, TestOnly, Unresolved, Untested, Unused,
+    VersionSkew, run_all,
 };
 use crate::cache::EvidenceCache;
 use crate::conduct::Contribution;
@@ -441,7 +441,16 @@ impl Session {
                 )
             })
             .collect();
-        let all: [&dyn crate::analysis::Analysis; 7] = [
+        let cycle_hazards: Vec<SmolStr> = self
+            .extensions
+            .iter()
+            .filter(|e| {
+                e.spec().import_cycles() == kndo_contract::extension::CycleTolerance::Hazard
+            })
+            .map(|e| SmolStr::new(e.spec().coordinate()))
+            .collect();
+        let all: [&dyn crate::analysis::Analysis; 8] = [
+            &Cyclic,
             &Unused,
             &InternalOnly,
             &TestOnly,
@@ -454,7 +463,13 @@ impl Session {
             .into_iter()
             .filter(|a| self.config.categories.includes(&a.category()))
             .collect();
-        let mut outcome = run_all(&graph, round.coverage, &narrowables, &selected);
+        let mut outcome = run_all(
+            &graph,
+            round.coverage,
+            &narrowables,
+            &cycle_hazards,
+            &selected,
+        );
         // Plugin findings ride the same suppression pass — a `kndo:allow
         // ext:<coordinate>/<rule>` pragma reaches them like any category — and
         // `apply` owns the canonical final sort. The selection reaches them by

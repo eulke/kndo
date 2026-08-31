@@ -12,9 +12,13 @@
     ]
   },
   "health": {
-    "implicated": 703,
+    "implicated": 718,
     "subjects": 5052,
     "by_category": [
+      {
+        "category": "cyclic",
+        "findings": 31
+      },
       {
         "category": "unused",
         "findings": 703
@@ -221,6 +225,347 @@
         "end": 1
       },
       "message": "import of './imports.js' resolves to no file — a broken path or a rename that missed this call site"
+    },
+    {
+      "id": "kndo-3f9d5eef3cd4",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/module-runner/createImportMeta.ts"
+      },
+      "message": "8 files form an import cycle: packages/vite/src/module-runner/createImportMeta.ts → packages/vite/src/module-runner/types.ts → packages/vite/src/module-runner/sourcemap/interceptor.ts → packages/vite/src/module-runner/runner.ts → packages/vite/src/module-runner/createImportMeta.ts"
+    },
+    {
+      "id": "kndo-4170b6bef782",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/baseEnvironment.ts"
+      },
+      "message": "88 files form an import cycle: packages/vite/src/node/baseEnvironment.ts → packages/vite/src/node/config.ts → packages/vite/src/node/baseEnvironment.ts"
+    },
+    {
+      "id": "kndo-3c360200052c",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/ssr/runtime/__tests__/fixtures/circular/circular-a.js"
+      },
+      "message": "2 files form an import cycle: packages/vite/src/node/ssr/runtime/__tests__/fixtures/circular/circular-a.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/circular/circular-b.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/circular/circular-a.js"
+    },
+    {
+      "id": "kndo-af213e2df259",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic/entry-cyclic.js"
+      },
+      "message": "2 files form an import cycle: packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic/entry-cyclic.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic/entry.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic/entry-cyclic.js"
+    },
+    {
+      "id": "kndo-a6e1160e2cd8",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test1/dep2.js"
+      },
+      "message": "2 files form an import cycle: packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test1/dep2.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test1/index.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test1/dep2.js"
+    },
+    {
+      "id": "kndo-86c4f3ad2f99",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test2/dep2.js"
+      },
+      "message": "2 files form an import cycle: packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test2/dep2.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test2/index.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test2/dep2.js"
+    },
+    {
+      "id": "kndo-04dfd66f67a7",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test3/dep2.js"
+      },
+      "message": "2 files form an import cycle: packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test3/dep2.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test3/index.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test3/dep2.js"
+    },
+    {
+      "id": "kndo-24b36bce459b",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test4/dep2.js"
+      },
+      "message": "2 files form an import cycle: packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test4/dep2.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test4/index.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test4/dep2.js"
+    },
+    {
+      "id": "kndo-c2312cee5038",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test5/dep2.js"
+      },
+      "message": "2 files form an import cycle: packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test5/dep2.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test5/index.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test5/dep2.js"
+    },
+    {
+      "id": "kndo-7d44bcdf58c0",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test6/dep1.js"
+      },
+      "message": "2 files form an import cycle: packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test6/dep1.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test6/dep2.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test6/dep1.js"
+    },
+    {
+      "id": "kndo-c94f3d9858eb",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test7/Ion.js"
+      },
+      "message": "3 files form an import cycle: packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test7/Ion.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test7/dom/index.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test7/dom/Blob.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test7/Ion.js"
+    },
+    {
+      "id": "kndo-5358d015eff0",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test9/dep.js"
+      },
+      "message": "2 files form an import cycle: packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test9/dep.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test9/index.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test9/dep.js"
+    },
+    {
+      "id": "kndo-44d6ba92502c",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/ssr/runtime/__tests__/fixtures/hmr-evaluated-import-race/evaluated.js"
+      },
+      "message": "2 files form an import cycle: packages/vite/src/node/ssr/runtime/__tests__/fixtures/hmr-evaluated-import-race/evaluated.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/hmr-evaluated-import-race/shared.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/hmr-evaluated-import-race/evaluated.js"
+    },
+    {
+      "id": "kndo-1c8f3a1961a1",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/ssr/runtime/__tests__/fixtures/hmr-reexport-race/entry-a.js"
+      },
+      "message": "2 files form an import cycle: packages/vite/src/node/ssr/runtime/__tests__/fixtures/hmr-reexport-race/entry-a.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/hmr-reexport-race/shared.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/hmr-reexport-race/entry-a.js"
+    },
+    {
+      "id": "kndo-f01ebc18e44a",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/ssr/runtime/__tests__/fixtures/tla-circular/a.js"
+      },
+      "message": "2 files form an import cycle: packages/vite/src/node/ssr/runtime/__tests__/fixtures/tla-circular/a.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/tla-circular/b.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/tla-circular/a.js"
+    },
+    {
+      "id": "kndo-20afe83bfcb6",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/hmr-full-bundle-mode/cycle-a.js"
+      },
+      "message": "2 files form an import cycle: playground/hmr-full-bundle-mode/cycle-a.js → playground/hmr-full-bundle-mode/cycle-b.js → playground/hmr-full-bundle-mode/cycle-a.js"
+    },
+    {
+      "id": "kndo-d2cc91beeb89",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/hmr-ssr/circular/mod-a.js"
+      },
+      "message": "3 files form an import cycle: playground/hmr-ssr/circular/mod-a.js → playground/hmr-ssr/circular/mod-b.js → playground/hmr-ssr/circular/mod-c.js → playground/hmr-ssr/circular/mod-a.js"
+    },
+    {
+      "id": "kndo-641ab3e0581b",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/hmr-ssr/invalidation-circular-deps/circular-invalidate/child.js"
+      },
+      "message": "2 files form an import cycle: playground/hmr-ssr/invalidation-circular-deps/circular-invalidate/child.js → playground/hmr-ssr/invalidation-circular-deps/circular-invalidate/parent.js → playground/hmr-ssr/invalidation-circular-deps/circular-invalidate/child.js"
+    },
+    {
+      "id": "kndo-d24f8c20d70b",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/hmr-ssr/invalidation-circular-deps/invalidate-handled-in-circle/child.js"
+      },
+      "message": "2 files form an import cycle: playground/hmr-ssr/invalidation-circular-deps/invalidate-handled-in-circle/child.js → playground/hmr-ssr/invalidation-circular-deps/invalidate-handled-in-circle/parent.js → playground/hmr-ssr/invalidation-circular-deps/invalidate-handled-in-circle/child.js"
+    },
+    {
+      "id": "kndo-cec48df596d8",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/hmr-ssr/self-accept-within-circular/b.js"
+      },
+      "message": "2 files form an import cycle: playground/hmr-ssr/self-accept-within-circular/b.js → playground/hmr-ssr/self-accept-within-circular/c.js → playground/hmr-ssr/self-accept-within-circular/b.js"
+    },
+    {
+      "id": "kndo-5951de06aa0c",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/hmr/circular/mod-a.js"
+      },
+      "message": "3 files form an import cycle: playground/hmr/circular/mod-a.js → playground/hmr/circular/mod-b.js → playground/hmr/circular/mod-c.js → playground/hmr/circular/mod-a.js"
+    },
+    {
+      "id": "kndo-b579fb55d169",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/hmr/invalidation-circular-deps/circular-invalidate/child.js"
+      },
+      "message": "2 files form an import cycle: playground/hmr/invalidation-circular-deps/circular-invalidate/child.js → playground/hmr/invalidation-circular-deps/circular-invalidate/parent.js → playground/hmr/invalidation-circular-deps/circular-invalidate/child.js"
+    },
+    {
+      "id": "kndo-dd9c9cb4dc6b",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/hmr/invalidation-circular-deps/invalidate-handled-in-circle/child.js"
+      },
+      "message": "2 files form an import cycle: playground/hmr/invalidation-circular-deps/invalidate-handled-in-circle/child.js → playground/hmr/invalidation-circular-deps/invalidate-handled-in-circle/parent.js → playground/hmr/invalidation-circular-deps/invalidate-handled-in-circle/child.js"
+    },
+    {
+      "id": "kndo-3088b92365d1",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/hmr/self-accept-within-circular/b.js"
+      },
+      "message": "2 files form an import cycle: playground/hmr/self-accept-within-circular/b.js → playground/hmr/self-accept-within-circular/c.js → playground/hmr/self-accept-within-circular/b.js"
+    },
+    {
+      "id": "kndo-9a190a99a007",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/html/inline/common.js"
+      },
+      "message": "3 files form an import cycle: playground/html/inline/common.js → playground/html/inline/dep1.js → playground/html/inline/common.js"
+    },
+    {
+      "id": "kndo-ef7de1a81363",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/multiple-entrypoints/entrypoints/a0.js"
+      },
+      "message": "25 files form an import cycle: playground/multiple-entrypoints/entrypoints/a0.js → playground/multiple-entrypoints/entrypoints/a1.js → playground/multiple-entrypoints/entrypoints/a0.js"
+    },
+    {
+      "id": "kndo-bb0e3eb99c44",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/ssr/src/circular-dep-init/circular-dep-init.js"
+      },
+      "message": "2 files form an import cycle: playground/ssr/src/circular-dep-init/circular-dep-init.js → playground/ssr/src/circular-dep-init/module-b.js → playground/ssr/src/circular-dep-init/circular-dep-init.js"
+    },
+    {
+      "id": "kndo-82b9b2bba8ce",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/ssr/src/circular-import/a.js"
+      },
+      "message": "2 files form an import cycle: playground/ssr/src/circular-import/a.js → playground/ssr/src/circular-import/b.js → playground/ssr/src/circular-import/a.js"
+    },
+    {
+      "id": "kndo-2de265a39974",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/ssr/src/circular-import2/a.js"
+      },
+      "message": "2 files form an import cycle: playground/ssr/src/circular-import2/a.js → playground/ssr/src/circular-import2/b.js → playground/ssr/src/circular-import2/a.js"
+    },
+    {
+      "id": "kndo-a11dad66ec7f",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/ssr/src/forked-deadlock/deadlock-fuse-module.js"
+      },
+      "message": "4 files form an import cycle: playground/ssr/src/forked-deadlock/deadlock-fuse-module.js → playground/ssr/src/forked-deadlock/fuse-stuck-bridge-module.js → playground/ssr/src/forked-deadlock/stuck-module.js → playground/ssr/src/forked-deadlock/middle-module.js → playground/ssr/src/forked-deadlock/deadlock-fuse-module.js"
+    },
+    {
+      "id": "kndo-259df801c488",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/ssr/src/forked-deadlock/dynamic-imports/deadlock-fuse-module.js"
+      },
+      "message": "4 files form an import cycle: playground/ssr/src/forked-deadlock/dynamic-imports/deadlock-fuse-module.js → playground/ssr/src/forked-deadlock/dynamic-imports/fuse-stuck-bridge-module.js → playground/ssr/src/forked-deadlock/dynamic-imports/stuck-module.js → playground/ssr/src/forked-deadlock/dynamic-imports/middle-module.js → playground/ssr/src/forked-deadlock/dynamic-imports/deadlock-fuse-module.js"
     },
     {
       "id": "kndo-3e74b12d252b",

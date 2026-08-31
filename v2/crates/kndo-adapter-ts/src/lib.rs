@@ -43,6 +43,9 @@ impl TypeScriptAdapter {
             &["ts", "tsx", "js", "jsx", "mjs", "cjs", "mts", "cts"],
             &["**/package.json"],
             &[],
+            // ESM/CJS initialization order makes cycles bite: TDZ errors and
+            // partially-initialized modules at run time.
+            kndo_contract::extension::CycleTolerance::Hazard,
         );
         let mut resolution_exts = Vec::new();
         for ext in spec.suffixes() {

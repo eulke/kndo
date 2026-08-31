@@ -12,9 +12,13 @@
     ]
   },
   "health": {
-    "implicated": 3,
+    "implicated": 6,
     "subjects": 1187,
     "by_category": [
+      {
+        "category": "cyclic",
+        "findings": 3
+      },
       {
         "category": "unused",
         "findings": 3
@@ -22,6 +26,39 @@
     ]
   },
   "findings": [
+    {
+      "id": "kndo-e044057ecd0b",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "possible",
+      "subject": {
+        "kind": "file",
+        "path": "examples/celery/src/task_app/__init__.py"
+      },
+      "message": "2 files form an import cycle: examples/celery/src/task_app/__init__.py → examples/celery/src/task_app/views.py → examples/celery/src/task_app/__init__.py"
+    },
+    {
+      "id": "kndo-b23118770f12",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "possible",
+      "subject": {
+        "kind": "file",
+        "path": "examples/javascript/js_example/__init__.py"
+      },
+      "message": "2 files form an import cycle: examples/javascript/js_example/__init__.py → examples/javascript/js_example/views.py → examples/javascript/js_example/__init__.py"
+    },
+    {
+      "id": "kndo-198bf4abb2ad",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "src/flask/__init__.py"
+      },
+      "message": "20 files form an import cycle: src/flask/__init__.py → src/flask/app.py → src/flask/__init__.py"
+    },
     {
       "id": "kndo-4fb60e18262d",
       "category": "unused",

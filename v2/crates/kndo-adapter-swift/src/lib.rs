@@ -51,6 +51,9 @@ impl SwiftAdapter {
                 &["swift"],
                 &["**/Package.swift"],
                 &["module"],
+                // Files in a module compile as one unit; cross-references are
+                // routine, and the compiler rejects target-level cycles.
+                kndo_contract::extension::CycleTolerance::Tolerated,
             ),
         }
     }

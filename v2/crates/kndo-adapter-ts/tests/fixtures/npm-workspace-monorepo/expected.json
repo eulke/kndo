@@ -12,9 +12,13 @@
     ]
   },
   "health": {
-    "implicated": 1,
+    "implicated": 2,
     "subjects": 6,
     "by_category": [
+      {
+        "category": "cyclic",
+        "findings": 1
+      },
       {
         "category": "unused",
         "findings": 1
@@ -41,6 +45,17 @@
         "end": 1
       },
       "message": "import of './gone.js' resolves to no file — a broken path or a rename that missed this call site"
+    },
+    {
+      "id": "kndo-752137fa337c",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "packages/a/src/index.ts"
+      },
+      "message": "2 files form an import cycle: packages/a/src/index.ts → packages/b/src/index.ts → packages/a/src/index.ts"
     },
     {
       "id": "kndo-23e07c7c992f",

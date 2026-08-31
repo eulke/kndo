@@ -415,6 +415,13 @@ contract's own generated `Options` schema, and answering from a HELD session —
 analysis amortized across a conversation of lookups, refreshed by `check` (the
 tool descriptions say so; a test proves it behaviorally). One contract, two doors.
 
+**`cyclic`** completes the risk family's first member: SCCs over import edges,
+one warning per cycle with the shortest loop as its evidence chain, and hazard
+as the language's OWN declaration (`ExtensionSpec::import_cycles` — js-ts and
+python say so; go/rust/JVM/swift tolerance is silence, retiring v1's JVM
+file-cycle vice). Corpus: vite 31 — the 88-file node tangle included — and
+flask 3, the package's own circular-import knot v1 never measured.
+
 The dependency family arrived measure-first (COMPARISON has the full
 decomposition of the oracle's 543 dependency findings): **`unresolved`** — a
 relative import pointing at no file, `error`, on the new `Subject::Import` —

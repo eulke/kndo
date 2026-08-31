@@ -238,7 +238,16 @@ pub mod jvm_manifest {
         suffixes: &[&'static str],
         narrowable: &'static [&'static str],
     ) -> kndo_contract::extension::ExtensionSpec {
-        crate::source_adapter_spec(coordinate, version, suffixes, MANIFEST_GLOBS, narrowable)
+        crate::source_adapter_spec(
+            coordinate,
+            version,
+            suffixes,
+            MANIFEST_GLOBS,
+            narrowable,
+            // JVM compilers resolve reference cycles in multiple passes —
+            // routine structure, never an initialization hazard worth a finding.
+            kndo_contract::extension::CycleTolerance::Tolerated,
+        )
     }
 
     /// The one build system's manifest names — the shared half of every JVM
@@ -454,6 +463,7 @@ pub fn source_adapter_spec(
     suffixes: &[&'static str],
     manifests: &[&'static str],
     narrowable: &'static [&'static str],
+    import_cycles: kndo_contract::extension::CycleTolerance,
 ) -> kndo_contract::extension::ExtensionSpec {
     use kndo_contract::evidence::{EvidenceStream, EvidenceStreams};
     kndo_contract::extension::ExtensionSpec::builder(coordinate, version)
@@ -464,5 +474,6 @@ pub fn source_adapter_spec(
         ]))
         .manifests(manifests)
         .narrowable(narrowable)
+        .import_cycles(import_cycles)
         .build()
 }

@@ -1840,3 +1840,42 @@ false-positives dying as their keep-alive edges came back.
 218 tests, 15 gates, clippy clean; one conformance fixture change (the
 npm-workspace fixture now also pins a version-skew and an unresolved finding),
 called out here as the deliberate contract change it is.
+
+## 2026-08-31 — Cyclic ships: hazard is the language's own word
+
+Import cycles land as SCCs ≥ 2 over resolved import edges — never over
+`sees`, whose regions are mutual by construction — ONE warning per cycle,
+anchored at the lexicographically-first participant, the shortest loop through
+the anchor spelled in the message as the evidence chain, and confidence the
+weakest import on that loop (the honesty rule `trace` already applies to
+paths).
+
+Whether a cycle deserves a finding is a fact about the LANGUAGE, so it lives
+where language facts live: `ExtensionSpec::import_cycles: CycleTolerance`,
+default `Tolerated` (silence — the default-compatibility rule), consumed by
+the one analysis, exercised by the harvested `cyclic` conformance fixture.
+Two behavioral states, not v1's three: `Idiomatic` and `Impossible` behaved
+identically (silence), and two states that behave the same are one state —
+each adapter's declaration carries its own why in a comment instead. js-ts and
+python declare `Hazard` (ESM/CJS TDZ and partially-initialized modules;
+Python's circular ImportError); go, rust, the JVM pair and swift stay
+tolerated, which retires v1's JVM file-cycle findings as the vice they were
+(javac resolves reference cycles in multiple passes — flagging routine legal
+structure dressed information up as a defect). A mixed cycle fires iff any
+participant's language calls it a hazard. Self-import edges (Python's
+`from . import x` inside `__init__.py` resolves to the package's own file)
+are excluded before SCC computation — not a cycle between modules, and they
+must not shadow a real loop's rendering.
+
+Corpus: vite 31 (the 88-file `packages/vite/src/node` tangle is the headline;
+its deliberate cycle fixtures are code like any other), flask 3 (the
+package's own 20-file knot, `__init__.py → app.py` the shortest loop — a
+category v1 never measured on Python), everything else 0. The oracle's two
+package-level findings wait for the package graph (EXPERIMENTS, package
+aggregation). Wire components cannot declare Hazard yet — the world speaks no
+cycle vocabulary; absence defaults to silence like every other undeclared
+capability, and a versioned world can carry it later.
+
+219 tests, 15 gates, clippy clean; the harvested cyclic fixture and the
+npm-workspace fixture now pin cycle findings byte-exactly (deliberate,
+called out here).

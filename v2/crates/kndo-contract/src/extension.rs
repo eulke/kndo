@@ -64,6 +64,23 @@ pub enum MutatesGraph {
     No,
 }
 
+/// Whether an import cycle among this language's files is a defect worth a
+/// finding — a LANGUAGE fact, declared as spec data so core never names a
+/// language. `Hazard`: module-initialization order makes cycles bite (ESM/CJS
+/// TDZ and partially-initialized modules; Python's circular ImportError).
+/// `Tolerated` — the default — covers every silent reason at once: the
+/// compiler forbids them (Go), resolves them routinely (JVM multi-pass), or
+/// the module system makes them idiomatic (Rust modules within a crate);
+/// information is not dressed up as a defect, and silence needs no
+/// sub-classification to behave.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CycleTolerance {
+    #[default]
+    Tolerated,
+    Hazard,
+}
+
 impl MutatesGraph {
     pub fn as_bool(self) -> bool {
         matches!(self, MutatesGraph::Yes)
@@ -88,6 +105,7 @@ pub struct ExtensionSpec {
     // -- extraction --
     suffixes: Vec<SmolStr>,
     narrowable_scopes: Vec<SmolStr>,
+    import_cycles: CycleTolerance,
     claims: Vec<SmolStr>,
     emits: EvidenceStreams,
     manifests: Vec<SmolStr>,
@@ -119,6 +137,7 @@ impl ExtensionSpec {
                 version,
                 suffixes: Vec::new(),
                 narrowable_scopes: Vec::new(),
+                import_cycles: CycleTolerance::Tolerated,
                 claims: Vec::new(),
                 emits: EvidenceStreams::none(),
                 manifests: Vec::new(),
@@ -159,6 +178,11 @@ impl ExtensionSpec {
     /// (the default) means the analysis never fires for this adapter's files.
     pub fn narrowable_scopes(&self) -> &[SmolStr] {
         &self.narrowable_scopes
+    }
+
+    /// See [`CycleTolerance`]; the `cyclic` analysis is the consumer.
+    pub fn import_cycles(&self) -> CycleTolerance {
+        self.import_cycles
     }
 
     pub fn claims(&self) -> &[SmolStr] {
@@ -219,6 +243,9 @@ pub struct ExtensionSpecParts {
     pub version: u32,
     pub suffixes: Vec<SmolStr>,
     pub narrowable_scopes: Vec<SmolStr>,
+    /// Wire components cannot declare `Hazard` yet — the world speaks no cycle
+    /// vocabulary; defaults to `Tolerated` (silence) like every other absence.
+    pub import_cycles: CycleTolerance,
     pub claims: Vec<SmolStr>,
     pub emits: EvidenceStreams,
     pub manifests: Vec<SmolStr>,
@@ -252,6 +279,7 @@ impl From<ExtensionSpecParts> for ExtensionSpec {
             version: parts.version,
             suffixes: parts.suffixes,
             narrowable_scopes: parts.narrowable_scopes,
+            import_cycles: parts.import_cycles,
             claims: parts.claims,
             emits: parts.emits,
             manifests: parts.manifests,
@@ -299,6 +327,14 @@ impl ExtensionSpecBuilder {
     /// default-compatibility rule: `internal-only` stays silent.
     pub fn narrowable(mut self, scopes: &[&'static str]) -> Self {
         self.spec.narrowable_scopes = scopes.iter().map(|s| SmolStr::new_static(s)).collect();
+        self
+    }
+
+    /// Declare the language's cycle tolerance (see [`CycleTolerance`]).
+    /// Omitted ⇒ `Tolerated` — the default-compatibility rule: `cyclic` stays
+    /// silent for this adapter's files.
+    pub fn import_cycles(mut self, tolerance: CycleTolerance) -> Self {
+        self.spec.import_cycles = tolerance;
         self
     }
 

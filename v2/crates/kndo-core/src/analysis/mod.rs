@@ -7,6 +7,7 @@
 //! Reachability is computed once, per root color, and shared: every analysis reads
 //! the same [`Reachability`] instead of building its own.
 
+mod cyclic;
 mod duplicate;
 mod internal_only;
 mod test_only;
@@ -15,6 +16,7 @@ mod untested;
 mod unused;
 mod version_skew;
 
+pub use cyclic::Cyclic;
 pub use duplicate::Duplicate;
 pub use internal_only::InternalOnly;
 pub use test_only::TestOnly;
@@ -106,6 +108,10 @@ pub struct RunContext<'a> {
     /// strictly narrower rung (`ExtensionSpec::narrowable_scopes`) — the fact
     /// `internal-only` reads before advising anything.
     pub narrowables: &'a [(smol_str::SmolStr, Vec<smol_str::SmolStr>)],
+    /// Adapter coordinates whose language declared import cycles a hazard
+    /// (`ExtensionSpec::import_cycles`) — the fact `cyclic` reads before
+    /// accusing anything.
+    pub cycle_hazards: &'a [smol_str::SmolStr],
 }
 
 pub struct AnalysisContext<'a> {
@@ -199,6 +205,7 @@ pub fn run_all(
     graph: &Graph,
     coverage: Option<crate::coverage::Coverage>,
     narrowables: &[(smol_str::SmolStr, Vec<smol_str::SmolStr>)],
+    cycle_hazards: &[smol_str::SmolStr],
     analyses: &[&dyn Analysis],
 ) -> AnalysisOutcome {
     let reach = Reachability::compute(graph);
@@ -209,6 +216,7 @@ pub fn run_all(
         index,
         coverage,
         narrowables,
+        cycle_hazards,
     };
     let mut findings = Vec::new();
     let mut abstained = Vec::new();

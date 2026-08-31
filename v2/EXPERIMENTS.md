@@ -62,12 +62,15 @@ structural evidence (zero-FP unreachable without per-tool knowledge); go.mod
 discovery does not follow symlinks (three vite findings live on that boundary —
 following them is its own experiment if a corpus repo ever hinges on it).
 
-### cyclic (import cycles)
-38 oracle findings (vite 31, Exposed 4, guava 3). The graph has the edges already;
-the open question is the zero-FP definition of an ACTIONABLE cycle — same-package
-mutual imports are idiomatic in several ecosystems (Go forbids them at compile time,
-so gin's zero is the language's; JS tolerates them at runtime). Definition first,
-corpus count second.
+### cyclic (import cycles) — SHIPPED 2026-08-31
+The definition question resolved as a language capability:
+`ExtensionSpec::import_cycles` (default Tolerated = silence; js-ts and python
+declare Hazard). Corpus: vite 31 (incl. the real 88-file node tangle), flask 3
+(the package's own 20-file knot — never measured by v1), everything else 0;
+v1's JVM file-cycle findings retired as vice (multi-pass compilation makes
+them routine legal structure). Still open here: package-level cycles (guava's
+maven test-dep loop, Exposed's gradle one) — they need the package dependency
+graph the package-aggregation epic builds, and land with it.
 
 ### Python ancestor-package import edges
 `import a.b.c` executes `a/__init__.py` and `a/b/__init__.py` on the way down —

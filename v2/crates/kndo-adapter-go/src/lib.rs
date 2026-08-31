@@ -27,7 +27,16 @@ pub struct GoAdapter {
 impl GoAdapter {
     pub fn new() -> Self {
         GoAdapter {
-            spec: kndo_toolkit::source_adapter_spec("kndo:go", 3, &["go"], &["**/go.mod"], &[]),
+            spec: kndo_toolkit::source_adapter_spec(
+                "kndo:go",
+                3,
+                &["go"],
+                &["**/go.mod"],
+                &[],
+                // The compiler forbids import cycles: one could only be a
+                // resolution artifact here.
+                kndo_contract::extension::CycleTolerance::Tolerated,
+            ),
         }
     }
 }

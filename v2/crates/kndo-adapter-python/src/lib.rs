@@ -55,6 +55,9 @@ impl PythonAdapter {
                     "**/requirements-*.txt",
                 ],
                 &[],
+                // Circular imports raise at import time (partially-initialized
+                // module AttributeError) — the classic Python hazard.
+                kndo_contract::extension::CycleTolerance::Hazard,
             ),
         }
     }

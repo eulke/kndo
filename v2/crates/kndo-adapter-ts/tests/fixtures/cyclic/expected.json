@@ -12,11 +12,28 @@
     ]
   },
   "health": {
-    "implicated": 0,
+    "implicated": 1,
     "subjects": 6,
-    "by_category": []
+    "by_category": [
+      {
+        "category": "cyclic",
+        "findings": 1
+      }
+    ]
   },
-  "findings": [],
+  "findings": [
+    {
+      "id": "kndo-a9e73a6e9b52",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "a.ts"
+      },
+      "message": "2 files form an import cycle: a.ts → b.ts → a.ts"
+    }
+  ],
   "fixed": [],
   "baselined": 0,
   "abstained": [

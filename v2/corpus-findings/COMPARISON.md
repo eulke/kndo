@@ -657,3 +657,24 @@ plugin knowledge. The oracle's numbers were noise at roughly the same ratio.
 gin's two `test-only` dependency findings name the deeper vice: go.mod has no
 dev section, so "move it to devDependencies" is advice Go cannot take —
 unactionable by construction.
+
+## Cyclic (2026-08-31)
+
+The oracle's 38 decompose as: vite 31 file-level (real — including the 88-file
+SCC in `packages/vite/src/node`, the repository's known tangle — beside its
+deliberate cycle fixtures, which are code like any other), Exposed 3 + guava 2
+file-level in JVM languages (the compiler resolves reference cycles in
+multiple passes — routine legal structure, a v1 vice to flag), and 2
+package-level (guava's maven test-dependency loop, Exposed's gradle one) that
+wait for the package graph the package-aggregation epic will build.
+
+v2 reports 34: vite 31 and flask 3 — the flask package's own famous 20-file
+circular-import knot (`__init__.py → app.py → __init__.py` as the shortest
+loop) plus two example apps; Python was never measured by v1. Cycle hazard is
+the language's own declaration (`ExtensionSpec::import_cycles`): js-ts and
+python say `Hazard` (initialization-order bites at run time), go (compiler
+forbids), rust (intra-crate modules are idiomatic), the JVM pair (multi-pass)
+and swift (single compilation unit) stay `Tolerated` — silence, not findings.
+Self-import edges (Python's `from . import x` inside `__init__.py`) are not
+cycles between modules and neither seed an SCC nor shadow a real loop's
+rendering.
