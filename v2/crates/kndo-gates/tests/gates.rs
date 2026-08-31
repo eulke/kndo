@@ -872,6 +872,7 @@ fn agent_format_matches_its_committed_golden() {
     let report = Report {
         run: RunInfo {
             schema: REPORT_SCHEMA,
+            mode: kndo::Mode::Full,
             files_discovered: 12,
             files_claimed: 11,
             extensions: vec![
@@ -886,6 +887,7 @@ fn agent_format_matches_its_committed_golden() {
             ],
         },
         health,
+        base_health: None,
         findings,
         fixed,
         baselined: 3,

@@ -17,6 +17,8 @@ kndo = { path = "../kndo", features = ["wasm"] }
 # clap's defaults pull suggestion/color machinery the binary doesn't need.
 clap = { version = "4", features = ["derive", "std", "error-context", "help", "usage"], default-features = false }
 
+tempfile = "3"
+
 [dev-dependencies]
 kndo-testkit = { path = "../kndo-testkit" }
 serde_json = "1"

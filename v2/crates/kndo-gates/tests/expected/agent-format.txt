@@ -1,5 +1,5 @@
-kndo agent format 1 (kndo-v2/m6)
-result: findings 4 · baselined 3 · fixed 1 · files 11/12 claimed
+kndo agent format 2 (kndo-v2/m6)
+result: mode full · findings 4 · carried 3 · fixed 1 · files 11/12 claimed
 health: 95.0 · implicated 2 of 40 · unused 2
 extensions: kndo:python 7 · kndo:swift 4
 findings:

@@ -21,6 +21,22 @@ pub struct ExtensionRun {
     pub files: u32,
 }
 
+/// What this report's `findings`/`fixed` split was computed against. `full` is a
+/// tree against its baseline file (all current findings when none exists); the
+/// diff modes compare two TREES — base never includes the baseline file, so a
+/// baselined finding reintroduced by a change reads as new debt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub enum Mode {
+    /// The whole tree, split against the on-disk baseline when one exists.
+    Full,
+    /// What `git commit` would commit (the index) against HEAD.
+    Staged,
+    /// The worktree against the merge-base with a named ref.
+    Diff,
+}
+
 #[derive(Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct RunInfo {
@@ -29,6 +45,7 @@ pub struct RunInfo {
     /// drifting through.
     #[cfg_attr(feature = "schema", schemars(schema_with = "schema_version_const"))]
     pub schema: &'static str,
+    pub mode: Mode,
     pub files_discovered: u32,
     pub files_claimed: u32,
     pub extensions: Vec<ExtensionRun>,
@@ -56,6 +73,10 @@ pub struct Report {
     /// reachability itself abstained (the abstention entry says why).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub health: Option<Health>,
+    /// In the diff modes, the BASE tree's health — a pure function of the tree
+    /// the invocation pinned, never cross-run state. Absent in `full` mode.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub base_health: Option<Health>,
     /// New relative to the baseline; all current findings when none exists.
     pub findings: Vec<Finding>,
     /// Baseline entries the current run no longer produces.

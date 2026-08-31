@@ -9,6 +9,17 @@
         "$ref": "#/$defs/Abstention"
       }
     },
+    "base_health": {
+      "description": "In the diff modes, the BASE tree's health — a pure function of the tree\nthe invocation pinned, never cross-run state. Absent in `full` mode.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Health"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "baselined": {
       "description": "Current findings the baseline already carries — counted, not repeated.",
       "type": "integer",
@@ -354,6 +365,26 @@
         "end"
       ]
     },
+    "Mode": {
+      "description": "What this report's `findings`/`fixed` split was computed against. `full` is a\ntree against its baseline file (all current findings when none exists); the\ndiff modes compare two TREES — base never includes the baseline file, so a\nbaselined finding reintroduced by a change reads as new debt.",
+      "oneOf": [
+        {
+          "description": "The whole tree, split against the on-disk baseline when one exists.",
+          "type": "string",
+          "const": "full"
+        },
+        {
+          "description": "What `git commit` would commit (the index) against HEAD.",
+          "type": "string",
+          "const": "staged"
+        },
+        {
+          "description": "The worktree against the merge-base with a named ref.",
+          "type": "string",
+          "const": "diff"
+        }
+      ]
+    },
     "ProjectPath": {
       "description": "A `/`-separated, project-relative path. The one path spelling that crosses crate\nboundaries; OS paths stay at the discovery edge.",
       "type": "string"
@@ -396,6 +427,9 @@
           "format": "uint32",
           "minimum": 0
         },
+        "mode": {
+          "$ref": "#/$defs/Mode"
+        },
         "schema": {
           "description": "Stamped as a CONST in the generated schema, from the same `REPORT_SCHEMA` the report\nwrites — a report from any other envelope version fails validation instead of\ndrifting through.",
           "const": "kndo-v2/m6"
@@ -403,6 +437,7 @@
       },
       "required": [
         "schema",
+        "mode",
         "files_discovered",
         "files_claimed",
         "extensions"

@@ -98,7 +98,7 @@ fn agent_format_carries_the_finding_id_as_the_handle() {
     let p = project_with_findings();
     let out = check(&p, &["--format", "agent"], piped());
     assert!(
-        out.stdout.starts_with("kndo agent format 1 (kndo-v2/m6)\n"),
+        out.stdout.starts_with("kndo agent format 2 (kndo-v2/m6)\n"),
         "{}",
         out.stdout
     );
@@ -215,4 +215,116 @@ fn help_is_a_conversation_not_an_error() {
     let bad = run_args(["kndo", "check", "--not-a-flag"], piped());
     assert_eq!(bad.code, 2);
     assert!(bad.stdout.is_empty());
+}
+
+fn sh_git(root: &std::path::Path, args: &[&str]) {
+    let out = std::process::Command::new("git")
+        .args(args)
+        .current_dir(root)
+        .env("GIT_AUTHOR_NAME", "t")
+        .env("GIT_AUTHOR_EMAIL", "t@t")
+        .env("GIT_COMMITTER_NAME", "t")
+        .env("GIT_COMMITTER_EMAIL", "t@t")
+        .output()
+        .expect("git runs");
+    assert!(
+        out.status.success(),
+        "git {args:?}: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+fn committed_project() -> TempProject {
+    let p = project_with_findings();
+    sh_git(p.root(), &["init", "-q"]);
+    sh_git(p.root(), &["add", "-A"]);
+    sh_git(p.root(), &["commit", "-qm", "base"]);
+    p
+}
+
+#[test]
+fn staged_mode_reports_what_the_change_moves() {
+    let p = committed_project();
+    // The staged change fixes the orphan (imports it) and introduces new dead code.
+    p.file(
+        "src/index.js",
+        "export function api() { return used() + floats(); }\n\
+         import { used } from \"./used.js\";\nimport { floats } from \"./orphan.js\";\n",
+    );
+    p.file(
+        "src/leftover.js",
+        "export function leftover() { return 9; }\n",
+    );
+    sh_git(p.root(), &["add", "-A"]);
+
+    let out = check(&p, &["--staged"], terminal());
+    assert_eq!(
+        out.code, 1,
+        "a new warning gates: {}{}",
+        out.stdout, out.stderr
+    );
+    assert!(
+        out.stdout.contains("staged: 1 new · 1 fixed · 0 carried"),
+        "{}",
+        out.stdout
+    );
+    assert!(
+        out.stdout.contains("fixed by this change:"),
+        "{}",
+        out.stdout
+    );
+    assert!(
+        out.stdout.contains("warning unused src/orphan.js"),
+        "the fixed listing names the healed finding: {}",
+        out.stdout
+    );
+    assert!(
+        out.stdout.contains(" → ") && out.stdout.contains("health "),
+        "the health arrow shows which way the change moves it: {}",
+        out.stdout
+    );
+
+    // The worktree still has the OLD index.js on disk? No — TempProject writes the
+    // worktree; --staged must judge the INDEX, which equals the worktree here.
+    // The unstaged case is the diff test's subject.
+    let envelope = check(&p, &["--staged", "--format", "json"], piped());
+    let report: serde_json::Value = serde_json::from_str(&envelope.stdout).expect("stdout is JSON");
+    assert_eq!(report["run"]["mode"], "staged");
+    assert_eq!(report["fixed"].as_array().map(|f| f.len()), Some(1));
+    assert!(report["base_health"].is_object(), "{}", envelope.stdout);
+}
+
+#[test]
+fn diff_mode_compares_the_worktree_against_a_ref() {
+    let p = committed_project();
+    // Unstaged worktree change: one more dead export.
+    p.file(
+        "src/used.js",
+        "export function used() { return 1; }\nexport function fresh() { return 2; }\n",
+    );
+    let out = check(&p, &["--diff", "HEAD"], piped());
+    let report: serde_json::Value = serde_json::from_str(&out.stdout).expect("stdout is JSON");
+    assert_eq!(report["run"]["mode"], "diff");
+    let new: Vec<String> = report["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| {
+            f["subject"]["selector"]["Free"]
+                .as_str()
+                .unwrap_or("")
+                .to_string()
+        })
+        .collect();
+    assert_eq!(new, ["fresh"], "{}", out.stdout);
+    // The orphan exists in BOTH trees: carried, not new — and not gated.
+    assert_eq!(report["baselined"], 1, "{}", out.stdout);
+}
+
+#[test]
+fn a_diff_outside_git_is_a_plain_failure_not_a_panic() {
+    let p = project_with_findings();
+    let out = check(&p, &["--staged"], piped());
+    assert_eq!(out.code, 2);
+    assert!(out.stderr.contains("kndo: git:"), "{}", out.stderr);
 }

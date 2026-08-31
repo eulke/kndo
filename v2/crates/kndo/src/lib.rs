@@ -15,9 +15,9 @@ pub use kndo_contract::vocab::{Category, Confidence, ProjectPath, Span, SubjectK
 pub use kndo_core::{
     Abstention, AbstentionReason, AbstentionScope, Activation, ActivationRule, CONTENT_MAX_BYTES,
     CONTENT_MAX_FILES, CategoryCount, ConductSeverity, ConductSink, ConductTarget, Config,
-    ContentView, Contribution, ExtensionRun, GatePolicy, Graph, GraphView, Health, PhaseTimings,
-    REPORT_SCHEMA, Refusal, Report, ReportDiagnostic, RuleDescriptor, RunInfo, RunMode, RunOutcome,
-    Session, Snapshot, SuppressedSummary, Threads, is_reserved_coordinate,
+    ContentView, Contribution, ExtensionRun, GatePolicy, Graph, GraphView, Health, Mode,
+    PhaseTimings, REPORT_SCHEMA, Refusal, Report, ReportDiagnostic, RuleDescriptor, RunInfo,
+    RunMode, RunOutcome, Session, Snapshot, SuppressedSummary, Threads, is_reserved_coordinate,
 };
 
 use kndo_adapter_go::GoAdapter;

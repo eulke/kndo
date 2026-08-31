@@ -375,6 +375,17 @@ it, SARIF regions carry `startLine`/`endLine` beside the byte-true span. Columns
 deliberately absent: SARIF counts them in UTF-16 units, and a slightly-wrong column is
 worse than none.
 
+Fourth row: **the diff modes**. `kndo check --staged` (the index against HEAD) and
+`--diff <ref>` (the worktree against the merge-base) are the composition of two FULL
+analyses over two pinned trees — the engine never learned git; the CLI materializes
+the base via `git archive` into a scratch dir and `Snapshot::against` rides the
+baseline mechanism, so `new`/`fixed`/`carried` is one split everywhere. A
+tree-vs-tree comparison never consults the baseline file (a baselined finding a
+change reintroduces is new debt), the envelope says its `mode`, and `base_health`
+gives the honest version of v1's arrow — `health 97.6 → 97.8` derived from the two
+pinned trees, not cross-run state. Agent format moved to 2 for the reshaped result
+line (`mode`, the unified `carried` label).
+
 Second row: **health**, rebuilt as a derived ratio instead of v1's penalty score. The
 envelope's `health` carries two counted integers and a per-category tally —
 `implicated` (distinct symbols/files with a first-party, warning-or-worse finding; two

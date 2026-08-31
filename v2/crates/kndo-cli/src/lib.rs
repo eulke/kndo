@@ -5,8 +5,10 @@
 //! reachability) exercise it through imports; `main` stays one call deep.
 
 use clap::{Parser, Subcommand, ValueEnum};
-use kndo::{Config, GatePolicy, Report, RunMode, RunOutcome, Severity, Threads};
+use kndo::{Config, GatePolicy, Mode, Report, RunMode, RunOutcome, Severity, Threads};
 use std::path::PathBuf;
+
+mod git;
 
 #[derive(Parser)]
 #[command(
@@ -35,6 +37,12 @@ struct CheckArgs {
     /// json when piped
     #[arg(long, value_enum)]
     format: Option<Format>,
+    /// Analyze what `git commit` would commit, against HEAD
+    #[arg(long, conflicts_with = "diff")]
+    staged: bool,
+    /// Analyze the worktree against merge-base(<ref>, HEAD)
+    #[arg(long, value_name = "ref")]
+    diff: Option<String>,
 }
 
 #[derive(clap::Args)]
@@ -140,6 +148,8 @@ pub fn run(cli: Cli, host: Host) -> CliOutput {
             fail_on: FailOn::Warning,
         },
         format: None,
+        staged: false,
+        diff: None,
     }));
     match command {
         Command::Check(args) => check(args, &host),
@@ -175,6 +185,7 @@ fn resolve_format(flag: Option<Format>, host: &Host) -> (Format, Option<String>)
 
 fn open_and_analyze(args: &RunArgs) -> Result<(kndo::Session, kndo::Snapshot), kndo::Refusal> {
     let root = args.path.clone().unwrap_or_else(|| PathBuf::from("."));
+    let snapshot = analyze_at(&root, args, !args.no_cache)?;
     let config = Config {
         threads: match args.threads {
             Some(n) if n > 0 => Threads::Count(n),
@@ -183,8 +194,55 @@ fn open_and_analyze(args: &RunArgs) -> Result<(kndo::Session, kndo::Snapshot), k
         use_cache: !args.no_cache,
     };
     let session = kndo::open(root, config)?;
-    let snapshot = session.analyze(RunMode::Full)?;
     Ok((session, snapshot))
+}
+
+fn analyze_at(
+    root: &std::path::Path,
+    args: &RunArgs,
+    use_cache: bool,
+) -> Result<kndo::Snapshot, kndo::Refusal> {
+    let config = Config {
+        threads: match args.threads {
+            Some(n) if n > 0 => Threads::Count(n),
+            _ => Threads::Auto,
+        },
+        use_cache,
+    };
+    kndo::open(root.to_path_buf(), config)?.analyze(RunMode::Full)
+}
+
+/// A diff-mode run: two full analyses over two pinned trees, composed. The base
+/// (and, for `--staged`, the index) is materialized by the git edge; scratch trees
+/// run cache-off so nothing is written into them. The comparison then rides the
+/// baseline mechanism — `Snapshot::against` documents why the baseline file never
+/// participates in a tree-vs-tree split.
+fn diff_snapshot(args: &RunArgs, comparison: git::Comparison) -> Result<kndo::Snapshot, CliOutput> {
+    let root = args.path.clone().unwrap_or_else(|| PathBuf::from("."));
+    let mode = match comparison {
+        git::Comparison::Staged => Mode::Staged,
+        git::Comparison::Against(_) => Mode::Diff,
+    };
+    let base_tree = comparison.base_tree(&root).map_err(git_failed)?;
+    let base = git::materialize(&root, &base_tree).map_err(git_failed)?;
+    let base_snapshot = analyze_at(&base.root, args, false).map_err(refused)?;
+    let mut snapshot = match comparison.current_tree(&root).map_err(git_failed)? {
+        Some(index_tree) => {
+            let current = git::materialize(&root, &index_tree).map_err(git_failed)?;
+            analyze_at(&current.root, args, false).map_err(refused)?
+        }
+        None => analyze_at(&root, args, !args.no_cache).map_err(refused)?,
+    };
+    snapshot.against(&base_snapshot, mode);
+    Ok(snapshot)
+}
+
+fn git_failed(message: String) -> CliOutput {
+    CliOutput {
+        stdout: String::new(),
+        stderr: format!("kndo: git: {message}\n"),
+        code: 2,
+    }
 }
 
 fn refused(refusal: kndo::Refusal) -> CliOutput {
@@ -198,9 +256,20 @@ fn refused(refusal: kndo::Refusal) -> CliOutput {
 
 fn check(args: CheckArgs, host: &Host) -> CliOutput {
     let (format, warning) = resolve_format(args.format, host);
-    let (_, snapshot) = match open_and_analyze(&args.run) {
-        Ok(pair) => pair,
-        Err(refusal) => return refused(refusal),
+    let comparison = if args.staged {
+        Some(git::Comparison::Staged)
+    } else {
+        args.diff.clone().map(git::Comparison::Against)
+    };
+    let snapshot = match comparison {
+        Some(comparison) => match diff_snapshot(&args.run, comparison) {
+            Ok(snapshot) => snapshot,
+            Err(failure) => return failure,
+        },
+        None => match open_and_analyze(&args.run) {
+            Ok((_, snapshot)) => snapshot,
+            Err(refusal) => return refused(refusal),
+        },
     };
     let report = snapshot.report();
     let code = snapshot.gate(&args.run.fail_on.policy()).exit_code();
@@ -251,47 +320,74 @@ fn baseline(args: RunArgs) -> CliOutput {
 }
 
 /// The text report: findings in the facade's canonical order (already sorted by the
-/// engine), then what moved against the baseline, then the run's own honesty —
-/// abstentions, suppressions, diagnostics.
+/// engine), then what moved against the comparison — the baseline in full mode, the
+/// base tree in the diff modes — then the run's own honesty: abstentions,
+/// suppressions, diagnostics.
 fn render_text(report: &Report) -> String {
     let mut out = String::new();
     for finding in &report.findings {
         out.push_str(&render_finding(finding));
     }
     let run = &report.run;
-    if report.findings.is_empty() {
-        if report.baselined > 0 {
-            out.push_str(&format!(
-                "no new findings · {} baselined ({} of {} files claimed)\n",
-                report.baselined, run.files_claimed, run.files_discovered
-            ));
-        } else {
-            out.push_str(&format!(
-                "no findings ({} of {} files claimed)\n",
-                run.files_claimed, run.files_discovered
-            ));
+    match run.mode {
+        Mode::Full => {
+            if report.findings.is_empty() {
+                if report.baselined > 0 {
+                    out.push_str(&format!(
+                        "no new findings · {} baselined ({} of {} files claimed)\n",
+                        report.baselined, run.files_claimed, run.files_discovered
+                    ));
+                } else {
+                    out.push_str(&format!(
+                        "no findings ({} of {} files claimed)\n",
+                        run.files_claimed, run.files_discovered
+                    ));
+                }
+            } else {
+                out.push_str(&format!(
+                    "{} finding{}",
+                    report.findings.len(),
+                    plural(report.findings.len())
+                ));
+                if report.baselined > 0 || !report.fixed.is_empty() {
+                    out.push_str(&format!(
+                        " · {} baselined · {} fixed since baseline",
+                        report.baselined,
+                        report.fixed.len()
+                    ));
+                }
+                out.push('\n');
+            }
         }
-    } else {
-        out.push_str(&format!(
-            "{} finding{}",
-            report.findings.len(),
-            plural(report.findings.len())
-        ));
-        if report.baselined > 0 || !report.fixed.is_empty() {
+        Mode::Staged | Mode::Diff => {
+            let label = if run.mode == Mode::Staged {
+                "staged"
+            } else {
+                "diff"
+            };
             out.push_str(&format!(
-                " · {} baselined · {} fixed since baseline",
-                report.baselined,
-                report.fixed.len()
+                "{label}: {} new · {} fixed · {} carried\n",
+                report.findings.len(),
+                report.fixed.len(),
+                report.baselined
             ));
+            if !report.fixed.is_empty() {
+                out.push_str("fixed by this change:\n");
+                for finding in &report.fixed {
+                    out.push_str("  ");
+                    out.push_str(&render_finding(finding));
+                }
+            }
         }
-        out.push('\n');
     }
     if let Some(health) = &report.health {
+        let score = match &report.base_health {
+            Some(base) => format!("{} → {}", base.score_text(), health.score_text()),
+            None => health.score_text(),
+        };
         out.push_str(&format!(
-            "health {} · implicated {} of {}",
-            health.score_text(),
-            health.implicated,
-            health.subjects
+            "health {score} · implicated {} of {}",
+            health.implicated, health.subjects
         ));
         for c in &health.by_category {
             out.push_str(&format!(" · {} {}", c.category.as_str(), c.findings));

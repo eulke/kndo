@@ -1,22 +1,26 @@
-//! Agent format 1 — a token-frugal, line-oriented text projection of the envelope
+//! Agent format 2 — a token-frugal, line-oriented text projection of the envelope
 //! for LLM context windows. The finding's [`kndo_contract::subject::FindingId`] is
 //! the reference handle — stable across runs, which no per-run numbering could be —
 //! so lines carry the id and nothing is numbered. Sections appear only when they
-//! have content; the `result:` line always carries every count, so absence reads as
-//! zero, never as unknown.
+//! have content; the `result:` line always carries the run's mode and every count,
+//! so absence reads as zero, never as unknown. `carried` is the one label for the
+//! comparison set's still-present findings, whatever the comparison was — the
+//! baseline file in `full` mode, the base tree in the diff modes — and the health
+//! line becomes `base → current` when a diff mode carries the base tree's health.
 //!
 //! Label-first counts (`findings 2`, `roots 1`) keep the grammar identical at every
 //! quantity. The header stamps the format version and the envelope schema it
 //! projects; the crate version deliberately does not appear — these bytes move only
 //! when the format or the report moves, which is what lets a golden pin them.
 
-use crate::report::{REPORT_SCHEMA, Report};
+use crate::report::{Mode, REPORT_SCHEMA, Report};
 use kndo_contract::evidence::DiagnosticLevel;
 use kndo_contract::finding::Finding;
 
 /// Moves only when the line grammar changes meaning; new envelope content
-/// rendering through the existing grammar is not a bump.
-const AGENT_FORMAT: u32 = 1;
+/// rendering through the existing grammar is not a bump. 2 reshaped the
+/// `result:` line (leading `mode`, `carried` label) and the health arrow.
+const AGENT_FORMAT: u32 = 2;
 
 impl Report {
     /// The agent rendering: a newline-terminated text document, byte-pinned by the
@@ -28,7 +32,8 @@ impl Report {
             "kndo agent format {AGENT_FORMAT} ({REPORT_SCHEMA})\n"
         ));
         out.push_str(&format!(
-            "result: findings {} · baselined {} · fixed {} · files {}/{} claimed\n",
+            "result: mode {} · findings {} · carried {} · fixed {} · files {}/{} claimed\n",
+            mode_word(self.run.mode),
             self.findings.len(),
             self.baselined,
             self.fixed.len(),
@@ -36,11 +41,13 @@ impl Report {
             self.run.files_discovered,
         ));
         if let Some(health) = &self.health {
+            let score = match &self.base_health {
+                Some(base) => format!("{} → {}", base.score_text(), health.score_text()),
+                None => health.score_text(),
+            };
             out.push_str(&format!(
-                "health: {} · implicated {} of {}",
-                health.score_text(),
-                health.implicated,
-                health.subjects
+                "health: {score} · implicated {} of {}",
+                health.implicated, health.subjects
             ));
             for c in &health.by_category {
                 out.push_str(&format!(" · {} {}", c.category.as_str(), c.findings));
@@ -121,6 +128,14 @@ fn section(out: &mut String, header: &str, findings: &[Finding]) {
     }
 }
 
+fn mode_word(mode: Mode) -> &'static str {
+    match mode {
+        Mode::Full => "full",
+        Mode::Staged => "staged",
+        Mode::Diff => "diff",
+    }
+}
+
 fn level_word(level: DiagnosticLevel) -> &'static str {
     match level {
         DiagnosticLevel::Info => "info",
@@ -145,11 +160,13 @@ mod tests {
         Report {
             run: RunInfo {
                 schema: REPORT_SCHEMA,
+                mode: crate::report::Mode::Full,
                 files_discovered: 0,
                 files_claimed: 0,
                 extensions: Vec::new(),
             },
             health: None,
+            base_health: None,
             findings: Vec::new(),
             fixed: Vec::new(),
             baselined: 0,
@@ -180,8 +197,8 @@ mod tests {
         let text = empty_report().to_agent();
         assert_eq!(
             text,
-            "kndo agent format 1 (kndo-v2/m6)\n\
-             result: findings 0 · baselined 0 · fixed 0 · files 0/0 claimed\n"
+            "kndo agent format 2 (kndo-v2/m6)\n\
+             result: mode full · findings 0 · carried 0 · fixed 0 · files 0/0 claimed\n"
         );
     }
 
@@ -228,7 +245,9 @@ mod tests {
         });
 
         let text = report.to_agent();
-        assert!(text.contains("result: findings 1 · baselined 2 · fixed 1 · files 5/6 claimed\n"));
+        assert!(text.contains(
+            "result: mode full · findings 1 · carried 2 · fixed 1 · files 5/6 claimed\n"
+        ));
         assert!(text.contains("health: 87.5 · implicated 1 of 8 · unused 1\n"));
         assert!(text.contains("extensions: kndo:python 5\n"));
         assert!(text.contains("findings:\n["));

@@ -1,6 +1,7 @@
 {
   "run": {
     "schema": "kndo-v2/m6",
+    "mode": "full",
     "files_discovered": 1,
     "files_claimed": 0,
     "extensions": []

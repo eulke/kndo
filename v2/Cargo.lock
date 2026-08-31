@@ -1043,6 +1043,7 @@ dependencies = [
  "kndo",
  "kndo-testkit",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]

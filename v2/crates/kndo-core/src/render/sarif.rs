@@ -230,11 +230,13 @@ mod tests {
         Report {
             run: RunInfo {
                 schema: REPORT_SCHEMA,
+                mode: crate::report::Mode::Full,
                 files_discovered: 0,
                 files_claimed: 0,
                 extensions: Vec::new(),
             },
             health: None,
+            base_health: None,
             findings,
             fixed: Vec::new(),
             baselined: 0,

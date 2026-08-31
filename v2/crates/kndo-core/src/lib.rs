@@ -27,7 +27,7 @@ pub use health::{CategoryCount, Health};
 pub use kndo_contract::extension::{
     ConductBuilder, ExtensionSpec, ExtensionSpecBuilder, ExtensionSpecParts, MutatesGraph,
 };
-pub use report::{ExtensionRun, REPORT_SCHEMA, Report, ReportDiagnostic, RunInfo};
+pub use report::{ExtensionRun, Mode, REPORT_SCHEMA, Report, ReportDiagnostic, RunInfo};
 pub use session::{
     Config, GatePolicy, PhaseTimings, Refusal, RunMode, RunOutcome, Session, Snapshot, Threads,
 };

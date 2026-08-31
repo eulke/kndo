@@ -103,6 +103,8 @@ pub struct Snapshot {
     pub contributions: Vec<Contribution>,
     pub timings: PhaseTimings,
     baseline: Option<Vec<Finding>>,
+    mode: crate::report::Mode,
+    base_health: Option<crate::health::Health>,
     pragma_problems: Vec<crate::suppress::PragmaProblem>,
     composition_diagnostics: Vec<ReportDiagnostic>,
     files_discovered: u32,
@@ -156,6 +158,29 @@ impl Snapshot {
             .iter()
             .filter(move |f| !known.contains(f.id.as_str()))
     }
+
+    /// Turn this snapshot into a diff against another tree's snapshot: the base's
+    /// findings replace the baseline file as the comparison set (a tree-vs-tree
+    /// split never consults the baseline — a baselined finding this change
+    /// reintroduces is new debt), and the base's health rides along so the report
+    /// can say which way the change moves it — a pure function of the two trees
+    /// the invocation pinned, never cross-run state.
+    pub fn against(&mut self, base: &Snapshot, mode: crate::report::Mode) {
+        self.baseline = Some(base.findings.clone());
+        self.base_health =
+            crate::health::Health::measure(&base.findings, subjects_of(&base.graph), &base.judged);
+        self.mode = mode;
+    }
+}
+
+/// The health universe: every declaration plus every claimed file.
+fn subjects_of(graph: &Graph) -> u32 {
+    (graph.files.len()
+        + graph
+            .files
+            .iter()
+            .map(|f| f.evidence.declarations.len())
+            .sum::<usize>()) as u32
 }
 
 pub struct GatePolicy {
@@ -383,6 +408,8 @@ impl Session {
             findings,
             abstained: outcome.abstained,
             judged: outcome.judged,
+            mode: crate::report::Mode::Full,
+            base_health: None,
             suppressed: suppressed.summary,
             contributions: round.contributions,
             pragma_problems: suppressed.problems,
@@ -491,18 +518,13 @@ impl Snapshot {
         let findings: Vec<Finding> = self.new_findings().cloned().collect();
         let baselined = (self.findings.len() - findings.len()) as u32;
 
-        let subjects = self.graph.files.len()
-            + self
-                .graph
-                .files
-                .iter()
-                .map(|f| f.evidence.declarations.len())
-                .sum::<usize>();
-        let health = crate::health::Health::measure(&self.findings, subjects as u32, &self.judged);
+        let health =
+            crate::health::Health::measure(&self.findings, subjects_of(&self.graph), &self.judged);
 
         Report {
             run: RunInfo {
                 schema: REPORT_SCHEMA,
+                mode: self.mode,
                 files_discovered: self.files_discovered,
                 files_claimed: self.graph.files.len() as u32,
                 extensions: per_extension
@@ -511,6 +533,7 @@ impl Snapshot {
                     .collect(),
             },
             health,
+            base_health: self.base_health.clone(),
             findings,
             fixed,
             baselined,

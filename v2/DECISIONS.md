@@ -1438,3 +1438,42 @@ insertions, zero deletions, verified lines-only); agent golden regenerated with
 hand-lined specimen findings so the grammar is pinned; corpus reports regenerated.
 196 tests, 14 gates, clippy clean, smoke-tested through the real binary
 (`pkg/core.py:7 — _fresh_leftover`; SARIF `startLine: 7, endLine: 8`).
+
+## 2026-08-31 — Diff modes: two full analyses over two pinned trees, composed
+
+`kndo check --staged` (index vs HEAD) and `--diff <ref>` (worktree vs
+merge-base(ref, HEAD)). The design is one sentence: **a diff run is the composition
+of two full runs** — and everything falls out of it:
+
+- **The engine never learned git.** Frontends own the git edge: the CLI resolves
+  the base (HEAD / merge-base; `git write-tree` for the index — plumbing,
+  worktree-untouched) and materializes it with `git archive | tar` into a scratch
+  dir, stateless. Scratch trees run cache-off so nothing is written into them; the
+  worktree's untracked `.kndo/plugins/` is copied over so both sides run the same
+  composition — otherwise the diff reports the composition, not the change.
+- **One split, everywhere.** `Snapshot::against(base, mode)` feeds the base tree's
+  findings through the baseline mechanism — `new`/`fixed`/`carried` is the same
+  operation whether the comparison set came from the baseline file or a tree. The
+  span-free, line-free `FindingId` is what makes it correct: moving code cannot
+  fabricate a new/fixed pair.
+- **A tree-vs-tree split never consults the baseline file** — a baselined finding a
+  change reintroduces reads as new debt, and the gate holds it.
+- **`base_health` is the honest version of v1's arrow.** Both trees are pinned by
+  the invocation, so `health 97.6 → 97.8` is a pure function of them —
+  deterministic, unlike v1's cross-run `health.previous` (the field that forced the
+  one determinism carve-out). Absent in full mode.
+- **Envelope**: `run.mode` (`full`/`staged`/`diff`) is stated in every report.
+  Agent format bumped to 2: the `result:` line reshaped (leading `mode`, and
+  `carried` as the one label for the comparison set's still-present findings) and
+  the health arrow — a grammar change is a version change, so agents parse on a
+  stated contract.
+- The gate stays what it was: new findings at or above the floor fail, in every
+  mode — v1's per-mode default (`none` on full) solved the legacy-repo problem the
+  baseline solves in v2.
+
+Freight: schema regenerated (`mode`, `base_health`); fixtures regenerated
+(`"mode": "full"`, pure addition); agent golden regenerated at format 2; corpus
+reports regenerated. Three end-to-end CLI tests over real git repos (staged
+new/fixed/carried + arrow + envelope; diff-vs-ref carried-not-gated; outside-git
+degrades to a plain exit-2 failure). Smoke: the staged run reports
+`staged: 1 new · 1 fixed · 1 carried`, `health 71.4 → 71.4`, exit 1.
