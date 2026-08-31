@@ -919,3 +919,32 @@ Extensions contribute evidence; core judges — that is the containment model,
 and moving the judgment out would demote `untested` to an advisory `ext:`
 category. Verified as pure code motion: full suite green, zero drift in
 fixtures, corpus reports and schema.
+
+## 2026-08-31 — M6 order by census, and kndo:java's never-declare postures
+
+The owner green-lit continuing M6; the oracle census fixed the order the
+recorded M6 decision left open: internal-only's demand is 88% guava (7,014 of
+7,983), so the remaining languages land before the analysis that needs them —
+M6.b (java, then kotlin/swift), M6.c internal-only + linear ladder, M6.d
+measured parity, M6.e close-out.
+
+kndo:java (M6.b.1) ships with two never-declare postures, both measured:
+
+- Enum constants are never declared. `values()`/`valueOf`/reflection reach
+  every constant with no source line naming it — the grammar cannot prove one
+  dead. Vindication came from the corpus itself: 84% of v1's guava `unused`
+  oracle rows are enum members, 5,194 of them in a benchmark whose first line
+  is guava's own `@SuppressWarnings("unused") // Nested enums used reflectively
+  in setUp.` The one measurement killed 5,485 false positives.
+- Constructors are never declared: `new Widget()` references the type, no
+  source line calls `<init>` — a declared constructor is a manufactured dead
+  symbol.
+
+Resolution is the compiler-checked convention run backwards — path suffix over
+the discovered set with a nearest-module preference (longest shared prefix)
+for sibling modules declaring the same package — and the unit is the directory
+plus the standard layout's two mirrors: `src/test/java` sees its
+`src/main/java` package one-way; `src/main/java<NN>` multi-release variants
+and their base are one unit symmetrically. Third-party packages stay
+Unresolved, deliberately (no package→coordinate mapping exists without a
+classpath; guessing floods `undeclared`).

@@ -21,6 +21,7 @@ pub use kndo_core::{
 };
 
 use kndo_adapter_go::GoAdapter;
+use kndo_adapter_java::JavaAdapter;
 use kndo_adapter_rust::RustAdapter;
 use kndo_adapter_ts::TypeScriptAdapter;
 use kndo_coverage::LcovPlugin;
@@ -35,6 +36,7 @@ pub fn default_extensions() -> Vec<Box<dyn Extension>> {
         Box::new(TypeScriptAdapter::new()),
         Box::new(RustAdapter::new()),
         Box::new(GoAdapter::new()),
+        Box::new(JavaAdapter::new()),
         Box::new(LcovPlugin),
     ]
 }

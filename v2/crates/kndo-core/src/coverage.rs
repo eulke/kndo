@@ -110,7 +110,9 @@ mod tests {
             .collect()
     }
 
-    fn records(entries: &[(&str, &[(u32, u64)], &[(u32, u64)])]) -> CoverageRecords {
+    type FileSpec<'a> = (&'a str, &'a [(u32, u64)], &'a [(u32, u64)]);
+
+    fn records(entries: &[FileSpec<'_>]) -> CoverageRecords {
         CoverageRecords {
             files: entries
                 .iter()

@@ -1,0 +1,92 @@
+//! Java, through the tree-sitter-java grammar. The one Java-shaped idea this
+//! adapter is built on: a package is declared (`package com.foo;`) AND the
+//! compiler-checked file/directory convention makes it directory-shaped — so
+//! imports resolve by PATH SUFFIX (`com.foo.Bar` → `**/com/foo/Bar.java`) and
+//! [`Extension::unit_mates`] is the directory, plus the Maven/Gradle standard
+//! layout's test↔main mirror (a test class shares its package with the main
+//! classes it exercises, from a parallel source root). Java is nominal, so —
+//! unlike Go's structural interfaces — members are declared and judged; the
+//! dispatch sites no source line names (`@Override` bodies, serialization
+//! hooks, `main`) are rooted instead.
+//!
+//! The coordinate carries v1's territory (`java`) under the built-in namespace,
+//! so oracle comparisons line up file-for-file.
+
+mod extract;
+mod manifest;
+mod resolve;
+
+use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
+use kndo_contract::evidence::{DiagnosticLevel, EvidenceSink, EvidenceStream, EvidenceStreams};
+use kndo_contract::extension::{Extension, ExtensionSpec};
+use kndo_contract::vocab::ProjectPath;
+use smol_str::SmolStr;
+
+pub struct JavaAdapter {
+    spec: ExtensionSpec,
+}
+
+impl JavaAdapter {
+    pub fn new() -> Self {
+        let spec = ExtensionSpec::builder("kndo:java", 1)
+            .extensions(&["java"])
+            .emits(EvidenceStreams::of(&[
+                EvidenceStream::Comments,
+                EvidenceStream::Metrics,
+            ]))
+            .manifests(&[
+                "**/pom.xml",
+                "**/build.gradle",
+                "**/build.gradle.kts",
+                "**/settings.gradle",
+                "**/settings.gradle.kts",
+            ])
+            .build();
+        JavaAdapter { spec }
+    }
+}
+
+impl Default for JavaAdapter {
+    fn default() -> Self {
+        JavaAdapter::new()
+    }
+}
+
+impl Extension for JavaAdapter {
+    fn spec(&self) -> &ExtensionSpec {
+        &self.spec
+    }
+
+    fn extract(&self, file: &SourceFile<'_>, out: &mut EvidenceSink) {
+        let language = tree_sitter_java::LANGUAGE.into();
+        match kndo_toolkit::parse(&language, file.content) {
+            Some(tree) => {
+                if tree.root_node().has_error() {
+                    out.diagnostic(
+                        DiagnosticLevel::Info,
+                        "syntax errors in file — evidence may be partial",
+                        None,
+                    );
+                }
+                extract::extract(file.path, file.content, &tree, out);
+            }
+            None => out.diagnostic(
+                DiagnosticLevel::Warn,
+                "parse produced no tree — no evidence extracted from this file",
+                None,
+            ),
+        }
+    }
+
+    fn resolve(&self, from: &ProjectPath, specifier: &str, cx: &ResolveContext<'_>) -> Resolution {
+        resolve::resolve(from, specifier, cx)
+    }
+
+    fn manifest_dependencies(&self, manifest: &SourceFile<'_>) -> Vec<SmolStr> {
+        manifest::dependencies(manifest)
+    }
+
+    fn unit_mates(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
+        resolve::unit_mates(path, cx)
+    }
+}

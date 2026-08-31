@@ -1,0 +1,64 @@
+{
+  "run": {
+    "schema": "kndo-v2/m6",
+    "files_discovered": 3,
+    "files_claimed": 2,
+    "extensions": [
+      {
+        "id": "kndo:java",
+        "files": 2
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "kndo-da56d8b1673a",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "src/main/java/com/foo/Helper.java",
+        "selector": {
+          "Member": {
+            "owner": "Helper",
+            "name": "dead"
+          }
+        },
+        "span": {
+          "start": 203,
+          "end": 224
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    }
+  ],
+  "fixed": [],
+  "baselined": 0,
+  "abstained": [
+    {
+      "category": "test-only",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    },
+    {
+      "category": "untested",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    }
+  ],
+  "suppressed": {
+    "total": 0,
+    "by_category": []
+  },
+  "plugins": [
+    {
+      "coordinate": "kndo:coverage-lcov",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    }
+  ],
+  "diagnostics": []
+}

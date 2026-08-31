@@ -229,3 +229,44 @@ existing built tree always wins untouched), every fixture corpus unchanged. One
 deliberate, existence-gated mapping closed the milestone's biggest recorded
 distortion; the shared cli.ts/client.ts verdicts confirmed against v1 in M2
 remain, as they should — v1 sees the same graph truth.
+
+## M6.b.1 — guava speaks: the first Java measurement
+
+`kndo:java` lands on the unified door and guava claims 3,277 of 3,352 files.
+v2 reports 5,621 findings; the oracle (minus its 7,014 `internal-only`, which
+v2 does not build until M6.c) reports 13,230. Category by category:
+
+**unused 766 vs 6,525 — and 5,485 of the oracle's are false positives its own
+subject proves.** 84% of v1's guava `unused` findings are `enum-member` rows
+(5,194 from `EnumsBenchmark.java` alone), and that file opens with guava's own
+`@SuppressWarnings("unused") // Nested enums used reflectively in setUp.` — the
+constants are reached by `Class.forName(...).getEnumConstants()`, no source
+line naming any of them. v2 never declares enum constants at all (`values()`,
+`valueOf`, `EnumSet.allOf` and plain reflection reach every constant
+namelessly — the grammar cannot prove one dead), the same
+never-accuse-the-unprovable posture as constructors here and methods in Go.
+The residual non-enum oracle unused is 1,040 (703 methods, 163 fields, 46
+classes, 41 files, 37 enums, 49 annotations) against v2's 766 — v2's pooled
+name matching and its library-mode file roots keep more alive by design, in
+the keep-alive direction.
+
+**duplicate 4,708 vs 3,564 — the surplus is real and v1 could not see it.**
+1,326 of v2's are FILE-level: guava vendors byte-identical parallel trees
+(`android/guava/**` mirrors, the `futures/listenablefuture1` copy), and v1 had
+no file-granularity duplicate at all. The symbol-level remainder (3,382) sits
+under v1's 3,564 with the same 60-token floor.
+
+**untested 147 (file) vs 2,559 (symbol), test-only 0 vs 570** — the two known
+granularity gaps, recorded since rally and gin: without coverage v2's untested
+judges files, and under library-mode roots (every importable file carries its
+own Production root, exactly Go's stance) nothing is ever reached ONLY by
+tests at file scope. Both sharpen in M6.c when the linear ladder gives
+"reached only by tests" a surface-level meaning, and wherever lcov exists the
+ingestion path already upgrades untested to Certain symbols.
+
+**Layout notes measured, not guessed:** guava's tests live at
+`guava-tests/test/**` — not `src/test/java/**` — so the Surefire filename
+convention carries their Test roots; multi-release variants
+(`src/main/java16/**`) are unit mates of their base package symmetrically (the
+jar tool merges them), which is what keeps `DefaultMethodSupport` alive in the
+harvested fixture exactly as v1 did.

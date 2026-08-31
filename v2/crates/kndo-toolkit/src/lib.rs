@@ -84,3 +84,40 @@ pub fn winnow(token_hashes: &[u64], k: usize, window: usize) -> Vec<u64> {
     out.dedup();
     out
 }
+
+/// Depth-first walk that never enters the named subtrees — the shared shape of
+/// every adapter's reference pass: binding/renaming constructs (imports,
+/// package clauses) are pruned because their identifiers already became import
+/// evidence, or deliberately none.
+pub fn walk_pruned(node: Node<'_>, skip: &[&str], f: &mut dyn FnMut(Node<'_>)) {
+    if skip.contains(&node.kind()) {
+        return;
+    }
+    f(node);
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        walk_pruned(child, skip, f);
+    }
+}
+
+/// Comment evidence for plain `//` and `/* */` grammars: the node's span with
+/// any trailing newline the grammar swallowed trimmed off, and the text span
+/// inside the markers. Grammars whose comments carry more meaning (Rust's doc
+/// markers) keep their own version — that difference is grammar knowledge.
+pub fn plain_comment(n: Node<'_>, source: &[u8], out: &mut kndo_contract::evidence::EvidenceSink) {
+    let mut span = span(n);
+    while span.end > span.start
+        && matches!(source.get(span.end as usize - 1), Some(b'\n') | Some(b'\r'))
+    {
+        span = Span::new(span.start, span.end - 1);
+    }
+    let bytes = &source[span.start as usize..(span.end as usize).min(source.len())];
+    let text = if bytes.starts_with(b"//") {
+        Span::new(span.start + 2, span.end)
+    } else if bytes.starts_with(b"/*") && bytes.ends_with(b"*/") && bytes.len() >= 4 {
+        Span::new(span.start + 2, span.end - 2)
+    } else {
+        span
+    };
+    out.comment(span, text);
+}

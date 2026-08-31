@@ -12,7 +12,7 @@
 use kndo_contract::evidence::{
     EvidenceSink, ImportShape, ImportTarget, Reach, RefKind, RootKind, RootTarget, SymbolKind,
 };
-use kndo_contract::vocab::{Confidence, ProjectPath, Span};
+use kndo_contract::vocab::{Confidence, ProjectPath};
 use kndo_toolkit as tk;
 use smol_str::SmolStr;
 use tree_sitter::Node;
@@ -193,9 +193,11 @@ fn string_content(node: Node<'_>, source: &[u8]) -> String {
 }
 
 fn references_and_comments(root: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
-    walk_pruned(root, &mut |n| {
+    // Import declarations bind and rename; their paths already became import
+    // evidence.
+    tk::walk_pruned(root, &["import_declaration"], &mut |n| {
         if n.kind() == "comment" {
-            comment(n, source, out);
+            tk::plain_comment(n, source, out);
             return;
         }
         if !matches!(
@@ -212,19 +214,6 @@ fn references_and_comments(root: Node<'_>, source: &[u8], out: &mut EvidenceSink
         }
         out.reference(tk::text(n, source), classify(n, parent), tk::span(n));
     });
-}
-
-/// Depth-first walk that never enters import declarations — those bind and rename,
-/// and their paths already became import evidence.
-fn walk_pruned(node: Node<'_>, f: &mut dyn FnMut(Node<'_>)) {
-    if node.kind() == "import_declaration" {
-        return;
-    }
-    f(node);
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        walk_pruned(child, f);
-    }
 }
 
 /// Binding and naming positions are not uses; the bias stays keep-alive — only
@@ -305,22 +294,4 @@ fn function_metrics(node: Node<'_>) -> kndo_contract::evidence::FunctionMetrics 
         token_count: token_hashes.len() as u32,
         fingerprints: tk::winnow(&token_hashes, 5, 4),
     }
-}
-
-fn comment(n: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
-    let mut span = tk::span(n);
-    while span.end > span.start
-        && matches!(source.get(span.end as usize - 1), Some(b'\n') | Some(b'\r'))
-    {
-        span = Span::new(span.start, span.end - 1);
-    }
-    let bytes = &source[span.start as usize..(span.end as usize).min(source.len())];
-    let text = if bytes.starts_with(b"//") {
-        Span::new(span.start + 2, span.end)
-    } else if bytes.starts_with(b"/*") && bytes.ends_with(b"*/") && bytes.len() >= 4 {
-        Span::new(span.start + 2, span.end - 2)
-    } else {
-        span
-    };
-    out.comment(span, text);
 }

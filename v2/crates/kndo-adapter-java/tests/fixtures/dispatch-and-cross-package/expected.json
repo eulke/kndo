@@ -1,0 +1,64 @@
+{
+  "run": {
+    "schema": "kndo-v2/m6",
+    "files_discovered": 5,
+    "files_claimed": 4,
+    "extensions": [
+      {
+        "id": "kndo:java",
+        "files": 4
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "kndo-3e0db58d6384",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "src/main/java/com/foo/Greeter.java",
+        "selector": {
+          "Member": {
+            "owner": "Greeter",
+            "name": "go"
+          }
+        },
+        "span": {
+          "start": 42,
+          "end": 52
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    }
+  ],
+  "fixed": [],
+  "baselined": 0,
+  "abstained": [
+    {
+      "category": "test-only",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    },
+    {
+      "category": "untested",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    }
+  ],
+  "suppressed": {
+    "total": 0,
+    "by_category": []
+  },
+  "plugins": [
+    {
+      "coordinate": "kndo:coverage-lcov",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    }
+  ],
+  "diagnostics": []
+}

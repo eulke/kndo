@@ -682,58 +682,49 @@ fn function_metrics(node: Node<'_>) -> kndo_contract::evidence::FunctionMetrics 
 
 fn references_and_comments(root: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
     let mut seen_paths: BTreeSet<String> = BTreeSet::new();
-    walk_pruned(root, &mut |n| {
-        match n.kind() {
-            "line_comment" | "block_comment" => {
-                comment(n, source, out);
+    tk::walk_pruned(
+        root,
+        &["use_declaration", "extern_crate_declaration"],
+        &mut |n| {
+            match n.kind() {
+                "line_comment" | "block_comment" => {
+                    comment(n, source, out);
+                    return;
+                }
+                "scoped_identifier" | "scoped_type_identifier" => {
+                    path_import(n, source, &mut seen_paths, out);
+                    // Fall through is deliberate in spirit: the identifiers inside the
+                    // path still land as references via their own visits.
+                    return;
+                }
+                // Inline format arguments (`"{VERSION}"`) are real uses the string hides.
+                "string_content" => {
+                    format_arg_references(n, source, out);
+                    return;
+                }
+                // Attribute strings name items by convention (`schemars(schema_with =
+                // "f")`, `serde(with = "m")`): every identifier-shaped word is a use.
+                "attribute_item" => {
+                    attribute_string_references(n, source, out);
+                    return;
+                }
+                _ => {}
+            }
+            if !matches!(
+                n.kind(),
+                "identifier" | "type_identifier" | "field_identifier"
+            ) {
                 return;
             }
-            "scoped_identifier" | "scoped_type_identifier" => {
-                path_import(n, source, &mut seen_paths, out);
-                // Fall through is deliberate in spirit: the identifiers inside the
-                // path still land as references via their own visits.
+            let Some(parent) = n.parent() else {
+                return;
+            };
+            if !is_use(n, parent) {
                 return;
             }
-            // Inline format arguments (`"{VERSION}"`) are real uses the string hides.
-            "string_content" => {
-                format_arg_references(n, source, out);
-                return;
-            }
-            // Attribute strings name items by convention (`schemars(schema_with =
-            // "f")`, `serde(with = "m")`): every identifier-shaped word is a use.
-            "attribute_item" => {
-                attribute_string_references(n, source, out);
-                return;
-            }
-            _ => {}
-        }
-        if !matches!(
-            n.kind(),
-            "identifier" | "type_identifier" | "field_identifier"
-        ) {
-            return;
-        }
-        let Some(parent) = n.parent() else {
-            return;
-        };
-        if !is_use(n, parent) {
-            return;
-        }
-        out.reference(tk::text(n, source), classify(n, parent), tk::span(n));
-    });
-}
-
-/// Depth-first walk that never enters `use`/`extern crate` subtrees — those bind and
-/// rename, and their identifiers already became import evidence.
-fn walk_pruned(node: Node<'_>, f: &mut dyn FnMut(Node<'_>)) {
-    if matches!(node.kind(), "use_declaration" | "extern_crate_declaration") {
-        return;
-    }
-    f(node);
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        walk_pruned(child, f);
-    }
+            out.reference(tk::text(n, source), classify(n, parent), tk::span(n));
+        },
+    );
 }
 
 /// `{name}` and `{name:spec}` inside a string are inline format arguments — Rust's

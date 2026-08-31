@@ -278,6 +278,19 @@ Complete (CI verification pending only the credits reset, like M0–M2):
   `kndo-v2/m6` envelope — the repository's single deliberate regeneration
   (finding ids untouched: identity never included the extension id).
   Everything else in M6 lands on the unified door.
+- **M6.b.1 — kndo:java.** The oracle census ordered M6: internal-only (the
+  milestone's reason) is 88% guava, so the languages come first. Java lands as
+  the fourth built-in on the M4 playbook: path-suffix resolution from the
+  compiler-checked package/directory convention (nearest-module preference for
+  sibling trees sharing a package), directory units with two standard-layout
+  mirrors (test→main one-way, multi-release↔base symmetric), nominal members
+  declared and judged with dispatch roots for what no source line names
+  (`@Override`, serialization hooks, `main`), and the never-declare posture for
+  constructors and enum constants (reflection reaches constants namelessly —
+  guava's own `@SuppressWarnings("unused")` on its enum benchmark proves 84% of
+  the oracle's guava `unused` were false positives). Six v1 fixtures replay;
+  guava claims 3,277 files and measures 5,621 findings with every category
+  delta explained in `corpus-findings/COMPARISON.md`.
 
 ## Name verification (2026-08-29)
 
