@@ -134,8 +134,8 @@ fn contract_fingerprint_is_stable_within_a_build() {
 
 #[test]
 fn declaring_extensions_is_claiming_them() {
-    use kndo_contract::adapter::AdapterSpec;
-    let spec = AdapterSpec::builder("demo", 1)
+    use kndo_contract::extension::ExtensionSpec;
+    let spec = ExtensionSpec::builder("demo", 1)
         .extensions(&["ts", "tsx"])
         .claims(&["**/special.conf"])
         .build();

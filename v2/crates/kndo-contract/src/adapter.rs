@@ -1,13 +1,10 @@
-//! The adapter side of the contract: what a language teaches kndo, and how. Adapters
-//! implement [`LanguageAdapter`] against this crate only — the engine is one more
-//! consumer. [`AdapterSpec`] carries id, semantics version, claim globs, the declared
-//! evidence streams, and the manifest globs behind [`LanguageAdapter::roots`]; the
-//! visibility ladder and cycle policy arrive with the languages that need them (each
-//! with a default, a named core consumer, and a conformance case).
+//! The extraction-side shared types: the file handed to extraction, the project
+//! context an extension resolves against, and what resolution/manifest reads return.
+//! [`crate::extension::Extension`] is the one trait that consumes them; this module
+//! holds the data shapes it shares with the engine.
 
-use crate::evidence::{EvidenceSink, EvidenceStreams, RootKind};
+use crate::evidence::RootKind;
 use crate::vocab::{Confidence, ProjectPath};
-use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
 use std::collections::BTreeSet;
 
@@ -15,137 +12,6 @@ use std::collections::BTreeSet;
 pub struct SourceFile<'a> {
     pub path: &'a ProjectPath,
     pub content: &'a [u8],
-}
-
-/// What an adapter IS, as data. Built once, returned by reference, and folded into
-/// every evidence cache key (`id`, `semantics_version`, `emits`) so a behavior change
-/// invalidates exactly what it changes.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AdapterSpec {
-    id: SmolStr,
-    semantics_version: u32,
-    claims: Vec<SmolStr>,
-    emits: EvidenceStreams,
-    #[serde(default)]
-    manifests: Vec<SmolStr>,
-    #[serde(default)]
-    extensions: Vec<SmolStr>,
-}
-
-impl AdapterSpec {
-    /// The bridge-side constructor: a LOADED component's spec arrives as data, not
-    /// statics, so the builder's `&'static str` economy cannot apply. Everything is
-    /// taken verbatim — in particular `claims` is NOT derived from `extensions`
-    /// here, because the guest-side builder already derived it and the wire carries
-    /// the finished list. Native adapters use [`AdapterSpec::builder`].
-    #[allow(clippy::too_many_arguments)]
-    pub fn assemble(
-        id: impl Into<SmolStr>,
-        semantics_version: u32,
-        claims: Vec<SmolStr>,
-        emits: EvidenceStreams,
-        manifests: Vec<SmolStr>,
-        extensions: Vec<SmolStr>,
-    ) -> AdapterSpec {
-        AdapterSpec {
-            id: id.into(),
-            semantics_version,
-            claims,
-            emits,
-            manifests,
-            extensions,
-        }
-    }
-
-    pub fn builder(id: &'static str, semantics_version: u32) -> AdapterSpecBuilder {
-        AdapterSpecBuilder {
-            spec: AdapterSpec {
-                id: SmolStr::new_static(id),
-                semantics_version,
-                claims: Vec::new(),
-                emits: EvidenceStreams::none(),
-                manifests: Vec::new(),
-                extensions: Vec::new(),
-            },
-        }
-    }
-
-    pub fn id(&self) -> &str {
-        &self.id
-    }
-
-    pub fn semantics_version(&self) -> u32 {
-        self.semantics_version
-    }
-
-    /// The claim globs — the one source of what this adapter owns; the engine matches
-    /// against these, so a glob listed here is never merely descriptive.
-    pub fn claims(&self) -> &[SmolStr] {
-        &self.claims
-    }
-
-    pub fn emits(&self) -> &EvidenceStreams {
-        &self.emits
-    }
-
-    /// Globs naming the manifest files this adapter can read roots from. Manifests are
-    /// consulted, never claimed: the engine hands each match to
-    /// [`LanguageAdapter::roots`] and anchors what comes back.
-    pub fn manifests(&self) -> &[SmolStr] {
-        &self.manifests
-    }
-
-    /// The file extensions this adapter speaks (no leading dot), in
-    /// resolution-candidate priority order — THE one declaration: the claim globs
-    /// derive from it at build time, and the adapter's own resolution, script
-    /// detection, and any other extension-conditional logic read this same list
-    /// instead of keeping copies.
-    pub fn extensions(&self) -> &[SmolStr] {
-        &self.extensions
-    }
-}
-
-pub struct AdapterSpecBuilder {
-    spec: AdapterSpec,
-}
-
-impl AdapterSpecBuilder {
-    /// Declare the extensions this adapter speaks (no leading dot), in
-    /// resolution-candidate priority order — the shared derivation rule
-    /// (`crate::extension::declare_extensions`): declaring extensions IS claiming
-    /// them; `claims` stays for patterns that are not extension-shaped.
-    pub fn extensions(mut self, extensions: &[&'static str]) -> Self {
-        crate::extension::declare_extensions(
-            &mut self.spec.extensions,
-            &mut self.spec.claims,
-            extensions,
-        );
-        self
-    }
-
-    pub fn claims(mut self, globs: &[&'static str]) -> Self {
-        self.spec
-            .claims
-            .extend(globs.iter().map(|g| SmolStr::new_static(g)));
-        self
-    }
-
-    /// Omitted ⇒ `EvidenceStreams::none()` — the default-compatibility rule.
-    pub fn emits(mut self, streams: EvidenceStreams) -> Self {
-        self.spec.emits = streams;
-        self
-    }
-
-    /// Omitted ⇒ no manifests consulted and [`LanguageAdapter::roots`] never called —
-    /// the default-compatibility rule.
-    pub fn manifests(mut self, globs: &[&'static str]) -> Self {
-        self.spec.manifests = globs.iter().map(|g| SmolStr::new_static(g)).collect();
-        self
-    }
-
-    pub fn build(self) -> AdapterSpec {
-        self.spec
-    }
 }
 
 /// A package one manifest declares: the name the ecosystem imports it by, the file
@@ -256,54 +122,4 @@ pub struct ProjectRoot {
     pub file: ProjectPath,
     pub kind: RootKind,
     pub confidence: Confidence,
-}
-
-pub trait LanguageAdapter: Send + Sync {
-    fn spec(&self) -> &AdapterSpec;
-
-    /// Never fails: extraction degrades through the sink's diagnostics.
-    fn extract(&self, file: &SourceFile<'_>, out: &mut EvidenceSink);
-
-    /// Resolve a relative import specifier written in `from` against the project.
-    fn resolve(&self, from: &ProjectPath, specifier: &str, cx: &ResolveContext<'_>) -> Resolution;
-
-    /// The roots one manifest declares. Called for every discovered file matching
-    /// [`AdapterSpec::manifests`]; the default — no manifests, no roots — reproduces
-    /// pre-capability behavior. Unparseable or dangling entries degrade to absence:
-    /// a root that anchors nothing accuses nothing.
-    fn roots(&self, manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<ProjectRoot> {
-        let _ = (manifest, cx);
-        Vec::new()
-    }
-
-    /// The packages one manifest declares, fed back to every adapter's `resolve`
-    /// through [`ResolveContext::package`]. Same default and degradations as `roots`.
-    fn packages(&self, manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<PackageEntry> {
-        let _ = (manifest, cx);
-        Vec::new()
-    }
-
-    /// The dependency NAMES one manifest declares, every section alike — what
-    /// plugin activation (`ManifestDependency`) evaluates against, through the same
-    /// discovered-manifest pipeline `roots` and `packages` already ride; no second
-    /// manifest walk exists. The default — no names — keeps such rules unmatched,
-    /// so a plugin stays off rather than guessing on. Same degradations as `roots`.
-    fn manifest_dependencies(&self, manifest: &SourceFile<'_>) -> Vec<SmolStr> {
-        let _ = manifest;
-        Vec::new()
-    }
-
-    /// The files whose names `path` can see WITHOUT an import — the rest of its
-    /// compilation unit, in the languages whose unit is bigger than the file (every
-    /// non-test sibling of a Go file's package; a test file sees the whole package).
-    /// The engine draws one reachability edge per mate and pools references over
-    /// the visibility this declares, so a mate's use keeps a declaration no import
-    /// ever names. Depends only on `path` and the file SET, never on content —
-    /// which is what lets a persisted graph trust it while only contents change.
-    /// The default — no mates, names scoped to the file — reproduces pre-capability
-    /// behavior.
-    fn unit_mates(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
-        let _ = (path, cx);
-        Vec::new()
-    }
 }

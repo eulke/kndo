@@ -111,9 +111,9 @@ pub enum SymbolKind {
     Other(SmolStr),
 }
 
-/// Whether a declaration is nameable beyond its file. The visibility *ladder* (the
-/// per-language rungs between private and public) arrives with the AdapterSpec work;
-/// this is the half every language shares. Closed by design: it is binary by meaning.
+/// Whether a declaration is nameable beyond its file — the half every language
+/// shares. Closed by design: it is binary by meaning; scope SHAPE between the two
+/// (package/module/crate regions) is capability work, not a third rung.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ContractFingerprint)]
 #[serde(rename_all = "lowercase")]
 pub enum Reach {
