@@ -405,3 +405,65 @@ dependency names read by SwiftPM's own labeled arguments.
 - duplicate 145 vs 199: v2 fingerprints the WHOLE declaration under the
   unified rule; v1's different token stream drew different borderline pairs.
 - untested 42 vs 64: granularity, as everywhere.
+
+## M6.b.4 — flask speaks: the first fresh-baseline measurement
+
+`kndo:python` is the seventh built-in and the first language v1 never spoke:
+no oracle row, no harvested fixtures, no quarry. The acceptance bar is
+therefore different in kind — not "every difference explained" but **every
+finding explained against the tree's own ground truth**, which for 83 claimed
+files and 23 findings meant reviewing all of them, not a sample.
+
+The measurement earned its keep twice before the numbers settled — the first
+run said 29, and six of those were false, each falling to a language fact the
+first extractor modeled wrong:
+
+1. **Imports are legal anywhere.** The extractor collected import statements
+   only at module top level, but function-scoped lazy imports are a
+   first-class idiom — flask reaches `debughelpers.py` through four imports
+   and every one is inside a function body (three in src for circular-import
+   avoidance, one inside a test in `test_basic.py`). `if TYPE_CHECKING:` and
+   `try/except ImportError` blocks hide imports the same way. One whole-tree
+   walk replaced the top-level loop; three false `untested` findings died
+   (`debughelpers.py`, both `blueprintapp` blueprints — the latter reached
+   only via `from blueprintapp import app` inside test functions).
+2. **In `from X import a`, `a` may be the submodule `X/a.py`.** The tutorial's
+   factory does `from . import auth`, which is not an attribute read — it
+   imports `flaskr/auth.py`, per importlib's own lookup order. Each
+   from-import binding now emits a namespace probe of its dotted path; a probe
+   with no matching file resolves nowhere and is inert, one with a file IS the
+   language's semantics. Three more false `untested` findings died
+   (`flaskr/auth.py`, `flaskr/blog.py`, `js_example/views.py`).
+
+What stands, 23 findings, all verified:
+
+- **unused 3 — all true positives** under the accused ⇔ zero-grep-uses
+  protocol. `src/flask/app.py:_make_timedelta` is the sharpest: the only use
+  anywhere is `sansio/app.py:224`, which names its OWN sibling copy at
+  `sansio/app.py:52` — the `app.py` copy is a refactoring leftover. A
+  name-pooled resolution (v1's defect class) could never report this, because
+  the living namesake would keep the dead one; per-file Private judgment
+  separates them, and kndo accuses only the dead copy.
+  `cli.py:_path_is_ancestor` and `test_json.py:_has_encoding` are plain
+  zero-use leftovers.
+- **duplicate 11 — flask's real shapes.** The five-way
+  `template_filter`/`template_test`/`template_global` family across
+  `App` and `Blueprint` is genuinely the same body modulo the registered
+  dict; two test-app `__init__.py` files are byte-identical (`cmp` agrees);
+  four test-body pairs clone under the token-class winnowing rule (same
+  statement stream, different literals — the metric's stated definition).
+- **untested 9 — all true statements** of "production-reachable, no
+  test-colored path": `docs/conf.py` (sphinx config, imported by nothing),
+  the celery example (ships no tests at all — where the javascript example
+  ships `tests/test_js_example.py` and correctly went quiet),
+  `cliapp/factory.py` and `helloworld/hello.py` (loaded only through CLI
+  strings like `--app "cliapp.factory"` — a string is not an import, and
+  kndo does no name-divination), and the three `tests/type_check/*` files
+  (mypy fixtures driven by `pyproject.toml` config, imported by nothing).
+  Whether `examples/` and `docs/` belong in a run at all is the user's
+  scoping choice, not the adapter's to make.
+
+`internal-only` is silent by construction: Python has no enforceable rung
+between underscore-private and importable, so `narrowable` is empty — "add an
+underscore" would be advice about a convention, not a boundary the language
+checks.

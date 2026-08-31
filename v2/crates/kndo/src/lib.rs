@@ -22,6 +22,7 @@ pub use kndo_core::{
 use kndo_adapter_go::GoAdapter;
 use kndo_adapter_java::JavaAdapter;
 use kndo_adapter_kotlin::KotlinAdapter;
+use kndo_adapter_python::PythonAdapter;
 use kndo_adapter_rust::RustAdapter;
 use kndo_adapter_swift::SwiftAdapter;
 use kndo_adapter_ts::TypeScriptAdapter;
@@ -39,6 +40,7 @@ pub fn default_extensions() -> Vec<Box<dyn Extension>> {
         Box::new(GoAdapter::new()),
         Box::new(JavaAdapter::new()),
         Box::new(KotlinAdapter::new()),
+        Box::new(PythonAdapter::new()),
         Box::new(SwiftAdapter::new()),
         Box::new(LcovPlugin),
     ]

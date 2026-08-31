@@ -1209,3 +1209,52 @@ regions; duplicate 51, real Client delegation twins), Alamofire 609 (unused
 fuzzy pooling kept alive, plus storyboard-instantiated Example types reported
 on static ground, the UIKit-reflection plugin candidate joining caliper's in
 EXPERIMENTS). 167 tests, 13 gates.
+
+## 2026-08-31 — M6.b.4: kndo:python, the first fresh-baseline language
+
+**Decision.** Python lands as the seventh built-in with no oracle, no quarry
+and no harvested fixtures — v1 never spoke it — so every posture is derived
+from the language and the acceptance bar is total: flask (BSD-3, pinned at
+d318b68) measured and EVERY finding reviewed against the tree's own ground
+truth, not a sample. Fixtures are authored new, six of them, each pinning one
+accusation an underscore-private leftover earns.
+
+The derived postures: visibility is the underscore convention and the honest
+mapping is binary (leading underscore → Private, dunder names are protocol
+spelling, everything else → Exported); `narrowable` stays EMPTY — no
+enforceable rung sits between underscore and importable, so `internal-only`
+is silent by construction ("add an underscore" is advice about a convention,
+not a boundary the language checks); the module IS the file, so `sees`
+answers nothing (the default's degenerate case) and packages re-export
+through ordinary `__init__.py` edges; dispatch the source never names roots
+as `Possible` for decorated defs (`@d def f` IS `f = d(f)`) and dunder
+methods (the runtime protocol calls them), `Certain` for the `__main__`
+guard and for `test_*` functions in discovery-named test files
+(`test_*.py`/`*_test.py`/`conftest.py` — the runner dispatches by name);
+never declared: `__init__`/`__new__`/`__del__` and function-local defs.
+
+**The measurement fixed the adapter twice** — the point of a fresh baseline.
+First run said 29 findings; six were false and both causes were wrong models
+of the language, not tuning: (1) imports are legal ANYWHERE — the top-level
+walk missed flask's function-scoped lazy imports (all four imports of
+`debughelpers.py` sit inside function bodies, one of them inside a test), so
+one whole-tree walk now collects them, `TYPE_CHECKING` and
+`try/except ImportError` blocks included; (2) in `from X import a`, `a` may
+be the SUBMODULE `X/a.py` (importlib's lookup order, the tutorial's
+`from . import auth`), so every from-import binding now emits a namespace
+probe of its dotted path — inert when no file matches, the language's own
+semantics when one does. No spec-version bump for either: the adapter had
+never been committed, so version 1 lands complete.
+
+**Measurement.** flask: 83 claimed, 23 findings — unused 3 (all grep-verified
+true positives; `app.py:_make_timedelta` is dead beside its living
+`sansio/app.py` namesake, the accusation name-pooling could never make),
+duplicate 11 (the real five-way `template_*` decorator family, one
+byte-identical pair, four test clones), untested 9 (all true: sphinx config,
+a test-less celery example, CLI-string-loaded test apps — a string is not an
+import — and mypy-driven `type_check/` fixtures). Decomposed in COMPARISON.
+181 tests, 13 gates, clippy clean.
+
+The ancestor-package chain (`import a.b.c` executes `a/__init__.py` and
+`a/b/__init__.py`) is NOT built: no measured case in flask needed it —
+recorded in EXPERIMENTS as an open candidate instead.

@@ -244,6 +244,7 @@ fn adapter_conformance_fixtures_are_byte_identical() {
         (manifest.join("../kndo-adapter-java/tests/fixtures"), 6),
         (manifest.join("../kndo-adapter-kotlin/tests/fixtures"), 5),
         (manifest.join("../kndo-adapter-swift/tests/fixtures"), 4),
+        (manifest.join("../kndo-adapter-python/tests/fixtures"), 6),
     ];
     let overwrite = std::env::var_os("KNDO_CONFORMANCE").is_some_and(|v| v == "overwrite");
     let mut failures = Vec::new();

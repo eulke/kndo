@@ -44,6 +44,15 @@ manifest visibility before any measurement.
 
 ## Open candidates (never decided in v1)
 
+### Python ancestor-package import edges
+`import a.b.c` executes `a/__init__.py` and `a/b/__init__.py` on the way down —
+the language's rule, but kndo:python emits no edges to the ancestors, only to
+`a/b/c.py` itself (plus the submodule probes M6.b.4 added for from-import
+bindings). No flask finding hinged on it — every ancestor `__init__.py` there is
+reached by direct imports anyway — so the edges are not built. Build only when a
+corpus repo shows a finding this changes; the emission point is one loop in
+`imports()` next to the binding probes.
+
 ### hollow-test rule
 A test that asserts nothing / covers nothing real. No decision recorded; needs a
 definition that can reach zero FP and a corpus count.

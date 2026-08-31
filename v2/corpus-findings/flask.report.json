@@ -1,0 +1,384 @@
+{
+  "run": {
+    "schema": "kndo-v2/m6",
+    "files_discovered": 217,
+    "files_claimed": 83,
+    "extensions": [
+      {
+        "id": "kndo:python",
+        "files": 83
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "kndo-4fb60e18262d",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "src/flask/app.py",
+        "selector": {
+          "Free": "_make_timedelta"
+        },
+        "span": {
+          "start": 2489,
+          "end": 2672
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-4c1a2a4fda96",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "src/flask/cli.py",
+        "selector": {
+          "Free": "_path_is_ancestor"
+        },
+        "span": {
+          "start": 23572,
+          "end": 23868
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-9ecdece7f844",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "tests/test_json.py",
+        "selector": {
+          "Free": "_has_encoding"
+        },
+        "span": {
+          "start": 6853,
+          "end": 7002
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-8de2affcf5ae",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "src/flask/sansio/app.py",
+        "selector": {
+          "Member": {
+            "owner": "App",
+            "name": "template_global"
+          }
+        },
+        "span": {
+          "start": 31172,
+          "end": 32136
+        }
+      },
+      "message": "structural clone of src/flask/sansio/app.py:App.template_filter"
+    },
+    {
+      "id": "kndo-8eb168bb58aa",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "src/flask/sansio/app.py",
+        "selector": {
+          "Member": {
+            "owner": "App",
+            "name": "template_test"
+          }
+        },
+        "span": {
+          "start": 29207,
+          "end": 30360
+        }
+      },
+      "message": "structural clone of src/flask/sansio/app.py:App.template_filter"
+    },
+    {
+      "id": "kndo-861ae29d6053",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "src/flask/sansio/blueprints.py",
+        "selector": {
+          "Member": {
+            "owner": "Blueprint",
+            "name": "app_template_test"
+          }
+        },
+        "span": {
+          "start": 20052,
+          "end": 21026
+        }
+      },
+      "message": "structural clone of src/flask/sansio/app.py:App.template_filter"
+    },
+    {
+      "id": "kndo-b0b3e1ec77a4",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "src/flask/sansio/blueprints.py",
+        "selector": {
+          "Member": {
+            "owner": "Blueprint",
+            "name": "app_template_filter"
+          }
+        },
+        "span": {
+          "start": 18014,
+          "end": 18982
+        }
+      },
+      "message": "structural clone of src/flask/sansio/app.py:App.template_filter"
+    },
+    {
+      "id": "kndo-c6c91ffcd7b3",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "src/flask/sansio/blueprints.py",
+        "selector": {
+          "Member": {
+            "owner": "Blueprint",
+            "name": "app_template_global"
+          }
+        },
+        "span": {
+          "start": 22120,
+          "end": 23120
+        }
+      },
+      "message": "structural clone of src/flask/sansio/app.py:App.template_filter"
+    },
+    {
+      "id": "kndo-f634d7f89050",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "tests/test_apps/cliapp/__init__.py"
+      },
+      "message": "byte-identical to tests/test_apps/blueprintapp/apps/__init__.py"
+    },
+    {
+      "id": "kndo-19223d72b24c",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "tests/test_apps/cliapp/inner1/inner2/__init__.py"
+      },
+      "message": "byte-identical to tests/test_apps/blueprintapp/apps/__init__.py"
+    },
+    {
+      "id": "kndo-232905ccdf4b",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "tests/test_basic.py",
+        "selector": {
+          "Free": "test_teardown_request_handler_debug_mode"
+        },
+        "span": {
+          "start": 22088,
+          "end": 22457
+        }
+      },
+      "message": "structural clone of tests/test_basic.py:test_teardown_request_handler"
+    },
+    {
+      "id": "kndo-e85ec2945a61",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "tests/test_basic.py",
+        "selector": {
+          "Free": "test_static_url_path_with_ending_slash"
+        },
+        "span": {
+          "start": 38701,
+          "end": 39042
+        }
+      },
+      "message": "structural clone of tests/test_basic.py:test_static_url_path"
+    },
+    {
+      "id": "kndo-beb56d88a482",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "tests/test_cli.py",
+        "selector": {
+          "Free": "test_help_echo_loading_error"
+        },
+        "span": {
+          "start": 10916,
+          "end": 11287
+        }
+      },
+      "message": "structural clone of tests/test_cli.py:test_no_command_echo_loading_error"
+    },
+    {
+      "id": "kndo-cbe2aab13a36",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "tests/test_templating.py",
+        "selector": {
+          "Free": "test_no_escaping"
+        },
+        "span": {
+          "start": 2063,
+          "end": 2587
+        }
+      },
+      "message": "structural clone of tests/test_templating.py:test_escaping"
+    },
+    {
+      "id": "kndo-fafb1d5a0d15",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "docs/conf.py"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-98f9bc486370",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "examples/celery/src/task_app/__init__.py"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-ac26eed80e7a",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "examples/celery/src/task_app/tasks.py"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-dbab28fd7e35",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "examples/celery/src/task_app/views.py"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-c5389f54a4e6",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "tests/test_apps/cliapp/factory.py"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-1566ee892155",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "tests/test_apps/helloworld/hello.py"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-2ac535238367",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "tests/type_check/typing_app_decorators.py"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-318578a93c74",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "tests/type_check/typing_error_handler.py"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-e8edb01f140e",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "tests/type_check/typing_route.py"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    }
+  ],
+  "fixed": [],
+  "baselined": 0,
+  "abstained": [],
+  "suppressed": {
+    "total": 0,
+    "by_category": []
+  },
+  "plugins": [
+    {
+      "coordinate": "kndo:coverage-lcov",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    }
+  ],
+  "diagnostics": []
+}

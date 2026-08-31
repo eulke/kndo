@@ -1,0 +1,50 @@
+{
+  "run": {
+    "schema": "kndo-v2/m6",
+    "files_discovered": 3,
+    "files_claimed": 3,
+    "extensions": [
+      {
+        "id": "kndo:python",
+        "files": 3
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "kndo-e25896936916",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "src/logic.py",
+        "selector": {
+          "Free": "_stale"
+        },
+        "span": {
+          "start": 63,
+          "end": 89
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    }
+  ],
+  "fixed": [],
+  "baselined": 0,
+  "abstained": [],
+  "suppressed": {
+    "total": 0,
+    "by_category": []
+  },
+  "plugins": [
+    {
+      "coordinate": "kndo:coverage-lcov",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    }
+  ],
+  "diagnostics": []
+}

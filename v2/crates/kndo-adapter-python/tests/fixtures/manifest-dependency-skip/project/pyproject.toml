@@ -1,0 +1,5 @@
+[project]
+name = "demo"
+dependencies = [
+    "flask>=3.0",
+]

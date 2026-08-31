@@ -1,0 +1,17 @@
+[package]
+name = "kndo-adapter-python"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+kndo-contract = { path = "../kndo-contract" }
+kndo-toolkit = { path = "../kndo-toolkit" }
+smol_str = { version = "0.3", features = ["serde"] }
+tree-sitter = "0.25"
+tree-sitter-python = "0.25"
+
+[dev-dependencies]
+kndo-testkit = { path = "../kndo-testkit" }

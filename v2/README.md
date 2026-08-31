@@ -314,17 +314,32 @@ Complete (CI verification pending only the credits reset, like M0–M2):
   v1 fixtures replay; vapor measures 216 findings and Alamofire 609 — including
   ~130 genuinely dead test-case helpers v1's fuzzy pooling kept alive — every
   delta decomposed in COMPARISON under the quarry-not-target law.
-- **M6.c — internal-only + scope shape.** The census's reason: 7,983 oracle
-  `internal-only` findings plus the recorded kotlin/rust granularity gaps wait
-  on declarations that can carry a BOUNDED visibility region (EXPERIMENTS,
-  "Visibility-ladder shape").
+- **M6.c — done: internal-only over enumerated regions.** `Reach` grew its
+  middle rung — `Scoped { scope }`, the adapter's own word for a bounded
+  region — and `Extension::seen_from` answers which files sit inside a
+  declaration's scope from paths and manifests alone (content-free; `None`
+  means Exported treatment, so go and java were proven byte-identical no-ops
+  before any language moved). The graph carries the regions, `unused` judges
+  Scoped declarations against their region instead of the entry surface, and
+  the `internal-only` analysis reports Exported/Scoped declarations whose
+  every confident use sits inside their own file — gated by
+  `narrowable_scopes`, the spec's list of rungs the language actually
+  enforces. The first fix it demanded was kndo's own: `StoreData` in the
+  dogfood went private.
 - **M6.d — measured parity, M6.e — close-out.** Per the census order in
   `DECISIONS.md`.
-- **M6.b.4 — python (planned, owner decision 2026-08-31).** The first
+- **M6.b.4 — python, done (owner decision 2026-08-31).** The first
   fresh-baseline language: v1 never spoke it, so there is no quarry, no
-  harvested fixtures and no oracle row — acceptance is corpus measurement
-  plus sampled, explained findings, with fixtures authored new. Corpus
-  candidate: flask (BSD-3), pinned at kickoff.
+  harvested fixtures and no oracle row — every posture is derived from the
+  language (underscore convention → Private, decorated defs and dunders as
+  dispatch roots, the `__main__` guard as the language's entry idiom, pytest's
+  discovery names as test roots, `narrowable` empty because no enforceable
+  rung exists between underscore and importable). Six fixtures authored new;
+  flask (BSD-3, pinned) claims 83 files and measures 23 findings, every one
+  reviewed against ground truth in `corpus-findings/COMPARISON.md` — the
+  measurement itself forced the two extraction fixes that define the adapter
+  (imports collected wherever the language allows them; submodule probes for
+  `from X import a`).
 
 ## Name verification (2026-08-29)
 

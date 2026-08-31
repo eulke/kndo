@@ -78,3 +78,16 @@ commit = "cf330f6558504b8e2acafb1ac253094d8f7ca75e"
 license = "MIT"
 languages = ["swift"]
 why = "The untested-noise measurement anchor (56% of vapor's untested findings were one bug's noise before the fix)."
+
+# ---- fresh-baseline repos: no v1 run exists, so there is no oracle row. The
+# acceptance bar (owner decision 2026-08-31) is corpus measurement plus sampled,
+# hand-verified findings — recorded in COMPARISON like every other repo, minus
+# the oracle column.
+
+[[repo]]
+name = "flask"
+github = "pallets/flask"
+commit = "d318b683471101618febed18996405ad26462110"
+license = "BSD-3-Clause"
+languages = ["python"]
+why = "The first fresh-baseline language's corpus: a library the ecosystem knows by heart, src-layout, pytest suite — the shapes kndo:python must speak."
