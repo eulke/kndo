@@ -413,6 +413,18 @@ contract's own generated `Options` schema, and answering from a HELD session —
 analysis amortized across a conversation of lookups, refreshed by `check` (the
 tool descriptions say so; a test proves it behaviorally). One contract, two doors.
 
+Eighth row: **presentation and the filter disposition**. `--quiet` (the verdict
+line alone — the exit code already carries the gate), `--verbose` (the phases
+line, from the timings that live beside the byte-pinned report), and `--color
+auto|always|never` (flag > `NO_COLOR` > tty; semantic palette — severity words,
+the clean line, and diff-mode health arrows colored by DIRECTION only, because
+coloring an absolute score would smuggle the dead letter bands back in). All
+three shape the human render and warn on any other format. The CLI restores the
+default SIGPIPE disposition at startup — piped-by-design output makes the
+Unix-filter convention correct, and the suite asserts death-by-signal-13 on an
+output that provably overflows a pipe buffer. The query verbs' reach filter
+respells as `--reach`, freeing `--color` for its universal meaning.
+
 Sixth row: **`kndo.toml` and `init`**. The CLI's persisted invocation defaults —
 `[check]` `fail-on`/`format`/`only`/`skip`, only keys with living consumers — with
 v1's lesson as birth law: an unknown key REFUSES the run (a typo is never silently

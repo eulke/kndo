@@ -220,8 +220,8 @@ commitment to v1's design: each item is rebuilt v2-native when it lands.
 | `init` + `kndo.toml` + pre-commit hook | shipped (2026-08-31) | `[check]` fail-on/format/only/skip — only keys with living consumers; a typo REFUSES the run (`deny_unknown_fields`); one merge site (flag > `KNDO_FORMAT` > file > default); `init --hook` writes a pre-commit running `kndo check --staged`; template↔struct held one-list by a test |
 | `plugin` manager verb (install/list/new/build/wit/verify) | absent — `.kndo/plugins/` loads, nothing manages | open — authoring exists (`docs`), management waits for demand |
 | `--only` / `--skip` / `--strict` category filters | `--only`/`--skip` shipped (2026-08-31) as judgment scope — the unselected analysis never runs, `judged` shrinks, health follows | `--strict` dead: it promoted `undeclared`, a category v2 has not built — the dependency family carries it (DECISIONS) |
-| `--quiet` / `--verbose` / `--color` | absent | open — presentation polish for the human render only |
-| SIGPIPE default disposition (`kndo \| head` exits like a filter) | absent — writes ignore EPIPE, exit code keeps the run's verdict | open judgment: v1 restored SIG_DFL for Unix-filter behavior; v2's quiet-ignore never panics but reports the gate code instead of 141 — decide once, on purpose |
+| `--quiet` / `--verbose` / `--color` | shipped (2026-08-31) | human-render options only (elsewhere they warn and change nothing): quiet = the one verdict line, verbose = the phases line from beside-the-report timings, color = flag > `NO_COLOR` > tty with a semantic palette (severity, clean line, arrow DIRECTION — never an absolute score); v1's verbose reveal-of-hidden-tiers has no successor because v2 hides no tier |
+| SIGPIPE default disposition (`kndo \| head` exits like a filter) | shipped (2026-08-31): SIG_DFL restored in the CLI binary, asserted-overflow test pair | v1's reasoning adopted as v2's own judgment — piped-by-design output makes the filter convention correct; serve is a protocol conversation, not a filter, and keeps clean error-propagation |
 
 ## Standing experiment infrastructure
 

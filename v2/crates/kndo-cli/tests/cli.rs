@@ -9,13 +9,17 @@ fn piped() -> Host {
     Host {
         tty: false,
         format_env: None,
+        no_color: false,
     }
 }
 
+// NO_COLOR set: content assertions stay byte-clean; the presentation test
+// builds its own colored host.
 fn terminal() -> Host {
     Host {
         tty: true,
         format_env: None,
+        no_color: true,
     }
 }
 
@@ -73,6 +77,7 @@ fn the_format_flag_beats_terminal_and_environment() {
     let host = Host {
         tty: true,
         format_env: Some("sarif".to_string()),
+        no_color: false,
     };
     let human = check(&p, &["--format", "human"], host);
     assert!(human.stdout.contains("1 finding\n"), "{}", human.stdout);
@@ -115,6 +120,7 @@ fn the_environment_picks_the_format_and_garbage_warns_not_refuses() {
         Host {
             tty: true,
             format_env: Some("agent".to_string()),
+            no_color: false,
         },
     );
     assert!(
@@ -129,6 +135,7 @@ fn the_environment_picks_the_format_and_garbage_warns_not_refuses() {
         Host {
             tty: true,
             format_env: Some("yaml".to_string()),
+            no_color: false,
         },
     );
     assert!(
@@ -408,6 +415,7 @@ fn kndo_toml_sets_defaults_and_every_flag_beats_it() {
         Host {
             tty: true,
             format_env: Some("json".to_string()),
+            no_color: false,
         },
     );
     assert!(env.stdout.starts_with('{'), "{}", env.stdout);
@@ -634,4 +642,59 @@ fn trace_impact_and_explain_close_the_loop_end_to_end() {
         piped(),
     );
     assert_eq!(unknown.code, 1, "{}", unknown.stdout);
+}
+
+#[test]
+fn presentation_flags_shape_the_human_render_only() {
+    let p = project_with_findings();
+
+    // --quiet is the one-line contract: the verdict, nothing else; the exit
+    // code already carries the gate.
+    let quiet = check(&p, &["--quiet"], terminal());
+    assert_eq!(quiet.code, 1);
+    assert_eq!(quiet.stdout.lines().count(), 1, "{}", quiet.stdout);
+    assert!(quiet.stdout.starts_with("1 finding"), "{}", quiet.stdout);
+
+    // --verbose appends the phases line — the observability channel that lives
+    // beside the byte-pinned report, never inside it.
+    let verbose = check(&p, &["--verbose"], terminal());
+    assert!(
+        verbose.stdout.contains("phases: discover "),
+        "{}",
+        verbose.stdout
+    );
+    assert!(verbose.stdout.contains("· total "), "{}", verbose.stdout);
+
+    // --color always paints severity even piped (the flag beats the tty
+    // default); the escape wraps the severity word exactly.
+    let painted = check(&p, &["--format", "human", "--color", "always"], piped());
+    assert!(
+        painted.stdout.contains("\x1b[33mwarning\x1b[0m unused"),
+        "{:?}",
+        painted.stdout
+    );
+
+    // A colored terminal by default; NO_COLOR alone turns it back off.
+    let colored = check(
+        &p,
+        &[],
+        Host {
+            tty: true,
+            format_env: None,
+            no_color: false,
+        },
+    );
+    assert!(colored.stdout.contains("\x1b[33m"), "{:?}", colored.stdout);
+    let plain = check(&p, &[], terminal());
+    assert!(!plain.stdout.contains("\x1b["), "{:?}", plain.stdout);
+
+    // On a non-human format the flags cannot bind: said on stderr, output
+    // untouched — the other renders are byte-pinned contracts.
+    let warned = check(&p, &["--quiet"], piped());
+    assert!(warned.stderr.contains("--quiet"), "{}", warned.stderr);
+    assert!(warned.stdout.starts_with('{'), "{}", warned.stdout);
+
+    // Asking for both moods at once is a refused invocation, not a guess.
+    let both = check(&p, &["--quiet", "--verbose"], terminal());
+    assert_eq!(both.code, 2, "{}", both.stderr);
 }

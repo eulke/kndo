@@ -1042,6 +1042,7 @@ dependencies = [
  "clap",
  "kndo",
  "kndo-testkit",
+ "libc",
  "serde",
  "serde_json",
  "tempfile",

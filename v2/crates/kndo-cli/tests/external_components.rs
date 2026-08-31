@@ -33,6 +33,7 @@ fn a_wasm_language_and_plugin_run_from_kndo_plugins_through_the_cli() {
         Host {
             tty: false,
             format_env: None,
+            no_color: false,
         },
     );
     let report: serde_json::Value = serde_json::from_str(&out.stdout).expect("stdout is JSON");
@@ -95,6 +96,7 @@ fn a_broken_component_degrades_to_a_visible_diagnostic() {
         Host {
             tty: true,
             format_env: None,
+            no_color: false,
         },
     );
     assert_eq!(out.code, 0, "{}{}", out.stdout, out.stderr);

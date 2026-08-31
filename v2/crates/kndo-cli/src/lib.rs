@@ -68,7 +68,7 @@ struct QueryArgs {
     kind: Option<String>,
     /// find: keep only this reachability color
     #[arg(long, value_enum)]
-    color: Option<ColorArg>,
+    reach: Option<ReachArg>,
     /// trace: root set to trace from (default: production, then test, tooling)
     #[arg(long, value_enum)]
     roots: Option<RootsArg>,
@@ -99,21 +99,21 @@ impl RootsArg {
 }
 
 #[derive(Debug, ValueEnum, Clone, Copy)]
-enum ColorArg {
+enum ReachArg {
     Production,
     TestOnly,
     ToolingOnly,
     Unreachable,
 }
 
-impl ColorArg {
+impl ReachArg {
     fn into_core(self) -> kndo::query::ReachColor {
         use kndo::query::ReachColor as C;
         match self {
-            ColorArg::Production => C::Production,
-            ColorArg::TestOnly => C::TestOnly,
-            ColorArg::ToolingOnly => C::ToolingOnly,
-            ColorArg::Unreachable => C::Unreachable,
+            ReachArg::Production => C::Production,
+            ReachArg::TestOnly => C::TestOnly,
+            ReachArg::ToolingOnly => C::ToolingOnly,
+            ReachArg::Unreachable => C::Unreachable,
         }
     }
 }
@@ -167,6 +167,24 @@ struct CheckArgs {
     /// Judge everything except these categories (comma-separated, repeatable)
     #[arg(long, value_delimiter = ',', value_name = "categories")]
     skip: Vec<String>,
+    /// Human render: print the verdict line only
+    #[arg(long, conflicts_with = "verbose")]
+    quiet: bool,
+    /// Human render: also print the run's phase timings
+    #[arg(long)]
+    verbose: bool,
+    /// Color the human render (default: on a terminal, unless NO_COLOR)
+    #[arg(long, value_enum, value_name = "when")]
+    color: Option<ColorChoice>,
+}
+
+/// `--color` in the universal spelling. `auto` and absent are the same
+/// judgment: color when stdout is a terminal and `NO_COLOR` is not set.
+#[derive(Debug, ValueEnum, Clone, Copy)]
+enum ColorChoice {
+    Auto,
+    Always,
+    Never,
 }
 
 #[derive(clap::Args)]
@@ -234,6 +252,9 @@ pub struct Host {
     pub tty: bool,
     /// The `KNDO_FORMAT` environment value, if set. The `--format` flag wins.
     pub format_env: Option<String>,
+    /// `NO_COLOR` is present and non-empty (no-color.org) — suppresses color
+    /// unless `--color always` explicitly asks.
+    pub no_color: bool,
 }
 
 pub fn run_args<I, T>(args: I, host: Host) -> CliOutput
@@ -278,6 +299,9 @@ pub fn run(cli: Cli, host: Host) -> CliOutput {
         diff: None,
         only: Vec::new(),
         skip: Vec::new(),
+        quiet: false,
+        verbose: false,
+        color: None,
     }));
     match command {
         Command::Check(args) => check(args, &host),
@@ -318,7 +342,7 @@ fn query_verb(verb: kndo::query::Verb, args: QueryArgs, host: &Host) -> CliOutpu
         options: kndo::query::Options {
             limit: args.limit,
             kind: args.kind.clone(),
-            color: args.color.map(ColorArg::into_core),
+            color: args.reach.map(ReachArg::into_core),
             roots: args.roots.map(RootsArg::into_core),
             if_deleted: args.if_deleted,
         },
@@ -602,6 +626,7 @@ fn health(args: RunArgs, host: &Host) -> CliOutput {
 
 /// What one `check` invocation resolved to, from every source it may come from.
 struct Effective {
+    color: bool,
     format: Format,
     fail_on: FailOn,
     categories: Categories,
@@ -654,8 +679,14 @@ fn effective(
         }
         selection_of(&file.check.only, &file.check.skip)?
     };
+    let color = match args.color {
+        Some(ColorChoice::Always) => true,
+        Some(ColorChoice::Never) => false,
+        Some(ColorChoice::Auto) | None => host.tty && !host.no_color,
+    };
     Ok((
         Effective {
+            color,
             format,
             fail_on,
             categories,
@@ -809,10 +840,36 @@ fn check(args: CheckArgs, host: &Host) -> CliOutput {
     };
     let report = snapshot.report();
     let code = snapshot.gate(&fail_on.policy()).exit_code();
+    let mut stderr = warning.unwrap_or_default();
+    // The presentation flags shape the human render and nothing else — the
+    // other formats are byte-pinned contracts, so a flag that cannot bind is
+    // said out loud instead of silently ignored.
+    if !matches!(format, Format::Human) {
+        let given: Vec<&str> = [
+            args.quiet.then_some("--quiet"),
+            args.verbose.then_some("--verbose"),
+            args.color.is_some().then_some("--color"),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        if !given.is_empty() {
+            stderr.push_str(&format!(
+                "kndo: {} shape{} the human render only — no effect here\n",
+                given.join("/"),
+                if given.len() == 1 { "s" } else { "" },
+            ));
+        }
+    }
+    let presentation = Presentation {
+        color: effective.color,
+        quiet: args.quiet,
+        verbose: args.verbose,
+    };
     // Text documents arrive newline-terminated from their renders; JSON values
     // are framed here.
     let stdout = match format {
-        Format::Human => render_text(&report),
+        Format::Human => render_text(&report, &snapshot.timings, &presentation),
         Format::Json => {
             let mut json = report.to_json();
             json.push('\n');
@@ -827,7 +884,7 @@ fn check(args: CheckArgs, host: &Host) -> CliOutput {
     };
     CliOutput {
         stdout,
-        stderr: warning.unwrap_or_default(),
+        stderr,
         code,
     }
 }
@@ -855,30 +912,70 @@ fn baseline(args: RunArgs) -> CliOutput {
     }
 }
 
+/// How the human render presents: semantic ANSI color (severity words, the
+/// clean line, health-arrow DIRECTION — never an absolute score, which would
+/// smuggle back the judgment bands health deliberately does not have), the
+/// one-line `--quiet` contract, and the `--verbose` phases line rendered from
+/// the timings that live beside the byte-pinned report.
+struct Presentation {
+    color: bool,
+    quiet: bool,
+    verbose: bool,
+}
+
+impl Presentation {
+    fn paint(&self, code: &str, text: &str) -> String {
+        if self.color {
+            format!("\x1b[{code}m{text}\x1b[0m")
+        } else {
+            text.to_string()
+        }
+    }
+
+    fn severity(&self, severity: kndo::Severity) -> String {
+        let code = match severity {
+            kndo::Severity::Error => "31",
+            kndo::Severity::Warning => "33",
+            kndo::Severity::Info => "36",
+        };
+        self.paint(code, severity.as_str())
+    }
+}
+
 /// The text report: findings in the facade's canonical order (already sorted by the
-/// engine), then what moved against the comparison — the baseline in full mode, the
-/// base tree in the diff modes — then the run's own honesty: abstentions,
-/// suppressions, diagnostics.
-fn render_text(report: &Report) -> String {
+/// engine), then the verdict line, then what moved against the comparison — the
+/// baseline in full mode, the base tree in the diff modes — then the run's own
+/// honesty: abstentions, suppressions, diagnostics. `--quiet` keeps the verdict
+/// line alone; the exit code already carries the gate.
+fn render_text(report: &Report, timings: &kndo::PhaseTimings, view: &Presentation) -> String {
     let mut out = String::new();
-    for finding in &report.findings {
-        out.push_str(&render_finding(finding));
+    if !view.quiet {
+        for finding in &report.findings {
+            out.push_str(&render_finding(finding, view));
+        }
     }
     let run = &report.run;
     match run.mode {
         Mode::Full => {
             if report.findings.is_empty() {
                 if report.baselined > 0 {
-                    out.push_str(&format!(
-                        "no new findings · {} baselined ({} of {} files claimed)\n",
-                        report.baselined, run.files_claimed, run.files_discovered
+                    out.push_str(&view.paint(
+                        "32",
+                        &format!(
+                            "no new findings · {} baselined ({} of {} files claimed)",
+                            report.baselined, run.files_claimed, run.files_discovered
+                        ),
                     ));
                 } else {
-                    out.push_str(&format!(
-                        "no findings ({} of {} files claimed)\n",
-                        run.files_claimed, run.files_discovered
+                    out.push_str(&view.paint(
+                        "32",
+                        &format!(
+                            "no findings ({} of {} files claimed)",
+                            run.files_claimed, run.files_discovered
+                        ),
                     ));
                 }
+                out.push('\n');
             } else {
                 out.push_str(&format!(
                     "{} finding{}",
@@ -907,18 +1004,21 @@ fn render_text(report: &Report) -> String {
                 report.fixed.len(),
                 report.baselined
             ));
-            if !report.fixed.is_empty() {
+            if !view.quiet && !report.fixed.is_empty() {
                 out.push_str("fixed by this change:\n");
                 for finding in &report.fixed {
                     out.push_str("  ");
-                    out.push_str(&render_finding(finding));
+                    out.push_str(&render_finding(finding, view));
                 }
             }
         }
     }
+    if view.quiet {
+        return out;
+    }
     if let Some(health) = &report.health {
         let score = match &report.base_health {
-            Some(base) => format!("{} → {}", base.score_text(), health.score_text()),
+            Some(base) => format!("{} → {}", base.score_text(), arrow_head(base, health, view)),
             None => health.score_text(),
         };
         out.push_str(&format!(
@@ -963,13 +1063,39 @@ fn render_text(report: &Report) -> String {
             diagnostic.message
         ));
     }
+    if view.verbose {
+        let ms = |d: std::time::Duration| format!("{:.1}ms", d.as_secs_f64() * 1000.0);
+        out.push_str(&format!(
+            "phases: discover {} · claim {} · extract {} · assemble {} · analyze {} · total {}\n",
+            ms(timings.discover),
+            ms(timings.claim),
+            ms(timings.extract),
+            ms(timings.assemble),
+            ms(timings.analyze),
+            ms(timings.total()),
+        ));
+    }
     out
 }
 
-fn render_finding(finding: &kndo::Finding) -> String {
+/// The current side of a `base → current` health arrow, colored by DIRECTION —
+/// a fact derived from the two measured ratios (lower implicated/subjects is
+/// better), compared exactly by cross-multiplication.
+fn arrow_head(base: &kndo::Health, health: &kndo::Health, view: &Presentation) -> String {
+    let current = (health.implicated as u64) * (base.subjects as u64);
+    let before = (base.implicated as u64) * (health.subjects as u64);
+    let text = health.score_text();
+    match current.cmp(&before) {
+        std::cmp::Ordering::Less => view.paint("32", &text),
+        std::cmp::Ordering::Greater => view.paint("31", &text),
+        std::cmp::Ordering::Equal => text,
+    }
+}
+
+fn render_finding(finding: &kndo::Finding, view: &Presentation) -> String {
     format!(
         "{} {} {}: {}\n",
-        finding.severity.as_str(),
+        view.severity(finding.severity),
         finding.category.as_str(),
         finding.location(),
         finding.message
