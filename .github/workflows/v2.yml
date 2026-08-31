@@ -85,7 +85,7 @@ jobs:
           set -eu
           cargo test -p kndo-gates --test gates -- --list > /tmp/gate-list.txt
           missing=""
-          for name in generated_ci_is_current contract_fingerprint_is_intentional dogfood_kndo_reports_nothing_on_itself warm_and_cold_runs_are_byte_identical threads_one_and_many_are_byte_identical incremental_and_full_assembly_are_byte_identical adapter_conformance_fixtures_are_byte_identical dogfood_zero_means_measured report_schema_is_generated_and_valid frontends_import_only_the_facade builtin_conduct_proofs extension_dependency_implication abi_compat_matrix; do
+          for name in generated_ci_is_current contract_fingerprint_is_intentional dogfood_kndo_reports_nothing_on_itself warm_and_cold_runs_are_byte_identical threads_one_and_many_are_byte_identical incremental_and_full_assembly_are_byte_identical adapter_conformance_fixtures_are_byte_identical dogfood_zero_means_measured report_schema_is_generated_and_valid agent_format_matches_its_committed_golden frontends_import_only_the_facade builtin_conduct_proofs extension_dependency_implication abi_compat_matrix; do
             grep -q "$name" /tmp/gate-list.txt || missing="$missing $name"
           done
           [ -z "$missing" ] || { echo "named gates missing from the harness:$missing"; exit 1; }
@@ -107,6 +107,8 @@ jobs:
         run: cargo test -p kndo-gates --test gates -- --exact dogfood_zero_means_measured
       - name: gate — report_schema_is_generated_and_valid (the committed schema is derived from the types and validates real reports)
         run: cargo test -p kndo-gates --test gates -- --exact report_schema_is_generated_and_valid
+      - name: gate — agent_format_matches_its_committed_golden (the agent render of the everything-specimen report is byte-pinned)
+        run: cargo test -p kndo-gates --test gates -- --exact agent_format_matches_its_committed_golden
       - name: gate — frontends_import_only_the_facade (a frontend's production dependencies contain exactly one kndo crate: kndo)
         run: cargo test -p kndo-gates --test gates -- --exact frontends_import_only_the_facade
       - name: gate — builtin_conduct_proofs (every built-in conducting extension proves its effect baseline-then-conduct, closed over the conduct subset of default_extensions)
