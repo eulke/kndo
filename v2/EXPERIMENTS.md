@@ -113,6 +113,29 @@ Each is an adapter-capability or platform experiment; Windows enters the release
 only after the CI matrix compiles it (the v1 lesson: it shipped in the target table with
 nothing ever building it, and died on a grammar's build script).
 
+### RootKind::Docs (a fourth reachability color)
+
+Candidate: documentation is neither production, test nor tooling. A `docs` root
+kind would let doc-example code contribute liveness WITHOUT hiding dead code:
+today references inside doctests/KDoc/DocC examples are invisible (symmetric
+with v1 — ripgrep parity holds), and if an adapter ever parsed them as plain
+references, an export used only by its own examples would go silently alive.
+Under a docs color it becomes a `docs-only` finding instead — test-only's
+sibling. The same color is what a docs adapter would root, if one ever earns
+revival (the Markdown adapter above is killed with data; that verdict stands).
+
+Demand today: none measured — no oracle category is docs-shaped and no corpus
+false positive asks for the color. Consumer rule, the ladder's own precedent:
+the color waits for its analysis, and a RootKind variant nothing emits and
+nothing reads is the "commented-out config key" the release law forbids.
+
+Why the entry exists anyway — a timing constraint: `root-kind` is a WIT enum
+and the ABI freezes at the first release. Adding an enum case is cheap before
+the freeze and a versioned evolution after. At the freeze (M6.e) this becomes
+a forced decision: either an experiment by then justifies the variant, or the
+set {production, test, tooling} is declared closed and docs-liveness, if it
+ever comes, arrives by another mechanism.
+
 ## Standing experiment infrastructure
 
 - The corpus (`corpus/corpus.toml`) is the measuring instrument; keep it pinned.
