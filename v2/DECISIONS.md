@@ -1540,3 +1540,71 @@ per the frontier law: `Session::extensions()` (the specs, the extensions' own
 claims) and `Session::composition_diagnostics()`. Spellings come from the one
 source each: clap's `to_possible_value` for flag values, `REPORT_SCHEMA` for the
 envelope. 208 tests, 14 gates, clippy clean.
+
+## 2026-08-31 — The query contract, designed; phase 1 shipped (the shared index)
+
+**The thesis (owner-confirmed, v1's own):** the graph exists so an agent does not
+burn tokens reconstructing it — navigation is selling the graph back at minimal
+token cost. v1's orientation was right (the verbs, the selector addresses, explicit
+elision, affordances-with-data); its design is quarried, not copied.
+
+**The design, in one diagram:**
+
+```
+            ┌────────────── one contract (core) ──────────────┐
+            │  query::Request ── Snapshot::query ── Response   │
+            │        │                 │                       │
+            │  selectors = the      navigate::Index            │
+            │  Subject vocabulary   (keep rules, ONE spelling) │
+            └───────┬──────────────────┬───────────────────────┘
+   CLI verbs ───────┘                  └─────── unused judgment
+   (find/describe/uses/used-by/          (keepers(limit 1) — emptiness
+    trace/impact/explain)                 is the accusation)
+   serve MCP tools (same Request/Response types, schema generated)
+```
+
+**The decisions, each with its reason:**
+
+- **The index the agent navigates IS the index the judge used.** v1 kept a parallel
+  navigation index beside the analyses — the drift class the one-source law forbids:
+  `trace` must never explain a world the findings did not come from.
+  `navigate::keepers(graph, index, decl, limit)` is the one spelling of the keep
+  rules; `unused` asks it with `limit 1` (a boolean in witness's clothing), `used-by`
+  asks for the capped list. Certified by construction: 79 conformance fixtures and
+  the nine corpus reports byte-identical after the extraction, 14 gates green.
+- **Selectors are the Subject vocabulary.** `path`, `path#name`, `path#Owner.member` —
+  the finding address space and the query address space are one space; `describe`
+  of what a finding points at needs zero translation. `dep:`/`pkg:` selectors wait
+  for the dependency family (no such graph nodes yet); `roots:production|test|tooling`
+  stays a trace endpoint.
+- **The verb set, judged one by one:** `find` (search → selectors), `describe` (one
+  node in full), `uses`/`used-by` (the neighbor pair — used-by IS the deletion
+  question, answered by keepers), `trace` (why alive: root → node path, every path
+  with its weakest confidence), `impact` (reverse closure; `--if-deleted` simulates
+  the removal and reports typed reachability flips, never fabricated findings),
+  `explain` (finding id → its subject described + the generic graph evidence;
+  per-category enrichment lands per analysis later). All seven earn their place;
+  v1's batched `kndo query` JSONL does not ship yet — serve is the batch amortizer
+  (a persistent session over one graph), and JSONL returns only if measurement
+  shows CLI-only agents need it.
+- **One envelope, versioned, pure.** `kndo-query/1`; results align 1:1 with
+  selectors and one bad selector never fails its siblings; every listing capped
+  with EXPLICIT elision (a model must never guess whether it saw everything);
+  node refs carry selector/kind/reach-color/lines, edge refs carry kind/confidence/
+  site. No wall-clock, no cache-state inside the envelope — v1 carried
+  `duration_ms`/`cache: warm` in query responses, the run-varying vice the report
+  envelope already banned.
+- **Reach colors are a core projection.** production / test-only / tooling-only /
+  unreachable derived ONCE from the three floods (the same Reachability the
+  analyses use); v1's `visibility: 0` ladder index is dead — v2 says
+  `private | scoped(token) | exported`.
+- **Agent text form** joins agent format 2 as new lines (selectors as handles —
+  numbering stays dead; `more:`-style explicit elision; `next:` affordances so the
+  model needn't memorize the CLI).
+- **serve grows from skeleton to proof:** each verb one MCP tool, input schema
+  generated from the same Request types (the report-schema machinery), Session
+  held across calls — the amortized-graph transport for agents.
+
+**Phasing:** Q1 (this commit) the shared index + unused on top of it. Q2 envelope +
+find/describe/uses/used-by + CLI + agent render + schema + goldens gate. Q3
+trace/impact(--if-deleted)/explain. Q4 serve tools + docs + ledger close.

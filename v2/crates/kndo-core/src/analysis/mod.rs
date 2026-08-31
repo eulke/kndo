@@ -94,6 +94,9 @@ fn flood(graph: &Graph, kind: RootKind) -> Vec<bool> {
 pub struct RunContext<'a> {
     pub graph: &'a Graph,
     pub reach: Reachability,
+    /// The navigation index — the keep rules' one home, shared between the
+    /// `unused` judgment and the query verbs.
+    pub index: crate::navigate::Index,
     pub coverage: Option<crate::coverage::Coverage>,
     /// Per adapter coordinate: the scope tokens its language can demote to a
     /// strictly narrower rung (`ExtensionSpec::narrowable_scopes`) — the fact
@@ -194,9 +197,12 @@ pub fn run_all(
     narrowables: &[(smol_str::SmolStr, Vec<smol_str::SmolStr>)],
     analyses: &[&dyn Analysis],
 ) -> AnalysisOutcome {
+    let reach = Reachability::compute(graph);
+    let index = crate::navigate::Index::build(graph, &reach);
     let run = RunContext {
         graph,
-        reach: Reachability::compute(graph),
+        reach,
+        index,
         coverage,
         narrowables,
     };
