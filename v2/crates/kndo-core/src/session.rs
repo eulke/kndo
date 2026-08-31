@@ -30,6 +30,7 @@ pub enum Threads {
 pub struct Config {
     pub threads: Threads,
     pub use_cache: bool,
+    pub categories: Categories,
 }
 
 impl Default for Config {
@@ -37,6 +38,36 @@ impl Default for Config {
         Config {
             threads: Threads::Auto,
             use_cache: true,
+            categories: Categories::All,
+        }
+    }
+}
+
+/// Which categories this run JUDGES — never a display filter. An unselected
+/// category's analysis does not run: it leaves the `judged` set (so its
+/// suppressions cannot read as stale), produces no abstention, and the report's
+/// `run.selection` says the narrowing was asked for. Health follows judgment —
+/// skip `unused` and health is absent, not padded. Plugin findings pass the same
+/// test by category name; a plugin's [`Contribution`] still records what it
+/// asserted, because activity and selection are different facts.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub enum Categories {
+    #[default]
+    All,
+    /// Judge only these.
+    Only(Vec<kndo_contract::vocab::Category>),
+    /// Judge everything except these.
+    Skip(Vec<kndo_contract::vocab::Category>),
+}
+
+impl Categories {
+    pub fn includes(&self, category: &kndo_contract::vocab::Category) -> bool {
+        match self {
+            Categories::All => true,
+            Categories::Only(selected) => selected.contains(category),
+            Categories::Skip(skipped) => !skipped.contains(category),
         }
     }
 }
@@ -105,6 +136,7 @@ pub struct Snapshot {
     baseline: Option<Vec<Finding>>,
     mode: crate::report::Mode,
     base_health: Option<crate::health::Health>,
+    categories: Categories,
     pragma_problems: Vec<crate::suppress::PragmaProblem>,
     composition_diagnostics: Vec<ReportDiagnostic>,
     files_discovered: u32,
@@ -374,16 +406,23 @@ impl Session {
                 )
             })
             .collect();
-        let mut outcome = run_all(
-            &graph,
-            round.coverage,
-            &narrowables,
-            &[&Unused, &InternalOnly, &TestOnly, &Untested, &Duplicate],
-        );
+        let all: [&dyn crate::analysis::Analysis; 5] =
+            [&Unused, &InternalOnly, &TestOnly, &Untested, &Duplicate];
+        let selected: Vec<&dyn crate::analysis::Analysis> = all
+            .into_iter()
+            .filter(|a| self.config.categories.includes(&a.category()))
+            .collect();
+        let mut outcome = run_all(&graph, round.coverage, &narrowables, &selected);
         // Plugin findings ride the same suppression pass — a `kndo:allow
         // ext:<coordinate>/<rule>` pragma reaches them like any category — and
-        // `apply` owns the canonical final sort.
-        outcome.findings.extend(round.findings);
+        // `apply` owns the canonical final sort. The selection reaches them by
+        // category name like any analysis's.
+        outcome.findings.extend(
+            round
+                .findings
+                .into_iter()
+                .filter(|f| self.config.categories.includes(&f.category)),
+        );
         let (findings, suppressed) = crate::suppress::apply(
             &graph,
             &contents,
@@ -410,6 +449,7 @@ impl Session {
             judged: outcome.judged,
             mode: crate::report::Mode::Full,
             base_health: None,
+            categories: self.config.categories.clone(),
             suppressed: suppressed.summary,
             contributions: round.contributions,
             pragma_problems: suppressed.problems,
@@ -525,6 +565,10 @@ impl Snapshot {
             run: RunInfo {
                 schema: REPORT_SCHEMA,
                 mode: self.mode,
+                selection: match &self.categories {
+                    Categories::All => None,
+                    narrowed => Some(narrowed.clone()),
+                },
                 files_discovered: self.files_discovered,
                 files_claimed: self.graph.files.len() as u32,
                 extensions: per_extension

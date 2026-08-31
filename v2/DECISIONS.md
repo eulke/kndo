@@ -1477,3 +1477,28 @@ reports regenerated. Three end-to-end CLI tests over real git repos (staged
 new/fixed/carried + arrow + envelope; diff-vs-ref carried-not-gated; outside-git
 degrades to a plain exit-2 failure). Smoke: the staged run reports
 `staged: 1 new · 1 fixed · 1 carried`, `health 71.4 → 71.4`, exit 1.
+
+## 2026-08-31 — Category selection is judgment scope, and the health verb
+
+`--only`/`--skip` land as `Config.categories: Categories` — the engine does not run
+what was not selected, which is the only honest shape: a display-only filter would
+leave the `judged` set lying (a suppression for a hidden category would read as
+stale), pad health with unjudged categories, and let a "clean" narrowed report
+imply more than it measured. Instead the unselected analysis never runs, `judged`
+shrinks, health follows judgment (skip `unused` and health is absent, not 100),
+plugin findings pass the same category test, and the envelope's `run.selection`
+records the narrowing verbatim (`{"only": ["unused"]}`) — what a narrowed run does
+not list, it did not judge. Unknown names are refused invocations at the frontier
+(exit 2, listing the first-party set) — told apart from a category that judged
+nothing. Both sides of a diff-mode run share the selection, or the diff would
+report the narrowing, not the change. v1's `--strict` did not come along: it
+promoted `undeclared`, a category v2 has not built — the ledger's dependency
+family carries it.
+
+`kndo health` ships as sugar over the same full analysis: the health block alone,
+the line on a terminal, the JSON object piped, always exit 0 — health is
+measurement, not a gate.
+
+Freight: schema regenerated (`run.selection` + Categories defs; fixtures and
+goldens byte-unmoved — All serializes as absence). 202 tests, 14 gates, clippy
+clean.

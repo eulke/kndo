@@ -46,6 +46,10 @@ pub struct RunInfo {
     #[cfg_attr(feature = "schema", schemars(schema_with = "schema_version_const"))]
     pub schema: &'static str,
     pub mode: Mode,
+    /// The category narrowing this run was asked for, verbatim — absent when the
+    /// run judged everything. What a narrowed run does not list, it did not judge.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub selection: Option<crate::session::Categories>,
     pub files_discovered: u32,
     pub files_claimed: u32,
     pub extensions: Vec<ExtensionRun>,

@@ -30,6 +30,7 @@ fn analyze(p: &TempProject, conduct: Vec<Box<dyn Extension>>) -> Snapshot {
         Config {
             threads: Threads::Auto,
             use_cache: false,
+            ..Config::default()
         },
         extensions,
     )

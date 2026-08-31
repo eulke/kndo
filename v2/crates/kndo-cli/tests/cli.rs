@@ -328,3 +328,64 @@ fn a_diff_outside_git_is_a_plain_failure_not_a_panic() {
     assert_eq!(out.code, 2);
     assert!(out.stderr.contains("kndo: git:"), "{}", out.stderr);
 }
+
+#[test]
+fn only_and_skip_narrow_judgment_not_display() {
+    let p = project_with_findings();
+    let out = check(&p, &["--only", "unused"], piped());
+    let report: serde_json::Value = serde_json::from_str(&out.stdout).expect("stdout is JSON");
+    assert_eq!(
+        report["run"]["selection"],
+        serde_json::json!({"only": ["unused"]})
+    );
+    assert!(
+        report["findings"].as_array().is_some_and(|f| !f.is_empty()),
+        "{}",
+        out.stdout
+    );
+
+    let skipped = check(&p, &["--skip", "unused"], piped());
+    let report: serde_json::Value = serde_json::from_str(&skipped.stdout).expect("stdout is JSON");
+    assert_eq!(
+        report["run"]["selection"],
+        serde_json::json!({"skip": ["unused"]})
+    );
+    assert_eq!(
+        report["findings"].as_array().map(|f| f.len()),
+        Some(0),
+        "{}",
+        skipped.stdout
+    );
+    // Health follows judgment: with `unused` un-judged there is no health, and
+    // the skipped category leaves no abstention behind either.
+    assert!(report.get("health").is_none(), "{}", skipped.stdout);
+    assert_eq!(skipped.code, 0, "nothing judged at the gate's floor");
+}
+
+#[test]
+fn an_unknown_category_is_a_refused_invocation() {
+    let p = project_with_findings();
+    let out = check(&p, &["--only", "unusedd"], piped());
+    assert_eq!(out.code, 2);
+    assert!(
+        out.stderr.contains("unknown category `unusedd`") && out.stderr.contains("unused"),
+        "{}",
+        out.stderr
+    );
+}
+
+#[test]
+fn the_health_verb_is_the_measurement_alone() {
+    let p = project_with_findings();
+    let root = p.root().to_string_lossy().into_owned();
+    let tty = run_args(["kndo", "health", &root], terminal());
+    assert_eq!(tty.code, 0, "health is measurement, not a gate");
+    assert!(tty.stdout.starts_with("health "), "{}", tty.stdout);
+    assert!(tty.stdout.contains("implicated 1 of"), "{}", tty.stdout);
+
+    let piped_out = run_args(["kndo", "health", &root], piped());
+    let health: serde_json::Value =
+        serde_json::from_str(&piped_out.stdout).expect("stdout is JSON");
+    assert_eq!(health["implicated"], 1);
+    assert!(health["subjects"].as_u64().is_some());
+}

@@ -170,6 +170,49 @@
         }
       ]
     },
+    "Categories": {
+      "description": "Which categories this run JUDGES — never a display filter. An unselected\ncategory's analysis does not run: it leaves the `judged` set (so its\nsuppressions cannot read as stale), produces no abstention, and the report's\n`run.selection` says the narrowing was asked for. Health follows judgment —\nskip `unused` and health is absent, not padded. Plugin findings pass the same\ntest by category name; a plugin's [`Contribution`] still records what it\nasserted, because activity and selection are different facts.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "all"
+          ]
+        },
+        {
+          "description": "Judge only these.",
+          "type": "object",
+          "properties": {
+            "only": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Category"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "only"
+          ]
+        },
+        {
+          "description": "Judge everything except these.",
+          "type": "object",
+          "properties": {
+            "skip": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Category"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "skip"
+          ]
+        }
+      ]
+    },
     "Category": {
       "description": "A finding category: a validated string newtype, not an enum, because the\n`ext:<coordinate>/<rule>` namespace is open. First-party categories are the\nassociated constants.",
       "type": "string"
@@ -433,6 +476,17 @@
         "schema": {
           "description": "Stamped as a CONST in the generated schema, from the same `REPORT_SCHEMA` the report\nwrites — a report from any other envelope version fails validation instead of\ndrifting through.",
           "const": "kndo-v2/m6"
+        },
+        "selection": {
+          "description": "The category narrowing this run was asked for, verbatim — absent when the\nrun judged everything. What a narrowed run does not list, it did not judge.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Categories"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [

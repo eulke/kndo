@@ -73,6 +73,7 @@ fn kmini_session(
         Config {
             threads: Threads::Auto,
             use_cache,
+            ..Config::default()
         },
         extensions,
     )
@@ -355,6 +356,7 @@ fn assert_extraction_violation(file_content: &str, violated_import: &str) {
         Config {
             threads: Threads::Auto,
             use_cache: false,
+            ..Config::default()
         },
         vec![Box::new(rude)],
     )

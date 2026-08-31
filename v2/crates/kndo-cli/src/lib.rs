@@ -5,7 +5,7 @@
 //! reachability) exercise it through imports; `main` stays one call deep.
 
 use clap::{Parser, Subcommand, ValueEnum};
-use kndo::{Config, GatePolicy, Mode, Report, RunMode, RunOutcome, Severity, Threads};
+use kndo::{Categories, Config, GatePolicy, Mode, Report, RunMode, RunOutcome, Severity, Threads};
 use std::path::PathBuf;
 
 mod git;
@@ -27,6 +27,8 @@ enum Command {
     Check(CheckArgs),
     /// Accept the current findings as the baseline future runs diff against
     Baseline(RunArgs),
+    /// Project health only — the same measurement `check` reports, as one block
+    Health(RunArgs),
 }
 
 #[derive(clap::Args)]
@@ -43,6 +45,17 @@ struct CheckArgs {
     /// Analyze the worktree against merge-base(<ref>, HEAD)
     #[arg(long, value_name = "ref")]
     diff: Option<String>,
+    /// Judge only these categories (comma-separated, repeatable)
+    #[arg(
+        long,
+        value_delimiter = ',',
+        value_name = "categories",
+        conflicts_with = "skip"
+    )]
+    only: Vec<String>,
+    /// Judge everything except these categories (comma-separated, repeatable)
+    #[arg(long, value_delimiter = ',', value_name = "categories")]
+    skip: Vec<String>,
 }
 
 #[derive(clap::Args)]
@@ -150,10 +163,53 @@ pub fn run(cli: Cli, host: Host) -> CliOutput {
         format: None,
         staged: false,
         diff: None,
+        only: Vec::new(),
+        skip: Vec::new(),
     }));
     match command {
         Command::Check(args) => check(args, &host),
         Command::Baseline(args) => baseline(args),
+        Command::Health(args) => health(args, &host),
+    }
+}
+
+/// The health block alone — a full analysis either way (health is derived from the
+/// whole judgment), a terminal gets the line, a pipe gets the JSON object. Always
+/// exit 0: health is measurement, not a gate.
+fn health(args: RunArgs, host: &Host) -> CliOutput {
+    let root = args.path.clone().unwrap_or_else(|| PathBuf::from("."));
+    let snapshot = match analyze_at(&root, &args, !args.no_cache, &Categories::All) {
+        Ok(snapshot) => snapshot,
+        Err(refusal) => return refused(refusal),
+    };
+    let report = snapshot.report();
+    let stdout = match &report.health {
+        None => {
+            "health not measured — reachability abstained (run `kndo check` for why)\n".to_string()
+        }
+        Some(health) if host.tty => {
+            let mut line = format!(
+                "health {} · implicated {} of {}",
+                health.score_text(),
+                health.implicated,
+                health.subjects
+            );
+            for c in &health.by_category {
+                line.push_str(&format!(" · {} {}", c.category.as_str(), c.findings));
+            }
+            line.push('\n');
+            line
+        }
+        Some(health) => {
+            let mut json = serde_json::to_string_pretty(health).expect("health serializes");
+            json.push('\n');
+            json
+        }
+    };
+    CliOutput {
+        stdout,
+        stderr: String::new(),
+        code: 0,
     }
 }
 
@@ -183,15 +239,47 @@ fn resolve_format(flag: Option<Format>, host: &Host) -> (Format, Option<String>)
     }
 }
 
+/// The user's category narrowing, validated at the frontier: an unknown name is a
+/// refused invocation, told apart from a category that judged nothing.
+fn selection_of(only: &[String], skip: &[String]) -> Result<Categories, CliOutput> {
+    let parse = |names: &[String]| -> Result<Vec<kndo::Category>, CliOutput> {
+        names
+            .iter()
+            .map(|name| {
+                kndo::Category::parse(name).ok_or_else(|| CliOutput {
+                    stdout: String::new(),
+                    stderr: format!(
+                        "kndo: unknown category `{name}` (first-party: {})\n",
+                        kndo::Category::FIRST_PARTY
+                            .iter()
+                            .map(|c| c.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ),
+                    code: 2,
+                })
+            })
+            .collect()
+    };
+    if !only.is_empty() {
+        return Ok(Categories::Only(parse(only)?));
+    }
+    if !skip.is_empty() {
+        return Ok(Categories::Skip(parse(skip)?));
+    }
+    Ok(Categories::All)
+}
+
 fn open_and_analyze(args: &RunArgs) -> Result<(kndo::Session, kndo::Snapshot), kndo::Refusal> {
     let root = args.path.clone().unwrap_or_else(|| PathBuf::from("."));
-    let snapshot = analyze_at(&root, args, !args.no_cache)?;
+    let snapshot = analyze_at(&root, args, !args.no_cache, &Categories::All)?;
     let config = Config {
         threads: match args.threads {
             Some(n) if n > 0 => Threads::Count(n),
             _ => Threads::Auto,
         },
         use_cache: !args.no_cache,
+        categories: Categories::All,
     };
     let session = kndo::open(root, config)?;
     Ok((session, snapshot))
@@ -201,6 +289,7 @@ fn analyze_at(
     root: &std::path::Path,
     args: &RunArgs,
     use_cache: bool,
+    categories: &Categories,
 ) -> Result<kndo::Snapshot, kndo::Refusal> {
     let config = Config {
         threads: match args.threads {
@@ -208,6 +297,7 @@ fn analyze_at(
             _ => Threads::Auto,
         },
         use_cache,
+        categories: categories.clone(),
     };
     kndo::open(root.to_path_buf(), config)?.analyze(RunMode::Full)
 }
@@ -217,7 +307,11 @@ fn analyze_at(
 /// run cache-off so nothing is written into them. The comparison then rides the
 /// baseline mechanism — `Snapshot::against` documents why the baseline file never
 /// participates in a tree-vs-tree split.
-fn diff_snapshot(args: &RunArgs, comparison: git::Comparison) -> Result<kndo::Snapshot, CliOutput> {
+fn diff_snapshot(
+    args: &RunArgs,
+    comparison: git::Comparison,
+    categories: &Categories,
+) -> Result<kndo::Snapshot, CliOutput> {
     let root = args.path.clone().unwrap_or_else(|| PathBuf::from("."));
     let mode = match comparison {
         git::Comparison::Staged => Mode::Staged,
@@ -225,13 +319,15 @@ fn diff_snapshot(args: &RunArgs, comparison: git::Comparison) -> Result<kndo::Sn
     };
     let base_tree = comparison.base_tree(&root).map_err(git_failed)?;
     let base = git::materialize(&root, &base_tree).map_err(git_failed)?;
-    let base_snapshot = analyze_at(&base.root, args, false).map_err(refused)?;
+    // Both sides judge the same categories, or the diff would report the
+    // narrowing, not the change.
+    let base_snapshot = analyze_at(&base.root, args, false, categories).map_err(refused)?;
     let mut snapshot = match comparison.current_tree(&root).map_err(git_failed)? {
         Some(index_tree) => {
             let current = git::materialize(&root, &index_tree).map_err(git_failed)?;
-            analyze_at(&current.root, args, false).map_err(refused)?
+            analyze_at(&current.root, args, false, categories).map_err(refused)?
         }
-        None => analyze_at(&root, args, !args.no_cache).map_err(refused)?,
+        None => analyze_at(&root, args, !args.no_cache, categories).map_err(refused)?,
     };
     snapshot.against(&base_snapshot, mode);
     Ok(snapshot)
@@ -256,20 +352,27 @@ fn refused(refusal: kndo::Refusal) -> CliOutput {
 
 fn check(args: CheckArgs, host: &Host) -> CliOutput {
     let (format, warning) = resolve_format(args.format, host);
+    let categories = match selection_of(&args.only, &args.skip) {
+        Ok(categories) => categories,
+        Err(failure) => return failure,
+    };
     let comparison = if args.staged {
         Some(git::Comparison::Staged)
     } else {
         args.diff.clone().map(git::Comparison::Against)
     };
     let snapshot = match comparison {
-        Some(comparison) => match diff_snapshot(&args.run, comparison) {
+        Some(comparison) => match diff_snapshot(&args.run, comparison, &categories) {
             Ok(snapshot) => snapshot,
             Err(failure) => return failure,
         },
-        None => match open_and_analyze(&args.run) {
-            Ok((_, snapshot)) => snapshot,
-            Err(refusal) => return refused(refusal),
-        },
+        None => {
+            let root = args.run.path.clone().unwrap_or_else(|| PathBuf::from("."));
+            match analyze_at(&root, &args.run, !args.run.no_cache, &categories) {
+                Ok(snapshot) => snapshot,
+                Err(refusal) => return refused(refusal),
+            }
+        }
     };
     let report = snapshot.report();
     let code = snapshot.gate(&args.run.fail_on.policy()).exit_code();

@@ -38,7 +38,11 @@ use kndo_testkit::{MockAdapter, TempProject};
 fn run(root: &std::path::Path, use_cache: bool, threads: Threads) -> Snapshot {
     let session = Session::open(
         root,
-        Config { threads, use_cache },
+        Config {
+            threads,
+            use_cache,
+            ..Config::default()
+        },
         vec![Box::new(MockAdapter::new())],
     )
     .expect("open session");
@@ -265,6 +269,7 @@ fn adapter_conformance_fixtures_are_byte_identical() {
                 Config {
                     threads: Threads::Auto,
                     use_cache: false,
+                    ..Config::default()
                 },
             )
             .expect("open fixture project");
@@ -372,6 +377,7 @@ fn builtin_conduct_proofs() {
     let config = || Config {
         threads: Threads::Auto,
         use_cache: false,
+        ..Config::default()
     };
 
     let extraction_only = || {
@@ -523,6 +529,7 @@ fn extension_dependency_implication() {
         Config {
             threads: Threads::Auto,
             use_cache: false,
+            ..Config::default()
         },
         extensions,
     )
@@ -620,6 +627,7 @@ fn abi_compat_matrix() {
             Config {
                 threads: Threads::Auto,
                 use_cache: false,
+                ..Config::default()
             },
             extensions,
         )
@@ -873,6 +881,7 @@ fn agent_format_matches_its_committed_golden() {
         run: RunInfo {
             schema: REPORT_SCHEMA,
             mode: kndo::Mode::Full,
+            selection: None,
             files_discovered: 12,
             files_claimed: 11,
             extensions: vec![

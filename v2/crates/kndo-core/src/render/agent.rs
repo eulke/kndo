@@ -161,6 +161,7 @@ mod tests {
             run: RunInfo {
                 schema: REPORT_SCHEMA,
                 mode: crate::report::Mode::Full,
+                selection: None,
                 files_discovered: 0,
                 files_claimed: 0,
                 extensions: Vec::new(),

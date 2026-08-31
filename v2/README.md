@@ -386,6 +386,12 @@ gives the honest version of v1's arrow — `health 97.6 → 97.8` derived from t
 pinned trees, not cross-run state. Agent format moved to 2 for the reshaped result
 line (`mode`, the unified `carried` label).
 
+Fifth row: **selection and the health verb**. `--only`/`--skip` narrow JUDGMENT, never
+display: an unselected analysis does not run, `judged` shrinks (suppressions cannot go
+stale against it), health follows judgment, and the envelope's `run.selection` records
+the ask verbatim — what a narrowed run does not list, it did not judge. `kndo health`
+prints the measurement alone (line on a tty, JSON piped, always exit 0).
+
 Second row: **health**, rebuilt as a derived ratio instead of v1's penalty score. The
 envelope's `health` carries two counted integers and a per-category tally —
 `implicated` (distinct symbols/files with a first-party, warning-or-worse finding; two

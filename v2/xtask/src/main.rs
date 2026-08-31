@@ -147,6 +147,7 @@ fn corpus(args: &[String]) -> Result<()> {
             kndo::Config {
                 threads: kndo::Threads::Auto,
                 use_cache: false,
+                ..kndo::Config::default()
             },
         )
         .map_err(|e| format!("{name}: {e}"))?;

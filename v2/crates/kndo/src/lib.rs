@@ -14,8 +14,8 @@ pub use kndo_contract::subject::{FindingId, Subject, SymbolSelector};
 pub use kndo_contract::vocab::{Category, Confidence, ProjectPath, Span, SubjectKind};
 pub use kndo_core::{
     Abstention, AbstentionReason, AbstentionScope, Activation, ActivationRule, CONTENT_MAX_BYTES,
-    CONTENT_MAX_FILES, CategoryCount, ConductSeverity, ConductSink, ConductTarget, Config,
-    ContentView, Contribution, ExtensionRun, GatePolicy, Graph, GraphView, Health, Mode,
+    CONTENT_MAX_FILES, Categories, CategoryCount, ConductSeverity, ConductSink, ConductTarget,
+    Config, ContentView, Contribution, ExtensionRun, GatePolicy, Graph, GraphView, Health, Mode,
     PhaseTimings, REPORT_SCHEMA, Refusal, Report, ReportDiagnostic, RuleDescriptor, RunInfo,
     RunMode, RunOutcome, Session, Snapshot, SuppressedSummary, Threads, is_reserved_coordinate,
 };
