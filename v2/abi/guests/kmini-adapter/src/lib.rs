@@ -175,10 +175,15 @@ impl Extension for KminiAdapter {
         }
     }
 
-    fn manifest_dependencies(&self, manifest: &SourceFile<'_>) -> Vec<SmolStr> {
+    fn manifest_dependencies(
+        &self,
+        manifest: &SourceFile<'_>,
+    ) -> Vec<kndo_contract::adapter::DependencyDeclaration> {
         manifest_lines(manifest.content)
             .filter(|(k, _)| *k == "dep")
-            .map(|(_, v)| SmolStr::new(v))
+            .map(|(_, v)| {
+                kndo_contract::adapter::DependencyDeclaration::name_only(SmolStr::new(v))
+            })
             .collect()
     }
 

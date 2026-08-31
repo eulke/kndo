@@ -10,14 +10,18 @@
 mod duplicate;
 mod internal_only;
 mod test_only;
+mod unresolved;
 mod untested;
 mod unused;
+mod version_skew;
 
 pub use duplicate::Duplicate;
 pub use internal_only::InternalOnly;
 pub use test_only::TestOnly;
+pub use unresolved::Unresolved;
 pub use untested::Untested;
 pub use unused::Unused;
+pub use version_skew::VersionSkew;
 
 use crate::graph::Graph;
 use kndo_contract::evidence::{EvidenceStream, RootKind};

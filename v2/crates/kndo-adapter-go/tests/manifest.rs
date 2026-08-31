@@ -76,7 +76,7 @@ fn require_lines_report_dependency_names_both_forms() {
             content: content.as_bytes(),
         })
         .into_iter()
-        .map(|d| d.to_string())
+        .map(|d| d.name.to_string())
         .collect();
     assert_eq!(
         deps,

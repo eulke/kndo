@@ -1770,3 +1770,73 @@ the shape and the enumeration do not:
 
 serve gets the form for free (`options.to` flows through the same Request;
 the trace tool's description names it). 217 tests, 15 gates, clippy clean.
+
+## 2026-08-31 — The dependency family, measured first: two ship, two defer
+
+The oracle's largest unbuilt block — 543 dependency-subject findings
+(undeclared 293, deps-unused 198, version-skew 38, deps-test-only 14) — went
+through the corpus experiment before any analysis was written. The
+decomposition (recorded in `corpus-findings/COMPARISON.md`, per finding) turned
+the demand on its head: the bulk was the oracle's own vices, and the family's
+honest core is two small, high-precision analyses plus a set of adapter fixes
+worth more than either.
+
+**`unresolved` ships** — a relative specifier pointing at no file, `error`,
+the import's own confidence, on the new `Subject::Import { path, specifier,
+span }` (identity = path + specifier, spans carried for lines only, the Symbol
+rule). Its precision floor, each rule measured: only the contract's `./`-style
+Relative spelling (an adapter routing other grammars through the variant —
+rust's `crate::` paths — is judged by its own resolver, killing 54 ripgrep
+non-findings); only `Certain` imports (an adapter's derived probe is
+speculation — python's submodule probes now honestly emit `Possible`, fixing
+their mislabel); a target that EXISTS in the discovered tree is not missing
+(`Graph.discovered` is new — assets and manifests live outside the analyzed
+world; scope, not breakage); and the missing target's parent directory must
+hold a discovered file (a `../dist/…` reach into build output is deliberate).
+Corpus: vite 10 (three deliberate fixtures, four unmodeled vite resolution
+features, three symlinks — discovery does not follow symlinks, a boundary now
+written down), every other repo 0. The category's value is the regression it
+will catch, and its noise floor is provably zero here.
+
+**`version-skew` ships** — same name, diverging comparable requirements across
+manifests, `info`/`certain` on `Subject::Dependency`, deliberately not denting
+health. Peer scope exempt (a wide peer range beside a narrow dev pin is
+correct practice v1 flagged); `version_req: None` never compares — and the
+adapter that knows the ecosystem decides what is comparable (npm protocols,
+cargo path/git/workspace-inherited specs). Corpus: ripgrep 10 (all
+semver-compatible — the `workspace.dependencies` nudge), vite 3, everything
+else 0 (the Exposed oracle's 4 were doc-snippet poms; JVM declarations ship
+name-only until BOM/catalog modeling exists).
+
+**`undeclared` defers with its number**: 2–3 honest true positives on this
+corpus against a 124-finding fixture cliff and a 195-case
+ancestor-declaration class the per-leaf model must first learn — the corpus is
+a pathological instrument for this rule (vite is a repository OF resolution
+edge cases). **Dependency `unused`/`test-only` defers**: config-driven tooling
+is invisible to structural evidence (vite root: `typescript`, `lint-staged`,
+`execa`…), and gin's go.mod `test-only` names a vice — Go has no dev section,
+so the advice is unactionable by construction.
+
+The carrier: `Extension::manifest_dependencies` now returns
+`Vec<DependencyDeclaration { name, scope: Option<DependencyScope>,
+version_req: Option<SmolStr> }>` — one manifest pipeline still, activation
+reads `.name` from the same stream. js-ts and rust implement it fully; the
+other five ship `name_only` (typed absence: skew stays silent rather than
+wrong). The WASM ABI is untouched — the world still speaks names, the host
+shim wraps them, and a versioned world can carry rich declarations later.
+`Graph` grows `manifest_declarations` + `discovered`;
+`GRAPH_SEMANTICS_VERSION` 5→6 (one knob). The contract fingerprint did not
+move: subjects and manifest data are not evidence-reachable, and the gate
+proved it.
+
+Riding along, worth more than the analyses: the js-ts resolver strips
+query/fragment suffixes (42 real vite edges had been dying as unresolved
+behind `?worker`-style suffixes), the compiled-to-source swap learned
+`.js→.d.ts`, `.mjs→.mts`, `.cjs→.cts`, and the adapter now CLAIMS `mts`/`cts`
+sources at all (real files in the wild; vite ships them) — adapter version
+3→4. vite's corpus totals moved 1077→913 findings, mostly unused
+false-positives dying as their keep-alive edges came back.
+
+218 tests, 15 gates, clippy clean; one conformance fixture change (the
+npm-workspace fixture now also pins a version-skew and an unresolved finding),
+called out here as the deliberate contract change it is.

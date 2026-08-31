@@ -282,14 +282,28 @@ impl Extension for WasmExtension {
         .unwrap_or_default()
     }
 
-    fn manifest_dependencies(&self, manifest: &SourceFile<'_>) -> Vec<smol_str::SmolStr> {
+    fn manifest_dependencies(
+        &self,
+        manifest: &SourceFile<'_>,
+    ) -> Vec<kndo_contract::adapter::DependencyDeclaration> {
         // The manifest hook gets bytes and NOTHING else — its own phase, so a
         // guest reaching for `known-files` here trips a named violation instead
-        // of silently reading an empty snapshot.
+        // of silently reading an empty snapshot. The ABI speaks names only;
+        // scope and requirement are honestly absent, so version-skew never
+        // judges a guest-declared dependency it cannot compare.
         self.call(StoreData::bare(Phase::Manifest), |guest, store| {
             guest.call_manifest_dependencies(store, manifest.path.as_str(), manifest.content)
         })
-        .map(|names| names.into_iter().map(smol_str::SmolStr::new).collect())
+        .map(|names| {
+            names
+                .into_iter()
+                .map(|name| kndo_contract::adapter::DependencyDeclaration {
+                    name: smol_str::SmolStr::new(name),
+                    scope: None,
+                    version_req: None,
+                })
+                .collect()
+        })
         .unwrap_or_default()
     }
 

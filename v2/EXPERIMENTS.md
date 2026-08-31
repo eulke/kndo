@@ -44,14 +44,23 @@ manifest visibility before any measurement.
 
 ## Open candidates (never decided in v1)
 
-### Dependency-hygiene family (undeclared / unresolved / version-skew)
-The oracle's largest unbuilt block after the ladder: 410 findings — undeclared 293
-(vite 289, lodash 4), unresolved 79 (vite), version-skew 38 (vite 24, ripgrep 10,
-Exposed 4). The inputs half-exist (`manifest_dependencies` is read for conduct
-activation), but judging them needs per-language dependency MODELS — what counts as
-declared (workspace inheritance, peer/optional/dev tiers, version ranges), what an
-import resolves against, per ecosystem. Nothing here ships without its corpus
-experiment; the demand decomposition above is the starting measurement.
+### Dependency-hygiene family (undeclared / unresolved / version-skew) — measured 2026-08-31
+Full demand was 543 dependency-subject oracle findings (the 410 above plus 198
+deps-unused and 14 deps-test-only hiding inside `unused`/`test-only`). The corpus
+experiment decomposed every one (COMPARISON has the per-finding record):
+**`unresolved` and `version-skew` shipped** (vite 10 + 3, ripgrep 10, everything
+else 0 — zero measured noise), carried by `DependencyDeclaration` evidence
+(js-ts and rust rich; JVM/go/python/swift name-only until their version models
+exist) and three resolver/claim fixes worth more than the analyses.
+**`undeclared` deferred with its number**: 2–3 honest true positives on this
+corpus vs a 124-finding fixture cliff + 195 ancestor-declared (workspace
+hoisting) + ambient modules + self-imports — the model needs those classes AND
+a corpus repo shaped like an ordinary application before it can be judged.
+**deps-unused/test-only deferred**: config-driven tooling is invisible to
+structural evidence (zero-FP unreachable without per-tool knowledge); go.mod
+`test-only` is unactionable by construction (no dev section). Also recorded:
+discovery does not follow symlinks (three vite findings live on that boundary —
+following them is its own experiment if a corpus repo ever hinges on it).
 
 ### cyclic (import cycles)
 38 oracle findings (vite 31, Exposed 4, guava 3). The graph has the edges already;

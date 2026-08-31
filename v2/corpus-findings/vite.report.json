@@ -3,25 +3,225 @@
     "schema": "kndo-v2/m6",
     "mode": "full",
     "files_discovered": 2712,
-    "files_claimed": 1553,
+    "files_claimed": 1558,
     "extensions": [
       {
         "id": "kndo:js-ts",
-        "files": 1553
+        "files": 1558
       }
     ]
   },
   "health": {
-    "implicated": 699,
-    "subjects": 5044,
+    "implicated": 703,
+    "subjects": 5052,
     "by_category": [
       {
         "category": "unused",
-        "findings": 699
+        "findings": 703
       }
     ]
   },
   "findings": [
+    {
+      "id": "kndo-fbd9fa3e8193",
+      "category": "unresolved",
+      "severity": "error",
+      "confidence": "certain",
+      "subject": {
+        "kind": "import",
+        "path": "packages/vite/src/node/__tests__/fixtures/config/native-compat/json-extensionless/vite.config.js",
+        "specifier": "./foo",
+        "span": {
+          "start": 0,
+          "end": 24
+        }
+      },
+      "lines": {
+        "start": 1,
+        "end": 1
+      },
+      "message": "import of './foo' resolves to no file — a broken path or a rename that missed this call site"
+    },
+    {
+      "id": "kndo-5bdeb1d39042",
+      "category": "unresolved",
+      "severity": "error",
+      "confidence": "certain",
+      "subject": {
+        "kind": "import",
+        "path": "packages/vite/src/node/ssr/__tests__/fixtures/modules/has-invalid-import.js",
+        "specifier": "./non-existent.js",
+        "span": {
+          "start": 0,
+          "end": 39
+        }
+      },
+      "lines": {
+        "start": 1,
+        "end": 1
+      },
+      "message": "import of './non-existent.js' resolves to no file — a broken path or a rename that missed this call site"
+    },
+    {
+      "id": "kndo-771a2776804d",
+      "category": "unresolved",
+      "severity": "error",
+      "confidence": "certain",
+      "subject": {
+        "kind": "import",
+        "path": "playground/hmr/missing-file/main.js",
+        "specifier": "./a.js",
+        "span": {
+          "start": 0,
+          "end": 15
+        }
+      },
+      "lines": {
+        "start": 1,
+        "end": 1
+      },
+      "message": "import of './a.js' resolves to no file — a broken path or a rename that missed this call site"
+    },
+    {
+      "id": "kndo-7fb300e8c432",
+      "category": "unresolved",
+      "severity": "error",
+      "confidence": "certain",
+      "subject": {
+        "kind": "import",
+        "path": "playground/optimize-deps/dep-relative-to-main/entry.js",
+        "specifier": "./",
+        "span": {
+          "start": 17,
+          "end": 30
+        }
+      },
+      "lines": {
+        "start": 1,
+        "end": 1
+      },
+      "message": "import of './' resolves to no file — a broken path or a rename that missed this call site"
+    },
+    {
+      "id": "kndo-48efd9708ccc",
+      "category": "unresolved",
+      "severity": "error",
+      "confidence": "certain",
+      "subject": {
+        "kind": "import",
+        "path": "playground/resolve/browser-field/relative.js",
+        "specifier": "./ext",
+        "span": {
+          "start": 0,
+          "end": 22
+        }
+      },
+      "lines": {
+        "start": 1,
+        "end": 1
+      },
+      "message": "import of './ext' resolves to no file — a broken path or a rename that missed this call site"
+    },
+    {
+      "id": "kndo-8061e3ce1d4e",
+      "category": "unresolved",
+      "severity": "error",
+      "confidence": "certain",
+      "subject": {
+        "kind": "import",
+        "path": "playground/resolve/browser-field/relative.js",
+        "specifier": "./ext.js",
+        "span": {
+          "start": 61,
+          "end": 86
+        }
+      },
+      "lines": {
+        "start": 3,
+        "end": 3
+      },
+      "message": "import of './ext.js' resolves to no file — a broken path or a rename that missed this call site"
+    },
+    {
+      "id": "kndo-161d3ab41e0c",
+      "category": "unresolved",
+      "severity": "error",
+      "confidence": "certain",
+      "subject": {
+        "kind": "import",
+        "path": "playground/ssr-resolve/deep-import/index.js",
+        "specifier": "./bar",
+        "span": {
+          "start": 39,
+          "end": 77
+        }
+      },
+      "lines": {
+        "start": 2,
+        "end": 2
+      },
+      "message": "import of './bar' resolves to no file — a broken path or a rename that missed this call site"
+    },
+    {
+      "id": "kndo-274a6f37e345",
+      "category": "unresolved",
+      "severity": "error",
+      "confidence": "certain",
+      "subject": {
+        "kind": "import",
+        "path": "playground/ssr-wasm/src/direct-add.js",
+        "specifier": "./add.wasm",
+        "span": {
+          "start": 0,
+          "end": 32
+        }
+      },
+      "lines": {
+        "start": 1,
+        "end": 1
+      },
+      "message": "import of './add.wasm' resolves to no file — a broken path or a rename that missed this call site"
+    },
+    {
+      "id": "kndo-aba82174499c",
+      "category": "unresolved",
+      "severity": "error",
+      "confidence": "certain",
+      "subject": {
+        "kind": "import",
+        "path": "playground/ssr-wasm/src/direct-light.js",
+        "specifier": "./light-with-imports.wasm",
+        "span": {
+          "start": 41,
+          "end": 98
+        }
+      },
+      "lines": {
+        "start": 2,
+        "end": 2
+      },
+      "message": "import of './light-with-imports.wasm' resolves to no file — a broken path or a rename that missed this call site"
+    },
+    {
+      "id": "kndo-aeee62e61754",
+      "category": "unresolved",
+      "severity": "error",
+      "confidence": "certain",
+      "subject": {
+        "kind": "import",
+        "path": "playground/ssr-wasm/src/direct-light.js",
+        "specifier": "./imports.js",
+        "span": {
+          "start": 0,
+          "end": 40
+        }
+      },
+      "lines": {
+        "start": 1,
+        "end": 1
+      },
+      "message": "import of './imports.js' resolves to no file — a broken path or a rename that missed this call site"
+    },
     {
       "id": "kndo-3e74b12d252b",
       "category": "unused",
@@ -1070,6 +1270,17 @@
       "subject": {
         "kind": "file",
         "path": "playground/assets/static/raw.js"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-48f3121a14f7",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/assets/static/raw.mts"
       },
       "message": "no root anchors this file and no reachable file imports it"
     },
@@ -6189,6 +6400,17 @@
       "message": "no root anchors this file and no reachable file imports it"
     },
     {
+      "id": "kndo-39413812ee61",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/resolve/sharp-dir-nested/#/index.cjs"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
       "id": "kndo-a89697bd5ecc",
       "category": "unused",
       "severity": "warning",
@@ -6200,6 +6422,17 @@
       "message": "no root anchors this file and no reachable file imports it"
     },
     {
+      "id": "kndo-db58d717529d",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/resolve/ts-extension/hellocjs.cts"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
       "id": "kndo-9f6012be17db",
       "category": "unused",
       "severity": "warning",
@@ -6207,6 +6440,17 @@
       "subject": {
         "kind": "file",
         "path": "playground/resolve/ts-extension/hellojsx.tsx"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-f83d4e6cbc93",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/resolve/ts-extension/hellomjs.mts"
       },
       "message": "no root anchors this file and no reachable file imports it"
     },
@@ -8123,6 +8367,17 @@
         "path": "packages/vite/src/node/__tests__/fixtures/config/native-compat/extensionless/helper.js"
       },
       "message": "byte-identical to packages/vite/src/node/__tests__/fixtures/config/native-compat/clean/helper.js"
+    },
+    {
+      "id": "kndo-d05794b4a311",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/node/__tests__/fixtures/config/native-compat/mts-config/vite.config.mts"
+      },
+      "message": "byte-identical to packages/vite/src/node/__tests__/fixtures/config/native-compat/esm-in-commonjs-pkg/vite.config.js"
     },
     {
       "id": "kndo-d8d8d61eb3d0",
@@ -10378,6 +10633,42 @@
         "path": "playground/optimize-deps/dep-lodash/cloneDeep.js"
       },
       "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-e2042f1053f5",
+      "category": "version-skew",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "dependency",
+        "owner_manifest": "docs/package.json",
+        "name": "vue"
+      },
+      "message": "declared with diverging version requirements: docs/package.json (^3.5.41), packages/create-vite/template-vue-ts/package.json (^3.5.41), packages/create-vite/template-vue/package.json (^3.5.41), packages/vite/src/node/__tests__/package.json (^3.5.18), playground/alias/package.json (^3.5.41), playground/devtools/package.json (^3.5.41), playground/extensions/package.json (^3.5.41), playground/external/dep-that-imports/package.json (^3.5.41), playground/external/dep-that-requires/package.json (^3.5.41), playground/external/package.json (^3.5.41), playground/json/package.json (^3.5.41), playground/optimize-deps-no-discovery/package.json (^3.5.41), playground/optimize-deps/package.json (^3.5.41)"
+    },
+    {
+      "id": "kndo-1e1525d427c3",
+      "category": "version-skew",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "dependency",
+        "owner_manifest": "packages/create-vite/template-react-ts/package.json",
+        "name": "react"
+      },
+      "message": "declared with diverging version requirements: packages/create-vite/template-react-ts/package.json (^19.2.8), packages/create-vite/template-react/package.json (^19.2.8), playground/environment-react-ssr/package.json (^19.2.8), playground/optimize-deps/dep-linked-include/package.json (19.2.8), playground/optimize-deps/package.json (^19.2.8), playground/ssr-webworker/package.json (^19.2.8)"
+    },
+    {
+      "id": "kndo-9fc599f7b8b2",
+      "category": "version-skew",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "dependency",
+        "owner_manifest": "playground/backend-integration/package.json",
+        "name": "tailwindcss"
+      },
+      "message": "declared with diverging version requirements: playground/backend-integration/package.json (^4.3.3), playground/tailwind-sourcemap/package.json (^4.3.3), playground/tailwind-v3/package.json (^3.4.19), playground/tailwind/package.json (^4.3.3)"
     }
   ],
   "fixed": [],

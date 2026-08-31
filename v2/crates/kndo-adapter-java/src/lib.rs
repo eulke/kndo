@@ -19,7 +19,6 @@ use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::EvidenceSink;
 use kndo_contract::extension::{Extension, ExtensionSpec};
 use kndo_contract::vocab::ProjectPath;
-use smol_str::SmolStr;
 
 pub struct JavaAdapter {
     spec: ExtensionSpec,
@@ -55,8 +54,14 @@ impl Extension for JavaAdapter {
         resolve::resolve(from, specifier, cx)
     }
 
-    fn manifest_dependencies(&self, manifest: &SourceFile<'_>) -> Vec<SmolStr> {
+    fn manifest_dependencies(
+        &self,
+        manifest: &SourceFile<'_>,
+    ) -> Vec<kndo_contract::adapter::DependencyDeclaration> {
         kndo_toolkit::jvm_manifest::dependencies(manifest)
+            .into_iter()
+            .map(kndo_contract::adapter::DependencyDeclaration::name_only)
+            .collect()
     }
 
     fn sees(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {

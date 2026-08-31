@@ -4,7 +4,10 @@
 //! `Result<Snapshot, Refusal>`: the run either happened or was refused, and the
 //! refusal reappears inside [`RunOutcome`] so `exit_code` covers that path too.
 
-use crate::analysis::{Abstention, Duplicate, InternalOnly, TestOnly, Untested, Unused, run_all};
+use crate::analysis::{
+    Abstention, Duplicate, InternalOnly, TestOnly, Unresolved, Untested, Unused, VersionSkew,
+    run_all,
+};
 use crate::cache::EvidenceCache;
 use crate::conduct::Contribution;
 use crate::graph::Graph;
@@ -170,7 +173,9 @@ fn line_of(starts: &[u32], offset: u32) -> u32 {
 fn fill_lines(mut findings: Vec<Finding>, index: &BTreeMap<ProjectPath, Vec<u32>>) -> Vec<Finding> {
     for f in &mut findings {
         let span = match &f.subject {
-            Subject::Symbol { span, .. } | Subject::Suppression { span, .. } => *span,
+            Subject::Symbol { span, .. }
+            | Subject::Import { span, .. }
+            | Subject::Suppression { span, .. } => *span,
             _ => continue,
         };
         if let Some(starts) = index.get(f.subject.path()) {
@@ -357,7 +362,12 @@ impl Session {
             files.iter().map(|f| f.path.clone()).collect();
         let mut manifest_dependencies: BTreeSet<SmolStr> = BTreeSet::new();
         crate::graph::for_each_manifest(&files, &self.extensions, |extension, manifest| {
-            manifest_dependencies.extend(extension.manifest_dependencies(&manifest));
+            manifest_dependencies.extend(
+                extension
+                    .manifest_dependencies(&manifest)
+                    .into_iter()
+                    .map(|d| d.name),
+            );
         });
         let active =
             crate::conduct::activate(&self.extensions, &discovered_paths, &manifest_dependencies);
@@ -431,8 +441,15 @@ impl Session {
                 )
             })
             .collect();
-        let all: [&dyn crate::analysis::Analysis; 5] =
-            [&Unused, &InternalOnly, &TestOnly, &Untested, &Duplicate];
+        let all: [&dyn crate::analysis::Analysis; 7] = [
+            &Unused,
+            &InternalOnly,
+            &TestOnly,
+            &Untested,
+            &Duplicate,
+            &Unresolved,
+            &VersionSkew,
+        ];
         let selected: Vec<&dyn crate::analysis::Analysis> = all
             .into_iter()
             .filter(|a| self.config.categories.includes(&a.category()))

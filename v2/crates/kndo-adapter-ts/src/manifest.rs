@@ -6,7 +6,9 @@
 //! `dist/`) — degrades to absence: a root that anchors nothing accuses nothing.
 
 use crate::resolve::{parent_dir, resolve_in_dir};
-use kndo_contract::adapter::{PackageEntry, ProjectRoot, ResolveContext, SourceFile};
+use kndo_contract::adapter::{
+    DependencyDeclaration, DependencyScope, PackageEntry, ProjectRoot, ResolveContext, SourceFile,
+};
 use kndo_contract::evidence::RootKind;
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use smol_str::SmolStr;
@@ -175,22 +177,49 @@ pub fn packages(
 
 /// The dependency names this manifest declares, every section npm installs from —
 /// activation evidence for plugin `ManifestDependency` rules, never resolution.
-pub fn dependencies(manifest: &SourceFile<'_>) -> Vec<SmolStr> {
+pub fn dependencies(manifest: &SourceFile<'_>) -> Vec<DependencyDeclaration> {
     let Ok(json) = serde_json::from_slice::<serde_json::Value>(manifest.content) else {
         return Vec::new();
     };
     let mut out = Vec::new();
-    for section in [
-        "dependencies",
-        "devDependencies",
-        "peerDependencies",
-        "optionalDependencies",
+    for (section, scope) in [
+        ("dependencies", DependencyScope::Prod),
+        ("devDependencies", DependencyScope::Dev),
+        ("peerDependencies", DependencyScope::Peer),
+        ("optionalDependencies", DependencyScope::Optional),
     ] {
         if let Some(serde_json::Value::Object(map)) = json.get(section) {
-            out.extend(map.keys().map(SmolStr::new));
+            for (name, req) in map {
+                out.push(DependencyDeclaration {
+                    name: SmolStr::new(name),
+                    scope: Some(scope),
+                    version_req: comparable_req(req.as_str().unwrap_or_default()),
+                });
+            }
         }
     }
     out
+}
+
+/// A requirement worth comparing across manifests. Protocol and wildcard forms
+/// (`workspace:*`, `file:…`, `link:…`, git/url refs, `*`) name a RESOLUTION
+/// mechanism, not a version — encoding them as text would diverge from every
+/// real requirement and draw false skew wherever manifests otherwise agree.
+fn comparable_req(req: &str) -> Option<SmolStr> {
+    let non_version = req.is_empty()
+        || req == "*"
+        || [
+            "workspace:",
+            "file:",
+            "link:",
+            "portal:",
+            "npm:",
+            "git",
+            "http",
+        ]
+        .iter()
+        .any(|p| req.starts_with(p));
+    (!non_version).then(|| SmolStr::new(req))
 }
 
 /// Every string leaf of the `exports` value — plain, per-subpath, or per-condition

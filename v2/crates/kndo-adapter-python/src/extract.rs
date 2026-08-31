@@ -437,8 +437,11 @@ fn imports(item: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
             }
             // In `from X import a`, `a` may be the SUBMODULE `X/a.py` rather
             // than an attribute of X — importlib's own lookup order. Each
-            // binding gets a namespace probe of that dotted path; a probe with
-            // no matching file resolves nowhere and is inert.
+            // binding gets a namespace probe of that dotted path. `Possible`,
+            // not `Certain`: the probe is the ADAPTER speculating about which
+            // of the two readings holds, never the author writing a path — so
+            // a probe that resolves keeps its file alive, and one that does
+            // not stays below the tier where `unresolved` accuses.
             if !star {
                 for b in &bindings {
                     let sep = if module.ends_with('.') { "" } else { "." };
@@ -454,7 +457,7 @@ fn imports(item: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
                             local: b.local.clone(),
                         },
                         span,
-                        Confidence::Certain,
+                        Confidence::Possible,
                     );
                 }
             }

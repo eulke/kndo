@@ -11,11 +11,12 @@ mod extract;
 mod manifest;
 mod resolve;
 
-use kndo_contract::adapter::{PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile};
+use kndo_contract::adapter::{
+    DependencyDeclaration, PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile,
+};
 use kndo_contract::evidence::{EvidenceSink, RootKind, RootTarget};
 use kndo_contract::extension::{Extension, ExtensionSpec};
 use kndo_contract::vocab::{Confidence, ProjectPath};
-use smol_str::SmolStr;
 use tree_sitter::Language;
 
 /// The `.d.ts` fact, spelled once: the type-declaration companion extension that
@@ -35,8 +36,11 @@ impl TypeScriptAdapter {
     pub fn new() -> Self {
         let spec = kndo_toolkit::source_adapter_spec(
             "kndo:js-ts",
-            3,
-            &["ts", "tsx", "js", "jsx", "mjs", "cjs"],
+            // 4: claims mts/cts (real sources in the wild — vite ships them),
+            // and resolution learned the .mjs→.mts/.cjs→.cts swaps, query/
+            // fragment stripping, and .d.ts answering .js specifiers.
+            4,
+            &["ts", "tsx", "js", "jsx", "mjs", "cjs", "mts", "cts"],
             &["**/package.json"],
             &[],
         );
@@ -99,7 +103,7 @@ impl Extension for TypeScriptAdapter {
         manifest::packages(manifest, cx, &self.resolution_exts)
     }
 
-    fn manifest_dependencies(&self, manifest: &SourceFile<'_>) -> Vec<SmolStr> {
+    fn manifest_dependencies(&self, manifest: &SourceFile<'_>) -> Vec<DependencyDeclaration> {
         manifest::dependencies(manifest)
     }
 }

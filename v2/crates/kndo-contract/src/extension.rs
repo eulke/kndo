@@ -6,7 +6,9 @@
 //! is gated. Phase discipline lives in the signatures: an extraction hook cannot
 //! name the graph because no parameter provides one.
 
-use crate::adapter::{PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile};
+use crate::adapter::{
+    DependencyDeclaration, PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile,
+};
 use crate::evidence::{CoverageRecords, EvidenceSink, EvidenceStreams, RootKind};
 use crate::finding::Severity;
 use crate::vocab::{Confidence, ProjectPath};
@@ -649,10 +651,11 @@ pub trait Extension: Send + Sync {
         Vec::new()
     }
 
-    /// The dependency NAMES one manifest declares, every section alike — what
-    /// activation's `ManifestDependency` rules evaluate against, through the same
-    /// discovered-manifest pipeline `roots` and `packages` ride.
-    fn manifest_dependencies(&self, manifest: &SourceFile<'_>) -> Vec<SmolStr> {
+    /// The dependency declarations one manifest states, every section alike —
+    /// activation's `ManifestDependency` rules evaluate against the names, and
+    /// the dependency analyses (version-skew today) read scope and requirement —
+    /// through the same discovered-manifest pipeline `roots` and `packages` ride.
+    fn manifest_dependencies(&self, manifest: &SourceFile<'_>) -> Vec<DependencyDeclaration> {
         let _ = manifest;
         Vec::new()
     }

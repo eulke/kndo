@@ -18,9 +18,13 @@ let package = Package(
     targets: [.target(name: "App")]
 )
 "#;
-    let names = a.manifest_dependencies(&SourceFile {
-        path: &ProjectPath::new("Package.swift"),
-        content: manifest,
-    });
+    let names = a
+        .manifest_dependencies(&SourceFile {
+            path: &ProjectPath::new("Package.swift"),
+            content: manifest,
+        })
+        .into_iter()
+        .map(|d| d.name)
+        .collect::<Vec<_>>();
     assert_eq!(names, vec!["local-kit", "swift-nio", "vapor"]);
 }

@@ -513,10 +513,12 @@ impl<E: Extension + Default> bindings::Guest for ExportedExtension<E> {
             path: &path,
             content: &content,
         };
+        // The ABI speaks names only; a guest's scope/requirement stay guest-side
+        // until a versioned world carries them.
         E::default()
             .manifest_dependencies(&manifest)
             .iter()
-            .map(|s| s.to_string())
+            .map(|d| d.name.to_string())
             .collect()
     }
 

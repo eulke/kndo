@@ -415,6 +415,21 @@ contract's own generated `Options` schema, and answering from a HELD session —
 analysis amortized across a conversation of lookups, refreshed by `check` (the
 tool descriptions say so; a test proves it behaviorally). One contract, two doors.
 
+The dependency family arrived measure-first (COMPARISON has the full
+decomposition of the oracle's 543 dependency findings): **`unresolved`** — a
+relative import pointing at no file, `error`, on the new `Subject::Import` —
+ships with a measured-zero noise floor (its ten corpus findings are all vite's
+own deliberate fixtures, unmodeled vite resolution features, and symlinks),
+and **`version-skew`** — diverging comparable requirements across manifests,
+`info`, peer-exempt — ships on the new `DependencyDeclaration` evidence
+(`manifest_dependencies` grew scope and requirement; activation reads the same
+stream). `undeclared` and dependency-`unused` deferred with their numbers:
+the corpus is a pathological instrument for the first (2–3 true positives vs
+a 124-finding fixture cliff) and structural evidence cannot reach zero-FP for
+the second (config-driven tooling). The resolver fixes that rode along moved
+vite 1077→913 findings — query-suffix stripping, `.d.ts`/`.mts`/`.cts` swaps,
+and `mts`/`cts` claimed at all.
+
 Eighth row: **presentation and the filter disposition**. `--quiet` (the verdict
 line alone — the exit code already carries the gate), `--verbose` (the phases
 line, from the timings that live beside the byte-pinned report), and `--color

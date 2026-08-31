@@ -17,11 +17,12 @@ mod extract;
 mod manifest;
 mod resolve;
 
-use kndo_contract::adapter::{PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile};
+use kndo_contract::adapter::{
+    DependencyDeclaration, PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile,
+};
 use kndo_contract::evidence::EvidenceSink;
 use kndo_contract::extension::{Extension, ExtensionSpec};
 use kndo_contract::vocab::ProjectPath;
-use smol_str::SmolStr;
 
 pub struct RustAdapter {
     spec: ExtensionSpec,
@@ -83,7 +84,7 @@ impl Extension for RustAdapter {
         manifest::packages(manifest, cx)
     }
 
-    fn manifest_dependencies(&self, manifest: &SourceFile<'_>) -> Vec<SmolStr> {
+    fn manifest_dependencies(&self, manifest: &SourceFile<'_>) -> Vec<DependencyDeclaration> {
         manifest::dependencies(manifest)
     }
 }

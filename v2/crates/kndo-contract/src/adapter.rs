@@ -26,6 +26,47 @@ pub struct PackageEntry {
     pub dir: SmolStr,
 }
 
+/// The manifest section a dependency declaration sits in, translated to the
+/// engine's vocabulary by the declaring adapter. Closed by design like RootKind:
+/// analyses read scopes as verdict-changing facts (peer is a contract with the
+/// consumer, never a usage claim), so an unknown scope has no honest meaning.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DependencyScope {
+    Prod,
+    Dev,
+    Build,
+    Optional,
+    Peer,
+}
+
+/// One dependency declaration as one manifest states it. `scope: None` means the
+/// ecosystem has no sections (go.mod) or the source could not say (a WASM guest
+/// speaking the names-only ABI); `version_req: None` means the manifest states no
+/// comparable requirement — a workspace/path/git/BOM-managed coordinate — and a
+/// comparison the adapter knows it could not perform must stay silent rather than
+/// diverge from every real version.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct DependencyDeclaration {
+    pub name: SmolStr,
+    pub scope: Option<DependencyScope>,
+    pub version_req: Option<SmolStr>,
+}
+
+impl DependencyDeclaration {
+    /// A declaration that carries the name and honestly nothing else — the shape
+    /// for sources that state no sections or requirements this vocabulary can
+    /// compare (go.mod, a names-only ABI guest, JVM builds pending BOM/catalog
+    /// modeling). Activation reads the name; version-skew stays silent.
+    pub fn name_only(name: SmolStr) -> Self {
+        DependencyDeclaration {
+            name,
+            scope: None,
+            version_req: None,
+        }
+    }
+}
+
 /// The project around a file, as the engine lets an adapter see it during import
 /// resolution. Grows methods only.
 pub struct ResolveContext<'a> {

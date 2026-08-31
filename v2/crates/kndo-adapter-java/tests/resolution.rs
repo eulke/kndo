@@ -145,16 +145,16 @@ fn manifest_dependencies_carry_both_spellings() {
         path: &pom,
         content: b"<project><dependencies>\n  <dependency>\n    <groupId>com.squareup.okhttp3</groupId>\n    <artifactId>okhttp</artifactId>\n  </dependency>\n</dependencies></project>",
     });
-    assert!(deps.iter().any(|d| d == "com.squareup.okhttp3:okhttp"));
-    assert!(deps.iter().any(|d| d == "okhttp"));
+    assert!(deps.iter().any(|d| d.name == "com.squareup.okhttp3:okhttp"));
+    assert!(deps.iter().any(|d| d.name == "okhttp"));
 
     let gradle = path("build.gradle");
     let deps = a.manifest_dependencies(&SourceFile {
         path: &gradle,
         content: b"dependencies {\n  implementation 'io.vertx:vertx-core:4.5.0'\n}\n",
     });
-    assert!(deps.iter().any(|d| d == "io.vertx:vertx-core"));
-    assert!(deps.iter().any(|d| d == "vertx-core"));
+    assert!(deps.iter().any(|d| d.name == "io.vertx:vertx-core"));
+    assert!(deps.iter().any(|d| d.name == "vertx-core"));
 }
 
 #[test]

@@ -598,3 +598,62 @@ Two readings the table forces, both intended:
 The scores live in each `<repo>.report.json` as the two integers plus the
 per-category tally; the 100× ratio is computed at render, one decimal, in
 `Health::score_text` — the envelope stays float-free.
+
+## The dependency family (2026-08-31)
+
+The oracle carried 543 dependency-subject findings across the corpus (undeclared
+293, deps-unused 198, version-skew 38, deps-test-only 14). The corpus experiment
+decomposed every one before anything shipped; two members ship, two defer, and
+the oracle's totals turn out to be mostly its own vices.
+
+**Shipped — `unresolved` (v2: vite 10, everything else 0).** The oracle's 79
+were dominated by vite's `playground/` (deliberately-broken resolution
+fixtures), query-suffixed specifiers (`./worker?worker&url` — 42 real edges the
+resolver now strips suffixes to keep), `.d.ts` stubs answering `.js` specifiers
+(the swap table now includes `.d.ts`, `.mts`, `.cts` — and the adapter now
+claims `mts`/`cts` sources at all), assets that exist outside the analyzed
+world (`./app.css`, `../../package.json` — the graph now carries the discovered
+set so "exists but unclaimed" never reads as "missing"), and build outputs
+(`../dist/…` — the missing target's parent directory holds no discovered file,
+so the project is deliberately reaching outside the tree). The surviving ten
+are all vite's own: three fixtures broken on purpose (`missing-file/`,
+`has-invalid-import.js`, `./foo`), four resolution features the resolver does
+not model (browser-field remaps, directory-`main`, exports-map deep imports),
+and three symlinked files (`ssr-wasm/src/*` → `../../wasm/` — discovery does
+not follow symlinks; a recorded boundary, not a bug).
+
+**Shipped — `version-skew` (v2: ripgrep 10, vite 3, all `info`).** Peer
+requirements are exempt — a wide peer range beside a narrow dev pin is CORRECT
+practice the oracle flagged as skew (its `esbuild`/`sass-embedded` findings on
+vite's best-maintained manifest). Non-comparable requirements (`workspace:*`,
+`file:`, path/git specs) arrive as `None` from the adapter and never compare.
+ripgrep's ten are real textual divergence, all semver-compatible (the
+`workspace.dependencies` nudge); vite's three are real cross-manifest drift
+(react pin-vs-caret, vue, tailwind). Exposed's oracle 4 were Writerside DOC
+SNIPPETS read as project manifests — the JVM adapters ship names without
+requirements until BOM/catalog modeling exists, so v2 reports zero there by
+construction.
+
+**Deferred — `undeclared` (oracle 289 + 4).** Deduplicated per (package, name)
+and decomposed: vite = 195 ancestor-declared (workspace hoisting the per-leaf
+model refuses to see), 124 fixture-tree packages, ~20 parser noise (imports
+inside template literals of scaffolder/transform code), 3 self-imports (legal
+via `exports` self-reference), plus ambient runtime modules (`pnpapi`,
+`@vite/env`; lodash's phantomjs `system`/`webpage`). Honest true positives on
+this corpus: **2–3** (lodash's `@playwright/test`, `marky-markdown`), against a
+124-finding fixture cliff. The rule's real-world value is not in question — the
+corpus is simply a pathological instrument for it (vite is a repository OF
+resolution edge cases). Deferred until the model carries ancestor-declaration,
+ambient-module and self-import knowledge, with a corpus addition that looks
+like an ordinary application.
+
+**Deferred — dependency `unused`/`test-only` (oracle 198 + 14).** After
+fixture, `@types/*` and script-invocation classes, vite's remainder (24) is
+dominated by config-driven tooling (`typescript`, `lint-staged`, `execa`,
+`playwright-chromium` — invoked by configs and CI, invisible to import
+evidence); lodash's (13) by HTML-runner test assets. Zero-FP is not reachable
+with structural evidence alone — the tools that do this well carry per-tool
+plugin knowledge. The oracle's numbers were noise at roughly the same ratio.
+gin's two `test-only` dependency findings name the deeper vice: go.mod has no
+dev section, so "move it to devDependencies" is advice Go cannot take —
+unactionable by construction.

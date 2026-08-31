@@ -3179,6 +3179,126 @@
         "path": "crates/core/index/enabled.rs"
       },
       "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-0a483ba4b927",
+      "category": "version-skew",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "dependency",
+        "owner_manifest": "Cargo.toml",
+        "name": "serde_json"
+      },
+      "message": "declared with diverging version requirements: Cargo.toml (1.0.23), crates/globset/Cargo.toml (1.0.107), crates/printer/Cargo.toml (1.0.107)"
+    },
+    {
+      "id": "kndo-1ad4d8b1bf63",
+      "category": "version-skew",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "dependency",
+        "owner_manifest": "Cargo.toml",
+        "name": "bstr"
+      },
+      "message": "declared with diverging version requirements: Cargo.toml (1.7.0), crates/cli/Cargo.toml (1.6.2), crates/globset/Cargo.toml (1.6.2), crates/ignore/Cargo.toml (1.6.2), crates/index/Cargo.toml (1.12.0), crates/printer/Cargo.toml (1.6.2), crates/regex/Cargo.toml (1.6.2), crates/searcher/Cargo.toml (1.6.2)"
+    },
+    {
+      "id": "kndo-66a5841394fb",
+      "category": "version-skew",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "dependency",
+        "owner_manifest": "Cargo.toml",
+        "name": "termcolor"
+      },
+      "message": "declared with diverging version requirements: Cargo.toml (1.4.0), crates/cli/Cargo.toml (1.3.0), crates/grep/Cargo.toml (1.0.4), crates/printer/Cargo.toml (1.3.0)"
+    },
+    {
+      "id": "kndo-7c1fa2126710",
+      "category": "version-skew",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "dependency",
+        "owner_manifest": "Cargo.toml",
+        "name": "log"
+      },
+      "message": "declared with diverging version requirements: Cargo.toml (0.4.5), crates/cli/Cargo.toml (0.4.20), crates/globset/Cargo.toml (0.4.20), crates/ignore/Cargo.toml (0.4.20), crates/pcre2/Cargo.toml (0.4.20), crates/printer/Cargo.toml (0.4.5), crates/regex/Cargo.toml (0.4.20), crates/searcher/Cargo.toml (0.4.20)"
+    },
+    {
+      "id": "kndo-8fb0ead6fdd0",
+      "category": "version-skew",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "dependency",
+        "owner_manifest": "Cargo.toml",
+        "name": "walkdir"
+      },
+      "message": "declared with diverging version requirements: Cargo.toml (2), crates/grep/Cargo.toml (2.2.7), crates/ignore/Cargo.toml (2.4.0)"
+    },
+    {
+      "id": "kndo-f0f43b5dfe32",
+      "category": "version-skew",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "dependency",
+        "owner_manifest": "Cargo.toml",
+        "name": "serde"
+      },
+      "message": "declared with diverging version requirements: Cargo.toml (1.0.77), crates/globset/Cargo.toml (1.0.188), crates/printer/Cargo.toml (1.0.193)"
+    },
+    {
+      "id": "kndo-f3fb83cda439",
+      "category": "version-skew",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "dependency",
+        "owner_manifest": "Cargo.toml",
+        "name": "anyhow"
+      },
+      "message": "declared with diverging version requirements: Cargo.toml (1.0.75), crates/index/Cargo.toml (1.0.103)"
+    },
+    {
+      "id": "kndo-cd665bdef95d",
+      "category": "version-skew",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "dependency",
+        "owner_manifest": "crates/cli/Cargo.toml",
+        "name": "winapi-util"
+      },
+      "message": "declared with diverging version requirements: crates/cli/Cargo.toml (0.1.6), crates/ignore/Cargo.toml (0.1.2)"
+    },
+    {
+      "id": "kndo-9a594ad6d5a1",
+      "category": "version-skew",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "dependency",
+        "owner_manifest": "crates/globset/Cargo.toml",
+        "name": "regex-syntax"
+      },
+      "message": "declared with diverging version requirements: crates/globset/Cargo.toml (0.8.0), crates/index/Cargo.toml (0.8.8), crates/regex/Cargo.toml (0.8.0)"
+    },
+    {
+      "id": "kndo-f894ecb52c8b",
+      "category": "version-skew",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "dependency",
+        "owner_manifest": "crates/globset/Cargo.toml",
+        "name": "regex-automata"
+      },
+      "message": "declared with diverging version requirements: crates/globset/Cargo.toml (0.4.18), crates/ignore/Cargo.toml (0.4.18), crates/regex/Cargo.toml (0.4.0)"
     }
   ],
   "fixed": [],

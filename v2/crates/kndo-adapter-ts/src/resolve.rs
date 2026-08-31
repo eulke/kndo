@@ -8,8 +8,15 @@ use kndo_contract::adapter::{Resolution, ResolveContext};
 use kndo_contract::vocab::ProjectPath;
 
 /// A compiled-output extension in a specifier names the SOURCE beside it — the
-/// grammar-specific swap table, spelled once.
-const COMPILED_TO_SOURCE: [(&str, &[&str]); 2] = [(".js", &[".ts", ".tsx"]), (".jsx", &[".tsx"])];
+/// grammar-specific swap table, spelled once. `.d.ts` last: a declaration file
+/// answers a `.js` specifier only when no implementation source does (the shape
+/// TS gives type stubs — `types/hot.d.ts` answering `./hot.js`).
+const COMPILED_TO_SOURCE: [(&str, &[&str]); 4] = [
+    (".js", &[".ts", ".tsx", ".d.ts"]),
+    (".jsx", &[".tsx"]),
+    (".mjs", &[".mts", ".d.mts"]),
+    (".cjs", &[".cts", ".d.cts"]),
+];
 
 pub fn resolve(
     from: &ProjectPath,
@@ -17,6 +24,11 @@ pub fn resolve(
     cx: &ResolveContext<'_>,
     exts: &[String],
 ) -> Resolution {
+    // Bundler query/fragment suffixes (`./worker?worker&url`, `./x.svg#icon`)
+    // address the same file with extra instructions — the file is what keeps
+    // things alive, so resolution sees the path alone. Measured on the corpus:
+    // 42 real edges were dying as unresolved behind their suffixes.
+    let specifier = specifier.split(['?', '#']).next().unwrap_or(specifier);
     if !specifier.starts_with('.') {
         return resolve_bare(specifier, cx, exts);
     }

@@ -188,17 +188,27 @@ thiserror = "2"
 [target.'cfg(windows)'.dependencies]
 winapi = "0.3"
 "#;
-    let mut deps: Vec<String> = RustAdapter::new()
-        .manifest_dependencies(&SourceFile {
-            path: &path,
-            content: manifest.as_bytes(),
-        })
-        .into_iter()
-        .map(|d| d.to_string())
+    let mut deps = RustAdapter::new().manifest_dependencies(&SourceFile {
+        path: &path,
+        content: manifest.as_bytes(),
+    });
+    deps.sort_by(|a, b| a.name.cmp(&b.name));
+    use kndo_contract::adapter::DependencyScope as S;
+    let brief: Vec<(&str, Option<S>, Option<&str>)> = deps
+        .iter()
+        .map(|d| (d.name.as_str(), d.scope, d.version_req.as_deref()))
         .collect();
-    deps.sort();
     assert_eq!(
-        deps,
-        ["cc", "serde", "tempfile", "thiserror", "tokio", "winapi"]
+        brief,
+        [
+            ("cc", Some(S::Build), Some("1")),
+            ("serde", Some(S::Prod), Some("1")),
+            ("tempfile", Some(S::Dev), Some("3")),
+            // The workspace pool declares a comparable requirement with no
+            // usage scope of its own.
+            ("thiserror", None, Some("2")),
+            ("tokio", Some(S::Prod), Some("1")),
+            ("winapi", Some(S::Prod), Some("0.3")),
+        ]
     );
 }

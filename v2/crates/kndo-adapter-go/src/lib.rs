@@ -19,7 +19,6 @@ use kndo_contract::adapter::{PackageEntry, Resolution, ResolveContext, SourceFil
 use kndo_contract::evidence::EvidenceSink;
 use kndo_contract::extension::{Extension, ExtensionSpec};
 use kndo_contract::vocab::ProjectPath;
-use smol_str::SmolStr;
 
 pub struct GoAdapter {
     spec: ExtensionSpec,
@@ -59,8 +58,14 @@ impl Extension for GoAdapter {
         manifest::packages(manifest, cx)
     }
 
-    fn manifest_dependencies(&self, manifest: &SourceFile<'_>) -> Vec<SmolStr> {
+    fn manifest_dependencies(
+        &self,
+        manifest: &SourceFile<'_>,
+    ) -> Vec<kndo_contract::adapter::DependencyDeclaration> {
         manifest::dependencies(manifest)
+            .into_iter()
+            .map(kndo_contract::adapter::DependencyDeclaration::name_only)
+            .collect()
     }
 
     fn sees(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {

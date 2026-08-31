@@ -48,6 +48,14 @@ pub enum Subject {
     Directory {
         path: ProjectPath,
     },
+    /// One import statement, addressed by the specifier AS WRITTEN — identity
+    /// survives the code moving (the span is carried for lines, never for
+    /// identity, the same rule Symbol follows).
+    Import {
+        path: ProjectPath,
+        specifier: SmolStr,
+        span: Span,
+    },
     Suppression {
         path: ProjectPath,
         span: Span,
@@ -70,6 +78,11 @@ impl Subject {
                 owner_manifest,
                 name,
             } => format!("{} ({name})", owner_manifest.as_str()),
+            Subject::Import {
+                path, specifier, ..
+            } => {
+                format!("{} — import '{specifier}'", path.as_str())
+            }
             Subject::Suppression { path, .. } => format!("{} — allow", path.as_str()),
         }
     }
@@ -81,6 +94,7 @@ impl Subject {
             Subject::Package { .. } => SubjectKind::Package,
             Subject::Dependency { .. } => SubjectKind::Dependency,
             Subject::Directory { .. } => SubjectKind::Directory,
+            Subject::Import { .. } => SubjectKind::Import,
             Subject::Suppression { .. } => SubjectKind::Suppression,
         }
     }
@@ -91,6 +105,7 @@ impl Subject {
             Subject::File { path }
             | Subject::Symbol { path, .. }
             | Subject::Directory { path }
+            | Subject::Import { path, .. }
             | Subject::Suppression { path, .. } => path,
             Subject::Package { manifest, .. } => manifest,
             Subject::Dependency { owner_manifest, .. } => owner_manifest,
@@ -121,6 +136,7 @@ impl FindingId {
         let symbol = match subject {
             Subject::Symbol { selector, .. } => selector.render(),
             Subject::Package { name, .. } | Subject::Dependency { name, .. } => name.to_string(),
+            Subject::Import { specifier, .. } => specifier.to_string(),
             _ => String::new(),
         };
         part(&symbol);

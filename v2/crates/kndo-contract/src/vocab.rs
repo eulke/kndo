@@ -189,6 +189,7 @@ pub enum SubjectKind {
     Package,
     Dependency,
     Directory,
+    Import,
     Suppression,
 }
 
@@ -196,6 +197,7 @@ impl SubjectKind {
     pub fn as_str(&self) -> &'static str {
         match self {
             SubjectKind::File => "file",
+            SubjectKind::Import => "import",
             SubjectKind::Symbol => "symbol",
             SubjectKind::Package => "package",
             SubjectKind::Dependency => "dependency",

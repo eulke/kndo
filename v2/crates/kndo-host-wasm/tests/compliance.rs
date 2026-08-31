@@ -411,7 +411,10 @@ fn the_manifest_hook_gets_bytes_and_no_project_surface() {
             path: &kndo_contract::vocab::ProjectPath::new("manifest.rude"),
             content: b"files\n",
         },
-    );
+    )
+    .into_iter()
+    .map(|d| d.name)
+    .collect::<Vec<_>>();
     assert!(
         names.is_empty(),
         "a trapped manifest read degrades to no names, never to data"

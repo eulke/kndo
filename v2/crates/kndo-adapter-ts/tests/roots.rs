@@ -3,6 +3,7 @@
 //! anchor nothing.
 
 use kndo_adapter_ts::TypeScriptAdapter;
+use kndo_contract::adapter::DependencyScope;
 use kndo_contract::adapter::{ResolveContext, SourceFile};
 use kndo_contract::evidence::{EvidenceSink, RootKind, RootTarget};
 use kndo_contract::extension::Extension;
@@ -221,16 +222,26 @@ fn manifest_dependencies_report_every_section() {
         "optionalDependencies": { "fsevents": "^2" },
         "scripts": { "not-a-dep": "echo" }
     }"#;
-    let mut deps: Vec<String> = TypeScriptAdapter::new()
-        .manifest_dependencies(&SourceFile {
-            path: &path,
-            content: json.as_bytes(),
-        })
-        .into_iter()
-        .map(|d| d.to_string())
+    let mut deps = TypeScriptAdapter::new().manifest_dependencies(&SourceFile {
+        path: &path,
+        content: json.as_bytes(),
+    });
+    deps.sort_by(|a, b| a.name.cmp(&b.name));
+    let brief: Vec<(&str, Option<DependencyScope>, Option<&str>)> = deps
+        .iter()
+        .map(|d| (d.name.as_str(), d.scope, d.version_req.as_deref()))
         .collect();
-    deps.sort();
-    assert_eq!(deps, ["express", "fsevents", "lodash", "react", "vitest"]);
+    assert_eq!(
+        brief,
+        [
+            ("express", Some(DependencyScope::Prod), Some("^4")),
+            ("fsevents", Some(DependencyScope::Optional), Some("^2")),
+            // `*` names no comparable requirement — silence over false skew.
+            ("lodash", Some(DependencyScope::Prod), None),
+            ("react", Some(DependencyScope::Peer), Some(">=18")),
+            ("vitest", Some(DependencyScope::Dev), Some("^1")),
+        ]
+    );
     assert!(
         TypeScriptAdapter::new()
             .manifest_dependencies(&SourceFile {

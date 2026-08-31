@@ -18,16 +18,24 @@ dev = [
     "pytest",
 ]
 "#;
-    let names = a.manifest_dependencies(&SourceFile {
-        path: &ProjectPath::new("pyproject.toml"),
-        content: pyproject,
-    });
+    let names = a
+        .manifest_dependencies(&SourceFile {
+            path: &ProjectPath::new("pyproject.toml"),
+            content: pyproject,
+        })
+        .into_iter()
+        .map(|d| d.name)
+        .collect::<Vec<_>>();
     assert_eq!(names, vec!["flask", "pytest", "sqlalchemy"]);
 
     let reqs = b"# comment\nflask==3.0\nblinker>=1.6\n-r other.txt\n";
-    let names = a.manifest_dependencies(&SourceFile {
-        path: &ProjectPath::new("requirements.txt"),
-        content: reqs,
-    });
+    let names = a
+        .manifest_dependencies(&SourceFile {
+            path: &ProjectPath::new("requirements.txt"),
+            content: reqs,
+        })
+        .into_iter()
+        .map(|d| d.name)
+        .collect::<Vec<_>>();
     assert_eq!(names, vec!["blinker", "flask"]);
 }

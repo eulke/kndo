@@ -20,7 +20,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Bump when the SAME evidence assembles into a DIFFERENT graph — resolution
 /// candidate changes, reachability semantics, new assembled fields. Folded into the
 /// graph cache key beside the contract fingerprint and the adapter set.
-pub const GRAPH_SEMANTICS_VERSION: u32 = 5;
+pub const GRAPH_SEMANTICS_VERSION: u32 = 6;
 
 #[derive(Serialize, Deserialize)]
 pub struct GraphFile {
@@ -70,6 +70,23 @@ impl GraphFile {
 #[derive(Serialize, Deserialize)]
 pub struct Graph {
     pub files: Vec<GraphFile>,
+    /// Every discovered manifest's dependency declarations, path-sorted — the
+    /// raw material of the manifest-to-manifest analyses (version-skew), built
+    /// from the same [`for_each_manifest`] pipeline activation reads, so the
+    /// two can never disagree about what a manifest declares.
+    pub manifest_declarations: Vec<ManifestDeclarations>,
+    /// Every discovered path, claimed or not, sorted — the tree as discovery
+    /// saw it. `unresolved` reads it to tell "no such file" (a defect) from "a
+    /// file outside the analyzed world" (an asset, a manifest — not missing).
+    pub discovered: Vec<ProjectPath>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ManifestDeclarations {
+    pub manifest: ProjectPath,
+    /// Sorted by name, then scope order, then requirement — deterministic
+    /// whatever order the manifest stated them in.
+    pub declarations: Vec<kndo_contract::adapter::DependencyDeclaration>,
 }
 
 impl Graph {
@@ -139,7 +156,57 @@ pub fn assemble(
 
     anchor_manifest_roots(files, adapters, &cx, &mut graph_files);
 
-    Graph { files: graph_files }
+    let manifest_declarations = collect_manifest_declarations(files, adapters);
+    let mut discovered: Vec<ProjectPath> = files.iter().map(|f| f.path.clone()).collect();
+    discovered.sort();
+    Graph {
+        files: graph_files,
+        manifest_declarations,
+        discovered,
+    }
+}
+
+/// One entry per declaring manifest, path-sorted, declarations name-sorted —
+/// the deterministic projection of every adapter's `manifest_dependencies`.
+fn collect_manifest_declarations(
+    files: &[DiscoveredFile],
+    adapters: &[Box<dyn Extension>],
+) -> Vec<ManifestDeclarations> {
+    let mut by_manifest: std::collections::BTreeMap<
+        ProjectPath,
+        Vec<kndo_contract::adapter::DependencyDeclaration>,
+    > = std::collections::BTreeMap::new();
+    for_each_manifest(files, adapters, |adapter, manifest| {
+        let declarations = adapter.manifest_dependencies(&manifest);
+        if !declarations.is_empty() {
+            by_manifest
+                .entry(manifest.path.clone())
+                .or_default()
+                .extend(declarations);
+        }
+    });
+    by_manifest
+        .into_iter()
+        .map(|(manifest, mut declarations)| {
+            declarations.sort_by(|a, b| {
+                (
+                    a.name.as_str(),
+                    a.scope.map(|s| s as u8),
+                    a.version_req.as_deref(),
+                )
+                    .cmp(&(
+                        b.name.as_str(),
+                        b.scope.map(|s| s as u8),
+                        b.version_req.as_deref(),
+                    ))
+            });
+            declarations.dedup();
+            ManifestDeclarations {
+                manifest,
+                declarations,
+            }
+        })
+        .collect()
 }
 
 fn adapter_by_id<'a>(adapters: &'a [Box<dyn Extension>], id: &str) -> &'a dyn Extension {

@@ -625,6 +625,31 @@
           ]
         },
         {
+          "description": "One import statement, addressed by the specifier AS WRITTEN — identity\nsurvives the code moving (the span is carried for lines, never for\nidentity, the same rule Symbol follows).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "import"
+            },
+            "path": {
+              "$ref": "#/$defs/ProjectPath"
+            },
+            "span": {
+              "$ref": "#/$defs/Span"
+            },
+            "specifier": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "path",
+            "specifier",
+            "span"
+          ]
+        },
+        {
           "type": "object",
           "properties": {
             "kind": {

@@ -5,7 +5,9 @@
 //! Unparseable or dangling entries degrade to absence: a root that anchors nothing
 //! accuses nothing.
 
-use kndo_contract::adapter::{PackageEntry, ProjectRoot, ResolveContext, SourceFile};
+use kndo_contract::adapter::{
+    DependencyDeclaration, DependencyScope, PackageEntry, ProjectRoot, ResolveContext, SourceFile,
+};
 use kndo_contract::evidence::RootKind;
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use smol_str::SmolStr;
@@ -123,29 +125,56 @@ pub fn packages(manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<Packa
 /// reads: the three top-level sections, `[workspace.dependencies]`, and the same
 /// sections under each `[target.…]`. Names are the table keys (what the project's
 /// code refers to). Activation evidence for plugin `ManifestDependency` rules.
-pub fn dependencies(manifest: &SourceFile<'_>) -> Vec<SmolStr> {
-    const SECTIONS: [&str; 3] = ["dependencies", "dev-dependencies", "build-dependencies"];
+pub fn dependencies(manifest: &SourceFile<'_>) -> Vec<DependencyDeclaration> {
+    const SECTIONS: [(&str, DependencyScope); 3] = [
+        ("dependencies", DependencyScope::Prod),
+        ("dev-dependencies", DependencyScope::Dev),
+        ("build-dependencies", DependencyScope::Build),
+    ];
     let Some(toml) = parse(manifest.content) else {
         return Vec::new();
     };
     let mut out = Vec::new();
-    let mut collect = |table: Option<&toml::Value>| {
+    let mut collect = |table: Option<&toml::Value>, scope: Option<DependencyScope>| {
         if let Some(toml::Value::Table(map)) = table {
-            out.extend(map.keys().map(SmolStr::new));
+            for (name, spec) in map {
+                out.push(DependencyDeclaration {
+                    name: SmolStr::new(name),
+                    scope,
+                    version_req: comparable_req(spec),
+                });
+            }
         }
     };
-    for section in SECTIONS {
-        collect(toml.get(section));
+    for (section, scope) in SECTIONS {
+        collect(toml.get(section), Some(scope));
     }
-    collect(toml.get("workspace").and_then(|w| w.get("dependencies")));
+    // The workspace pool: a real declaring site version-skew compares against a
+    // member's own requirement, but not a usage scope — members opt in per name.
+    collect(
+        toml.get("workspace").and_then(|w| w.get("dependencies")),
+        None,
+    );
     if let Some(toml::Value::Table(targets)) = toml.get("target") {
         for target in targets.values() {
-            for section in SECTIONS {
-                collect(target.get(section));
+            for (section, scope) in SECTIONS {
+                collect(target.get(section), Some(scope));
             }
         }
     }
     out
+}
+
+/// The requirement one dependency spec states, when it states one at all: the
+/// bare-string form, or a table's `version` key. A path/git/workspace-inherited
+/// spec names a resolution mechanism, not a version — a comparison the manifest
+/// does not enable must stay silent instead of diverging from every real one.
+fn comparable_req(spec: &toml::Value) -> Option<SmolStr> {
+    match spec {
+        toml::Value::String(req) => Some(SmolStr::new(req)),
+        toml::Value::Table(t) => t.get("version").and_then(|v| v.as_str()).map(SmolStr::new),
+        _ => None,
+    }
 }
 
 fn lib_entry(toml: &toml::Value, dir: &str) -> Option<ProjectPath> {
