@@ -98,6 +98,8 @@ fn level(severity: Severity) -> &'static str {
 fn location_of(finding: &Finding) -> Location {
     let region = match &finding.subject {
         Subject::Symbol { span, .. } | Subject::Suppression { span, .. } => Some(Region {
+            start_line: finding.lines.map(|l| l.start),
+            end_line: finding.lines.map(|l| l.end),
             byte_offset: span.start,
             byte_length: span.end - span.start,
         }),
@@ -201,9 +203,16 @@ struct ArtifactLocation {
     uri: String,
 }
 
+/// Line properties when the engine resolved them (exact — newline-counted), plus
+/// the byte-true span always. Columns are deliberately absent: SARIF counts them
+/// in UTF-16 units, and a slightly-wrong column is worse than none.
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Region {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    start_line: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    end_line: Option<u32>,
     byte_offset: u32,
     byte_length: u32,
 }

@@ -34,6 +34,18 @@ impl Severity {
     }
 }
 
+/// 1-based, inclusive line range — display data the engine derives from the
+/// subject's byte span against the file's actual newlines. Lines are exact in any
+/// encoding (a newline is one byte); columns are deliberately absent — every
+/// interchange format counts them in its own unit, and a slightly-wrong column is
+/// worse than none.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct LineSpan {
+    pub start: u32,
+    pub end: u32,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Finding {
@@ -42,6 +54,10 @@ pub struct Finding {
     pub severity: Severity,
     pub confidence: Confidence,
     pub subject: Subject,
+    /// Where the subject's span sits in its file, when the subject has one.
+    /// Never identity: moving code changes lines and must not change the finding.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub lines: Option<LineSpan>,
     pub message: String,
 }
 
@@ -60,7 +76,22 @@ impl Finding {
             severity,
             confidence,
             subject,
+            lines: None,
             message: message.into(),
+        }
+    }
+
+    /// The one display spelling of WHERE this finding points: the subject's
+    /// rendering, with `:line` after the path when the engine resolved one.
+    pub fn location(&self) -> String {
+        match (&self.subject, self.lines) {
+            (Subject::Symbol { path, selector, .. }, Some(lines)) => {
+                format!("{}:{} — {}", path.as_str(), lines.start, selector.render())
+            }
+            (Subject::Suppression { path, .. }, Some(lines)) => {
+                format!("{}:{} — allow", path.as_str(), lines.start)
+            }
+            _ => self.subject.render(),
         }
     }
 }

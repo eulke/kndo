@@ -32,6 +32,10 @@
           "end": 3837
         }
       },
+      "lines": {
+        "start": 98,
+        "end": 116
+      },
       "message": "structural clone of auth.go:BasicAuthForRealm"
     },
     {
@@ -49,6 +53,10 @@
           "start": 2757,
           "end": 3285
         }
+      },
+      "lines": {
+        "start": 109,
+        "end": 122
       },
       "message": "structural clone of benchmarks_test.go:Benchmark404"
     },
@@ -68,6 +76,10 @@
           "end": 33291
         }
       },
+      "lines": {
+        "start": 1204,
+        "end": 1215
+      },
       "message": "structural clone of binding/binding_test.go:testQueryBindingFail"
     },
     {
@@ -85,6 +97,10 @@
           "start": 21705,
           "end": 21952
         }
+      },
+      "lines": {
+        "start": 779,
+        "end": 788
       },
       "message": "structural clone of binding/binding_test.go:TestRequiredSucceeds"
     },
@@ -104,6 +120,10 @@
           "end": 16225
         }
       },
+      "lines": {
+        "start": 556,
+        "end": 579
+      },
       "message": "structural clone of binding/binding_test.go:createFormFilesMultipartRequest"
     },
     {
@@ -121,6 +141,10 @@
           "start": 27996,
           "end": 28500
         }
+      },
+      "lines": {
+        "start": 1018,
+        "end": 1034
       },
       "message": "structural clone of binding/binding_test.go:testFormBindingForTimeNotUnixFormat"
     },
@@ -140,6 +164,10 @@
           "end": 20752
         }
       },
+      "lines": {
+        "start": 726,
+        "end": 736
+      },
       "message": "structural clone of binding/binding_test.go:TestBindingProtoBuf"
     },
     {
@@ -157,6 +185,10 @@
           "start": 14516,
           "end": 14773
         }
+      },
+      "lines": {
+        "start": 524,
+        "end": 529
       },
       "message": "structural clone of binding/binding_test.go:createFormPostRequest"
     },
@@ -176,6 +208,10 @@
           "end": 24907
         }
       },
+      "lines": {
+        "start": 894,
+        "end": 912
+      },
       "message": "structural clone of binding/binding_test.go:testFormBinding"
     },
     {
@@ -193,6 +229,10 @@
           "start": 27493,
           "end": 27994
         }
+      },
+      "lines": {
+        "start": 1000,
+        "end": 1016
       },
       "message": "structural clone of binding/binding_test.go:testFormBindingForTimeNotUnixFormat"
     },
@@ -212,6 +252,10 @@
           "end": 30373
         }
       },
+      "lines": {
+        "start": 1088,
+        "end": 1104
+      },
       "message": "structural clone of binding/binding_test.go:testFormBindingForTimeNotUnixFormat"
     },
     {
@@ -229,6 +273,10 @@
           "start": 13996,
           "end": 14251
         }
+      },
+      "lines": {
+        "start": 510,
+        "end": 515
       },
       "message": "structural clone of binding/binding_test.go:createFormPostRequest"
     },
@@ -248,6 +296,10 @@
           "end": 19692
         }
       },
+      "lines": {
+        "start": 687,
+        "end": 695
+      },
       "message": "structural clone of binding/binding_test.go:TestBindingFormPost"
     },
     {
@@ -265,6 +317,10 @@
           "start": 25496,
           "end": 25730
         }
+      },
+      "lines": {
+        "start": 935,
+        "end": 943
       },
       "message": "structural clone of binding/binding_test.go:TestFormBindingFail"
     },
@@ -284,6 +340,10 @@
           "end": 25980
         }
       },
+      "lines": {
+        "start": 945,
+        "end": 953
+      },
       "message": "structural clone of binding/binding_test.go:TestFormBindingFail"
     },
     {
@@ -301,6 +361,10 @@
           "start": 28502,
           "end": 29012
         }
+      },
+      "lines": {
+        "start": 1036,
+        "end": 1052
       },
       "message": "structural clone of binding/binding_test.go:testFormBindingForTimeNotUnixFormat"
     },
@@ -320,6 +384,10 @@
           "end": 25902
         }
       },
+      "lines": {
+        "start": 896,
+        "end": 903
+      },
       "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomSliceOfSliceUri"
     },
     {
@@ -337,6 +405,10 @@
           "start": 3808,
           "end": 3995
         }
+      },
+      "lines": {
+        "start": 149,
+        "end": 156
       },
       "message": "structural clone of binding/form_mapping_test.go:TestMappingURI"
     },
@@ -356,6 +428,10 @@
           "end": 28895
         }
       },
+      "lines": {
+        "start": 978,
+        "end": 988
+      },
       "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomArrayOfArrayUri"
     },
     {
@@ -373,6 +449,10 @@
           "start": 17883,
           "end": 18157
         }
+      },
+      "lines": {
+        "start": 627,
+        "end": 636
       },
       "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomSliceUri"
     },
@@ -392,6 +472,10 @@
           "end": 20919
         }
       },
+      "lines": {
+        "start": 728,
+        "end": 738
+      },
       "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomArrayOfArrayUri"
     },
     {
@@ -409,6 +493,10 @@
           "start": 21582,
           "end": 21863
         }
+      },
+      "lines": {
+        "start": 765,
+        "end": 772
       },
       "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomUnmarshalParamHexWithFormTag"
     },
@@ -428,6 +516,10 @@
           "end": 26299
         }
       },
+      "lines": {
+        "start": 905,
+        "end": 912
+      },
       "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomSliceOfSliceUri"
     },
     {
@@ -445,6 +537,10 @@
           "start": 25191,
           "end": 25508
         }
+      },
+      "lines": {
+        "start": 887,
+        "end": 894
       },
       "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomSliceStopsWhenError"
     },
@@ -464,6 +560,10 @@
           "end": 24855
         }
       },
+      "lines": {
+        "start": 865,
+        "end": 874
+      },
       "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomSliceUri"
     },
     {
@@ -481,6 +581,10 @@
           "start": 21865,
           "end": 22158
         }
+      },
+      "lines": {
+        "start": 774,
+        "end": 781
       },
       "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomUnmarshalParamHexDefault"
     },
@@ -500,6 +604,10 @@
           "end": 17390
         }
       },
+      "lines": {
+        "start": 591,
+        "end": 601
+      },
       "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomPointerStructTypeWithFormTag"
     },
     {
@@ -517,6 +625,10 @@
           "start": 23382,
           "end": 23796
         }
+      },
+      "lines": {
+        "start": 826,
+        "end": 836
       },
       "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomPointerStructTypeWithFormTag"
     },
@@ -536,6 +648,10 @@
           "end": 20086
         }
       },
+      "lines": {
+        "start": 704,
+        "end": 714
+      },
       "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomArrayUri"
     },
     {
@@ -553,6 +669,10 @@
           "start": 21302,
           "end": 21580
         }
+      },
+      "lines": {
+        "start": 756,
+        "end": 763
       },
       "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomUnmarshalParamHexWithFormTag"
     },
@@ -572,6 +692,10 @@
           "end": 23380
         }
       },
+      "lines": {
+        "start": 814,
+        "end": 824
+      },
       "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomStructTypeWithFormTag"
     },
     {
@@ -589,6 +713,10 @@
           "start": 30318,
           "end": 30943
         }
+      },
+      "lines": {
+        "start": 1022,
+        "end": 1035
       },
       "message": "structural clone of binding/form_mapping_test.go:TestMappingUsingBindUnmarshalerAndTextUnmarshalerWhenOnlyBindUnmarshalerDefined"
     },
@@ -608,6 +736,10 @@
           "end": 19067
         }
       },
+      "lines": {
+        "start": 656,
+        "end": 663
+      },
       "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomSliceOfSliceUri"
     },
     {
@@ -625,6 +757,10 @@
           "start": 27493,
           "end": 27856
         }
+      },
+      "lines": {
+        "start": 954,
+        "end": 964
       },
       "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomArrayUri"
     },
@@ -644,6 +780,10 @@
           "end": 3211
         }
       },
+      "lines": {
+        "start": 109,
+        "end": 119
+      },
       "message": "structural clone of binding/form_mapping_test.go:TestMappingIgnoreField"
     },
     {
@@ -661,6 +801,10 @@
           "start": 23798,
           "end": 24209
         }
+      },
+      "lines": {
+        "start": 838,
+        "end": 848
       },
       "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomPointerStructTypeWithFormTag"
     },
@@ -680,6 +824,10 @@
           "end": 25189
         }
       },
+      "lines": {
+        "start": 876,
+        "end": 885
+      },
       "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomSliceUri"
     },
     {
@@ -697,6 +845,10 @@
           "start": 15051,
           "end": 15299
         }
+      },
+      "lines": {
+        "start": 518,
+        "end": 526
       },
       "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomUnmarshalParamHexWithFormTag"
     },
@@ -716,6 +868,10 @@
           "end": 28374
         }
       },
+      "lines": {
+        "start": 966,
+        "end": 976
+      },
       "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomArrayOfArrayUri"
     },
     {
@@ -733,6 +889,10 @@
           "start": 22569,
           "end": 22975
         }
+      },
+      "lines": {
+        "start": 802,
+        "end": 812
       },
       "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomStructTypeWithFormTag"
     },
@@ -752,6 +912,10 @@
           "end": 16635
         }
       },
+      "lines": {
+        "start": 567,
+        "end": 577
+      },
       "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomStructTypeWithFormTag"
     },
     {
@@ -769,6 +933,10 @@
           "start": 27131,
           "end": 27491
         }
+      },
+      "lines": {
+        "start": 942,
+        "end": 952
       },
       "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomArrayUri"
     },
@@ -788,6 +956,10 @@
           "end": 559
         }
       },
+      "lines": {
+        "start": 14,
+        "end": 25
+      },
       "message": "structural clone of binding/toml_test.go:TestTOMLBindingBindBody"
     },
     {
@@ -805,6 +977,10 @@
           "start": 80608,
           "end": 81109
         }
+      },
+      "lines": {
+        "start": 2560,
+        "end": 2575
       },
       "message": "structural clone of context_test.go:TestContextBindWithYAML"
     },
@@ -824,6 +1000,10 @@
           "end": 78213
         }
       },
+      "lines": {
+        "start": 2456,
+        "end": 2475
+      },
       "message": "structural clone of context_test.go:TestContextBindWithJSON"
     },
     {
@@ -841,6 +1021,10 @@
           "start": 78897,
           "end": 79526
         }
+      },
+      "lines": {
+        "start": 2501,
+        "end": 2521
       },
       "message": "structural clone of context_test.go:TestContextBindHeader"
     },
@@ -860,6 +1044,10 @@
           "end": 18319
         }
       },
+      "lines": {
+        "start": 620,
+        "end": 626
+      },
       "message": "structural clone of context_test.go:TestContextGetIntSlice"
     },
     {
@@ -877,6 +1065,10 @@
           "start": 51165,
           "end": 51495
         }
+      },
+      "lines": {
+        "start": 1616,
+        "end": 1625
       },
       "message": "structural clone of context_test.go:TestContextRenderYAML"
     },
@@ -896,6 +1088,10 @@
           "end": 18534
         }
       },
+      "lines": {
+        "start": 628,
+        "end": 634
+      },
       "message": "structural clone of context_test.go:TestContextGetIntSlice"
     },
     {
@@ -913,6 +1109,10 @@
           "start": 77138,
           "end": 77643
         }
+      },
+      "lines": {
+        "start": 2439,
+        "end": 2454
       },
       "message": "structural clone of context_test.go:TestContextBindWithJSON"
     },
@@ -932,6 +1132,10 @@
           "end": 78895
         }
       },
+      "lines": {
+        "start": 2477,
+        "end": 2499
+      },
       "message": "structural clone of context_test.go:TestContextBindPlain"
     },
     {
@@ -949,6 +1153,10 @@
           "start": 18751,
           "end": 18964
         }
+      },
+      "lines": {
+        "start": 644,
+        "end": 650
       },
       "message": "structural clone of context_test.go:TestContextGetIntSlice"
     },
@@ -968,6 +1176,10 @@
           "end": 80606
         }
       },
+      "lines": {
+        "start": 2543,
+        "end": 2558
+      },
       "message": "structural clone of context_test.go:TestContextBindWithYAML"
     },
     {
@@ -985,6 +1197,10 @@
           "start": 85205,
           "end": 86674
         }
+      },
+      "lines": {
+        "start": 2739,
+        "end": 2801
       },
       "message": "structural clone of context_test.go:TestContextShouldBindBodyWithJSON"
     },
@@ -1004,6 +1220,10 @@
           "end": 56544
         }
       },
+      "lines": {
+        "start": 1762,
+        "end": 1775
+      },
       "message": "structural clone of context_test.go:TestContextNegotiationWithYAML"
     },
     {
@@ -1021,6 +1241,10 @@
           "start": 18966,
           "end": 19183
         }
+      },
+      "lines": {
+        "start": 652,
+        "end": 658
       },
       "message": "structural clone of context_test.go:TestContextGetIntSlice"
     },
@@ -1040,6 +1264,10 @@
           "end": 88256
         }
       },
+      "lines": {
+        "start": 2803,
+        "end": 2866
+      },
       "message": "structural clone of context_test.go:TestContextShouldBindBodyWithJSON"
     },
     {
@@ -1057,6 +1285,10 @@
           "start": 79528,
           "end": 80107
         }
+      },
+      "lines": {
+        "start": 2523,
+        "end": 2541
       },
       "message": "structural clone of context_test.go:TestContextBindWithQuery"
     },
@@ -1076,6 +1308,10 @@
           "end": 44116
         }
       },
+      "lines": {
+        "start": 1400,
+        "end": 1409
+      },
       "message": "structural clone of context_test.go:TestContextRenderNoContentJSON"
     },
     {
@@ -1093,6 +1329,10 @@
           "start": 19185,
           "end": 19402
         }
+      },
+      "lines": {
+        "start": 660,
+        "end": 666
       },
       "message": "structural clone of context_test.go:TestContextGetIntSlice"
     },
@@ -1112,6 +1352,10 @@
           "end": 63700
         }
       },
+      "lines": {
+        "start": 1976,
+        "end": 2000
+      },
       "message": "structural clone of context_test.go:TestContextAbortWithStatusJSON"
     },
     {
@@ -1129,6 +1373,10 @@
           "start": 43404,
           "end": 43743
         }
+      },
+      "lines": {
+        "start": 1388,
+        "end": 1397
       },
       "message": "structural clone of context_test.go:TestContextRenderNoContentJSON"
     },
@@ -1148,6 +1396,10 @@
           "end": 40725
         }
       },
+      "lines": {
+        "start": 1309,
+        "end": 1318
+      },
       "message": "structural clone of context_test.go:TestContextRenderNoContentSecureJSON"
     },
     {
@@ -1165,6 +1417,10 @@
           "start": 72847,
           "end": 73406
         }
+      },
+      "lines": {
+        "start": 2286,
+        "end": 2305
       },
       "message": "structural clone of context_test.go:TestContextBindWithJSON"
     },
@@ -1184,6 +1440,10 @@
           "end": 17690
         }
       },
+      "lines": {
+        "start": 596,
+        "end": 602
+      },
       "message": "structural clone of context_test.go:TestContextGetIntSlice"
     },
     {
@@ -1201,6 +1461,10 @@
           "start": 75603,
           "end": 76094
         }
+      },
+      "lines": {
+        "start": 2386,
+        "end": 2401
       },
       "message": "structural clone of context_test.go:TestContextBindWithYAML"
     },
@@ -1220,6 +1484,10 @@
           "end": 17901
         }
       },
+      "lines": {
+        "start": 604,
+        "end": 610
+      },
       "message": "structural clone of context_test.go:TestContextGetIntSlice"
     },
     {
@@ -1237,6 +1505,10 @@
           "start": 18536,
           "end": 18749
         }
+      },
+      "lines": {
+        "start": 636,
+        "end": 642
       },
       "message": "structural clone of context_test.go:TestContextGetIntSlice"
     },
@@ -1256,6 +1528,10 @@
           "end": 47548
         }
       },
+      "lines": {
+        "start": 1504,
+        "end": 1513
+      },
       "message": "structural clone of context_test.go:TestContextRenderData"
     },
     {
@@ -1273,6 +1549,10 @@
           "start": 76675,
           "end": 77136
         }
+      },
+      "lines": {
+        "start": 2424,
+        "end": 2437
       },
       "message": "structural clone of context_test.go:TestContextAutoBindJSON"
     },
@@ -1292,6 +1572,10 @@
           "end": 18108
         }
       },
+      "lines": {
+        "start": 612,
+        "end": 618
+      },
       "message": "structural clone of context_test.go:TestContextGetIntSlice"
     },
     {
@@ -1309,6 +1593,10 @@
           "start": 6252,
           "end": 6815
         }
+      },
+      "lines": {
+        "start": 218,
+        "end": 234
       },
       "message": "structural clone of context_test.go:TestContextFormFile"
     },
@@ -1328,6 +1616,10 @@
           "end": 17479
         }
       },
+      "lines": {
+        "start": 588,
+        "end": 594
+      },
       "message": "structural clone of context_test.go:TestContextGetIntSlice"
     },
     {
@@ -1345,6 +1637,10 @@
           "start": 42845,
           "end": 43287
         }
+      },
+      "lines": {
+        "start": 1373,
+        "end": 1384
       },
       "message": "structural clone of context_test.go:TestContextRenderHTML"
     },
@@ -1364,6 +1660,10 @@
           "end": 45771
         }
       },
+      "lines": {
+        "start": 1452,
+        "end": 1461
+      },
       "message": "structural clone of context_test.go:TestContextRenderString"
     },
     {
@@ -1381,6 +1681,10 @@
           "start": 53611,
           "end": 53978
         }
+      },
+      "lines": {
+        "start": 1694,
+        "end": 1704
       },
       "message": "structural clone of context_test.go:TestContextRenderRedirectWithAbsolutePath"
     },
@@ -1400,6 +1704,10 @@
           "end": 17268
         }
       },
+      "lines": {
+        "start": 580,
+        "end": 586
+      },
       "message": "structural clone of context_test.go:TestContextGetIntSlice"
     },
     {
@@ -1417,6 +1725,10 @@
           "start": 46347,
           "end": 46746
         }
+      },
+      "lines": {
+        "start": 1478,
+        "end": 1488
       },
       "message": "structural clone of context_test.go:TestContextRenderHTMLString"
     },
@@ -1436,6 +1748,10 @@
           "end": 1296
         }
       },
+      "lines": {
+        "start": 47,
+        "end": 58
+      },
       "message": "structural clone of ginS/gins_test.go:TestGET"
     },
     {
@@ -1453,6 +1769,10 @@
           "start": 1623,
           "end": 1941
         }
+      },
+      "lines": {
+        "start": 73,
+        "end": 84
       },
       "message": "structural clone of ginS/gins_test.go:TestGET"
     },
@@ -1472,6 +1792,10 @@
           "end": 5589
         }
       },
+      "lines": {
+        "start": 227,
+        "end": 235
+      },
       "message": "structural clone of ginS/gins_test.go:TestStaticFile"
     },
     {
@@ -1489,6 +1813,10 @@
           "start": 663,
           "end": 986
         }
+      },
+      "lines": {
+        "start": 34,
+        "end": 45
       },
       "message": "structural clone of ginS/gins_test.go:TestGET"
     },
@@ -1508,6 +1836,10 @@
           "end": 2840
         }
       },
+      "lines": {
+        "start": 111,
+        "end": 122
+      },
       "message": "structural clone of ginS/gins_test.go:TestGET"
     },
     {
@@ -1525,6 +1857,10 @@
           "start": 1943,
           "end": 2271
         }
+      },
+      "lines": {
+        "start": 86,
+        "end": 97
       },
       "message": "structural clone of ginS/gins_test.go:TestGET"
     },
@@ -1544,6 +1880,10 @@
           "end": 1621
         }
       },
+      "lines": {
+        "start": 60,
+        "end": 71
+      },
       "message": "structural clone of ginS/gins_test.go:TestGET"
     },
     {
@@ -1561,6 +1901,10 @@
           "start": 7884,
           "end": 8457
         }
+      },
+      "lines": {
+        "start": 282,
+        "end": 296
       },
       "message": "structural clone of gin_integration_test.go:TestRunTLS"
     },
@@ -1580,6 +1924,10 @@
           "end": 2807
         }
       },
+      "lines": {
+        "start": 123,
+        "end": 141
+      },
       "message": "structural clone of gin_test.go:TestLoadHTMLGlobDebugMode"
     },
     {
@@ -1597,6 +1945,10 @@
           "start": 12393,
           "end": 13142
         }
+      },
+      "lines": {
+        "start": 547,
+        "end": 571
       },
       "message": "structural clone of gin_test.go:TestNoRouteWithGlobalHandlers"
     },
@@ -1616,6 +1968,10 @@
           "end": 20822
         }
       },
+      "lines": {
+        "start": 834,
+        "end": 848
+      },
       "message": "structural clone of gin_test.go:TestEngineHandleContextUseEscapedPathPercentEncoded"
     },
     {
@@ -1633,6 +1989,10 @@
           "start": 8336,
           "end": 8695
         }
+      },
+      "lines": {
+        "start": 417,
+        "end": 435
       },
       "message": "structural clone of gin_test.go:TestLoadHTMLFSTestMode"
     },
@@ -1652,6 +2012,10 @@
           "end": 4126
         }
       },
+      "lines": {
+        "start": 190,
+        "end": 208
+      },
       "message": "structural clone of gin_test.go:TestLoadHTMLGlobDebugMode"
     },
     {
@@ -1669,6 +2033,10 @@
           "start": 6190,
           "end": 6587
         }
+      },
+      "lines": {
+        "start": 308,
+        "end": 326
       },
       "message": "structural clone of gin_test.go:TestLoadHTMLFilesTestMode"
     },
@@ -1688,6 +2056,10 @@
           "end": 7740
         }
       },
+      "lines": {
+        "start": 370,
+        "end": 388
+      },
       "message": "structural clone of gin_test.go:TestLoadHTMLFSTestMode"
     },
     {
@@ -1705,6 +2077,10 @@
           "start": 13144,
           "end": 14173
         }
+      },
+      "lines": {
+        "start": 573,
+        "end": 602
       },
       "message": "structural clone of gin_test.go:TestNoRouteWithGlobalHandlers"
     },
@@ -1724,6 +2100,10 @@
           "end": 7367
         }
       },
+      "lines": {
+        "start": 350,
+        "end": 368
+      },
       "message": "structural clone of gin_test.go:TestLoadHTMLFSTestMode"
     },
     {
@@ -1741,6 +2121,10 @@
           "start": 11657,
           "end": 12391
         }
+      },
+      "lines": {
+        "start": 525,
+        "end": 545
       },
       "message": "structural clone of gin_test.go:TestNoRouteWithoutGlobalHandlers"
     },
@@ -1760,6 +2144,10 @@
           "end": 5556
         }
       },
+      "lines": {
+        "start": 261,
+        "end": 279
+      },
       "message": "structural clone of gin_test.go:TestLoadHTMLFilesTestMode"
     },
     {
@@ -1777,6 +2165,10 @@
           "start": 4740,
           "end": 5145
         }
+      },
+      "lines": {
+        "start": 241,
+        "end": 259
       },
       "message": "structural clone of gin_test.go:TestLoadHTMLFilesTestMode"
     },
@@ -1796,6 +2188,10 @@
           "end": 3175
         }
       },
+      "lines": {
+        "start": 143,
+        "end": 161
+      },
       "message": "structural clone of gin_test.go:TestLoadHTMLGlobDebugMode"
     },
     {
@@ -1813,6 +2209,10 @@
           "start": 13328,
           "end": 13959
         }
+      },
+      "lines": {
+        "start": 312,
+        "end": 332
       },
       "message": "structural clone of githubapi_test.go:TestShouldBindUri"
     },
@@ -1832,6 +2232,10 @@
           "end": 17382
         }
       },
+      "lines": {
+        "start": 462,
+        "end": 476
+      },
       "message": "structural clone of githubapi_test.go:BenchmarkParallelGithub"
     },
     {
@@ -1849,6 +2253,10 @@
           "start": 2808,
           "end": 3627
         }
+      },
+      "lines": {
+        "start": 111,
+        "end": 137
       },
       "message": "structural clone of render/render_test.go:TestRenderSecureJSON"
     },
@@ -1868,6 +2276,10 @@
           "end": 18991
         }
       },
+      "lines": {
+        "start": 737,
+        "end": 748
+      },
       "message": "structural clone of render/render_test.go:TestRenderHTMLTemplateError"
     },
     {
@@ -1885,6 +2297,10 @@
           "start": 2762,
           "end": 2999
         }
+      },
+      "lines": {
+        "start": 105,
+        "end": 114
       },
       "message": "structural clone of routergroup_test.go:TestRouterGroupInvalidStatic"
     },
@@ -1904,6 +2320,10 @@
           "end": 3141
         }
       },
+      "lines": {
+        "start": 121,
+        "end": 131
+      },
       "message": "structural clone of routes_test.go:TestRouterGroupRouteOK"
     },
     {
@@ -1921,6 +2341,10 @@
           "start": 3143,
           "end": 3522
         }
+      },
+      "lines": {
+        "start": 133,
+        "end": 143
       },
       "message": "structural clone of routes_test.go:TestRouterGroupRouteOK"
     },
@@ -1940,6 +2364,10 @@
           "end": 20996
         }
       },
+      "lines": {
+        "start": 514,
+        "end": 523
+      },
       "message": "structural clone of tree_test.go:TestTreeChildConflict"
     },
     {
@@ -1957,6 +2385,10 @@
           "start": 34451,
           "end": 35987
         }
+      },
+      "lines": {
+        "start": 1066,
+        "end": 1113
       },
       "message": "structural clone of tree_test.go:TestTreeFindCaseInsensitivePathWithMultipleChildrenAndWildcard"
     }

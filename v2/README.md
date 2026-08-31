@@ -365,9 +365,15 @@ disposition, or dead with its vice named. First row paid: the **render toll**.
 (human on a tty, json piped — `kndo | jq` is the designed pipeline). `to_agent`
 (format 1: id-as-handle, no per-run numbering, golden-pinned by gate #14) and
 `to_sarif` (byte-offset regions — the contract's spans, no invented lines) render
-core-side as pure projections of `Report`, byte-identical from any frontend. The
-ledger's one open contract decision: line numbers in findings, named consumers SARIF
-text regions and `path:line` in the human render.
+core-side as pure projections of `Report`, byte-identical from any frontend.
+
+Third row: **lines**. `Finding.lines` is a 1-based inclusive range the engine resolves
+per run from the file contents already in memory — no cache or graph format learned
+about lines, and identity never includes them (moving code must not change a finding).
+`Finding::location()` is the one `path:line — symbol` spelling; human and agent print
+it, SARIF regions carry `startLine`/`endLine` beside the byte-true span. Columns are
+deliberately absent: SARIF counts them in UTF-16 units, and a slightly-wrong column is
+worse than none.
 
 Second row: **health**, rebuilt as a derived ratio instead of v1's penalty score. The
 envelope's `health` carries two counted integers and a per-category tally —

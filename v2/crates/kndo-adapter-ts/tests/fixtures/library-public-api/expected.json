@@ -37,6 +37,10 @@
           "end": 468
         }
       },
+      "lines": {
+        "start": 12,
+        "end": 14
+      },
       "message": "nothing references, roots, or imports this declaration"
     }
   ],

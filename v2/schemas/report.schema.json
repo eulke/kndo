@@ -271,6 +271,17 @@
         "id": {
           "$ref": "#/$defs/FindingId"
         },
+        "lines": {
+          "description": "Where the subject's span sits in its file, when the subject has one.\nNever identity: moving code changes lines and must not change the finding.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LineSpan"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "message": {
           "type": "string"
         },
@@ -321,6 +332,26 @@
         "implicated",
         "subjects",
         "by_category"
+      ]
+    },
+    "LineSpan": {
+      "description": "1-based, inclusive line range — display data the engine derives from the\nsubject's byte span against the file's actual newlines. Lines are exact in any\nencoding (a newline is one byte); columns are deliberately absent — every\ninterchange format counts them in its own unit, and a slightly-wrong column is\nworse than none.",
+      "type": "object",
+      "properties": {
+        "end": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "start": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "start",
+        "end"
       ]
     },
     "ProjectPath": {

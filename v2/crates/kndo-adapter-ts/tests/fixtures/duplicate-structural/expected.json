@@ -32,6 +32,10 @@
           "end": 456
         }
       },
+      "lines": {
+        "start": 3,
+        "end": 16
+      },
       "message": "structural clone of billing.ts:totalWithTax"
     }
   ],

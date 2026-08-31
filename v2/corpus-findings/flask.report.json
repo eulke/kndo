@@ -37,6 +37,10 @@
           "end": 2672
         }
       },
+      "lines": {
+        "start": 74,
+        "end": 78
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -55,6 +59,10 @@
           "end": 23868
         }
       },
+      "lines": {
+        "start": 691,
+        "end": 695
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -72,6 +80,10 @@
           "start": 6853,
           "end": 7002
         }
+      },
+      "lines": {
+        "start": 260,
+        "end": 267
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -94,6 +106,10 @@
           "end": 32136
         }
       },
+      "lines": {
+        "start": 779,
+        "end": 807
+      },
       "message": "structural clone of src/flask/sansio/app.py:App.template_filter"
     },
     {
@@ -114,6 +130,10 @@
           "start": 29207,
           "end": 30360
         }
+      },
+      "lines": {
+        "start": 720,
+        "end": 753
       },
       "message": "structural clone of src/flask/sansio/app.py:App.template_filter"
     },
@@ -136,6 +156,10 @@
           "end": 21026
         }
       },
+      "lines": {
+        "start": 504,
+        "end": 529
+      },
       "message": "structural clone of src/flask/sansio/app.py:App.template_filter"
     },
     {
@@ -157,6 +181,10 @@
           "end": 18982
         }
       },
+      "lines": {
+        "start": 450,
+        "end": 473
+      },
       "message": "structural clone of src/flask/sansio/app.py:App.template_filter"
     },
     {
@@ -177,6 +205,10 @@
           "start": 22120,
           "end": 23120
         }
+      },
+      "lines": {
+        "start": 562,
+        "end": 587
       },
       "message": "structural clone of src/flask/sansio/app.py:App.template_filter"
     },
@@ -218,6 +250,10 @@
           "end": 22457
         }
       },
+      "lines": {
+        "start": 795,
+        "end": 810
+      },
       "message": "structural clone of tests/test_basic.py:test_teardown_request_handler"
     },
     {
@@ -235,6 +271,10 @@
           "start": 38701,
           "end": 39042
         }
+      },
+      "lines": {
+        "start": 1446,
+        "end": 1454
       },
       "message": "structural clone of tests/test_basic.py:test_static_url_path"
     },
@@ -254,6 +294,10 @@
           "end": 11287
         }
       },
+      "lines": {
+        "start": 412,
+        "end": 424
+      },
       "message": "structural clone of tests/test_cli.py:test_no_command_echo_loading_error"
     },
     {
@@ -271,6 +315,10 @@
           "start": 2063,
           "end": 2587
         }
+      },
+      "lines": {
+        "start": 91,
+        "end": 110
       },
       "message": "structural clone of tests/test_templating.py:test_escaping"
     },

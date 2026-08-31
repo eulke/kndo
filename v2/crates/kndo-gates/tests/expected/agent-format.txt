@@ -7,12 +7,12 @@ findings:
   declared but never imported by any claimed file
 [kndo-728e436b9cfe] warning unused · file src/orphan.py · certain
   no root anchors this file and no reachable file imports it
-[kndo-c4258d23a768] warning unused · symbol src/store.py — Store._drop · probable
+[kndo-c4258d23a768] warning unused · symbol src/store.py:6 — Store._drop · probable
   `Store._drop` is declared but nothing in the project uses it
-[kndo-d097bb9361f9] info internal-only · symbol src/scope.swift — Helper · probable
+[kndo-d097bb9361f9] info internal-only · symbol src/scope.swift:1 — Helper · probable
   declared `module`-scoped, but every use is within its own file
 fixed:
-[kndo-c8ea51c36443] warning unused · symbol src/gone.py — _gone · certain
+[kndo-c8ea51c36443] warning unused · symbol src/gone.py:2 — _gone · certain
   `_gone` is declared but nothing in the project uses it
 abstained:
 - untested: no test root anchors any file in this graph

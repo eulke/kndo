@@ -32,6 +32,10 @@
           "end": 178
         }
       },
+      "lines": {
+        "start": 9,
+        "end": 11
+      },
       "message": "declared `crate`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
     }
   ],

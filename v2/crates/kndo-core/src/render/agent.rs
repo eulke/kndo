@@ -114,7 +114,7 @@ fn section(out: &mut String, header: &str, findings: &[Finding]) {
             f.severity.as_str(),
             f.category.as_str(),
             f.subject.kind().as_str(),
-            f.subject.render(),
+            f.location(),
             f.confidence.as_str(),
             f.message,
         ));

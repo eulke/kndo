@@ -41,6 +41,10 @@
           "end": 4056
         }
       },
+      "lines": {
+        "start": 28,
+        "end": 101
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -61,6 +65,10 @@
           "start": 4144,
           "end": 4375
         }
+      },
+      "lines": {
+        "start": 136,
+        "end": 144
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -83,6 +91,10 @@
           "end": 4630
         }
       },
+      "lines": {
+        "start": 149,
+        "end": 151
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -103,6 +115,10 @@
           "start": 3746,
           "end": 3949
         }
+      },
+      "lines": {
+        "start": 96,
+        "end": 100
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -125,6 +141,10 @@
           "end": 4469
         }
       },
+      "lines": {
+        "start": 109,
+        "end": 113
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -142,6 +162,10 @@
           "start": 12132,
           "end": 12361
         }
+      },
+      "lines": {
+        "start": 237,
+        "end": 242
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -161,6 +185,10 @@
           "end": 10740
         }
       },
+      "lines": {
+        "start": 340,
+        "end": 343
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -178,6 +206,10 @@
           "start": 10746,
           "end": 10866
         }
+      },
+      "lines": {
+        "start": 345,
+        "end": 348
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -197,6 +229,10 @@
           "end": 6698
         }
       },
+      "lines": {
+        "start": 179,
+        "end": 182
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -214,6 +250,10 @@
           "start": 10872,
           "end": 10988
         }
+      },
+      "lines": {
+        "start": 350,
+        "end": 353
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -233,6 +273,10 @@
           "end": 11122
         }
       },
+      "lines": {
+        "start": 355,
+        "end": 358
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -250,6 +294,10 @@
           "start": 11934,
           "end": 12060
         }
+      },
+      "lines": {
+        "start": 390,
+        "end": 393
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -269,6 +317,10 @@
           "end": 5206
         }
       },
+      "lines": {
+        "start": 135,
+        "end": 138
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -286,6 +338,10 @@
           "start": 11798,
           "end": 11928
         }
+      },
+      "lines": {
+        "start": 385,
+        "end": 388
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -305,6 +361,10 @@
           "end": 11270
         }
       },
+      "lines": {
+        "start": 360,
+        "end": 363
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -322,6 +382,10 @@
           "start": 1314,
           "end": 1468
         }
+      },
+      "lines": {
+        "start": 31,
+        "end": 34
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -341,6 +405,10 @@
           "end": 67566
         }
       },
+      "lines": {
+        "start": 29,
+        "end": 1516
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -359,6 +427,10 @@
           "end": 5334
         }
       },
+      "lines": {
+        "start": 29,
+        "end": 144
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -376,6 +448,10 @@
           "start": 5386,
           "end": 7202
         }
+      },
+      "lines": {
+        "start": 149,
+        "end": 204
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -398,6 +474,10 @@
           "end": 2216
         }
       },
+      "lines": {
+        "start": 65,
+        "end": 67
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -415,6 +495,10 @@
           "start": 2069,
           "end": 12928
         }
+      },
+      "lines": {
+        "start": 43,
+        "end": 285
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -434,6 +518,10 @@
           "end": 7827
         }
       },
+      "lines": {
+        "start": 29,
+        "end": 216
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -451,6 +539,10 @@
           "start": 7829,
           "end": 8479
         }
+      },
+      "lines": {
+        "start": 218,
+        "end": 237
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -470,6 +562,10 @@
           "end": 19621
         }
       },
+      "lines": {
+        "start": 31,
+        "end": 502
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -487,6 +583,10 @@
           "start": 19653,
           "end": 40234
         }
+      },
+      "lines": {
+        "start": 506,
+        "end": 1031
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -506,6 +606,10 @@
           "end": 58707
         }
       },
+      "lines": {
+        "start": 1033,
+        "end": 1503
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -523,6 +627,10 @@
           "start": 1265,
           "end": 8808
         }
+      },
+      "lines": {
+        "start": 30,
+        "end": 260
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -542,6 +650,10 @@
           "end": 29428
         }
       },
+      "lines": {
+        "start": 827,
+        "end": 871
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -559,6 +671,10 @@
           "start": 8810,
           "end": 15065
         }
+      },
+      "lines": {
+        "start": 262,
+        "end": 459
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -578,6 +694,10 @@
           "end": 27008
         }
       },
+      "lines": {
+        "start": 796,
+        "end": 824
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -595,6 +715,10 @@
           "start": 15067,
           "end": 22202
         }
+      },
+      "lines": {
+        "start": 461,
+        "end": 698
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -614,6 +738,10 @@
           "end": 26003
         }
       },
+      "lines": {
+        "start": 703,
+        "end": 790
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -631,6 +759,10 @@
           "start": 27458,
           "end": 34698
         }
+      },
+      "lines": {
+        "start": 693,
+        "end": 888
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -650,6 +782,10 @@
           "end": 27424
         }
       },
+      "lines": {
+        "start": 28,
+        "end": 689
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -667,6 +803,10 @@
           "start": 50312,
           "end": 54195
         }
+      },
+      "lines": {
+        "start": 1270,
+        "end": 1344
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -686,6 +826,10 @@
           "end": 50310
         }
       },
+      "lines": {
+        "start": 892,
+        "end": 1268
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -703,6 +847,10 @@
           "start": 33590,
           "end": 35477
         }
+      },
+      "lines": {
+        "start": 929,
+        "end": 987
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -722,6 +870,10 @@
           "end": 30619
         }
       },
+      "lines": {
+        "start": 776,
+        "end": 832
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -739,6 +891,10 @@
           "start": 14551,
           "end": 20506
         }
+      },
+      "lines": {
+        "start": 417,
+        "end": 522
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -758,6 +914,10 @@
           "end": 28717
         }
       },
+      "lines": {
+        "start": 526,
+        "end": 772
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -776,6 +936,10 @@
           "end": 2774
         }
       },
+      "lines": {
+        "start": 29,
+        "end": 73
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -793,6 +957,10 @@
           "start": 35491,
           "end": 38454
         }
+      },
+      "lines": {
+        "start": 991,
+        "end": 1080
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -815,6 +983,10 @@
           "end": 2963
         }
       },
+      "lines": {
+        "start": 78,
+        "end": 80
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -832,6 +1004,10 @@
           "start": 2788,
           "end": 14537
         }
+      },
+      "lines": {
+        "start": 77,
+        "end": 413
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -851,6 +1027,10 @@
           "end": 33588
         }
       },
+      "lines": {
+        "start": 836,
+        "end": 927
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -868,6 +1048,10 @@
           "start": 1241,
           "end": 5428
         }
+      },
+      "lines": {
+        "start": 28,
+        "end": 133
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -887,6 +1071,10 @@
           "end": 2828
         }
       },
+      "lines": {
+        "start": 28,
+        "end": 78
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -904,6 +1092,10 @@
           "start": 2884,
           "end": 4157
         }
+      },
+      "lines": {
+        "start": 68,
+        "end": 102
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -923,6 +1115,10 @@
           "end": 2882
         }
       },
+      "lines": {
+        "start": 33,
+        "end": 66
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -940,6 +1136,10 @@
           "start": 1244,
           "end": 3363
         }
+      },
+      "lines": {
+        "start": 28,
+        "end": 74
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -959,6 +1159,10 @@
           "end": 5816
         }
       },
+      "lines": {
+        "start": 78,
+        "end": 131
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -976,6 +1180,10 @@
           "start": 16244,
           "end": 32579
         }
+      },
+      "lines": {
+        "start": 412,
+        "end": 796
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -995,6 +1203,10 @@
           "end": 16230
         }
       },
+      "lines": {
+        "start": 88,
+        "end": 408
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -1012,6 +1224,10 @@
           "start": 2119,
           "end": 3182
         }
+      },
+      "lines": {
+        "start": 57,
+        "end": 84
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -1031,6 +1247,10 @@
           "end": 38113
         }
       },
+      "lines": {
+        "start": 800,
+        "end": 967
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -1049,6 +1269,10 @@
           "end": 10361
         }
       },
+      "lines": {
+        "start": 32,
+        "end": 310
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -1066,6 +1290,10 @@
           "start": 82,
           "end": 9902
         }
+      },
+      "lines": {
+        "start": 6,
+        "end": 224
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -1088,6 +1316,10 @@
           "end": 37548
         }
       },
+      "lines": {
+        "start": 1130,
+        "end": 1130
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -1105,6 +1337,10 @@
           "start": 36952,
           "end": 37446
         }
+      },
+      "lines": {
+        "start": 1111,
+        "end": 1125
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -1127,6 +1363,10 @@
           "end": 37671
         }
       },
+      "lines": {
+        "start": 1134,
+        "end": 1134
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -1147,6 +1387,10 @@
           "start": 37933,
           "end": 37949
         }
+      },
+      "lines": {
+        "start": 1149,
+        "end": 1149
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -1169,6 +1413,10 @@
           "end": 37631
         }
       },
+      "lines": {
+        "start": 1133,
+        "end": 1133
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -1186,6 +1434,10 @@
           "start": 1246,
           "end": 3738
         }
+      },
+      "lines": {
+        "start": 28,
+        "end": 106
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -1205,6 +1457,10 @@
           "end": 7017
         }
       },
+      "lines": {
+        "start": 126,
+        "end": 193
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -1222,6 +1478,10 @@
           "start": 40596,
           "end": 41253
         }
+      },
+      "lines": {
+        "start": 1227,
+        "end": 1248
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -1241,6 +1501,10 @@
           "end": 36950
         }
       },
+      "lines": {
+        "start": 195,
+        "end": 1109
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -1258,6 +1522,10 @@
           "start": 3740,
           "end": 4336
         }
+      },
+      "lines": {
+        "start": 108,
+        "end": 124
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -1277,6 +1545,10 @@
           "end": 17866
         }
       },
+      "lines": {
+        "start": 35,
+        "end": 527
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -1294,6 +1566,10 @@
           "start": 17880,
           "end": 21217
         }
+      },
+      "lines": {
+        "start": 531,
+        "end": 625
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -1313,6 +1589,10 @@
           "end": 8888
         }
       },
+      "lines": {
+        "start": 85,
+        "end": 248
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -1330,6 +1610,10 @@
           "start": 1244,
           "end": 2107
         }
+      },
+      "lines": {
+        "start": 29,
+        "end": 59
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -1349,6 +1633,10 @@
           "end": 2639
         }
       },
+      "lines": {
+        "start": 61,
+        "end": 83
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -1366,6 +1654,10 @@
           "start": 7640,
           "end": 8249
         }
+      },
+      "lines": {
+        "start": 230,
+        "end": 249
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -1385,6 +1677,10 @@
           "end": 7638
         }
       },
+      "lines": {
+        "start": 29,
+        "end": 228
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -1402,6 +1698,10 @@
           "start": 2901,
           "end": 5592
         }
+      },
+      "lines": {
+        "start": 84,
+        "end": 173
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -1421,6 +1721,10 @@
           "end": 7337
         }
       },
+      "lines": {
+        "start": 177,
+        "end": 237
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -1438,6 +1742,10 @@
           "start": 7351,
           "end": 17351
         }
+      },
+      "lines": {
+        "start": 241,
+        "end": 546
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -1457,6 +1765,10 @@
           "end": 2887
         }
       },
+      "lines": {
+        "start": 34,
+        "end": 80
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -1474,6 +1786,10 @@
           "start": 17382,
           "end": 18190
         }
+      },
+      "lines": {
+        "start": 550,
+        "end": 568
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -1493,6 +1809,10 @@
           "end": 19673
         }
       },
+      "lines": {
+        "start": 580,
+        "end": 623
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -1510,6 +1830,10 @@
           "start": 1240,
           "end": 8226
         }
+      },
+      "lines": {
+        "start": 28,
+        "end": 208
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -1529,6 +1853,10 @@
           "end": 56681
         }
       },
+      "lines": {
+        "start": 1410,
+        "end": 1475
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -1546,6 +1874,10 @@
           "start": 56683,
           "end": 69764
         }
+      },
+      "lines": {
+        "start": 1477,
+        "end": 1775
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -1565,6 +1897,10 @@
           "end": 40024
         }
       },
+      "lines": {
+        "start": 30,
+        "end": 981
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -1582,6 +1918,10 @@
           "start": 40755,
           "end": 53236
         }
+      },
+      "lines": {
+        "start": 1013,
+        "end": 1366
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -1601,6 +1941,10 @@
           "end": 54629
         }
       },
+      "lines": {
+        "start": 1368,
+        "end": 1406
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -1618,6 +1962,10 @@
           "start": 69851,
           "end": 75299
         }
+      },
+      "lines": {
+        "start": 1778,
+        "end": 1914
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -1637,6 +1985,10 @@
           "end": 40741
         }
       },
+      "lines": {
+        "start": 985,
+        "end": 1009
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -1654,6 +2006,10 @@
           "start": 50952,
           "end": 51417
         }
+      },
+      "lines": {
+        "start": 1386,
+        "end": 1400
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -1673,6 +2029,10 @@
           "end": 50950
         }
       },
+      "lines": {
+        "start": 1348,
+        "end": 1384
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -1690,6 +2050,10 @@
           "start": 1269,
           "end": 17401
         }
+      },
+      "lines": {
+        "start": 29,
+        "end": 466
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -1709,6 +2073,10 @@
           "end": 44863
         }
       },
+      "lines": {
+        "start": 1183,
+        "end": 1208
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -1726,6 +2094,10 @@
           "start": 17403,
           "end": 19026
         }
+      },
+      "lines": {
+        "start": 468,
+        "end": 515
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -1745,6 +2117,10 @@
           "end": 49764
         }
       },
+      "lines": {
+        "start": 1210,
+        "end": 1346
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -1762,6 +2138,10 @@
           "start": 19040,
           "end": 21233
         }
+      },
+      "lines": {
+        "start": 519,
+        "end": 569
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -1781,6 +2161,10 @@
           "end": 43972
         }
       },
+      "lines": {
+        "start": 782,
+        "end": 1181
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -1798,6 +2182,10 @@
           "start": 1256,
           "end": 2866
         }
+      },
+      "lines": {
+        "start": 29,
+        "end": 79
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -1817,6 +2205,10 @@
           "end": 14745
         }
       },
+      "lines": {
+        "start": 395,
+        "end": 449
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -1834,6 +2226,10 @@
           "start": 6330,
           "end": 10241
         }
+      },
+      "lines": {
+        "start": 193,
+        "end": 311
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -1853,6 +2249,10 @@
           "end": 17631
         }
       },
+      "lines": {
+        "start": 453,
+        "end": 543
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -1870,6 +2270,10 @@
           "start": 4597,
           "end": 6316
         }
+      },
+      "lines": {
+        "start": 138,
+        "end": 189
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -1889,6 +2293,10 @@
           "end": 22185
         }
       },
+      "lines": {
+        "start": 617,
+        "end": 698
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -1906,6 +2314,10 @@
           "start": 17847,
           "end": 19586
         }
+      },
+      "lines": {
+        "start": 559,
+        "end": 613
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -1925,6 +2337,10 @@
           "end": 4583
         }
       },
+      "lines": {
+        "start": 83,
+        "end": 134
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -1942,6 +2358,10 @@
           "start": 10243,
           "end": 12927
         }
+      },
+      "lines": {
+        "start": 313,
+        "end": 391
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -1961,6 +2381,10 @@
           "end": 17994
         }
       },
+      "lines": {
+        "start": 429,
+        "end": 458
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -1978,6 +2402,10 @@
           "start": 7876,
           "end": 16475
         }
+      },
+      "lines": {
+        "start": 155,
+        "end": 425
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -1997,6 +2425,10 @@
           "end": 56188
         }
       },
+      "lines": {
+        "start": 1040,
+        "end": 1298
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -2014,6 +2446,10 @@
           "start": 20955,
           "end": 27469
         }
+      },
+      "lines": {
+        "start": 511,
+        "end": 669
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -2033,6 +2469,10 @@
           "end": 61714
         }
       },
+      "lines": {
+        "start": 1414,
+        "end": 1433
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -2050,6 +2490,10 @@
           "start": 59596,
           "end": 61022
         }
+      },
+      "lines": {
+        "start": 1384,
+        "end": 1412
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -2069,6 +2513,10 @@
           "end": 44361
         }
       },
+      "lines": {
+        "start": 673,
+        "end": 1036
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -2086,6 +2534,10 @@
           "start": 14265,
           "end": 20941
         }
+      },
+      "lines": {
+        "start": 348,
+        "end": 507
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -2105,6 +2557,10 @@
           "end": 9500
         }
       },
+      "lines": {
+        "start": 163,
+        "end": 218
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -2122,6 +2578,10 @@
           "start": 9514,
           "end": 14223
         }
+      },
+      "lines": {
+        "start": 222,
+        "end": 344
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -2141,6 +2601,10 @@
           "end": 57208
         }
       },
+      "lines": {
+        "start": 1302,
+        "end": 1328
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -2158,6 +2622,10 @@
           "start": 57222,
           "end": 59582
         }
+      },
+      "lines": {
+        "start": 1332,
+        "end": 1380
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -2177,6 +2645,10 @@
           "end": 8818
         }
       },
+      "lines": {
+        "start": 29,
+        "end": 227
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -2194,6 +2666,10 @@
           "start": 1265,
           "end": 64218
         }
+      },
+      "lines": {
+        "start": 29,
+        "end": 1698
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -2213,6 +2689,10 @@
           "end": 77432
         }
       },
+      "lines": {
+        "start": 1702,
+        "end": 2025
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -2231,6 +2711,10 @@
           "end": 79463
         }
       },
+      "lines": {
+        "start": 2029,
+        "end": 2088
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -2248,6 +2732,10 @@
           "start": 2061,
           "end": 21343
         }
+      },
+      "lines": {
+        "start": 47,
+        "end": 571
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -2270,6 +2758,10 @@
           "end": 5660
         }
       },
+      "lines": {
+        "start": 172,
+        "end": 172
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -2290,6 +2782,10 @@
           "start": 18853,
           "end": 18871
         }
+      },
+      "lines": {
+        "start": 496,
+        "end": 496
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -2312,6 +2808,10 @@
           "end": 19786
         }
       },
+      "lines": {
+        "start": 529,
+        "end": 529
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -2329,6 +2829,10 @@
           "start": 4139,
           "end": 5669
         }
+      },
+      "lines": {
+        "start": 123,
+        "end": 172
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -2348,6 +2852,10 @@
           "end": 5253
         }
       },
+      "lines": {
+        "start": 82,
+        "end": 129
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -2365,6 +2873,10 @@
           "start": 10541,
           "end": 29632
         }
+      },
+      "lines": {
+        "start": 280,
+        "end": 787
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -2384,6 +2896,10 @@
           "end": 30797
         }
       },
+      "lines": {
+        "start": 789,
+        "end": 818
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -2401,6 +2917,10 @@
           "start": 1254,
           "end": 3347
         }
+      },
+      "lines": {
+        "start": 29,
+        "end": 78
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -2420,6 +2940,10 @@
           "end": 36417
         }
       },
+      "lines": {
+        "start": 820,
+        "end": 916
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -2437,6 +2961,10 @@
           "start": 5267,
           "end": 7490
         }
+      },
+      "lines": {
+        "start": 133,
+        "end": 184
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -2456,6 +2984,10 @@
           "end": 10527
         }
       },
+      "lines": {
+        "start": 188,
+        "end": 276
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -2473,6 +3005,10 @@
           "start": 1268,
           "end": 4768
         }
+      },
+      "lines": {
+        "start": 29,
+        "end": 141
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -2492,6 +3028,10 @@
           "end": 17616
         }
       },
+      "lines": {
+        "start": 413,
+        "end": 532
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -2509,6 +3049,10 @@
           "start": 4782,
           "end": 13533
         }
+      },
+      "lines": {
+        "start": 145,
+        "end": 409
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -2528,6 +3072,10 @@
           "end": 29383
         }
       },
+      "lines": {
+        "start": 746,
+        "end": 898
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -2545,6 +3093,10 @@
           "start": 17630,
           "end": 23179
         }
+      },
+      "lines": {
+        "start": 536,
+        "end": 704
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -2564,6 +3116,10 @@
           "end": 24777
         }
       },
+      "lines": {
+        "start": 15,
+        "end": 640
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -2581,6 +3137,10 @@
           "start": 24779,
           "end": 26760
         }
+      },
+      "lines": {
+        "start": 642,
+        "end": 689
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -2710,6 +3270,10 @@
           "end": 1697
         }
       },
+      "lines": {
+        "start": 40,
+        "end": 46
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -2731,6 +3295,10 @@
           "end": 1695
         }
       },
+      "lines": {
+        "start": 43,
+        "end": 45
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -2749,6 +3317,10 @@
           "end": 3260
         }
       },
+      "lines": {
+        "start": 27,
+        "end": 57
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -2766,6 +3338,10 @@
           "start": 1255,
           "end": 1438
         }
+      },
+      "lines": {
+        "start": 29,
+        "end": 35
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -2788,6 +3364,10 @@
           "end": 9585
         }
       },
+      "lines": {
+        "start": 176,
+        "end": 195
+      },
       "message": "structural clone of Source/Core/DataRequest.swift:DataRequest.didReceiveResponse"
     },
     {
@@ -2808,6 +3388,10 @@
           "start": 12410,
           "end": 12915
         }
+      },
+      "lines": {
+        "start": 258,
+        "end": 271
       },
       "message": "structural clone of Source/Core/DataRequest.swift:DataRequest.onHTTPResponse"
     },
@@ -2830,6 +3414,10 @@
           "end": 17720
         }
       },
+      "lines": {
+        "start": 344,
+        "end": 370
+      },
       "message": "structural clone of Source/Core/DataRequest.swift:DataRequest.response"
     },
     {
@@ -2850,6 +3438,10 @@
           "start": 17726,
           "end": 21478
         }
+      },
+      "lines": {
+        "start": 372,
+        "end": 440
       },
       "message": "structural clone of Source/Core/DataRequest.swift:DataRequest._response"
     },
@@ -2872,6 +3464,10 @@
           "end": 28642
         }
       },
+      "lines": {
+        "start": 536,
+        "end": 550
+      },
       "message": "structural clone of Source/Core/DataRequest.swift:DataRequest.responseString"
     },
     {
@@ -2892,6 +3488,10 @@
           "start": 29733,
           "end": 30982
         }
+      },
+      "lines": {
+        "start": 567,
+        "end": 582
       },
       "message": "structural clone of Source/Core/DataRequest.swift:DataRequest.responseJSON"
     },
@@ -2914,6 +3514,10 @@
           "end": 16098
         }
       },
+      "lines": {
+        "start": 312,
+        "end": 333
+      },
       "message": "structural clone of Source/Core/DataRequest.swift:DataRequest.validate"
     },
     {
@@ -2934,6 +3538,10 @@
           "start": 25403,
           "end": 26352
         }
+      },
+      "lines": {
+        "start": 507,
+        "end": 519
       },
       "message": "structural clone of Source/Core/DataRequest.swift:DataRequest.responseData"
     },
@@ -2956,6 +3564,10 @@
           "end": 41882
         }
       },
+      "lines": {
+        "start": 971,
+        "end": 983
+      },
       "message": "structural clone of Source/Core/Request.swift:Request.onURLRequestCreation"
     },
     {
@@ -2976,6 +3588,10 @@
           "start": 16175,
           "end": 16815
         }
+      },
+      "lines": {
+        "start": 344,
+        "end": 352
       },
       "message": "structural clone of Source/Core/Response.swift:DataResponse.tryMap"
     },
@@ -2998,6 +3614,10 @@
           "end": 17993
         }
       },
+      "lines": {
+        "start": 364,
+        "end": 372
+      },
       "message": "structural clone of Source/Core/Response.swift:DataResponse.mapError"
     },
     {
@@ -3018,6 +3638,10 @@
           "start": 18612,
           "end": 19245
         }
+      },
+      "lines": {
+        "start": 386,
+        "end": 394
       },
       "message": "structural clone of Source/Core/Response.swift:DataResponse.tryMapError"
     },
@@ -3040,6 +3664,10 @@
           "end": 15438
         }
       },
+      "lines": {
+        "start": 320,
+        "end": 328
+      },
       "message": "structural clone of Source/Core/Response.swift:DataResponse.map"
     },
     {
@@ -3060,6 +3688,10 @@
           "start": 58736,
           "end": 59209
         }
+      },
+      "lines": {
+        "start": 925,
+        "end": 931
       },
       "message": "structural clone of Source/Core/Session.swift:Session.upload"
     },
@@ -3082,6 +3714,10 @@
           "end": 54351
         }
       },
+      "lines": {
+        "start": 837,
+        "end": 855
+      },
       "message": "structural clone of Source/Core/Session.swift:Session.upload"
     },
     {
@@ -3102,6 +3738,10 @@
           "start": 15247,
           "end": 16229
         }
+      },
+      "lines": {
+        "start": 338,
+        "end": 355
       },
       "message": "structural clone of Source/Core/SessionDelegate.swift:SessionDelegate.urlSession"
     },
@@ -3124,6 +3764,10 @@
           "end": 12893
         }
       },
+      "lines": {
+        "start": 273,
+        "end": 284
+      },
       "message": "structural clone of Source/Core/SessionDelegate.swift:SessionDelegate.urlSession"
     },
     {
@@ -3141,6 +3785,10 @@
           "start": 29455,
           "end": 30262
         }
+      },
+      "lines": {
+        "start": 544,
+        "end": 553
       },
       "message": "structural clone of Source/Features/Combine.swift:publishData"
     },
@@ -3163,6 +3811,10 @@
           "end": 26283
         }
       },
+      "lines": {
+        "start": 473,
+        "end": 483
+      },
       "message": "structural clone of Source/Features/Combine.swift:Inner.request"
     },
     {
@@ -3180,6 +3832,10 @@
           "start": 32413,
           "end": 33735
         }
+      },
+      "lines": {
+        "start": 584,
+        "end": 598
       },
       "message": "structural clone of Source/Features/Combine.swift:publishDecodable"
     },
@@ -3199,6 +3855,10 @@
           "end": 36019
         }
       },
+      "lines": {
+        "start": 615,
+        "end": 627
+      },
       "message": "structural clone of Source/Features/Combine.swift:publishDecodable"
     },
     {
@@ -3216,6 +3876,10 @@
           "start": 26844,
           "end": 27193
         }
+      },
+      "lines": {
+        "start": 500,
+        "end": 504
       },
       "message": "structural clone of Source/Features/Combine.swift:publishResponse"
     },
@@ -3235,6 +3899,10 @@
           "end": 28017
         }
       },
+      "lines": {
+        "start": 514,
+        "end": 518
+      },
       "message": "structural clone of Source/Features/Combine.swift:publishResponse"
     },
     {
@@ -3252,6 +3920,10 @@
           "start": 31438,
           "end": 32407
         }
+      },
+      "lines": {
+        "start": 571,
+        "end": 582
       },
       "message": "structural clone of Source/Features/Combine.swift:publishString"
     },
@@ -3271,6 +3943,10 @@
           "end": 28374
         }
       },
+      "lines": {
+        "start": 507,
+        "end": 517
+      },
       "message": "structural clone of Source/Features/Concurrency.swift:serializingString"
     },
     {
@@ -3288,6 +3964,10 @@
           "start": 30761,
           "end": 31597
         }
+      },
+      "lines": {
+        "start": 559,
+        "end": 577
       },
       "message": "structural clone of Source/Features/Concurrency.swift:dataTask"
     },
@@ -3307,6 +3987,10 @@
           "end": 22842
         }
       },
+      "lines": {
+        "start": 440,
+        "end": 448
+      },
       "message": "structural clone of Source/Features/Concurrency.swift:serializingData"
     },
     {
@@ -3324,6 +4008,10 @@
           "start": 24066,
           "end": 25354
         }
+      },
+      "lines": {
+        "start": 466,
+        "end": 477
       },
       "message": "structural clone of Source/Features/Concurrency.swift:serializingDecodable"
     },
@@ -3346,6 +4034,10 @@
           "end": 33873
         }
       },
+      "lines": {
+        "start": 614,
+        "end": 618
+      },
       "message": "structural clone of Source/Features/Concurrency.swift:DataStreamTask.streamingData"
     },
     {
@@ -3366,6 +4058,10 @@
           "start": 34232,
           "end": 35872
         }
+      },
+      "lines": {
+        "start": 845,
+        "end": 884
       },
       "message": "structural clone of Tests/AuthenticationInterceptorTests.swift:AuthenticationInterceptorTestCase.testThatInterceptorRetriesRequestAfterRefresh"
     },
@@ -3388,6 +4084,10 @@
           "end": 6286
         }
       },
+      "lines": {
+        "start": 150,
+        "end": 175
+      },
       "message": "structural clone of Tests/AuthenticationTests.swift:BasicAuthenticationTestCase.testHTTPBasicAuthenticationFailsWithInvalidCredentials"
     },
     {
@@ -3408,6 +4108,10 @@
           "start": 6292,
           "end": 7200
         }
+      },
+      "lines": {
+        "start": 177,
+        "end": 203
       },
       "message": "structural clone of Tests/AuthenticationTests.swift:BasicAuthenticationTestCase.testHTTPBasicAuthenticationWithValidCredentials"
     },
@@ -3430,6 +4134,10 @@
           "end": 11737
         }
       },
+      "lines": {
+        "start": 248,
+        "end": 258
+      },
       "message": "structural clone of Tests/CacheTests.swift:CacheTestCase.testDefaultCachePolicy"
     },
     {
@@ -3450,6 +4158,10 @@
           "start": 2020,
           "end": 2687
         }
+      },
+      "lines": {
+        "start": 53,
+        "end": 72
       },
       "message": "structural clone of Tests/CachedResponseHandlerTests.swift:CachedResponseHandlerTestCase.testThatRequestCachedResponseHandlerCanCacheResponse"
     },
@@ -3472,6 +4184,10 @@
           "end": 6968
         }
       },
+      "lines": {
+        "start": 178,
+        "end": 197
+      },
       "message": "structural clone of Tests/CachedResponseHandlerTests.swift:CachedResponseHandlerTestCase.testThatSessionCachedResponseHandlerCanCacheResponse"
     },
     {
@@ -3492,6 +4208,10 @@
           "start": 4428,
           "end": 5127
         }
+      },
+      "lines": {
+        "start": 126,
+        "end": 145
       },
       "message": "structural clone of Tests/CachedResponseHandlerTests.swift:CachedResponseHandlerTestCase.testThatSessionCachedResponseHandlerCanCacheResponse"
     },
@@ -3514,6 +4234,10 @@
           "end": 55899
         }
       },
+      "lines": {
+        "start": 1409,
+        "end": 1435
+      },
       "message": "structural clone of Tests/CombineTests.swift:DataRequestCombineTests.testThatPublishedDataRequestCanBeCancelledManually"
     },
     {
@@ -3534,6 +4258,10 @@
           "start": 40354,
           "end": 41200
         }
+      },
+      "lines": {
+        "start": 1035,
+        "end": 1056
       },
       "message": "structural clone of Tests/CombineTests.swift:DataRequestCombineTests.testThatDataRequestCanBePublished"
     },
@@ -3556,6 +4284,10 @@
           "end": 45370
         }
       },
+      "lines": {
+        "start": 1150,
+        "end": 1171
+      },
       "message": "structural clone of Tests/CombineTests.swift:DownloadRequestCombineTests.testThatDownloadRequestCanPublishData"
     },
     {
@@ -3576,6 +4308,10 @@
           "start": 41206,
           "end": 42087
         }
+      },
+      "lines": {
+        "start": 1058,
+        "end": 1079
       },
       "message": "structural clone of Tests/CombineTests.swift:DataRequestCombineTests.testThatNonAutomaticDataRequestCanBePublished"
     },
@@ -3598,6 +4334,10 @@
           "end": 58705
         }
       },
+      "lines": {
+        "start": 1469,
+        "end": 1502
+      },
       "message": "structural clone of Tests/CombineTests.swift:DataRequestCombineTests.testThatMultipleDataRequestPublishersCanBeChained"
     },
     {
@@ -3618,6 +4358,10 @@
           "start": 23002,
           "end": 24039
         }
+      },
+      "lines": {
+        "start": 596,
+        "end": 623
       },
       "message": "structural clone of Tests/CombineTests.swift:DataStreamRequestCombineTests.testThatDataStreamRequestCanPublishData"
     },
@@ -3640,6 +4384,10 @@
           "end": 46645
         }
       },
+      "lines": {
+        "start": 1173,
+        "end": 1198
+      },
       "message": "structural clone of Tests/CombineTests.swift:DataRequestCombineTests.testThatDataRequestCanBePublishedWithMultipleHandlers"
     },
     {
@@ -3660,6 +4408,10 @@
           "start": 48563,
           "end": 49688
         }
+      },
+      "lines": {
+        "start": 1255,
+        "end": 1283
       },
       "message": "structural clone of Tests/CombineTests.swift:DataRequestCombineTests.testThatPublishedDataRequestIsNotResumedUnlessSubscribed"
     },
@@ -3682,6 +4434,10 @@
           "end": 50904
         }
       },
+      "lines": {
+        "start": 1285,
+        "end": 1314
+      },
       "message": "structural clone of Tests/CombineTests.swift:DataRequestCombineTests.testThatDataRequestCanSubscribedFromNonMainQueueButPublishedOnMainQueue"
     },
     {
@@ -3702,6 +4458,10 @@
           "start": 3927,
           "end": 4754
         }
+      },
+      "lines": {
+        "start": 102,
+        "end": 123
       },
       "message": "structural clone of Tests/CombineTests.swift:DataRequestCombineTests.testThatDataRequestCanPublishData"
     },
@@ -3724,6 +4484,10 @@
           "end": 44557
         }
       },
+      "lines": {
+        "start": 1127,
+        "end": 1148
+      },
       "message": "structural clone of Tests/CombineTests.swift:DataRequestCombineTests.testThatDataRequestCanBePublishedUnserialized"
     },
     {
@@ -3744,6 +4508,10 @@
           "start": 42909,
           "end": 43725
         }
+      },
+      "lines": {
+        "start": 1104,
+        "end": 1125
       },
       "message": "structural clone of Tests/CombineTests.swift:DownloadRequestCombineTests.testThatDownloadRequestCanPublishData"
     },
@@ -3766,6 +4534,10 @@
           "end": 57173
         }
       },
+      "lines": {
+        "start": 1437,
+        "end": 1467
+      },
       "message": "structural clone of Tests/CombineTests.swift:DataRequestCombineTests.testThatMultipleDataRequestPublishersCanBeCombined"
     },
     {
@@ -3786,6 +4558,10 @@
           "start": 53396,
           "end": 54745
         }
+      },
+      "lines": {
+        "start": 1378,
+        "end": 1407
       },
       "message": "structural clone of Tests/CombineTests.swift:DataRequestCombineTests.testThatPublishedDataRequestCanBeCancelledAutomatically"
     },
@@ -3808,6 +4584,10 @@
           "end": 47502
         }
       },
+      "lines": {
+        "start": 1200,
+        "end": 1222
+      },
       "message": "structural clone of Tests/CombineTests.swift:DataRequestCombineTests.testThatDataRequestCanPublishResult"
     },
     {
@@ -3828,6 +4608,10 @@
           "start": 50910,
           "end": 52151
         }
+      },
+      "lines": {
+        "start": 1316,
+        "end": 1345
       },
       "message": "structural clone of Tests/CombineTests.swift:DataRequestCombineTests.testThatDataRequestPublishedOnSeparateQueueIsReceivedOnThatQueue"
     },
@@ -3850,6 +4634,10 @@
           "end": 53390
         }
       },
+      "lines": {
+        "start": 1347,
+        "end": 1376
+      },
       "message": "structural clone of Tests/CombineTests.swift:DataRequestCombineTests.testThatDataRequestPublishedOnSeparateQueueCanBeReceivedOntoMainQueue"
     },
     {
@@ -3870,6 +4658,10 @@
           "start": 11967,
           "end": 12581
         }
+      },
+      "lines": {
+        "start": 372,
+        "end": 389
       },
       "message": "structural clone of Tests/ConcurrencyTests.swift:DataRequestConcurrencyTests.testThatDataTaskIsAutomaticallyCancelledInTask"
     },
@@ -3892,6 +4684,10 @@
           "end": 15063
         }
       },
+      "lines": {
+        "start": 435,
+        "end": 458
+      },
       "message": "structural clone of Tests/ConcurrencyTests.swift:DataRequestConcurrencyTests.testThatDataTaskIsNotAutomaticallyCancelledInTaskGroupWhenDisabled"
     },
     {
@@ -3912,6 +4708,10 @@
           "start": 12587,
           "end": 13254
         }
+      },
+      "lines": {
+        "start": 391,
+        "end": 408
       },
       "message": "structural clone of Tests/ConcurrencyTests.swift:DataRequestConcurrencyTests.testThatDataTaskIsNotAutomaticallyCancelledInTaskWhenDisabled"
     },
@@ -3934,6 +4734,10 @@
           "end": 18856
         }
       },
+      "lines": {
+        "start": 568,
+        "end": 582
+      },
       "message": "structural clone of Tests/ConcurrencyTests.swift:DataStreamConcurrencyTests.testThatDataStreamTaskCanStreamData"
     },
     {
@@ -3954,6 +4758,10 @@
           "start": 13260,
           "end": 14132
         }
+      },
+      "lines": {
+        "start": 410,
+        "end": 433
       },
       "message": "structural clone of Tests/ConcurrencyTests.swift:DataRequestConcurrencyTests.testThatDataTaskIsAutomaticallyCancelledInTaskGroup"
     },
@@ -3976,6 +4784,10 @@
           "end": 11558
         }
       },
+      "lines": {
+        "start": 343,
+        "end": 356
+      },
       "message": "structural clone of Tests/ConcurrencyTests.swift:DataRequestConcurrencyTests.testThatDataTaskProperlySupportsConcurrentRequests"
     },
     {
@@ -3996,6 +4808,10 @@
           "start": 2926,
           "end": 4155
         }
+      },
+      "lines": {
+        "start": 70,
+        "end": 101
       },
       "message": "structural clone of Tests/LeaksTests.swift:LeaksTests.testForLeaks"
     },
@@ -4018,6 +4834,10 @@
           "end": 30571
         }
       },
+      "lines": {
+        "start": 913,
+        "end": 923
+      },
       "message": "structural clone of Tests/ParameterEncoderTests.swift:URLEncodedFormEncoderTests.testThatNilCanBeEncodedAsNull"
     },
     {
@@ -4038,6 +4858,10 @@
           "start": 3284,
           "end": 3736
         }
+      },
+      "lines": {
+        "start": 90,
+        "end": 105
       },
       "message": "structural clone of Tests/ParameterEncoderTests.swift:JSONParameterEncoderTests.testThatJSONEncoderDefaultWorks"
     },
@@ -4060,6 +4884,10 @@
           "end": 12736
         }
       },
+      "lines": {
+        "start": 390,
+        "end": 400
+      },
       "message": "structural clone of Tests/ParameterEncoderTests.swift:URLEncodedFormEncoderTests.testThatNestedDictionariesCanHaveExplicitBracketKeyPaths"
     },
     {
@@ -4080,6 +4908,10 @@
           "start": 23312,
           "end": 23733
         }
+      },
+      "lines": {
+        "start": 704,
+        "end": 714
       },
       "message": "structural clone of Tests/ParameterEncoderTests.swift:URLEncodedFormEncoderTests.testThatDatesCanBeEncoded"
     },
@@ -4102,6 +4934,10 @@
           "end": 23306
         }
       },
+      "lines": {
+        "start": 692,
+        "end": 702
+      },
       "message": "structural clone of Tests/ParameterEncoderTests.swift:URLEncodedFormEncoderTests.testThatDatesCanBeEncoded"
     },
     {
@@ -4122,6 +4958,10 @@
           "start": 23739,
           "end": 24151
         }
+      },
+      "lines": {
+        "start": 716,
+        "end": 726
       },
       "message": "structural clone of Tests/ParameterEncoderTests.swift:URLEncodedFormEncoderTests.testThatDatesCanBeEncoded"
     },
@@ -4144,6 +4984,10 @@
           "end": 17265
         }
       },
+      "lines": {
+        "start": 497,
+        "end": 511
+      },
       "message": "structural clone of Tests/ParameterEncodingTests.swift:URLParameterEncodingTestCase.testThatURLParameterEncodingEncodesGETParametersInURL"
     },
     {
@@ -4164,6 +5008,10 @@
           "start": 14843,
           "end": 15289
         }
+      },
+      "lines": {
+        "start": 449,
+        "end": 459
       },
       "message": "structural clone of Tests/ParameterEncodingTests.swift:URLParameterEncodingTestCase.testURLParameterEncodeStringForRequestWithPrecomposedQuery"
     },
@@ -4186,6 +5034,10 @@
           "end": 2105
         }
       },
+      "lines": {
+        "start": 45,
+        "end": 58
+      },
       "message": "structural clone of Tests/ProtectedTests.swift:ProtectedTests.testThatProtectedValuesAreAccessedSafely"
     },
     {
@@ -4206,6 +5058,10 @@
           "start": 2308,
           "end": 3112
         }
+      },
+      "lines": {
+        "start": 63,
+        "end": 87
       },
       "message": "structural clone of Tests/RedirectHandlerTests.swift:RedirectHandlerTestCase.testThatRequestRedirectHandlerCanFollowRedirects"
     },
@@ -4228,6 +5084,10 @@
           "end": 5741
         }
       },
+      "lines": {
+        "start": 146,
+        "end": 170
+      },
       "message": "structural clone of Tests/RedirectHandlerTests.swift:RedirectHandlerTestCase.testThatSessionRedirectHandlerCanFollowRedirects"
     },
     {
@@ -4248,6 +5108,10 @@
           "start": 55328,
           "end": 55957
         }
+      },
+      "lines": {
+        "start": 1432,
+        "end": 1451
       },
       "message": "structural clone of Tests/RequestTests.swift:RequestInvalidURLTestCase.testThatDataRequestWithFileURLThrowsError"
     },
@@ -4270,6 +5134,10 @@
           "end": 54627
         }
       },
+      "lines": {
+        "start": 1388,
+        "end": 1405
+      },
       "message": "structural clone of Tests/RequestTests.swift:RequestLifetimeTests.testThatRequestProvidesURLRequestWhenCreated"
     },
     {
@@ -4290,6 +5158,10 @@
           "start": 31057,
           "end": 33996
         }
+      },
+      "lines": {
+        "start": 781,
+        "end": 832
       },
       "message": "structural clone of Tests/DownloadTests.swift:DownloadRequestEventsTestCase.testThatDownloadRequestTriggersAllAppropriateLifetimeEvents"
     },
@@ -4312,6 +5184,10 @@
           "end": 36516
         }
       },
+      "lines": {
+        "start": 834,
+        "end": 880
+      },
       "message": "structural clone of Tests/DownloadTests.swift:DownloadRequestEventsTestCase.testThatCancelledDownloadRequestTriggersAllAppropriateLifetimeEvents"
     },
     {
@@ -4332,6 +5208,10 @@
           "start": 73420,
           "end": 74345
         }
+      },
+      "lines": {
+        "start": 1869,
+        "end": 1890
       },
       "message": "structural clone of Tests/RequestTests.swift:RequestCompressionTests.thatDeflateCompressorReplacesHeaderWhenConfigured"
     },
@@ -4354,6 +5234,10 @@
           "end": 15415
         }
       },
+      "lines": {
+        "start": 397,
+        "end": 416
+      },
       "message": "structural clone of Tests/RequestTests.swift:RequestResponseTestCase.testThatRequestsCanPassEncodableParametersAsAURLQuery"
     },
     {
@@ -4374,6 +5258,10 @@
           "start": 25409,
           "end": 26628
         }
+      },
+      "lines": {
+        "start": 651,
+        "end": 678
       },
       "message": "structural clone of Tests/RequestTests.swift:RequestResponseTestCase.testThatRequestManuallySuspendedManyTimesAfterAutomaticResumeOnlyReceivesAppropriateLifetimeEvents"
     },
@@ -4396,6 +5284,10 @@
           "end": 27190
         }
       },
+      "lines": {
+        "start": 720,
+        "end": 733
+      },
       "message": "structural clone of Tests/ResponseSerializationTests.swift:DecodableResponseSerializerTests.testThatDecodableResponseSerializerSucceedsWhenDataIsNilWithGETRequestAnd204ResponseStatusCode"
     },
     {
@@ -4416,6 +5308,10 @@
           "start": 31304,
           "end": 31802
         }
+      },
+      "lines": {
+        "start": 840,
+        "end": 852
       },
       "message": "structural clone of Tests/ResponseSerializationTests.swift:DownloadResponseSerializationTestCase.testThatDataResponseSerializerFailsWhenFileDataIsEmpty"
     },
@@ -4438,6 +5334,10 @@
           "end": 32860
         }
       },
+      "lines": {
+        "start": 868,
+        "end": 881
+      },
       "message": "structural clone of Tests/ResponseSerializationTests.swift:DataResponseSerializationTestCase.testThatStringResponseSerializerFailsWhenDataIsNilWithNonEmptyResponseStatusCode"
     },
     {
@@ -4458,6 +5358,10 @@
           "start": 9269,
           "end": 9753
         }
+      },
+      "lines": {
+        "start": 244,
+        "end": 256
       },
       "message": "structural clone of Tests/ResponseSerializationTests.swift:DataResponseSerializationTestCase.testThatDataResponseSerializerFailsWhenErrorIsNotNil"
     },
@@ -4480,6 +5384,10 @@
           "end": 16749
         }
       },
+      "lines": {
+        "start": 433,
+        "end": 448
+      },
       "message": "structural clone of Tests/ResponseSerializationTests.swift:DataResponseSerializationTestCase.testThatJSONResponseSerializerSucceedsWhenDataIsNilWithGETRequestAnd204ResponseStatusCode"
     },
     {
@@ -4500,6 +5408,10 @@
           "start": 38354,
           "end": 38922
         }
+      },
+      "lines": {
+        "start": 1027,
+        "end": 1040
       },
       "message": "structural clone of Tests/ResponseSerializationTests.swift:DataResponseSerializationTestCase.testThatStringResponseSerializerFailsWhenDataIsNilWithNonEmptyResponseStatusCode"
     },
@@ -4522,6 +5434,10 @@
           "end": 38348
         }
       },
+      "lines": {
+        "start": 1013,
+        "end": 1025
+      },
       "message": "structural clone of Tests/ResponseSerializationTests.swift:DataResponseSerializationTestCase.testThatDataResponseSerializerFailsWhenErrorIsNotNil"
     },
     {
@@ -4542,6 +5458,10 @@
           "start": 30822,
           "end": 31298
         }
+      },
+      "lines": {
+        "start": 826,
+        "end": 838
       },
       "message": "structural clone of Tests/ResponseSerializationTests.swift:DataResponseSerializationTestCase.testThatDataResponseSerializerFailsWhenDataIsNil"
     },
@@ -4564,6 +5484,10 @@
           "end": 28312
         }
       },
+      "lines": {
+        "start": 750,
+        "end": 762
+      },
       "message": "structural clone of Tests/ResponseSerializationTests.swift:DecodableResponseSerializerTests.testThatDecodableResponseSerializerSucceedsWhenDataIsNilWithEmptyResponseStatusCode"
     },
     {
@@ -4584,6 +5508,10 @@
           "start": 39539,
           "end": 40045
         }
+      },
+      "lines": {
+        "start": 1059,
+        "end": 1072
       },
       "message": "structural clone of Tests/ResponseSerializationTests.swift:DataResponseSerializationTestCase.testThatJSONResponseSerializerFailsWhenDataIsNil"
     },
@@ -4606,6 +5534,10 @@
           "end": 42764
         }
       },
+      "lines": {
+        "start": 1134,
+        "end": 1147
+      },
       "message": "structural clone of Tests/ResponseSerializationTests.swift:DataResponseSerializationTestCase.testThatJSONResponseSerializerFailsWhenErrorIsNotNil"
     },
     {
@@ -4626,6 +5558,10 @@
           "start": 28318,
           "end": 28924
         }
+      },
+      "lines": {
+        "start": 764,
+        "end": 777
       },
       "message": "structural clone of Tests/ResponseSerializationTests.swift:DecodableResponseSerializerTests.testThatDecodableResponseSerializerFailsWhenDataIsNilWithNonEmptyResponseStatusCode"
     },
@@ -4648,6 +5584,10 @@
           "end": 33959
         }
       },
+      "lines": {
+        "start": 900,
+        "end": 912
+      },
       "message": "structural clone of Tests/ResponseSerializationTests.swift:DataResponseSerializationTestCase.testThatDataResponseSerializerFailsWhenDataIsNil"
     },
     {
@@ -4668,6 +5608,10 @@
           "start": 10927,
           "end": 11514
         }
+      },
+      "lines": {
+        "start": 289,
+        "end": 303
       },
       "message": "structural clone of Tests/ResponseSerializationTests.swift:DataResponseSerializationTestCase.testThatStringResponseSerializerSucceedsWhenDataIsNilWithGETRequestAnd204ResponseStatusCode"
     },
@@ -4690,6 +5634,10 @@
           "end": 32287
         }
       },
+      "lines": {
+        "start": 854,
+        "end": 866
+      },
       "message": "structural clone of Tests/ResponseSerializationTests.swift:DataResponseSerializationTestCase.testThatDataResponseSerializerFailsWhenErrorIsNotNil"
     },
     {
@@ -4710,6 +5658,10 @@
           "start": 6379,
           "end": 6817
         }
+      },
+      "lines": {
+        "start": 171,
+        "end": 182
       },
       "message": "structural clone of Tests/ResponseSerializationTests.swift:DataResponseSerializationTestCase.testThatDataResponseSerializerSucceedsWhenDataIsNotNil"
     },
@@ -4732,6 +5684,10 @@
           "end": 47387
         }
       },
+      "lines": {
+        "start": 1270,
+        "end": 1283
+      },
       "message": "structural clone of Tests/ResponseSerializationTests.swift:DataPreprocessorSerializationTests.testThatDataResponseSerializerProperlyReceivesErrorFromFailingDataPreprocessor"
     },
     {
@@ -4752,6 +5708,10 @@
           "start": 34481,
           "end": 34995
         }
+      },
+      "lines": {
+        "start": 928,
+        "end": 940
       },
       "message": "structural clone of Tests/ResponseSerializationTests.swift:DownloadResponseSerializationTestCase.testThatDataResponseSerializerFailsWhenFileDataIsEmpty"
     },
@@ -4774,6 +5734,10 @@
           "end": 4754
         }
       },
+      "lines": {
+        "start": 109,
+        "end": 123
+      },
       "message": "structural clone of Tests/ResponseSerializationTests.swift:DataResponseSerializationTestCase.testThatDataResponseSerializerSucceedsWhenDataIsNilWithGETRequestAnd204ResponseStatusCode"
     },
     {
@@ -4794,6 +5758,10 @@
           "start": 40585,
           "end": 41123
         }
+      },
+      "lines": {
+        "start": 1089,
+        "end": 1102
       },
       "message": "structural clone of Tests/ResponseSerializationTests.swift:DownloadResponseSerializationTestCase.testThatJSONResponseSerializerFailsWhenFileURLIsInvalid"
     },
@@ -4816,6 +5784,10 @@
           "end": 5884
         }
       },
+      "lines": {
+        "start": 143,
+        "end": 155
+      },
       "message": "structural clone of Tests/ResponseSerializationTests.swift:DataResponseSerializationTestCase.testThatDataResponseSerializerFailsWhenDataIsNil"
     },
     {
@@ -4836,6 +5808,10 @@
           "start": 42770,
           "end": 43364
         }
+      },
+      "lines": {
+        "start": 1149,
+        "end": 1163
       },
       "message": "structural clone of Tests/ResponseSerializationTests.swift:DataResponseSerializationTestCase.testThatJSONResponseSerializerFailsWhenDataIsNilWithNonEmptyResponseStatusCode"
     },
@@ -4858,6 +5834,10 @@
           "end": 21411
         }
       },
+      "lines": {
+        "start": 642,
+        "end": 672
+      },
       "message": "structural clone of Tests/DownloadTests.swift:DownloadResponseTryMapErrorTestCase.testThatTryMapErrorCatchesTransformationError"
     },
     {
@@ -4878,6 +5858,10 @@
           "start": 5440,
           "end": 6314
         }
+      },
+      "lines": {
+        "start": 164,
+        "end": 188
       },
       "message": "structural clone of Tests/ResponseTests.swift:ResponseDataTestCase.testThatResponseDataReturnsFailureResultWithOptionalDataAndError"
     },
@@ -4900,6 +5884,10 @@
           "end": 7182
         }
       },
+      "lines": {
+        "start": 195,
+        "end": 218
+      },
       "message": "structural clone of Tests/ResponseTests.swift:ResponseDataTestCase.testThatResponseDataReturnsSuccessResultWithValidData"
     },
     {
@@ -4920,6 +5908,10 @@
           "start": 18852,
           "end": 19584
         }
+      },
+      "lines": {
+        "start": 590,
+        "end": 612
       },
       "message": "structural clone of Tests/DownloadTests.swift:DownloadResponseMapErrorTestCase.testThatMapErrorPreservesSuccessValue"
     },
@@ -4942,6 +5934,10 @@
           "end": 5434
         }
       },
+      "lines": {
+        "start": 139,
+        "end": 162
+      },
       "message": "structural clone of Tests/ResponseTests.swift:ResponseDataTestCase.testThatResponseDataReturnsSuccessResultWithValidData"
     },
     {
@@ -4962,6 +5958,10 @@
           "start": 19660,
           "end": 20398
         }
+      },
+      "lines": {
+        "start": 618,
+        "end": 640
       },
       "message": "structural clone of Tests/DownloadTests.swift:DownloadResponseTryMapErrorTestCase.testThatTryMapErrorPreservesSuccessValue"
     },
@@ -4984,6 +5984,10 @@
           "end": 18846
         }
       },
+      "lines": {
+        "start": 560,
+        "end": 588
+      },
       "message": "structural clone of Tests/DownloadTests.swift:DownloadResponseMapErrorTestCase.testThatMapErrorTransformsFailureValue"
     },
     {
@@ -5004,6 +6008,10 @@
           "start": 7188,
           "end": 8034
         }
+      },
+      "lines": {
+        "start": 220,
+        "end": 244
       },
       "message": "structural clone of Tests/ResponseTests.swift:ResponseDataTestCase.testThatResponseDataReturnsFailureResultWithOptionalDataAndError"
     },
@@ -5026,6 +6034,10 @@
           "end": 43187
         }
       },
+      "lines": {
+        "start": 998,
+        "end": 1012
+      },
       "message": "structural clone of Tests/ServerTrustEvaluatorTests.swift:ServerTrustPolicyPinCertificatesTestCase.testThatPinnedLeafCertificatePassesEvaluationWithoutHostValidation"
     },
     {
@@ -5046,6 +6058,10 @@
           "start": 21662,
           "end": 22286
         }
+      },
+      "lines": {
+        "start": 528,
+        "end": 540
       },
       "message": "structural clone of Tests/ServerTrustEvaluatorTests.swift:ServerTrustPolicyPerformDefaultEvaluationTestCase.testThatNonAnchoredRootCertificateChainFailsEvaluationWithoutHostValidation"
     },
@@ -5068,6 +6084,10 @@
           "end": 53761
         }
       },
+      "lines": {
+        "start": 1231,
+        "end": 1246
+      },
       "message": "structural clone of Tests/ServerTrustEvaluatorTests.swift:ServerTrustPolicyPinPublicKeysTestCase.testThatPinningLeafKeyWithoutCertificateChainValidationPassesEvaluationWithMissingIntermediateCertificate"
     },
     {
@@ -5088,6 +6108,10 @@
           "start": 19718,
           "end": 20263
         }
+      },
+      "lines": {
+        "start": 479,
+        "end": 491
       },
       "message": "structural clone of Tests/ServerTrustEvaluatorTests.swift:ServerTrustPolicyPerformDefaultEvaluationTestCase.testThatMissingDNSNameLeafCertificateFailsEvaluationWithHostValidation"
     },
@@ -5110,6 +6134,10 @@
           "end": 41626
         }
       },
+      "lines": {
+        "start": 966,
+        "end": 980
+      },
       "message": "structural clone of Tests/ServerTrustEvaluatorTests.swift:ServerTrustPolicyPinCertificatesTestCase.testThatPinnedLeafCertificatePassesEvaluationWithoutHostValidation"
     },
     {
@@ -5130,6 +6158,10 @@
           "start": 37779,
           "end": 38540
         }
+      },
+      "lines": {
+        "start": 902,
+        "end": 916
       },
       "message": "structural clone of Tests/ServerTrustEvaluatorTests.swift:ServerTrustPolicyPinCertificatesTestCase.testThatPinnedLeafCertificatePassesEvaluationWithoutHostValidation"
     },
@@ -5152,6 +6184,10 @@
           "end": 42415
         }
       },
+      "lines": {
+        "start": 982,
+        "end": 996
+      },
       "message": "structural clone of Tests/ServerTrustEvaluatorTests.swift:ServerTrustPolicyPinCertificatesTestCase.testThatPinnedLeafCertificatePassesEvaluationWithoutHostValidation"
     },
     {
@@ -5172,6 +6208,10 @@
           "start": 39296,
           "end": 40075
         }
+      },
+      "lines": {
+        "start": 934,
+        "end": 948
       },
       "message": "structural clone of Tests/ServerTrustEvaluatorTests.swift:ServerTrustPolicyPinCertificatesTestCase.testThatPinnedLeafCertificatePassesEvaluationWithoutHostValidation"
     },
@@ -5194,6 +6234,10 @@
           "end": 36957
         }
       },
+      "lines": {
+        "start": 870,
+        "end": 882
+      },
       "message": "structural clone of Tests/ServerTrustEvaluatorTests.swift:ServerTrustPolicyPinCertificatesTestCase.testThatPinningIntermediateCertificateNotInCertificateChainFailsEvaluationWithHostValidation"
     },
     {
@@ -5214,6 +6258,10 @@
           "start": 23449,
           "end": 24039
         }
+      },
+      "lines": {
+        "start": 570,
+        "end": 582
       },
       "message": "structural clone of Tests/ServerTrustEvaluatorTests.swift:ServerTrustPolicyPerformDefaultEvaluationTestCase.testThatExpiredCertificateChainFailsEvaluationWithoutHostValidation"
     },
@@ -5236,6 +6284,10 @@
           "end": 32458
         }
       },
+      "lines": {
+        "start": 768,
+        "end": 780
+      },
       "message": "structural clone of Tests/ServerTrustEvaluatorTests.swift:ServerTrustPolicyPinCertificatesTestCase.testThatPinningIntermediateCertificateNotInCertificateChainFailsEvaluationWithoutHostValidation"
     },
     {
@@ -5256,6 +6308,10 @@
           "start": 38546,
           "end": 39290
         }
+      },
+      "lines": {
+        "start": 918,
+        "end": 932
       },
       "message": "structural clone of Tests/ServerTrustEvaluatorTests.swift:ServerTrustPolicyPinCertificatesTestCase.testThatPinnedLeafCertificatePassesEvaluationWithoutHostValidation"
     },
@@ -5278,6 +6334,10 @@
           "end": 29125
         }
       },
+      "lines": {
+        "start": 692,
+        "end": 706
+      },
       "message": "structural clone of Tests/ServerTrustEvaluatorTests.swift:ServerTrustPolicyPinCertificatesTestCase.testThatPinnedLeafCertificatePassesEvaluationWithoutHostValidation"
     },
     {
@@ -5298,6 +6358,10 @@
           "start": 29131,
           "end": 29863
         }
+      },
+      "lines": {
+        "start": 708,
+        "end": 722
       },
       "message": "structural clone of Tests/ServerTrustEvaluatorTests.swift:ServerTrustPolicyPinCertificatesTestCase.testThatPinnedLeafCertificatePassesEvaluationWithoutHostValidation"
     },
@@ -5320,6 +6384,10 @@
           "end": 56186
         }
       },
+      "lines": {
+        "start": 1282,
+        "end": 1297
+      },
       "message": "structural clone of Tests/ServerTrustEvaluatorTests.swift:ServerTrustPolicyPinPublicKeysTestCase.testThatPinningLeafKeyWithoutCertificateChainValidationPassesEvaluationWithMissingIntermediateCertificate"
     },
     {
@@ -5340,6 +6408,10 @@
           "start": 22891,
           "end": 23443
         }
+      },
+      "lines": {
+        "start": 556,
+        "end": 568
       },
       "message": "structural clone of Tests/ServerTrustEvaluatorTests.swift:ServerTrustPolicyPerformDefaultEvaluationTestCase.testThatExpiredCertificateChainFailsEvaluationWithoutHostValidation"
     },
@@ -5362,6 +6434,10 @@
           "end": 55385
         }
       },
+      "lines": {
+        "start": 1265,
+        "end": 1280
+      },
       "message": "structural clone of Tests/ServerTrustEvaluatorTests.swift:ServerTrustPolicyPinPublicKeysTestCase.testThatPinningLeafKeyWithoutCertificateChainValidationPassesEvaluationWithMissingIntermediateCertificate"
     },
     {
@@ -5382,6 +6458,10 @@
           "start": 52079,
           "end": 52910
         }
+      },
+      "lines": {
+        "start": 1214,
+        "end": 1229
       },
       "message": "structural clone of Tests/ServerTrustEvaluatorTests.swift:ServerTrustPolicyPinPublicKeysTestCase.testThatPinningLeafKeyWithoutCertificateChainValidationPassesEvaluationWithMissingIntermediateCertificate"
     },
@@ -5404,6 +6484,10 @@
           "end": 31840
         }
       },
+      "lines": {
+        "start": 754,
+        "end": 766
+      },
       "message": "structural clone of Tests/ServerTrustEvaluatorTests.swift:ServerTrustPolicyPinCertificatesTestCase.testThatPinningIntermediateCertificateNotInCertificateChainFailsEvaluationWithoutHostValidation"
     },
     {
@@ -5424,6 +6508,10 @@
           "start": 16747,
           "end": 17334
         }
+      },
+      "lines": {
+        "start": 407,
+        "end": 419
       },
       "message": "structural clone of Tests/ServerTrustEvaluatorTests.swift:ServerTrustPolicyPerformDefaultEvaluationTestCase.testThatExpiredCertificateChainFailsEvaluationWithoutHostValidation"
     },
@@ -5446,6 +6534,10 @@
           "end": 36363
         }
       },
+      "lines": {
+        "start": 856,
+        "end": 868
+      },
       "message": "structural clone of Tests/ServerTrustEvaluatorTests.swift:ServerTrustPolicyPinCertificatesTestCase.testThatPinningIntermediateCertificateNotInCertificateChainFailsEvaluationWithHostValidation"
     },
     {
@@ -5466,6 +6558,10 @@
           "start": 53767,
           "end": 54567
         }
+      },
+      "lines": {
+        "start": 1248,
+        "end": 1263
       },
       "message": "structural clone of Tests/ServerTrustEvaluatorTests.swift:ServerTrustPolicyPinPublicKeysTestCase.testThatPinningLeafKeyWithoutCertificateChainValidationPassesEvaluationWithMissingIntermediateCertificate"
     },
@@ -5488,6 +6584,10 @@
           "end": 40868
         }
       },
+      "lines": {
+        "start": 950,
+        "end": 964
+      },
       "message": "structural clone of Tests/ServerTrustEvaluatorTests.swift:ServerTrustPolicyPinCertificatesTestCase.testThatPinnedLeafCertificatePassesEvaluationWithoutHostValidation"
     },
     {
@@ -5508,6 +6608,10 @@
           "start": 37019,
           "end": 37773
         }
+      },
+      "lines": {
+        "start": 886,
+        "end": 900
       },
       "message": "structural clone of Tests/ServerTrustEvaluatorTests.swift:ServerTrustPolicyPinCertificatesTestCase.testThatPinnedLeafCertificatePassesEvaluationWithoutHostValidation"
     },
@@ -5530,6 +6634,10 @@
           "end": 8816
         }
       },
+      "lines": {
+        "start": 173,
+        "end": 226
+      },
       "message": "structural clone of Tests/SessionDelegateTests.swift:SessionDelegateTestCase.testThatAppropriateNotificationsAreCalledWithRequestForDataRequest"
     },
     {
@@ -5550,6 +6658,10 @@
           "start": 56684,
           "end": 59122
         }
+      },
+      "lines": {
+        "start": 1492,
+        "end": 1548
       },
       "message": "structural clone of Tests/SessionTests.swift:SessionTestCase.testThatSessionCallsResponseSerializerCompletionsWhenAdapterThrowsErrorDuringRetry"
     },
@@ -5572,6 +6684,10 @@
           "end": 24141
         }
       },
+      "lines": {
+        "start": 637,
+        "end": 662
+      },
       "message": "structural clone of Tests/SessionTests.swift:SessionTestCase.testThatDataRequestWithInvalidURLStringThrowsResponseHandlerError"
     },
     {
@@ -5592,6 +6708,10 @@
           "start": 28084,
           "end": 29470
         }
+      },
+      "lines": {
+        "start": 776,
+        "end": 806
       },
       "message": "structural clone of Tests/SessionTests.swift:SessionTestCase.testThatSessionCallsRequestAdaptersWhenCreatingDataRequest"
     },
@@ -5614,6 +6734,10 @@
           "end": 15104
         }
       },
+      "lines": {
+        "start": 376,
+        "end": 399
+      },
       "message": "structural clone of Tests/TLSEvaluationTests.swift:TLSEvaluationExpiredLeafCertificateTestCase.testThatExpiredCertificateRequestSucceedsWhenPinningLeafCertificateWithoutCertificateChainOrHostValidation"
     },
     {
@@ -5634,6 +6758,10 @@
           "start": 19844,
           "end": 20809
         }
+      },
+      "lines": {
+        "start": 606,
+        "end": 634
       },
       "message": "structural clone of Tests/ValidationTests.swift:AutomaticValidationTestCase.testThatValidationForRequestWithAcceptableStatusCodeAndContentTypeResponseSucceeds"
     },
@@ -5656,6 +6784,10 @@
           "end": 7416
         }
       },
+      "lines": {
+        "start": 184,
+        "end": 220
+      },
       "message": "structural clone of Tests/ValidationTests.swift:ContentTypeValidationTestCase.testThatValidationForRequestWithAcceptableContentTypeResponseSucceeds"
     },
     {
@@ -5676,6 +6808,10 @@
           "start": 2145,
           "end": 3873
         }
+      },
+      "lines": {
+        "start": 62,
+        "end": 105
       },
       "message": "structural clone of Tests/WebSocketTests.swift:WebSocketTests.testThatWebSocketsCanReceiveMessageEvents"
     },
@@ -5750,6 +6886,10 @@
           "end": 1353
         }
       },
+      "lines": {
+        "start": 29,
+        "end": 31
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
     {
@@ -5770,6 +6910,10 @@
           "start": 1818,
           "end": 1848
         }
+      },
+      "lines": {
+        "start": 51,
+        "end": 51
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -5792,6 +6936,10 @@
           "end": 2050
         }
       },
+      "lines": {
+        "start": 54,
+        "end": 58
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -5812,6 +6960,10 @@
           "start": 1375,
           "end": 1422
         }
+      },
+      "lines": {
+        "start": 33,
+        "end": 33
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -5834,6 +6986,10 @@
           "end": 1369
         }
       },
+      "lines": {
+        "start": 31,
+        "end": 31
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -5854,6 +7010,10 @@
           "start": 4722,
           "end": 4779
         }
+      },
+      "lines": {
+        "start": 98,
+        "end": 98
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -5876,6 +7036,10 @@
           "end": 4462
         }
       },
+      "lines": {
+        "start": 93,
+        "end": 93
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -5896,6 +7060,10 @@
           "start": 5123,
           "end": 5179
         }
+      },
+      "lines": {
+        "start": 105,
+        "end": 105
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -5918,6 +7086,10 @@
           "end": 4640
         }
       },
+      "lines": {
+        "start": 96,
+        "end": 96
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -5935,6 +7107,10 @@
           "start": 4170,
           "end": 5117
         }
+      },
+      "lines": {
+        "start": 89,
+        "end": 103
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -5954,6 +7130,10 @@
           "end": 15616
         }
       },
+      "lines": {
+        "start": 436,
+        "end": 441
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
     },
     {
@@ -5972,6 +7152,10 @@
           "end": 4209
         }
       },
+      "lines": {
+        "start": 71,
+        "end": 74
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
     },
     {
@@ -5989,6 +7173,10 @@
           "start": 1991,
           "end": 2457
         }
+      },
+      "lines": {
+        "start": 55,
+        "end": 75
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -6011,6 +7199,10 @@
           "end": 1638
         }
       },
+      "lines": {
+        "start": 38,
+        "end": 41
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
     },
     {
@@ -6031,6 +7223,10 @@
           "start": 1753,
           "end": 1868
         }
+      },
+      "lines": {
+        "start": 46,
+        "end": 49
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
     },
@@ -6053,6 +7249,10 @@
           "end": 5256
         }
       },
+      "lines": {
+        "start": 105,
+        "end": 105
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -6073,6 +7273,10 @@
           "start": 7636,
           "end": 7659
         }
+      },
+      "lines": {
+        "start": 138,
+        "end": 138
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -6095,6 +7299,10 @@
           "end": 5620
         }
       },
+      "lines": {
+        "start": 109,
+        "end": 109
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -6115,6 +7323,10 @@
           "start": 6305,
           "end": 6353
         }
+      },
+      "lines": {
+        "start": 118,
+        "end": 118
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -6137,6 +7349,10 @@
           "end": 4624
         }
       },
+      "lines": {
+        "start": 97,
+        "end": 97
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -6157,6 +7373,10 @@
           "start": 7752,
           "end": 7789
         }
+      },
+      "lines": {
+        "start": 140,
+        "end": 140
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -6179,6 +7399,10 @@
           "end": 5755
         }
       },
+      "lines": {
+        "start": 111,
+        "end": 111
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -6199,6 +7423,10 @@
           "start": 5345,
           "end": 5432
         }
+      },
+      "lines": {
+        "start": 107,
+        "end": 107
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -6221,6 +7449,10 @@
           "end": 6232
         }
       },
+      "lines": {
+        "start": 116,
+        "end": 116
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -6241,6 +7473,10 @@
           "start": 53156,
           "end": 53193
         }
+      },
+      "lines": {
+        "start": 1258,
+        "end": 1258
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
     },
@@ -6263,6 +7499,10 @@
           "end": 6025
         }
       },
+      "lines": {
+        "start": 114,
+        "end": 114
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -6280,6 +7520,10 @@
           "start": 48195,
           "end": 48559
         }
+      },
+      "lines": {
+        "start": 749,
+        "end": 760
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -6299,6 +7543,10 @@
           "end": 48189
         }
       },
+      "lines": {
+        "start": 735,
+        "end": 747
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
     {
@@ -6316,6 +7564,10 @@
           "start": 21450,
           "end": 22056
         }
+      },
+      "lines": {
+        "start": 336,
+        "end": 350
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -6338,6 +7590,10 @@
           "end": 5898
         }
       },
+      "lines": {
+        "start": 95,
+        "end": 95
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -6358,6 +7614,10 @@
           "start": 3142,
           "end": 3209
         }
+      },
+      "lines": {
+        "start": 68,
+        "end": 68
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
     },
@@ -6380,6 +7640,10 @@
           "end": 4124
         }
       },
+      "lines": {
+        "start": 93,
+        "end": 93
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
     {
@@ -6400,6 +7664,10 @@
           "start": 2898,
           "end": 2950
         }
+      },
+      "lines": {
+        "start": 65,
+        "end": 65
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
     },
@@ -6422,6 +7690,10 @@
           "end": 5730
         }
       },
+      "lines": {
+        "start": 141,
+        "end": 141
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -6439,6 +7711,10 @@
           "start": 20049,
           "end": 20327
         }
+      },
+      "lines": {
+        "start": 529,
+        "end": 536
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -6461,6 +7737,10 @@
           "end": 5662
         }
       },
+      "lines": {
+        "start": 138,
+        "end": 138
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -6481,6 +7761,10 @@
           "start": 5310,
           "end": 5522
         }
+      },
+      "lines": {
+        "start": 134,
+        "end": 136
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -6503,6 +7787,10 @@
           "end": 5017
         }
       },
+      "lines": {
+        "start": 122,
+        "end": 122
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -6521,6 +7809,10 @@
           "end": 2134
         }
       },
+      "lines": {
+        "start": 36,
+        "end": 41
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
     {
@@ -6538,6 +7830,10 @@
           "start": 5274,
           "end": 5668
         }
+      },
+      "lines": {
+        "start": 133,
+        "end": 139
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -6560,6 +7856,10 @@
           "end": 5821
         }
       },
+      "lines": {
+        "start": 143,
+        "end": 145
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -6580,6 +7880,10 @@
           "start": 2642,
           "end": 2676
         }
+      },
+      "lines": {
+        "start": 53,
+        "end": 53
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -6602,6 +7906,10 @@
           "end": 12747
         }
       },
+      "lines": {
+        "start": 219,
+        "end": 219
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -6622,6 +7930,10 @@
           "start": 9200,
           "end": 9290
         }
+      },
+      "lines": {
+        "start": 141,
+        "end": 141
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
     },
@@ -6644,6 +7956,10 @@
           "end": 6847
         }
       },
+      "lines": {
+        "start": 109,
+        "end": 109
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
     },
     {
@@ -6664,6 +7980,10 @@
           "start": 12529,
           "end": 12554
         }
+      },
+      "lines": {
+        "start": 213,
+        "end": 213
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -6686,6 +8006,10 @@
           "end": 12947
         }
       },
+      "lines": {
+        "start": 222,
+        "end": 225
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -6706,6 +8030,10 @@
           "start": 4780,
           "end": 4913
         }
+      },
+      "lines": {
+        "start": 84,
+        "end": 84
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
     },
@@ -6728,6 +8056,10 @@
           "end": 13135
         }
       },
+      "lines": {
+        "start": 227,
+        "end": 231
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
     },
     {
@@ -6748,6 +8080,10 @@
           "start": 12756,
           "end": 12815
         }
+      },
+      "lines": {
+        "start": 220,
+        "end": 220
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -6770,6 +8106,10 @@
           "end": 12653
         }
       },
+      "lines": {
+        "start": 216,
+        "end": 216
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -6790,6 +8130,10 @@
           "start": 12564,
           "end": 12602
         }
+      },
+      "lines": {
+        "start": 215,
+        "end": 215
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -6812,6 +8156,10 @@
           "end": 18829
         }
       },
+      "lines": {
+        "start": 322,
+        "end": 322
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -6829,6 +8177,10 @@
           "start": 3318,
           "end": 3754
         }
+      },
+      "lines": {
+        "start": 78,
+        "end": 90
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -6851,6 +8203,10 @@
           "end": 3441
         }
       },
+      "lines": {
+        "start": 81,
+        "end": 81
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -6871,6 +8227,10 @@
           "start": 3489,
           "end": 3517
         }
+      },
+      "lines": {
+        "start": 83,
+        "end": 83
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -6893,6 +8253,10 @@
           "end": 3403
         }
       },
+      "lines": {
+        "start": 80,
+        "end": 80
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -6913,6 +8277,10 @@
           "start": 2501,
           "end": 2767
         }
+      },
+      "lines": {
+        "start": 57,
+        "end": 62
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
     },
@@ -6935,6 +8303,10 @@
           "end": 3480
         }
       },
+      "lines": {
+        "start": 82,
+        "end": 82
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -6953,6 +8325,10 @@
           "end": 11973
         }
       },
+      "lines": {
+        "start": 281,
+        "end": 294
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -6970,6 +8346,10 @@
           "start": 10888,
           "end": 10994
         }
+      },
+      "lines": {
+        "start": 270,
+        "end": 270
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -6992,6 +8372,10 @@
           "end": 5331
         }
       },
+      "lines": {
+        "start": 114,
+        "end": 114
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -7009,6 +8393,10 @@
           "start": 10782,
           "end": 10883
         }
+      },
+      "lines": {
+        "start": 269,
+        "end": 269
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -7031,6 +8419,10 @@
           "end": 5129
         }
       },
+      "lines": {
+        "start": 110,
+        "end": 110
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -7048,6 +8440,10 @@
           "start": 10999,
           "end": 11107
         }
+      },
+      "lines": {
+        "start": 271,
+        "end": 271
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -7067,6 +8463,10 @@
           "end": 10777
         }
       },
+      "lines": {
+        "start": 268,
+        "end": 268
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -7084,6 +8484,10 @@
           "start": 11112,
           "end": 11271
         }
+      },
+      "lines": {
+        "start": 272,
+        "end": 278
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -7106,6 +8510,10 @@
           "end": 5234
         }
       },
+      "lines": {
+        "start": 112,
+        "end": 112
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -7126,6 +8534,10 @@
           "start": 2786,
           "end": 2863
         }
+      },
+      "lines": {
+        "start": 58,
+        "end": 58
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -7148,6 +8560,10 @@
           "end": 2777
         }
       },
+      "lines": {
+        "start": 57,
+        "end": 57
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -7168,6 +8584,10 @@
           "start": 2651,
           "end": 2688
         }
+      },
+      "lines": {
+        "start": 54,
+        "end": 54
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -7190,6 +8610,10 @@
           "end": 2642
         }
       },
+      "lines": {
+        "start": 53,
+        "end": 53
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -7210,6 +8634,10 @@
           "start": 2698,
           "end": 2736
         }
+      },
+      "lines": {
+        "start": 56,
+        "end": 56
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -7232,6 +8660,10 @@
           "end": 20438
         }
       },
+      "lines": {
+        "start": 412,
+        "end": 412
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
     },
     {
@@ -7249,6 +8681,10 @@
           "start": 25237,
           "end": 28158
         }
+      },
+      "lines": {
+        "start": 546,
+        "end": 632
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -7271,6 +8707,10 @@
           "end": 26288
         }
       },
+      "lines": {
+        "start": 576,
+        "end": 578
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
     },
     {
@@ -7292,6 +8732,10 @@
           "end": 28230
         }
       },
+      "lines": {
+        "start": 635,
+        "end": 635
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -7310,6 +8754,10 @@
           "end": 36710
         }
       },
+      "lines": {
+        "start": 816,
+        "end": 848
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
     {
@@ -7327,6 +8775,10 @@
           "start": 39973,
           "end": 41118
         }
+      },
+      "lines": {
+        "start": 960,
+        "end": 987
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -7349,6 +8801,10 @@
           "end": 40182
         }
       },
+      "lines": {
+        "start": 964,
+        "end": 966
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -7367,6 +8823,10 @@
           "end": 46919
         }
       },
+      "lines": {
+        "start": 1048,
+        "end": 1115
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
     {
@@ -7384,6 +8844,10 @@
           "start": 28724,
           "end": 29879
         }
+      },
+      "lines": {
+        "start": 658,
+        "end": 684
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -7406,6 +8870,10 @@
           "end": 22267
         }
       },
+      "lines": {
+        "start": 482,
+        "end": 482
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -7423,6 +8891,10 @@
           "start": 22195,
           "end": 23254
         }
+      },
+      "lines": {
+        "start": 481,
+        "end": 506
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -7445,6 +8917,10 @@
           "end": 28253
         }
       },
+      "lines": {
+        "start": 636,
+        "end": 636
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -7462,6 +8938,10 @@
           "start": 28160,
           "end": 28683
         }
+      },
+      "lines": {
+        "start": 634,
+        "end": 655
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -7484,6 +8964,10 @@
           "end": 35287
         }
       },
+      "lines": {
+        "start": 817,
+        "end": 817
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -7501,6 +8985,10 @@
           "start": 25064,
           "end": 25235
         }
+      },
+      "lines": {
+        "start": 538,
+        "end": 544
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -7523,6 +9011,10 @@
           "end": 25338
         }
       },
+      "lines": {
+        "start": 547,
+        "end": 547
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
     {
@@ -7543,6 +9035,10 @@
           "start": 28787,
           "end": 28818
         }
+      },
+      "lines": {
+        "start": 659,
+        "end": 659
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -7565,6 +9061,10 @@
           "end": 40043
         }
       },
+      "lines": {
+        "start": 961,
+        "end": 961
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -7582,6 +9082,10 @@
           "start": 1273,
           "end": 1336
         }
+      },
+      "lines": {
+        "start": 30,
+        "end": 30
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -7601,6 +9105,10 @@
           "end": 5752
         }
       },
+      "lines": {
+        "start": 152,
+        "end": 155
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -7618,6 +9126,10 @@
           "start": 10023,
           "end": 10141
         }
+      },
+      "lines": {
+        "start": 315,
+        "end": 318
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -7637,6 +9149,10 @@
           "end": 5581
         }
       },
+      "lines": {
+        "start": 147,
+        "end": 150
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -7654,6 +9170,10 @@
           "start": 9913,
           "end": 10017
         }
+      },
+      "lines": {
+        "start": 310,
+        "end": 313
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -7673,6 +9193,10 @@
           "end": 3371
         }
       },
+      "lines": {
+        "start": 83,
+        "end": 86
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -7690,6 +9214,10 @@
           "start": 8206,
           "end": 8340
         }
+      },
+      "lines": {
+        "start": 242,
+        "end": 245
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -7709,6 +9237,10 @@
           "end": 3185
         }
       },
+      "lines": {
+        "start": 78,
+        "end": 81
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -7726,6 +9258,10 @@
           "start": 8052,
           "end": 8200
         }
+      },
+      "lines": {
+        "start": 237,
+        "end": 240
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -7745,6 +9281,10 @@
           "end": 3921
         }
       },
+      "lines": {
+        "start": 98,
+        "end": 101
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -7762,6 +9302,10 @@
           "start": 8624,
           "end": 8752
         }
+      },
+      "lines": {
+        "start": 257,
+        "end": 260
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -7781,6 +9325,10 @@
           "end": 9713
         }
       },
+      "lines": {
+        "start": 296,
+        "end": 299
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -7798,6 +9346,10 @@
           "start": 2033,
           "end": 2209
         }
+      },
+      "lines": {
+        "start": 53,
+        "end": 56
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -7817,6 +9369,10 @@
           "end": 7454
         }
       },
+      "lines": {
+        "start": 212,
+        "end": 215
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -7834,6 +9390,10 @@
           "start": 2595,
           "end": 2779
         }
+      },
+      "lines": {
+        "start": 68,
+        "end": 71
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -7853,6 +9413,10 @@
           "end": 7886
         }
       },
+      "lines": {
+        "start": 227,
+        "end": 230
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -7870,6 +9434,10 @@
           "start": 6769,
           "end": 6871
         }
+      },
+      "lines": {
+        "start": 188,
+        "end": 191
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -7889,6 +9457,10 @@
           "end": 5923
         }
       },
+      "lines": {
+        "start": 157,
+        "end": 160
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -7906,6 +9478,10 @@
           "start": 10147,
           "end": 10265
         }
+      },
+      "lines": {
+        "start": 320,
+        "end": 323
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -7925,6 +9501,10 @@
           "end": 2985
         }
       },
+      "lines": {
+        "start": 73,
+        "end": 76
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -7943,6 +9523,10 @@
           "end": 8046
         }
       },
+      "lines": {
+        "start": 232,
+        "end": 235
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -7960,6 +9544,10 @@
           "start": 4594,
           "end": 5163
         }
+      },
+      "lines": {
+        "start": 125,
+        "end": 142
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -7982,6 +9570,10 @@
           "end": 2487
         }
       },
+      "lines": {
+        "start": 65,
+        "end": 65
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -8002,6 +9594,10 @@
           "start": 1463,
           "end": 1487
         }
+      },
+      "lines": {
+        "start": 34,
+        "end": 34
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -8024,6 +9620,10 @@
           "end": 2446
         }
       },
+      "lines": {
+        "start": 64,
+        "end": 64
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -8044,6 +9644,10 @@
           "start": 1431,
           "end": 1454
         }
+      },
+      "lines": {
+        "start": 33,
+        "end": 33
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -8066,6 +9670,10 @@
           "end": 1543
         }
       },
+      "lines": {
+        "start": 36,
+        "end": 36
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -8086,6 +9694,10 @@
           "start": 1553,
           "end": 1578
         }
+      },
+      "lines": {
+        "start": 38,
+        "end": 38
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -8108,6 +9720,10 @@
           "end": 2418
         }
       },
+      "lines": {
+        "start": 63,
+        "end": 63
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -8125,6 +9741,10 @@
           "start": 2019,
           "end": 2087
         }
+      },
+      "lines": {
+        "start": 53,
+        "end": 55
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -8147,6 +9767,10 @@
           "end": 1514
         }
       },
+      "lines": {
+        "start": 35,
+        "end": 35
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -8168,6 +9792,10 @@
           "end": 4663
         }
       },
+      "lines": {
+        "start": 126,
+        "end": 126
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -8186,6 +9814,10 @@
           "end": 2013
         }
       },
+      "lines": {
+        "start": 32,
+        "end": 51
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
     {
@@ -8203,6 +9835,10 @@
           "start": 2093,
           "end": 4588
         }
+      },
+      "lines": {
+        "start": 57,
+        "end": 123
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -8225,6 +9861,10 @@
           "end": 1983
         }
       },
+      "lines": {
+        "start": 59,
+        "end": 59
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -8242,6 +9882,10 @@
           "start": 1292,
           "end": 1903
         }
+      },
+      "lines": {
+        "start": 30,
+        "end": 55
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -8264,6 +9908,10 @@
           "end": 1669
         }
       },
+      "lines": {
+        "start": 34,
+        "end": 45
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -8285,6 +9933,10 @@
           "end": 2595
         }
       },
+      "lines": {
+        "start": 61,
+        "end": 61
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -8302,6 +9954,10 @@
           "start": 2131,
           "end": 2412
         }
+      },
+      "lines": {
+        "start": 46,
+        "end": 53
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -8321,6 +9977,10 @@
           "end": 59046
         }
       },
+      "lines": {
+        "start": 1505,
+        "end": 1518
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
     {
@@ -8338,6 +9998,10 @@
           "start": 29515,
           "end": 29714
         }
+      },
+      "lines": {
+        "start": 875,
+        "end": 882
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
     },
@@ -8357,6 +10021,10 @@
           "end": 1381
         }
       },
+      "lines": {
+        "start": 30,
+        "end": 32
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -8374,6 +10042,10 @@
           "start": 1991,
           "end": 2224
         }
+      },
+      "lines": {
+        "start": 55,
+        "end": 63
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
     },
@@ -8393,6 +10065,10 @@
           "end": 2341
         }
       },
+      "lines": {
+        "start": 65,
+        "end": 68
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
     },
     {
@@ -8410,6 +10086,10 @@
           "start": 1361,
           "end": 1464
         }
+      },
+      "lines": {
+        "start": 32,
+        "end": 36
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -8432,6 +10112,10 @@
           "end": 3290
         }
       },
+      "lines": {
+        "start": 89,
+        "end": 89
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -8452,6 +10136,10 @@
           "start": 16324,
           "end": 16358
         }
+      },
+      "lines": {
+        "start": 413,
+        "end": 413
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -8474,6 +10162,10 @@
           "end": 1319
         }
       },
+      "lines": {
+        "start": 30,
+        "end": 30
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -8492,6 +10184,10 @@
           "end": 1321
         }
       },
+      "lines": {
+        "start": 29,
+        "end": 31
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
     {
@@ -8509,6 +10205,10 @@
           "start": 1352,
           "end": 1419
         }
+      },
+      "lines": {
+        "start": 34,
+        "end": 36
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -8531,6 +10231,10 @@
           "end": 2103
         }
       },
+      "lines": {
+        "start": 49,
+        "end": 52
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
     },
     {
@@ -8548,6 +10252,10 @@
           "start": 1323,
           "end": 2105
         }
+      },
+      "lines": {
+        "start": 33,
+        "end": 53
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -8570,6 +10278,10 @@
           "end": 38074
         }
       },
+      "lines": {
+        "start": 1154,
+        "end": 1154
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -8590,6 +10302,10 @@
           "start": 37578,
           "end": 37599
         }
+      },
+      "lines": {
+        "start": 1132,
+        "end": 1132
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -8612,6 +10328,10 @@
           "end": 40799
         }
       },
+      "lines": {
+        "start": 1234,
+        "end": 1234
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -8632,6 +10352,10 @@
           "start": 37729,
           "end": 37740
         }
+      },
+      "lines": {
+        "start": 1138,
+        "end": 1138
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -8654,6 +10378,10 @@
           "end": 37912
         }
       },
+      "lines": {
+        "start": 1147,
+        "end": 1147
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -8674,6 +10402,10 @@
           "start": 37496,
           "end": 37511
         }
+      },
+      "lines": {
+        "start": 1128,
+        "end": 1128
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -8696,6 +10428,10 @@
           "end": 37573
         }
       },
+      "lines": {
+        "start": 1131,
+        "end": 1131
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -8717,6 +10453,10 @@
           "end": 37527
         }
       },
+      "lines": {
+        "start": 1129,
+        "end": 1129
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -8734,6 +10474,10 @@
           "start": 40650,
           "end": 40706
         }
+      },
+      "lines": {
+        "start": 1228,
+        "end": 1230
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -8756,6 +10500,10 @@
           "end": 39705
         }
       },
+      "lines": {
+        "start": 1199,
+        "end": 1199
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -8776,6 +10524,10 @@
           "start": 37917,
           "end": 37928
         }
+      },
+      "lines": {
+        "start": 1148,
+        "end": 1148
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -8798,6 +10550,10 @@
           "end": 37815
         }
       },
+      "lines": {
+        "start": 1142,
+        "end": 1142
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -8818,6 +10574,10 @@
           "start": 38504,
           "end": 38524
         }
+      },
+      "lines": {
+        "start": 1170,
+        "end": 1170
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -8840,6 +10600,10 @@
           "end": 38560
         }
       },
+      "lines": {
+        "start": 1171,
+        "end": 1171
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -8860,6 +10624,10 @@
           "start": 37820,
           "end": 37842
         }
+      },
+      "lines": {
+        "start": 1143,
+        "end": 1143
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -8882,6 +10650,10 @@
           "end": 39727
         }
       },
+      "lines": {
+        "start": 1200,
+        "end": 1200
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -8903,6 +10675,10 @@
           "end": 38038
         }
       },
+      "lines": {
+        "start": 1153,
+        "end": 1153
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -8920,6 +10696,10 @@
           "start": 1265,
           "end": 1357
         }
+      },
+      "lines": {
+        "start": 29,
+        "end": 31
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -8942,6 +10722,10 @@
           "end": 3013
         }
       },
+      "lines": {
+        "start": 95,
+        "end": 95
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -8963,6 +10747,10 @@
           "end": 3457
         }
       },
+      "lines": {
+        "start": 111,
+        "end": 111
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -8980,6 +10768,10 @@
           "start": 3060,
           "end": 3236
         }
+      },
+      "lines": {
+        "start": 99,
+        "end": 105
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -9002,6 +10794,10 @@
           "end": 3195
         }
       },
+      "lines": {
+        "start": 103,
+        "end": 103
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -9022,6 +10818,10 @@
           "start": 2740,
           "end": 2766
         }
+      },
+      "lines": {
+        "start": 87,
+        "end": 87
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -9044,6 +10844,10 @@
           "end": 2977
         }
       },
+      "lines": {
+        "start": 93,
+        "end": 93
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -9064,6 +10868,10 @@
           "start": 3204,
           "end": 3230
         }
+      },
+      "lines": {
+        "start": 104,
+        "end": 104
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -9086,6 +10894,10 @@
           "end": 3048
         }
       },
+      "lines": {
+        "start": 96,
+        "end": 96
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -9103,6 +10915,10 @@
           "start": 2702,
           "end": 2873
         }
+      },
+      "lines": {
+        "start": 86,
+        "end": 89
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -9125,6 +10941,10 @@
           "end": 3319
         }
       },
+      "lines": {
+        "start": 109,
+        "end": 109
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -9145,6 +10965,10 @@
           "start": 2775,
           "end": 2867
         }
+      },
+      "lines": {
+        "start": 88,
+        "end": 88
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -9167,6 +10991,10 @@
           "end": 3389
         }
       },
+      "lines": {
+        "start": 110,
+        "end": 110
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -9188,6 +11016,10 @@
           "end": 3126
         }
       },
+      "lines": {
+        "start": 100,
+        "end": 100
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -9205,6 +11037,10 @@
           "start": 2879,
           "end": 3054
         }
+      },
+      "lines": {
+        "start": 91,
+        "end": 97
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -9227,6 +11063,10 @@
           "end": 3159
         }
       },
+      "lines": {
+        "start": 101,
+        "end": 101
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -9247,6 +11087,10 @@
           "start": 20387,
           "end": 20418
         }
+      },
+      "lines": {
+        "start": 647,
+        "end": 647
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -9269,6 +11113,10 @@
           "end": 20374
         }
       },
+      "lines": {
+        "start": 646,
+        "end": 646
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -9286,6 +11134,10 @@
           "start": 23057,
           "end": 23132
         }
+      },
+      "lines": {
+        "start": 715,
+        "end": 715
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -9308,6 +11160,10 @@
           "end": 18765
         }
       },
+      "lines": {
+        "start": 590,
+        "end": 592
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
     },
     {
@@ -9328,6 +11184,10 @@
           "start": 20801,
           "end": 20858
         }
+      },
+      "lines": {
+        "start": 663,
+        "end": 663
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -9350,6 +11210,10 @@
           "end": 18539
         }
       },
+      "lines": {
+        "start": 582,
+        "end": 584
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
     },
     {
@@ -9371,6 +11235,10 @@
           "end": 18644
         }
       },
+      "lines": {
+        "start": 586,
+        "end": 588
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
     },
     {
@@ -9388,6 +11256,10 @@
           "start": 20166,
           "end": 20434
         }
+      },
+      "lines": {
+        "start": 639,
+        "end": 649
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -9410,6 +11282,10 @@
           "end": 19974
         }
       },
+      "lines": {
+        "start": 630,
+        "end": 630
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -9428,6 +11304,10 @@
           "end": 20515
         }
       },
+      "lines": {
+        "start": 651,
+        "end": 654
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
     {
@@ -9445,6 +11325,10 @@
           "start": 20328,
           "end": 20428
         }
+      },
+      "lines": {
+        "start": 645,
+        "end": 648
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -9467,6 +11351,10 @@
           "end": 41222
         }
       },
+      "lines": {
+        "start": 1018,
+        "end": 1026
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -9487,6 +11375,10 @@
           "start": 41829,
           "end": 42069
         }
+      },
+      "lines": {
+        "start": 1045,
+        "end": 1050
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -9509,6 +11401,10 @@
           "end": 41556
         }
       },
+      "lines": {
+        "start": 1028,
+        "end": 1036
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -9526,6 +11422,10 @@
           "start": 21649,
           "end": 21834
         }
+      },
+      "lines": {
+        "start": 583,
+        "end": 589
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -9545,6 +11445,10 @@
           "end": 45244
         }
       },
+      "lines": {
+        "start": 1217,
+        "end": 1223
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
     {
@@ -9562,6 +11466,10 @@
           "start": 21488,
           "end": 28926
         }
+      },
+      "lines": {
+        "start": 580,
+        "end": 778
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -9581,6 +11489,10 @@
           "end": 45068
         }
       },
+      "lines": {
+        "start": 1211,
+        "end": 1215
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
     {
@@ -9598,6 +11510,10 @@
           "start": 1341,
           "end": 2609
         }
+      },
+      "lines": {
+        "start": 32,
+        "end": 59
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -9620,6 +11536,10 @@
           "end": 4872
         }
       },
+      "lines": {
+        "start": 82,
+        "end": 99
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -9640,6 +11560,10 @@
           "start": 3404,
           "end": 3466
         }
+      },
+      "lines": {
+        "start": 79,
+        "end": 79
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -9662,6 +11586,10 @@
           "end": 3051
         }
       },
+      "lines": {
+        "start": 71,
+        "end": 71
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -9682,6 +11610,10 @@
           "start": 1502,
           "end": 1538
         }
+      },
+      "lines": {
+        "start": 36,
+        "end": 36
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -9704,6 +11636,10 @@
           "end": 7204
         }
       },
+      "lines": {
+        "start": 101,
+        "end": 130
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -9724,6 +11660,10 @@
           "start": 3471,
           "end": 3503
         }
+      },
+      "lines": {
+        "start": 80,
+        "end": 80
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -9746,6 +11686,10 @@
           "end": 3234
         }
       },
+      "lines": {
+        "start": 75,
+        "end": 75
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -9767,6 +11711,10 @@
           "end": 3328
         }
       },
+      "lines": {
+        "start": 76,
+        "end": 76
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -9784,6 +11732,10 @@
           "start": 1264,
           "end": 7862
         }
+      },
+      "lines": {
+        "start": 29,
+        "end": 151
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -9806,6 +11758,10 @@
           "end": 2727
         }
       },
+      "lines": {
+        "start": 63,
+        "end": 63
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -9826,6 +11782,10 @@
           "start": 7210,
           "end": 7310
         }
+      },
+      "lines": {
+        "start": 132,
+        "end": 134
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -9848,6 +11808,10 @@
           "end": 2884
         }
       },
+      "lines": {
+        "start": 65,
+        "end": 65
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -9868,6 +11832,10 @@
           "start": 2732,
           "end": 2801
         }
+      },
+      "lines": {
+        "start": 64,
+        "end": 64
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -9890,6 +11858,10 @@
           "end": 3149
         }
       },
+      "lines": {
+        "start": 73,
+        "end": 73
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -9910,6 +11882,10 @@
           "start": 3333,
           "end": 3398
         }
+      },
+      "lines": {
+        "start": 77,
+        "end": 77
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -9932,6 +11908,10 @@
           "end": 3112
         }
       },
+      "lines": {
+        "start": 72,
+        "end": 72
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -9949,6 +11929,10 @@
           "start": 7123,
           "end": 7386
         }
+      },
+      "lines": {
+        "start": 152,
+        "end": 158
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -9971,6 +11955,10 @@
           "end": 2606
         }
       },
+      "lines": {
+        "start": 51,
+        "end": 51
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -9991,6 +11979,10 @@
           "start": 1934,
           "end": 2018
         }
+      },
+      "lines": {
+        "start": 43,
+        "end": 43
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -10013,6 +12005,10 @@
           "end": 2344
         }
       },
+      "lines": {
+        "start": 48,
+        "end": 48
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -10033,6 +12029,10 @@
           "start": 2438,
           "end": 2524
         }
+      },
+      "lines": {
+        "start": 50,
+        "end": 50
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -10055,6 +12055,10 @@
           "end": 6575
         }
       },
+      "lines": {
+        "start": 128,
+        "end": 134
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
     },
     {
@@ -10075,6 +12079,10 @@
           "start": 2349,
           "end": 2433
         }
+      },
+      "lines": {
+        "start": 49,
+        "end": 49
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -10097,6 +12105,10 @@
           "end": 1929
         }
       },
+      "lines": {
+        "start": 42,
+        "end": 42
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -10114,6 +12126,10 @@
           "start": 6630,
           "end": 6903
         }
+      },
+      "lines": {
+        "start": 139,
+        "end": 144
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -10136,6 +12152,10 @@
           "end": 6300
         }
       },
+      "lines": {
+        "start": 80,
+        "end": 126
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -10156,6 +12176,10 @@
           "start": 2023,
           "end": 2114
         }
+      },
+      "lines": {
+        "start": 44,
+        "end": 44
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -10178,6 +12202,10 @@
           "end": 1830
         }
       },
+      "lines": {
+        "start": 41,
+        "end": 41
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -10195,6 +12223,10 @@
           "start": 6961,
           "end": 7000
         }
+      },
+      "lines": {
+        "start": 149,
+        "end": 149
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -10217,6 +12249,10 @@
           "end": 2235
         }
       },
+      "lines": {
+        "start": 47,
+        "end": 47
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -10237,6 +12273,10 @@
           "start": 3446,
           "end": 3488
         }
+      },
+      "lines": {
+        "start": 98,
+        "end": 98
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -10259,6 +12299,10 @@
           "end": 1460
         }
       },
+      "lines": {
+        "start": 34,
+        "end": 34
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -10279,6 +12323,10 @@
           "start": 3399,
           "end": 3432
         }
+      },
+      "lines": {
+        "start": 96,
+        "end": 96
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -10301,6 +12349,10 @@
           "end": 7588
         }
       },
+      "lines": {
+        "start": 198,
+        "end": 198
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -10321,6 +12373,10 @@
           "start": 7746,
           "end": 7805
         }
+      },
+      "lines": {
+        "start": 204,
+        "end": 204
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -10343,6 +12399,10 @@
           "end": 3705
         }
       },
+      "lines": {
+        "start": 103,
+        "end": 103
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -10363,6 +12423,10 @@
           "start": 4068,
           "end": 4133
         }
+      },
+      "lines": {
+        "start": 112,
+        "end": 112
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -10385,6 +12449,10 @@
           "end": 8019
         }
       },
+      "lines": {
+        "start": 207,
+        "end": 207
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -10405,6 +12473,10 @@
           "start": 3784,
           "end": 3851
         }
+      },
+      "lines": {
+        "start": 108,
+        "end": 108
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -10427,6 +12499,10 @@
           "end": 7737
         }
       },
+      "lines": {
+        "start": 203,
+        "end": 203
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -10447,6 +12523,10 @@
           "start": 3501,
           "end": 3536
         }
+      },
+      "lines": {
+        "start": 99,
+        "end": 99
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -10469,6 +12549,10 @@
           "end": 3919
         }
       },
+      "lines": {
+        "start": 109,
+        "end": 109
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -10489,6 +12573,10 @@
           "start": 2283,
           "end": 2304
         }
+      },
+      "lines": {
+        "start": 61,
+        "end": 61
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -10511,6 +12599,10 @@
           "end": 3285
         }
       },
+      "lines": {
+        "start": 92,
+        "end": 92
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -10531,6 +12623,10 @@
           "start": 7417,
           "end": 7441
         }
+      },
+      "lines": {
+        "start": 194,
+        "end": 194
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -10553,6 +12649,10 @@
           "end": 1501
         }
       },
+      "lines": {
+        "start": 36,
+        "end": 36
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -10573,6 +12673,10 @@
           "start": 3298,
           "end": 3318
         }
+      },
+      "lines": {
+        "start": 93,
+        "end": 93
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -10595,6 +12699,10 @@
           "end": 7474
         }
       },
+      "lines": {
+        "start": 195,
+        "end": 195
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -10616,6 +12724,10 @@
           "end": 3663
         }
       },
+      "lines": {
+        "start": 102,
+        "end": 102
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -10634,6 +12746,10 @@
           "end": 3715
         }
       },
+      "lines": {
+        "start": 91,
+        "end": 104
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
     {
@@ -10651,6 +12767,10 @@
           "start": 7383,
           "end": 7598
         }
+      },
+      "lines": {
+        "start": 193,
+        "end": 199
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -10673,6 +12793,10 @@
           "end": 3585
         }
       },
+      "lines": {
+        "start": 100,
+        "end": 100
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -10690,6 +12814,10 @@
           "start": 77514,
           "end": 77578
         }
+      },
+      "lines": {
+        "start": 2030,
+        "end": 2032
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -10712,6 +12840,10 @@
           "end": 3628
         }
       },
+      "lines": {
+        "start": 101,
+        "end": 101
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -10732,6 +12864,10 @@
           "start": 2314,
           "end": 2345
         }
+      },
+      "lines": {
+        "start": 63,
+        "end": 63
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -10754,6 +12890,10 @@
           "end": 1754
         }
       },
+      "lines": {
+        "start": 36,
+        "end": 36
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -10772,6 +12912,10 @@
           "end": 1374
         }
       },
+      "lines": {
+        "start": 30,
+        "end": 30
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -10789,6 +12933,10 @@
           "start": 1398,
           "end": 1461
         }
+      },
+      "lines": {
+        "start": 34,
+        "end": 34
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
@@ -10811,6 +12959,10 @@
           "end": 8625
         }
       },
+      "lines": {
+        "start": 245,
+        "end": 255
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -10828,6 +12980,10 @@
           "start": 4851,
           "end": 4895
         }
+      },
+      "lines": {
+        "start": 144,
+        "end": 146
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -10847,6 +13003,10 @@
           "end": 4845
         }
       },
+      "lines": {
+        "start": 61,
+        "end": 142
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
     {
@@ -10864,6 +13024,10 @@
           "start": 4901,
           "end": 4968
         }
+      },
+      "lines": {
+        "start": 148,
+        "end": 150
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -10883,6 +13047,10 @@
           "end": 1670
         }
       },
+      "lines": {
+        "start": 38,
+        "end": 47
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
     {
@@ -10901,6 +13069,10 @@
           "end": 11769
         }
       },
+      "lines": {
+        "start": 333,
+        "end": 347
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
     {
@@ -10918,6 +13090,10 @@
           "start": 1676,
           "end": 1946
         }
+      },
+      "lines": {
+        "start": 49,
+        "end": 59
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -10940,6 +13116,10 @@
           "end": 1424
         }
       },
+      "lines": {
+        "start": 33,
+        "end": 33
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -10957,6 +13137,10 @@
           "start": 1259,
           "end": 3395
         }
+      },
+      "lines": {
+        "start": 29,
+        "end": 97
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -10979,6 +13163,10 @@
           "end": 1834
         }
       },
+      "lines": {
+        "start": 47,
+        "end": 47
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
@@ -10996,6 +13184,10 @@
           "start": 1326,
           "end": 1430
         }
+      },
+      "lines": {
+        "start": 32,
+        "end": 34
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
@@ -11015,6 +13207,10 @@
           "end": 23512
         }
       },
+      "lines": {
+        "start": 713,
+        "end": 718
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
     },
     {
@@ -11032,6 +13228,10 @@
           "start": 23654,
           "end": 24058
         }
+      },
+      "lines": {
+        "start": 726,
+        "end": 737
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
     },
@@ -11051,6 +13251,10 @@
           "end": 27123
         }
       },
+      "lines": {
+        "start": 693,
+        "end": 700
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
     },
     {
@@ -11068,6 +13272,10 @@
           "start": 1950,
           "end": 2007
         }
+      },
+      "lines": {
+        "start": 55,
+        "end": 57
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },

@@ -565,6 +565,10 @@
           "end": 10628
         }
       },
+      "lines": {
+        "start": 278,
+        "end": 337
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -585,6 +589,10 @@
           "start": 1444,
           "end": 1931
         }
+      },
+      "lines": {
+        "start": 48,
+        "end": 61
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -607,6 +615,10 @@
           "end": 7011
         }
       },
+      "lines": {
+        "start": 223,
+        "end": 225
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -627,6 +639,10 @@
           "start": 4846,
           "end": 4960
         }
+      },
+      "lines": {
+        "start": 160,
+        "end": 162
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -649,6 +665,10 @@
           "end": 4843
         }
       },
+      "lines": {
+        "start": 157,
+        "end": 159
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -669,6 +689,10 @@
           "start": 5763,
           "end": 5869
         }
+      },
+      "lines": {
+        "start": 186,
+        "end": 188
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -691,6 +715,10 @@
           "end": 6010
         }
       },
+      "lines": {
+        "start": 189,
+        "end": 193
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -711,6 +739,10 @@
           "start": 26774,
           "end": 26853
         }
+      },
+      "lines": {
+        "start": 886,
+        "end": 888
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -733,6 +765,10 @@
           "end": 26658
         }
       },
+      "lines": {
+        "start": 877,
+        "end": 879
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -753,6 +789,10 @@
           "start": 26167,
           "end": 26352
         }
+      },
+      "lines": {
+        "start": 861,
+        "end": 865
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -775,6 +815,10 @@
           "end": 3782
         }
       },
+      "lines": {
+        "start": 140,
+        "end": 142
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -795,6 +839,10 @@
           "start": 2621,
           "end": 2715
         }
+      },
+      "lines": {
+        "start": 91,
+        "end": 93
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -817,6 +865,10 @@
           "end": 2515
         }
       },
+      "lines": {
+        "start": 80,
+        "end": 85
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -838,6 +890,10 @@
           "end": 2850
         }
       },
+      "lines": {
+        "start": 97,
+        "end": 97
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -855,6 +911,10 @@
           "start": 708,
           "end": 883
         }
+      },
+      "lines": {
+        "start": 22,
+        "end": 30
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -5637,6 +5697,10 @@
           "end": 919
         }
       },
+      "lines": {
+        "start": 9,
+        "end": 35
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -7877,6 +7941,10 @@
           "end": 3303
         }
       },
+      "lines": {
+        "start": 7,
+        "end": 104
+      },
       "message": "structural clone of packages/create-vite/template-preact-ts/src/app.tsx:App"
     },
     {
@@ -7917,6 +7985,10 @@
           "end": 3625
         }
       },
+      "lines": {
+        "start": 7,
+        "end": 120
+      },
       "message": "structural clone of packages/create-vite/template-preact-ts/src/app.tsx:App"
     },
     {
@@ -7934,6 +8006,10 @@
           "start": 177,
           "end": 3625
         }
+      },
+      "lines": {
+        "start": 7,
+        "end": 120
       },
       "message": "structural clone of packages/create-vite/template-preact-ts/src/app.tsx:App"
     },
@@ -7963,6 +8039,10 @@
           "start": 184,
           "end": 3296
         }
+      },
+      "lines": {
+        "start": 7,
+        "end": 104
       },
       "message": "structural clone of packages/create-vite/template-solid-ts/src/App.tsx:App"
     },
@@ -8169,6 +8249,10 @@
           "end": 781
         }
       },
+      "lines": {
+        "start": 7,
+        "end": 21
+      },
       "message": "structural clone of packages/vite/src/node/__tests__/plugins/assetImportMetaUrl.spec.ts:createAssetImportMetaurlPluginTransform"
     },
     {
@@ -8186,6 +8270,10 @@
           "start": 51496,
           "end": 52512
         }
+      },
+      "lines": {
+        "start": 1703,
+        "end": 1738
       },
       "message": "structural clone of packages/plugin-legacy/src/index.ts:toOutputFilePathInHtml"
     },
@@ -8205,6 +8293,10 @@
           "end": 50854
         }
       },
+      "lines": {
+        "start": 1540,
+        "end": 1549
+      },
       "message": "structural clone of packages/plugin-legacy/src/index.ts:getBaseInHTML"
     },
     {
@@ -8222,6 +8314,10 @@
           "start": 39351,
           "end": 39806
         }
+      },
+      "lines": {
+        "start": 1146,
+        "end": 1159
       },
       "message": "structural clone of packages/vite/src/client/client.ts:injectQuery"
     },
@@ -8395,6 +8491,10 @@
           "end": 51406
         }
       },
+      "lines": {
+        "start": 1736,
+        "end": 1747
+      },
       "message": "structural clone of packages/plugin-legacy/src/index.ts:joinUrlSegments"
     },
     {
@@ -8413,6 +8513,10 @@
           "end": 4402
         }
       },
+      "lines": {
+        "start": 120,
+        "end": 145
+      },
       "message": "structural clone of playground/cli-module/__tests__/serve.ts:startedOnPort"
     },
     {
@@ -8430,6 +8534,10 @@
           "start": 4489,
           "end": 4766
         }
+      },
+      "lines": {
+        "start": 148,
+        "end": 159
       },
       "message": "structural clone of playground/cli-module/__tests__/serve.ts:resolvedOrTimeout"
     },
@@ -9109,6 +9217,10 @@
           "end": 890
         }
       },
+      "lines": {
+        "start": 27,
+        "end": 53
+      },
       "message": "structural clone of playground/multiple-entrypoints/entrypoints/a0.js:other"
     },
     {
@@ -9126,6 +9238,10 @@
           "start": 389,
           "end": 590
         }
+      },
+      "lines": {
+        "start": 18,
+        "end": 35
       },
       "message": "structural clone of playground/multiple-entrypoints/entrypoints/a0.js:other"
     },
@@ -9145,6 +9261,10 @@
           "end": 555
         }
       },
+      "lines": {
+        "start": 17,
+        "end": 33
+      },
       "message": "structural clone of playground/multiple-entrypoints/entrypoints/a0.js:other"
     },
     {
@@ -9162,6 +9282,10 @@
           "start": 567,
           "end": 857
         }
+      },
+      "lines": {
+        "start": 26,
+        "end": 51
       },
       "message": "structural clone of playground/multiple-entrypoints/entrypoints/a0.js:other"
     },
@@ -9181,6 +9305,10 @@
           "end": 824
         }
       },
+      "lines": {
+        "start": 25,
+        "end": 49
+      },
       "message": "structural clone of playground/multiple-entrypoints/entrypoints/a0.js:other"
     },
     {
@@ -9198,6 +9326,10 @@
           "start": 523,
           "end": 791
         }
+      },
+      "lines": {
+        "start": 24,
+        "end": 47
       },
       "message": "structural clone of playground/multiple-entrypoints/entrypoints/a0.js:other"
     },
@@ -9217,6 +9349,10 @@
           "end": 758
         }
       },
+      "lines": {
+        "start": 23,
+        "end": 45
+      },
       "message": "structural clone of playground/multiple-entrypoints/entrypoints/a0.js:other"
     },
     {
@@ -9234,6 +9370,10 @@
           "start": 479,
           "end": 725
         }
+      },
+      "lines": {
+        "start": 22,
+        "end": 43
       },
       "message": "structural clone of playground/multiple-entrypoints/entrypoints/a0.js:other"
     },
@@ -9253,6 +9393,10 @@
           "end": 692
         }
       },
+      "lines": {
+        "start": 21,
+        "end": 41
+      },
       "message": "structural clone of playground/multiple-entrypoints/entrypoints/a0.js:other"
     },
     {
@@ -9271,6 +9415,10 @@
           "end": 659
         }
       },
+      "lines": {
+        "start": 20,
+        "end": 39
+      },
       "message": "structural clone of playground/multiple-entrypoints/entrypoints/a0.js:other"
     },
     {
@@ -9288,6 +9436,10 @@
           "start": 413,
           "end": 626
         }
+      },
+      "lines": {
+        "start": 19,
+        "end": 37
       },
       "message": "structural clone of playground/multiple-entrypoints/entrypoints/a0.js:other"
     },
@@ -9460,6 +9612,10 @@
           "start": 7,
           "end": 249
         }
+      },
+      "lines": {
+        "start": 1,
+        "end": 9
       },
       "message": "structural clone of playground/optimize-deps/dep-with-assets/index.js:urlImportWorker"
     },
@@ -9743,6 +9899,10 @@
           "end": 927
         }
       },
+      "lines": {
+        "start": 10,
+        "end": 35
+      },
       "message": "structural clone of playground/ssr-deps/__tests__/serve.ts:serve"
     },
     {
@@ -9793,6 +9953,10 @@
           "start": 427,
           "end": 1081
         }
+      },
+      "lines": {
+        "start": 17,
+        "end": 42
       },
       "message": "structural clone of playground/ssr-deps/__tests__/serve.ts:serve"
     },
@@ -9933,6 +10097,10 @@
           "end": 425
         }
       },
+      "lines": {
+        "start": 5,
+        "end": 19
+      },
       "message": "structural clone of playground/tailwind-v3/vite.config.ts:delayIndexCssPlugin"
     },
     {
@@ -9950,6 +10118,10 @@
           "start": 8720,
           "end": 9233
         }
+      },
+      "lines": {
+        "start": 289,
+        "end": 305
       },
       "message": "structural clone of playground/hmr-ssr/__tests__/hmr-ssr.spec.ts:untilConsoleLogAfter"
     },

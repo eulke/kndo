@@ -9,7 +9,7 @@ pub use kndo_contract::evidence::{DiagnosticLevel, RootKind};
 pub use kndo_contract::extension::{
     Extension, ExtensionSpec, ExtensionSpecBuilder, GraphAccess, MutatesGraph,
 };
-pub use kndo_contract::finding::{Finding, Severity, sort_findings};
+pub use kndo_contract::finding::{Finding, LineSpan, Severity, sort_findings};
 pub use kndo_contract::subject::{FindingId, Subject, SymbolSelector};
 pub use kndo_contract::vocab::{Category, Confidence, ProjectPath, Span, SubjectKind};
 pub use kndo_core::{

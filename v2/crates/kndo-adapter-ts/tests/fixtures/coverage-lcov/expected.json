@@ -32,6 +32,10 @@
           "end": 273
         }
       },
+      "lines": {
+        "start": 15,
+        "end": 20
+      },
       "message": "no test executes this function"
     }
   ],

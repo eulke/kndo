@@ -35,6 +35,10 @@
           "end": 954
         }
       },
+      "lines": {
+        "start": 32,
+        "end": 32
+      },
       "message": "declared `package`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
     },
     {
@@ -56,6 +60,10 @@
           "end": 960
         }
       },
+      "lines": {
+        "start": 27,
+        "end": 33
+      },
       "message": "declared `package`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
     {
@@ -76,6 +84,10 @@
           "start": 885,
           "end": 928
         }
+      },
+      "lines": {
+        "start": 28,
+        "end": 30
       },
       "message": "declared `package`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
     }

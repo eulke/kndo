@@ -32,6 +32,10 @@
           "end": 21
         }
       },
+      "lines": {
+        "start": 1,
+        "end": 1
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     }
   ],

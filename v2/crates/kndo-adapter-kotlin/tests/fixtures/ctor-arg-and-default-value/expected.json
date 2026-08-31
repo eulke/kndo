@@ -32,6 +32,10 @@
           "end": 280
         }
       },
+      "lines": {
+        "start": 9,
+        "end": 9
+      },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
     {
@@ -49,6 +53,10 @@
           "start": 282,
           "end": 322
         }
+      },
+      "lines": {
+        "start": 11,
+        "end": 11
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     }

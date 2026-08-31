@@ -37,6 +37,10 @@
           "end": 361
         }
       },
+      "lines": {
+        "start": 11,
+        "end": 11
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -54,6 +58,10 @@
           "start": 309,
           "end": 333
         }
+      },
+      "lines": {
+        "start": 9,
+        "end": 9
       },
       "message": "nothing references, roots, or imports this declaration"
     }

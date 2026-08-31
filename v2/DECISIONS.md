@@ -1411,3 +1411,30 @@ regenerated (the specimen's health comes from the real `Health::measure`, so the
 golden pins genuine model output: its Info and dependency-subject findings implicate
 nothing). Still open in the ledger: a `health` verb as sugar, and `--by-package`
 (waits on package aggregation). 196 tests, 14 gates, clippy clean.
+
+## 2026-08-31 — Lines in findings: resolved per run, never persisted, never identity
+
+The ledger's one open contract decision, executed. `Finding.lines` is a 1-based,
+inclusive `LineSpan` the ENGINE derives — in one pass, for every spanned subject —
+by resolving the byte span against the file's actual newlines. The load-bearing
+choices:
+
+- **Nothing persisted learns about lines.** The pipeline already holds every file's
+  content in memory (hashing requires reading), so the line index is recomputed per
+  run as a pure function of content: no graph schema bump, no cache format change,
+  no adapter involvement. Deleting the feature would delete one pass and one field.
+- **Identity never includes lines** — moving code must not change a finding; the
+  field is serialized display data, absent (old baselines included) without error.
+- **One spelling.** `Finding::location()` renders `path:line — symbol` in the
+  contract, and human and agent both call it; SARIF regions gain
+  `startLine`/`endLine` beside the byte-true `byteOffset`/`byteLength` — code
+  scanning anchors at the exact line now. Columns stay absent on purpose: SARIF
+  counts them in UTF-16 units, and a slightly-wrong column is worse than none.
+- Lines are exact in any encoding — a newline is one byte — which is why lines
+  ship and columns do not.
+
+Freight: schema regenerated; 24 conformance fixtures gained `lines` (116
+insertions, zero deletions, verified lines-only); agent golden regenerated with
+hand-lined specimen findings so the grammar is pinned; corpus reports regenerated.
+196 tests, 14 gates, clippy clean, smoke-tested through the real binary
+(`pkg/core.py:7 — _fresh_leftover`; SARIF `startLine: 7, endLine: 8`).

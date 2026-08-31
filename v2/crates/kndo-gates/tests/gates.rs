@@ -775,11 +775,16 @@ fn agent_format_matches_its_committed_golden() {
     // if the grammar changed meaning, bump AGENT_FORMAT in the same commit.
     use kndo::{
         Abstention, AbstentionReason, AbstentionScope, Category, Confidence, Contribution,
-        DiagnosticLevel, ExtensionRun, Finding, ProjectPath, REPORT_SCHEMA, Report,
+        DiagnosticLevel, ExtensionRun, Finding, LineSpan, ProjectPath, REPORT_SCHEMA, Report,
         ReportDiagnostic, RunInfo, Severity, Span, Subject, SuppressedSummary, SymbolSelector,
         sort_findings,
     };
     use smol_str::SmolStr;
+
+    fn lined(mut finding: Finding, start: u32, end: u32) -> Finding {
+        finding.lines = Some(LineSpan { start, end });
+        finding
+    }
 
     let mut findings = vec![
         Finding::new(
@@ -792,32 +797,40 @@ fn agent_format_matches_its_committed_golden() {
             "",
             "no root anchors this file and no reachable file imports it",
         ),
-        Finding::new(
-            Category::UNUSED,
-            Severity::Warning,
-            Confidence::Probable,
-            Subject::Symbol {
-                path: ProjectPath::new("src/store.py"),
-                selector: SymbolSelector::Member {
-                    owner: SmolStr::new("Store"),
-                    name: SmolStr::new("_drop"),
+        lined(
+            Finding::new(
+                Category::UNUSED,
+                Severity::Warning,
+                Confidence::Probable,
+                Subject::Symbol {
+                    path: ProjectPath::new("src/store.py"),
+                    selector: SymbolSelector::Member {
+                        owner: SmolStr::new("Store"),
+                        name: SmolStr::new("_drop"),
+                    },
+                    span: Span::new(120, 180),
                 },
-                span: Span::new(120, 180),
-            },
-            "",
-            "`Store._drop` is declared but nothing in the project uses it",
+                "",
+                "`Store._drop` is declared but nothing in the project uses it",
+            ),
+            6,
+            9,
         ),
-        Finding::new(
-            Category::INTERNAL_ONLY,
-            Severity::Info,
-            Confidence::Probable,
-            Subject::Symbol {
-                path: ProjectPath::new("src/scope.swift"),
-                selector: SymbolSelector::Free(SmolStr::new("Helper")),
-                span: Span::new(0, 64),
-            },
-            "",
-            "declared `module`-scoped, but every use is within its own file",
+        lined(
+            Finding::new(
+                Category::INTERNAL_ONLY,
+                Severity::Info,
+                Confidence::Probable,
+                Subject::Symbol {
+                    path: ProjectPath::new("src/scope.swift"),
+                    selector: SymbolSelector::Free(SmolStr::new("Helper")),
+                    span: Span::new(0, 64),
+                },
+                "",
+                "declared `module`-scoped, but every use is within its own file",
+            ),
+            1,
+            3,
         ),
         Finding::new(
             Category::UNUSED,
@@ -832,17 +845,21 @@ fn agent_format_matches_its_committed_golden() {
         ),
     ];
     sort_findings(&mut findings);
-    let mut fixed = vec![Finding::new(
-        Category::UNUSED,
-        Severity::Warning,
-        Confidence::Certain,
-        Subject::Symbol {
-            path: ProjectPath::new("src/gone.py"),
-            selector: SymbolSelector::Free(SmolStr::new("_gone")),
-            span: Span::new(5, 25),
-        },
-        "",
-        "`_gone` is declared but nothing in the project uses it",
+    let mut fixed = vec![lined(
+        Finding::new(
+            Category::UNUSED,
+            Severity::Warning,
+            Confidence::Certain,
+            Subject::Symbol {
+                path: ProjectPath::new("src/gone.py"),
+                selector: SymbolSelector::Free(SmolStr::new("_gone")),
+                span: Span::new(5, 25),
+            },
+            "",
+            "`_gone` is declared but nothing in the project uses it",
+        ),
+        2,
+        2,
     )];
     sort_findings(&mut fixed);
     // The real model over the specimen's own findings, so the golden pins genuine

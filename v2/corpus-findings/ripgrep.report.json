@@ -40,6 +40,10 @@
           "end": 5622
         }
       },
+      "lines": {
+        "start": 200,
+        "end": 207
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -61,6 +65,10 @@
           "end": 5348
         }
       },
+      "lines": {
+        "start": 191,
+        "end": 198
+      },
       "message": "nothing references, roots, or imports this declaration"
     },
     {
@@ -78,6 +86,10 @@
           "start": 64018,
           "end": 64437
         }
+      },
+      "lines": {
+        "start": 1763,
+        "end": 1770
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -97,6 +109,10 @@
           "end": 117033
         }
       },
+      "lines": {
+        "start": 3795,
+        "end": 3807
+      },
       "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
     },
     {
@@ -114,6 +130,10 @@
           "start": 86764,
           "end": 87325
         }
+      },
+      "lines": {
+        "start": 2828,
+        "end": 2843
       },
       "message": "structural clone of crates/core/flags/defs.rs:test_debug"
     },
@@ -133,6 +153,10 @@
           "end": 122507
         }
       },
+      "lines": {
+        "start": 3959,
+        "end": 3972
+      },
       "message": "structural clone of crates/core/flags/defs.rs:test_auto_hybrid_regex"
     },
     {
@@ -150,6 +174,10 @@
           "start": 156479,
           "end": 156811
         }
+      },
+      "lines": {
+        "start": 5146,
+        "end": 5155
       },
       "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
     },
@@ -169,6 +197,10 @@
           "end": 19056
         }
       },
+      "lines": {
+        "start": 638,
+        "end": 651
+      },
       "message": "structural clone of crates/core/flags/defs.rs:test_auto_hybrid_regex"
     },
     {
@@ -186,6 +218,10 @@
           "start": 101474,
           "end": 102013
         }
+      },
+      "lines": {
+        "start": 3267,
+        "end": 3282
       },
       "message": "structural clone of crates/core/flags/defs.rs:test_auto_hybrid_regex"
     },
@@ -205,6 +241,10 @@
           "end": 105652
         }
       },
+      "lines": {
+        "start": 3383,
+        "end": 3403
+      },
       "message": "structural clone of crates/core/flags/defs.rs:test_glob_case_insensitive"
     },
     {
@@ -222,6 +262,10 @@
           "start": 131154,
           "end": 131667
         }
+      },
+      "lines": {
+        "start": 4295,
+        "end": 4309
       },
       "message": "structural clone of crates/core/flags/defs.rs:test_max_columns"
     },
@@ -241,6 +285,10 @@
           "end": 142633
         }
       },
+      "lines": {
+        "start": 4637,
+        "end": 4647
+      },
       "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
     },
     {
@@ -258,6 +306,10 @@
           "start": 199110,
           "end": 199831
         }
+      },
+      "lines": {
+        "start": 6563,
+        "end": 6584
       },
       "message": "structural clone of crates/core/flags/defs.rs:test_auto_hybrid_regex"
     },
@@ -277,6 +329,10 @@
           "end": 89312
         }
       },
+      "lines": {
+        "start": 2895,
+        "end": 2910
+      },
       "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
     },
     {
@@ -294,6 +350,10 @@
           "start": 84984,
           "end": 85519
         }
+      },
+      "lines": {
+        "start": 2768,
+        "end": 2783
       },
       "message": "structural clone of crates/core/flags/defs.rs:test_column"
     },
@@ -313,6 +373,10 @@
           "end": 153921
         }
       },
+      "lines": {
+        "start": 5042,
+        "end": 5052
+      },
       "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
     },
     {
@@ -330,6 +394,10 @@
           "start": 210150,
           "end": 210446
         }
+      },
+      "lines": {
+        "start": 6934,
+        "end": 6943
       },
       "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
     },
@@ -349,6 +417,10 @@
           "end": 224908
         }
       },
+      "lines": {
+        "start": 7439,
+        "end": 7458
+      },
       "message": "structural clone of crates/core/flags/defs.rs:test_type_add"
     },
     {
@@ -366,6 +438,10 @@
           "start": 73954,
           "end": 74495
         }
+      },
+      "lines": {
+        "start": 2399,
+        "end": 2414
       },
       "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
     },
@@ -385,6 +461,10 @@
           "end": 46544
         }
       },
+      "lines": {
+        "start": 1506,
+        "end": 1529
+      },
       "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
     },
     {
@@ -402,6 +482,10 @@
           "start": 218145,
           "end": 218434
         }
+      },
+      "lines": {
+        "start": 7224,
+        "end": 7233
       },
       "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
     },
@@ -421,6 +505,10 @@
           "end": 137001
         }
       },
+      "lines": {
+        "start": 4482,
+        "end": 4497
+      },
       "message": "structural clone of crates/core/flags/defs.rs:test_auto_hybrid_regex"
     },
     {
@@ -438,6 +526,10 @@
           "start": 99652,
           "end": 100229
         }
+      },
+      "lines": {
+        "start": 3206,
+        "end": 3221
       },
       "message": "structural clone of crates/core/flags/defs.rs:test_glob"
     },
@@ -457,6 +549,10 @@
           "end": 147445
         }
       },
+      "lines": {
+        "start": 4804,
+        "end": 4813
+      },
       "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
     },
     {
@@ -474,6 +570,10 @@
           "start": 215671,
           "end": 216249
         }
+      },
+      "lines": {
+        "start": 7124,
+        "end": 7142
       },
       "message": "structural clone of crates/core/flags/defs.rs:test_max_columns"
     },
@@ -493,6 +593,10 @@
           "end": 165199
         }
       },
+      "lines": {
+        "start": 5432,
+        "end": 5450
+      },
       "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
     },
     {
@@ -510,6 +614,10 @@
           "start": 213801,
           "end": 214678
         }
+      },
+      "lines": {
+        "start": 7058,
+        "end": 7082
       },
       "message": "structural clone of crates/core/flags/defs.rs:test_auto_hybrid_regex"
     },
@@ -529,6 +637,10 @@
           "end": 228631
         }
       },
+      "lines": {
+        "start": 7575,
+        "end": 7581
+      },
       "message": "structural clone of crates/core/flags/defs.rs:test_files"
     },
     {
@@ -546,6 +658,10 @@
           "start": 55984,
           "end": 57043
         }
+      },
+      "lines": {
+        "start": 1827,
+        "end": 1856
       },
       "message": "structural clone of crates/core/flags/defs.rs:test_auto_hybrid_regex"
     },
@@ -565,6 +681,10 @@
           "end": 17255
         }
       },
+      "lines": {
+        "start": 570,
+        "end": 591
+      },
       "message": "structural clone of crates/core/flags/defs.rs:test_auto_hybrid_regex"
     },
     {
@@ -582,6 +702,10 @@
           "start": 123387,
           "end": 123819
         }
+      },
+      "lines": {
+        "start": 4013,
+        "end": 4025
       },
       "message": "structural clone of crates/core/flags/defs.rs:test_column"
     },
@@ -601,6 +725,10 @@
           "end": 76016
         }
       },
+      "lines": {
+        "start": 2457,
+        "end": 2472
+      },
       "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
     },
     {
@@ -618,6 +746,10 @@
           "start": 217066,
           "end": 217403
         }
+      },
+      "lines": {
+        "start": 7178,
+        "end": 7187
       },
       "message": "structural clone of crates/core/flags/defs.rs:test_debug"
     },
@@ -637,6 +769,10 @@
           "end": 149858
         }
       },
+      "lines": {
+        "start": 4897,
+        "end": 4906
+      },
       "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
     },
     {
@@ -654,6 +790,10 @@
           "start": 174427,
           "end": 175111
         }
+      },
+      "lines": {
+        "start": 5764,
+        "end": 5782
       },
       "message": "structural clone of crates/core/flags/defs.rs:test_auto_hybrid_regex"
     },
@@ -673,6 +813,10 @@
           "end": 237969
         }
       },
+      "lines": {
+        "start": 7873,
+        "end": 7888
+      },
       "message": "structural clone of crates/core/flags/defs.rs:test_column"
     },
     {
@@ -690,6 +834,10 @@
           "start": 187022,
           "end": 188253
         }
+      },
+      "lines": {
+        "start": 6182,
+        "end": 6215
       },
       "message": "structural clone of crates/core/flags/defs.rs:test_dfa_size_limit"
     },
@@ -709,6 +857,10 @@
           "end": 148698
         }
       },
+      "lines": {
+        "start": 4850,
+        "end": 4860
+      },
       "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
     },
     {
@@ -726,6 +878,10 @@
           "start": 161416,
           "end": 161975
         }
+      },
+      "lines": {
+        "start": 5321,
+        "end": 5336
       },
       "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
     },
@@ -745,6 +901,10 @@
           "end": 166818
         }
       },
+      "lines": {
+        "start": 5500,
+        "end": 5510
+      },
       "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
     },
     {
@@ -762,6 +922,10 @@
           "start": 124766,
           "end": 125202
         }
+      },
+      "lines": {
+        "start": 4069,
+        "end": 4081
       },
       "message": "structural clone of crates/core/flags/defs.rs:test_column"
     },
@@ -781,6 +945,10 @@
           "end": 152525
         }
       },
+      "lines": {
+        "start": 4993,
+        "end": 5003
+      },
       "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
     },
     {
@@ -798,6 +966,10 @@
           "start": 211493,
           "end": 212213
         }
+      },
+      "lines": {
+        "start": 6983,
+        "end": 7002
       },
       "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
     },
@@ -817,6 +989,10 @@
           "end": 106939
         }
       },
+      "lines": {
+        "start": 3442,
+        "end": 3451
+      },
       "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
     },
     {
@@ -834,6 +1010,10 @@
           "start": 61740,
           "end": 63973
         }
+      },
+      "lines": {
+        "start": 2007,
+        "end": 2060
       },
       "message": "structural clone of crates/core/flags/defs.rs:test_field_context_separator"
     },
@@ -853,6 +1033,10 @@
           "end": 176280
         }
       },
+      "lines": {
+        "start": 5818,
+        "end": 5824
+      },
       "message": "structural clone of crates/core/flags/defs.rs:test_line_regexp"
     },
     {
@@ -870,6 +1054,10 @@
           "start": 140061,
           "end": 140462
         }
+      },
+      "lines": {
+        "start": 4573,
+        "end": 4585
       },
       "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
     },
@@ -889,6 +1077,10 @@
           "end": 208917
         }
       },
+      "lines": {
+        "start": 6854,
+        "end": 6887
+      },
       "message": "structural clone of crates/core/flags/defs.rs:test_sort_files"
     },
     {
@@ -906,6 +1098,10 @@
           "start": 159254,
           "end": 159607
         }
+      },
+      "lines": {
+        "start": 5248,
+        "end": 5257
       },
       "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
     },
@@ -925,6 +1121,10 @@
           "end": 151141
         }
       },
+      "lines": {
+        "start": 4944,
+        "end": 4954
+      },
       "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
     },
     {
@@ -942,6 +1142,10 @@
           "start": 157624,
           "end": 157981
         }
+      },
+      "lines": {
+        "start": 5193,
+        "end": 5203
       },
       "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
     },
@@ -961,6 +1165,10 @@
           "end": 146088
         }
       },
+      "lines": {
+        "start": 4743,
+        "end": 4764
+      },
       "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
     },
     {
@@ -978,6 +1186,10 @@
           "start": 72344,
           "end": 72999
         }
+      },
+      "lines": {
+        "start": 2342,
+        "end": 2358
       },
       "message": "structural clone of crates/core/flags/defs.rs:test_count"
     },
@@ -997,6 +1209,10 @@
           "end": 233095
         }
       },
+      "lines": {
+        "start": 7706,
+        "end": 7721
+      },
       "message": "structural clone of crates/core/flags/defs.rs:test_debug"
     },
     {
@@ -1014,6 +1230,10 @@
           "start": 129409,
           "end": 129824
         }
+      },
+      "lines": {
+        "start": 4234,
+        "end": 4245
       },
       "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
     },
@@ -1033,6 +1253,10 @@
           "end": 44393
         }
       },
+      "lines": {
+        "start": 1443,
+        "end": 1455
+      },
       "message": "structural clone of crates/core/flags/defs.rs:test_count"
     },
     {
@@ -1050,6 +1274,10 @@
           "start": 167677,
           "end": 167993
         }
+      },
+      "lines": {
+        "start": 5548,
+        "end": 5557
       },
       "message": "structural clone of crates/core/flags/defs.rs:test_null"
     },
@@ -1069,6 +1297,10 @@
           "end": 14051
         }
       },
+      "lines": {
+        "start": 456,
+        "end": 500
+      },
       "message": "structural clone of crates/core/flags/defs.rs:test_after_context"
     },
     {
@@ -1087,6 +1319,10 @@
           "end": 239804
         }
       },
+      "lines": {
+        "start": 7933,
+        "end": 7948
+      },
       "message": "structural clone of crates/core/flags/defs.rs:test_debug"
     },
     {
@@ -1104,6 +1340,10 @@
           "start": 155263,
           "end": 155609
         }
+      },
+      "lines": {
+        "start": 5099,
+        "end": 5108
       },
       "message": "structural clone of crates/core/flags/defs.rs:test_byte_offset"
     },
@@ -1126,6 +1366,10 @@
           "end": 21294
         }
       },
+      "lines": {
+        "start": 573,
+        "end": 581
+      },
       "message": "structural clone of crates/core/flags/lowargs.rs:ContextSeparator.new"
     },
     {
@@ -1147,6 +1391,10 @@
           "end": 22358
         }
       },
+      "lines": {
+        "start": 607,
+        "end": 615
+      },
       "message": "structural clone of crates/core/flags/lowargs.rs:ContextSeparator.new"
     },
     {
@@ -1164,6 +1412,10 @@
           "start": 37971,
           "end": 38277
         }
+      },
+      "lines": {
+        "start": 1221,
+        "end": 1230
       },
       "message": "structural clone of crates/globset/src/lib.rs:matches_all_required_extensions"
     },
@@ -1183,6 +1435,10 @@
           "end": 37682
         }
       },
+      "lines": {
+        "start": 1200,
+        "end": 1208
+      },
       "message": "structural clone of crates/globset/src/lib.rs:matches_all_literals"
     },
     {
@@ -1200,6 +1456,10 @@
           "start": 38295,
           "end": 38529
         }
+      },
+      "lines": {
+        "start": 1233,
+        "end": 1240
       },
       "message": "structural clone of crates/globset/src/lib.rs:matches_all_required_extensions"
     },
@@ -1222,6 +1482,10 @@
           "end": 26572
         }
       },
+      "lines": {
+        "start": 803,
+        "end": 814
+      },
       "message": "structural clone of crates/globset/src/lib.rs:BasenameLiteralStrategy.matches_into"
     },
     {
@@ -1243,6 +1507,10 @@
           "end": 23712
         }
       },
+      "lines": {
+        "start": 695,
+        "end": 706
+      },
       "message": "structural clone of crates/globset/src/lib.rs:GlobSetMatchStrategy.is_match"
     },
     {
@@ -1260,6 +1528,10 @@
           "start": 37089,
           "end": 37374
         }
+      },
+      "lines": {
+        "start": 1189,
+        "end": 1197
       },
       "message": "structural clone of crates/globset/src/lib.rs:matches_all_literals"
     },
@@ -1279,6 +1551,10 @@
           "end": 42088
         }
       },
+      "lines": {
+        "start": 1173,
+        "end": 1183
+      },
       "message": "structural clone of crates/ignore/src/dir.rs:git_exclude"
     },
     {
@@ -1296,6 +1572,10 @@
           "start": 43423,
           "end": 43798
         }
+      },
+      "lines": {
+        "start": 1226,
+        "end": 1235
       },
       "message": "structural clone of crates/ignore/src/dir.rs:gitignore_no_git"
     },
@@ -1315,6 +1595,10 @@
           "end": 42534
         }
       },
+      "lines": {
+        "start": 1186,
+        "end": 1196
+      },
       "message": "structural clone of crates/ignore/src/dir.rs:git_exclude"
     },
     {
@@ -1333,6 +1617,10 @@
           "end": 47461
         }
       },
+      "lines": {
+        "start": 1335,
+        "end": 1343
+      },
       "message": "structural clone of crates/ignore/src/dir.rs:git_exclude"
     },
     {
@@ -1350,6 +1638,10 @@
           "start": 7834,
           "end": 8401
         }
+      },
+      "lines": {
+        "start": 237,
+        "end": 247
       },
       "message": "structural clone of crates/ignore/src/overrides.rs:precedence"
     },
@@ -1372,6 +1664,10 @@
           "end": 12959
         }
       },
+      "lines": {
+        "start": 399,
+        "end": 408
+      },
       "message": "structural clone of crates/ignore/src/types.rs:TypesBuilder.select"
     },
     {
@@ -1393,6 +1689,10 @@
           "end": 33527
         }
       },
+      "lines": {
+        "start": 992,
+        "end": 998
+      },
       "message": "structural clone of crates/ignore/src/walk.rs:WalkBuilder.sort_by_file_path"
     },
     {
@@ -1410,6 +1710,10 @@
           "start": 1665,
           "end": 2811
         }
+      },
+      "lines": {
+        "start": 57,
+        "end": 86
       },
       "message": "structural clone of crates/ignore/tests/gitignore_matched_path_or_any_parents_tests.rs:test_files_in_root"
     },
@@ -1432,6 +1736,10 @@
           "end": 4453
         }
       },
+      "lines": {
+        "start": 141,
+        "end": 151
+      },
       "message": "structural clone of crates/index/src/literal.rs:GramQuery.from_set_or"
     },
     {
@@ -1453,6 +1761,10 @@
           "end": 3697
         }
       },
+      "lines": {
+        "start": 101,
+        "end": 127
+      },
       "message": "structural clone of crates/index/src/literal.rs:GramQuery.or"
     },
     {
@@ -1470,6 +1782,10 @@
           "start": 90015,
           "end": 90824
         }
+      },
+      "lines": {
+        "start": 2545,
+        "end": 2568
       },
       "message": "structural clone of crates/printer/src/standard.rs:max_columns_preview"
     },
@@ -1489,6 +1805,10 @@
           "end": 115495
         }
       },
+      "lines": {
+        "start": 3322,
+        "end": 3348
+      },
       "message": "structural clone of crates/printer/src/standard.rs:only_matching_multi_line1"
     },
     {
@@ -1506,6 +1826,10 @@
           "start": 128773,
           "end": 129635
         }
+      },
+      "lines": {
+        "start": 3752,
+        "end": 3775
       },
       "message": "structural clone of crates/printer/src/standard.rs:only_matching_multi_line1"
     },
@@ -1525,6 +1849,10 @@
           "end": 116472
         }
       },
+      "lines": {
+        "start": 3351,
+        "end": 3377
+      },
       "message": "structural clone of crates/printer/src/standard.rs:only_matching_multi_line1"
     },
     {
@@ -1542,6 +1870,10 @@
           "start": 78341,
           "end": 79565
         }
+      },
+      "lines": {
+        "start": 2174,
+        "end": 2207
       },
       "message": "structural clone of crates/printer/src/standard.rs:no_heading"
     },
@@ -1561,6 +1893,10 @@
           "end": 94190
         }
       },
+      "lines": {
+        "start": 2649,
+        "end": 2676
+      },
       "message": "structural clone of crates/printer/src/standard.rs:max_columns_multi_line"
     },
     {
@@ -1578,6 +1914,10 @@
           "start": 120308,
           "end": 121138
         }
+      },
+      "lines": {
+        "start": 3494,
+        "end": 3516
       },
       "message": "structural clone of crates/printer/src/standard.rs:replacement_passthru"
     },
@@ -1597,6 +1937,10 @@
           "end": 112783
         }
       },
+      "lines": {
+        "start": 3237,
+        "end": 3265
+      },
       "message": "structural clone of crates/printer/src/standard.rs:only_matching_max_columns_multi_line2"
     },
     {
@@ -1614,6 +1958,10 @@
           "start": 69976,
           "end": 71668
         }
+      },
+      "lines": {
+        "start": 1924,
+        "end": 1971
       },
       "message": "structural clone of crates/printer/src/standard.rs:context_break"
     },
@@ -1633,6 +1981,10 @@
           "end": 91642
         }
       },
+      "lines": {
+        "start": 2571,
+        "end": 2594
+      },
       "message": "structural clone of crates/printer/src/standard.rs:max_columns_preview"
     },
     {
@@ -1650,6 +2002,10 @@
           "start": 116490,
           "end": 117437
         }
+      },
+      "lines": {
+        "start": 3380,
+        "end": 3406
       },
       "message": "structural clone of crates/printer/src/standard.rs:only_matching_multi_line1"
     },
@@ -1669,6 +2025,10 @@
           "end": 131749
         }
       },
+      "lines": {
+        "start": 3807,
+        "end": 3834
+      },
       "message": "structural clone of crates/printer/src/standard.rs:invert_context"
     },
     {
@@ -1686,6 +2046,10 @@
           "start": 86062,
           "end": 86777
         }
+      },
+      "lines": {
+        "start": 2419,
+        "end": 2440
       },
       "message": "structural clone of crates/printer/src/standard.rs:column_number"
     },
@@ -1705,6 +2069,10 @@
           "end": 113628
         }
       },
+      "lines": {
+        "start": 3268,
+        "end": 3291
+      },
       "message": "structural clone of crates/printer/src/standard.rs:line_number"
     },
     {
@@ -1722,6 +2090,10 @@
           "start": 106338,
           "end": 107181
         }
+      },
+      "lines": {
+        "start": 3056,
+        "end": 3082
       },
       "message": "structural clone of crates/printer/src/standard.rs:only_matching_multi_line1"
     },
@@ -1741,6 +2113,10 @@
           "end": 123541
         }
       },
+      "lines": {
+        "start": 3571,
+        "end": 3590
+      },
       "message": "structural clone of crates/printer/src/standard.rs:replacement_multi_line"
     },
     {
@@ -1758,6 +2134,10 @@
           "start": 79583,
           "end": 80785
         }
+      },
+      "lines": {
+        "start": 2210,
+        "end": 2245
       },
       "message": "structural clone of crates/printer/src/standard.rs:heading"
     },
@@ -1777,6 +2157,10 @@
           "end": 92489
         }
       },
+      "lines": {
+        "start": 2597,
+        "end": 2621
+      },
       "message": "structural clone of crates/printer/src/standard.rs:max_columns_preview"
     },
     {
@@ -1794,6 +2178,10 @@
           "start": 89268,
           "end": 89997
         }
+      },
+      "lines": {
+        "start": 2520,
+        "end": 2542
       },
       "message": "structural clone of crates/printer/src/standard.rs:max_columns_preview"
     },
@@ -1813,6 +2201,10 @@
           "end": 132730
         }
       },
+      "lines": {
+        "start": 3837,
+        "end": 3865
+      },
       "message": "structural clone of crates/printer/src/standard.rs:invert_context"
     },
     {
@@ -1831,6 +2223,10 @@
           "end": 104870
         }
       },
+      "lines": {
+        "start": 2977,
+        "end": 2999
+      },
       "message": "structural clone of crates/printer/src/standard.rs:max_matches_multi_line3"
     },
     {
@@ -1848,6 +2244,10 @@
           "start": 109823,
           "end": 110923
         }
+      },
+      "lines": {
+        "start": 3173,
+        "end": 3204
       },
       "message": "structural clone of crates/printer/src/standard.rs:only_matching_max_columns_multi_line1"
     },
@@ -1870,6 +2270,10 @@
           "end": 34199
         }
       },
+      "lines": {
+        "start": 915,
+        "end": 926
+      },
       "message": "structural clone of crates/printer/src/standard.rs:StandardImpl.from_match"
     },
     {
@@ -1887,6 +2291,10 @@
           "start": 127943,
           "end": 128755
         }
+      },
+      "lines": {
+        "start": 3727,
+        "end": 3749
       },
       "message": "structural clone of crates/printer/src/standard.rs:only_matching_multi_line1"
     },
@@ -1906,6 +2314,10 @@
           "end": 118329
         }
       },
+      "lines": {
+        "start": 3409,
+        "end": 3434
+      },
       "message": "structural clone of crates/printer/src/standard.rs:only_matching_multi_line1"
     },
     {
@@ -1923,6 +2335,10 @@
           "start": 83437,
           "end": 84357
         }
+      },
+      "lines": {
+        "start": 2343,
+        "end": 2366
       },
       "message": "structural clone of crates/printer/src/standard.rs:line_number"
     },
@@ -1942,6 +2358,10 @@
           "end": 102678
         }
       },
+      "lines": {
+        "start": 2905,
+        "end": 2925
+      },
       "message": "structural clone of crates/printer/src/standard.rs:max_columns_multi_line"
     },
     {
@@ -1959,6 +2379,10 @@
           "start": 76057,
           "end": 76838
         }
+      },
+      "lines": {
+        "start": 2103,
+        "end": 2124
       },
       "message": "structural clone of crates/printer/src/standard.rs:separator_path"
     },
@@ -1978,6 +2402,10 @@
           "end": 126966
         }
       },
+      "lines": {
+        "start": 3673,
+        "end": 3697
+      },
       "message": "structural clone of crates/printer/src/standard.rs:replacement_passthru"
     },
     {
@@ -1995,6 +2423,10 @@
           "start": 126984,
           "end": 127925
         }
+      },
+      "lines": {
+        "start": 3700,
+        "end": 3724
       },
       "message": "structural clone of crates/printer/src/standard.rs:replacement_passthru"
     },
@@ -2014,6 +2446,10 @@
           "end": 94846
         }
       },
+      "lines": {
+        "start": 2679,
+        "end": 2698
+      },
       "message": "structural clone of crates/printer/src/standard.rs:max_columns"
     },
     {
@@ -2031,6 +2467,10 @@
           "start": 124419,
           "end": 125363
         }
+      },
+      "lines": {
+        "start": 3619,
+        "end": 3643
       },
       "message": "structural clone of crates/printer/src/standard.rs:replacement_max_columns"
     },
@@ -2050,6 +2490,10 @@
           "end": 133761
         }
       },
+      "lines": {
+        "start": 3868,
+        "end": 3897
+      },
       "message": "structural clone of crates/printer/src/standard.rs:invert_context"
     },
     {
@@ -2067,6 +2511,10 @@
           "start": 113646,
           "end": 114539
         }
+      },
+      "lines": {
+        "start": 3294,
+        "end": 3319
       },
       "message": "structural clone of crates/printer/src/standard.rs:only_matching_multi_line1"
     },
@@ -2086,6 +2534,10 @@
           "end": 87767
         }
       },
+      "lines": {
+        "start": 2443,
+        "end": 2468
+      },
       "message": "structural clone of crates/printer/src/standard.rs:column_number_multi_line"
     },
     {
@@ -2103,6 +2555,10 @@
           "start": 107952,
           "end": 108737
         }
+      },
+      "lines": {
+        "start": 3112,
+        "end": 3137
       },
       "message": "structural clone of crates/printer/src/standard.rs:only_matching_max_columns"
     },
@@ -2122,6 +2578,10 @@
           "end": 105562
         }
       },
+      "lines": {
+        "start": 3002,
+        "end": 3025
+      },
       "message": "structural clone of crates/printer/src/standard.rs:line_number"
     },
     {
@@ -2139,6 +2599,10 @@
           "start": 118347,
           "end": 119224
         }
+      },
+      "lines": {
+        "start": 3437,
+        "end": 3462
       },
       "message": "structural clone of crates/printer/src/standard.rs:only_matching_multi_line1"
     },
@@ -2158,6 +2622,10 @@
           "end": 36957
         }
       },
+      "lines": {
+        "start": 1030,
+        "end": 1046
+      },
       "message": "structural clone of crates/printer/src/summary.rs:count_path"
     },
     {
@@ -2175,6 +2643,10 @@
           "start": 35827,
           "end": 36384
         }
+      },
+      "lines": {
+        "start": 1011,
+        "end": 1027
       },
       "message": "structural clone of crates/printer/src/summary.rs:count_path"
     },
@@ -2194,6 +2666,10 @@
           "end": 32847
         }
       },
+      "lines": {
+        "start": 895,
+        "end": 912
+      },
       "message": "structural clone of crates/printer/src/summary.rs:count_no_path_even_with_path"
     },
     {
@@ -2211,6 +2687,10 @@
           "start": 37544,
           "end": 38108
         }
+      },
+      "lines": {
+        "start": 1068,
+        "end": 1084
       },
       "message": "structural clone of crates/printer/src/summary.rs:count_path"
     },
@@ -2230,6 +2710,10 @@
           "end": 38681
         }
       },
+      "lines": {
+        "start": 1087,
+        "end": 1103
+      },
       "message": "structural clone of crates/printer/src/summary.rs:path_with_match_not_found"
     },
     {
@@ -2247,6 +2731,10 @@
           "start": 30217,
           "end": 30635
         }
+      },
+      "lines": {
+        "start": 827,
+        "end": 838
       },
       "message": "structural clone of crates/printer/src/summary.rs:path_with_match_error"
     },
@@ -2269,6 +2757,10 @@
           "end": 14106
         }
       },
+      "lines": {
+        "start": 336,
+        "end": 348
+      },
       "message": "structural clone of crates/regex/src/literal.rs:Extractor.extract_class_unicode"
     },
     {
@@ -2286,6 +2778,10 @@
           "start": 23125,
           "end": 23912
         }
+      },
+      "lines": {
+        "start": 600,
+        "end": 622
       },
       "message": "structural clone of crates/pcre2/src/matcher.rs:line_terminator_crlf"
     },
@@ -2305,6 +2801,10 @@
           "end": 22076
         }
       },
+      "lines": {
+        "start": 560,
+        "end": 568
+      },
       "message": "structural clone of crates/pcre2/src/matcher.rs:word"
     },
     {
@@ -2323,6 +2823,10 @@
           "end": 24298
         }
       },
+      "lines": {
+        "start": 626,
+        "end": 634
+      },
       "message": "structural clone of crates/pcre2/src/matcher.rs:case_smart"
     },
     {
@@ -2340,6 +2844,10 @@
           "start": 34534,
           "end": 35185
         }
+      },
+      "lines": {
+        "start": 948,
+        "end": 964
       },
       "message": "structural clone of crates/searcher/src/line_buffer.rs:buffer_binary_convert3"
     },
@@ -2362,6 +2870,10 @@
           "end": 20338
         }
       },
+      "lines": {
+        "start": 617,
+        "end": 644
+      },
       "message": "structural clone of crates/searcher/src/searcher/core.rs:Core.sink_before_context"
     },
     {
@@ -2379,6 +2891,10 @@
           "start": 30157,
           "end": 31885
         }
+      },
+      "lines": {
+        "start": 932,
+        "end": 978
       },
       "message": "structural clone of crates/searcher/src/searcher/glue.rs:context_sherlock1"
     },
@@ -2398,6 +2914,10 @@
           "end": 17208
         }
       },
+      "lines": {
+        "start": 522,
+        "end": 535
+      },
       "message": "structural clone of crates/searcher/src/searcher/glue.rs:multi_line_overlap1"
     },
     {
@@ -2415,6 +2935,10 @@
           "start": 37745,
           "end": 40015
         }
+      },
+      "lines": {
+        "start": 1149,
+        "end": 1207
       },
       "message": "structural clone of crates/searcher/src/searcher/glue.rs:context_sherlock1"
     },
@@ -2434,6 +2958,10 @@
           "end": 35999
         }
       },
+      "lines": {
+        "start": 1046,
+        "end": 1094
+      },
       "message": "structural clone of crates/searcher/src/searcher/glue.rs:context_sherlock1"
     },
     {
@@ -2451,6 +2979,10 @@
           "start": 36017,
           "end": 37727
         }
+      },
+      "lines": {
+        "start": 1097,
+        "end": 1146
       },
       "message": "structural clone of crates/searcher/src/searcher/glue.rs:context_sherlock1"
     },
@@ -2470,6 +3002,10 @@
           "end": 48247
         }
       },
+      "lines": {
+        "start": 1419,
+        "end": 1492
+      },
       "message": "structural clone of crates/searcher/src/searcher/glue.rs:context_code2"
     },
     {
@@ -2488,6 +3024,10 @@
           "end": 34251
         }
       },
+      "lines": {
+        "start": 981,
+        "end": 1043
+      },
       "message": "structural clone of crates/searcher/src/searcher/glue.rs:context_sherlock_invert1"
     },
     {
@@ -2505,6 +3045,10 @@
           "start": 40033,
           "end": 42290
         }
+      },
+      "lines": {
+        "start": 1210,
+        "end": 1267
       },
       "message": "structural clone of crates/searcher/src/searcher/glue.rs:context_sherlock1"
     },
@@ -2527,6 +3071,10 @@
           "end": 25213
         }
       },
+      "lines": {
+        "start": 710,
+        "end": 723
+      },
       "message": "structural clone of crates/searcher/src/testutil.rs:TesterConfig.search_reader"
     },
     {
@@ -2548,6 +3096,10 @@
           "end": 7528
         }
       },
+      "lines": {
+        "start": 214,
+        "end": 220
+      },
       "message": "structural clone of tests/util.rs:Dir.link_dir"
     },
     {
@@ -2565,6 +3117,10 @@
           "start": 2257,
           "end": 2307
         }
+      },
+      "lines": {
+        "start": 86,
+        "end": 86
       },
       "message": "declared `crate`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },

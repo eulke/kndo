@@ -12,7 +12,8 @@ use crate::report::{ExtensionRun, REPORT_SCHEMA, Report, ReportDiagnostic, RunIn
 use crate::{discover, extract};
 use kndo_contract::evidence::DiagnosticLevel;
 use kndo_contract::extension::Extension;
-use kndo_contract::finding::{Finding, Severity};
+use kndo_contract::finding::{Finding, LineSpan, Severity};
+use kndo_contract::subject::Subject;
 use kndo_contract::vocab::ProjectPath;
 use smol_str::SmolStr;
 use std::collections::{BTreeMap, BTreeSet};
@@ -105,6 +106,40 @@ pub struct Snapshot {
     pragma_problems: Vec<crate::suppress::PragmaProblem>,
     composition_diagnostics: Vec<ReportDiagnostic>,
     files_discovered: u32,
+}
+
+/// Byte offsets where each line begins; line N (1-based) starts at `[N-1]`.
+fn line_starts(content: &[u8]) -> Vec<u32> {
+    let mut starts = vec![0u32];
+    for (i, b) in content.iter().enumerate() {
+        if *b == b'\n' {
+            starts.push(i as u32 + 1);
+        }
+    }
+    starts
+}
+
+fn line_of(starts: &[u32], offset: u32) -> u32 {
+    starts.partition_point(|s| *s <= offset) as u32
+}
+
+/// Resolve each spanned subject's byte span to its 1-based inclusive line range.
+/// The span's `end` is exclusive, so the range's last byte decides `end`'s line
+/// (an empty span sits on its start line).
+fn fill_lines(mut findings: Vec<Finding>, index: &BTreeMap<ProjectPath, Vec<u32>>) -> Vec<Finding> {
+    for f in &mut findings {
+        let span = match &f.subject {
+            Subject::Symbol { span, .. } | Subject::Suppression { span, .. } => *span,
+            _ => continue,
+        };
+        if let Some(starts) = index.get(f.subject.path()) {
+            f.lines = Some(LineSpan {
+                start: line_of(starts, span.start),
+                end: line_of(starts, span.end.saturating_sub(1).max(span.start)),
+            });
+        }
+    }
+    findings
 }
 
 impl Snapshot {
@@ -331,6 +366,14 @@ impl Session {
             &outcome.judged,
             outcome.findings,
         );
+        // Lines are resolved here, once, for every finding with a span — a pure
+        // function of this run's file contents (already in memory for hashing), so
+        // nothing is persisted and no cache format learns about lines.
+        let line_index: BTreeMap<ProjectPath, Vec<u32>> = files
+            .iter()
+            .map(|f| (f.path.clone(), line_starts(&f.content)))
+            .collect();
+        let findings = fill_lines(findings, &line_index);
         timings.analyze = analyze_start.elapsed();
 
         let mut composition = self.composition_diagnostics.clone();

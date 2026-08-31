@@ -339,7 +339,7 @@ fn render_finding(finding: &kndo::Finding) -> String {
         "{} {} {}: {}\n",
         finding.severity.as_str(),
         finding.category.as_str(),
-        finding.subject.render(),
+        finding.location(),
         finding.message
     )
 }
