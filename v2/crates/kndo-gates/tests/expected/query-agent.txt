@@ -35,12 +35,20 @@ next: kndo describe lib.kmock#helper
 kndo agent format 2 (kndo-query/1)
 verb: trace
 [lib.kmock#helper] function · production · 1-1
-  from Production root main.kmock
+  from production root main.kmock
   → lib.kmock via import (certain)
   kept there by binding main.kmock:2
 [orphan.kmock] file · unreachable
-  not reachable from the requested roots
+  not reachable that way
 next: kndo impact lib.kmock#helper --if-deleted
+---
+kndo agent format 2 (kndo-query/1)
+verb: trace
+[main.kmock] file · production
+  from main.kmock
+  → lib.kmock via import (certain)
+  kept there by binding main.kmock:2
+next: kndo impact main.kmock --if-deleted
 ---
 kndo agent format 2 (kndo-query/1)
 verb: impact

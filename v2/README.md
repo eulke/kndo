@@ -404,7 +404,9 @@ explicit elision; a bad selector is its own not-found, never its siblings' failu
 `next:` affordances close every agent response. `trace` is a liveness proof (the
 rooted file, each hop's edge with its recorded confidence, the in-file keeper last —
 and `path: null` exits 1, so `kndo trace x && rm x` cannot delete something
-reachable); `impact --if-deleted` simulates the removal as typed reachability flips
+reachable) and `--to <selector>` is its directed form — each input's shortest path
+TO one target, v1's positional pair reshaped so results stay 1:1 with inputs, and
+its speculative `--all --max-paths` enumeration dead; `impact --if-deleted` simulates the removal as typed reachability flips
 (newly-unreachable, newly-test-only, orphaned symbols), never fabricated findings;
 `explain` closes finding-id → subject → why, where for `unused` the empty keeper
 preview IS the why. `kndo-serve` grew from skeleton to proof: one MCP tool per verb

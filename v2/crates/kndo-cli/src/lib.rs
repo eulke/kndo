@@ -72,6 +72,9 @@ struct QueryArgs {
     /// trace: root set to trace from (default: production, then test, tooling)
     #[arg(long, value_enum)]
     roots: Option<RootsArg>,
+    /// trace: directed form — shortest path from each input TO this node
+    #[arg(long, value_name = "selector")]
+    to: Option<String>,
     /// impact: also simulate the removal and report the reachability flips
     #[arg(long)]
     if_deleted: bool,
@@ -345,6 +348,7 @@ fn query_verb(verb: kndo::query::Verb, args: QueryArgs, host: &Host) -> CliOutpu
             color: args.reach.map(ReachArg::into_core),
             roots: args.roots.map(RootsArg::into_core),
             if_deleted: args.if_deleted,
+            to: args.to.clone(),
         },
     };
     let response = snapshot.query(&request);

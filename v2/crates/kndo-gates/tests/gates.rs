@@ -1069,6 +1069,15 @@ fn query_contract_is_generated_and_pinned() {
             inputs: vec!["lib.kmock#helper".to_string(), "orphan.kmock".to_string()],
             options: Options::default(),
         },
+        // The directed form: FROM the entry file TO the kept symbol.
+        Request {
+            verb: Verb::Trace,
+            inputs: vec!["main.kmock".to_string()],
+            options: Options {
+                to: Some("lib.kmock#helper".to_string()),
+                ..Options::default()
+            },
+        },
         Request {
             verb: Verb::Impact,
             inputs: vec!["lib.kmock".to_string()],

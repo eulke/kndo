@@ -197,8 +197,9 @@ fn verb_description(verb: kndo::query::Verb) -> &'static str {
         Verb::Trace => {
             "Why this node is alive: the shortest path from a root (production \
              first, then test, then tooling), each hop naming its edge and \
-             confidence, the in-file keeper last. A null path means NOT \
-             reachable that way."
+             confidence, the in-file keeper last. options.to switches to the \
+             directed form — the path from each input TO that node. A null \
+             path means NOT reachable that way."
         }
         Verb::Impact => {
             "What depends on this node — the reverse closure nearest-first with \

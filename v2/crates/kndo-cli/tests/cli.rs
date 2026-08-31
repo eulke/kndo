@@ -590,6 +590,60 @@ fn trace_impact_and_explain_close_the_loop_end_to_end() {
         orphan.stdout
     );
 
+    // The directed form: from the root file TO the kept symbol — no root set,
+    // the origin is the input itself; the target symbol's keeper closes it.
+    let directed = run_args(
+        [
+            "kndo",
+            "trace",
+            "src/index.js",
+            "--to",
+            "src/used.js#used",
+            "--root",
+            &root,
+        ],
+        piped(),
+    );
+    assert_eq!(directed.code, 0, "{}{}", directed.stdout, directed.stderr);
+    let response: serde_json::Value = serde_json::from_str(&directed.stdout).expect("json");
+    let path = &response["results"][0]["path"];
+    assert!(path["roots"].is_null(), "{}", directed.stdout);
+    assert_eq!(path["root"]["selector"], "src/index.js");
+    assert_eq!(path["hops"][0]["node"]["selector"], "src/used.js");
+    assert!(path["keeper"]["kind"].is_string(), "{}", directed.stdout);
+
+    // Directed with no path between the endpoints: the same exit-1 truth.
+    let unreachable = run_args(
+        [
+            "kndo",
+            "trace",
+            "src/used.js",
+            "--to",
+            "src/orphan.js",
+            "--root",
+            &root,
+        ],
+        piped(),
+    );
+    assert_eq!(unreachable.code, 1, "{}", unreachable.stdout);
+
+    // A bad --to target is its own not-found, never a crash.
+    let bad = run_args(
+        [
+            "kndo",
+            "trace",
+            "src/index.js",
+            "--to",
+            "src/nope.js",
+            "--root",
+            &root,
+        ],
+        piped(),
+    );
+    assert_eq!(bad.code, 1, "{}", bad.stdout);
+    let response: serde_json::Value = serde_json::from_str(&bad.stdout).expect("json");
+    assert_eq!(response["results"][0]["status"], "not-found");
+
     // impact --if-deleted: the reverse closure plus the simulated removal.
     let impact = run_args(
         [

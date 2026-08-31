@@ -666,12 +666,18 @@
           "$ref": "#/$defs/NodeRef"
         },
         "roots": {
-          "description": "Which root set anchors this path.",
-          "$ref": "#/$defs/RootSet"
+          "description": "Which root set anchors this path — absent on the directed form, whose\norigin is the input itself.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RootSet"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
-        "roots",
         "root",
         "hops"
       ]

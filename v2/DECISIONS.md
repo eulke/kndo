@@ -1740,3 +1740,33 @@ changes nothing, and `--quiet --verbose` together is a refused invocation.
 
 217 tests, 15 gates, clippy clean; smoke on the demo shows the staged arrow
 `health 83.3 → 100.0` with the improved side green.
+
+## 2026-08-31 — Directed trace ships as `--to`; v1's path enumeration dies
+
+v1's `trace` had a second, positional form — `trace <from> <to>`, with `--all
+--max-paths K` enumerating simple-path alternatives. The surface question
+("how does A reach B?" — THE coupling question before a refactor) survives;
+the shape and the enumeration do not:
+
+- **`--to <selector>`, not a positional pair.** v2's inputs are 1:1 with
+  results by contract; a positional pair would silently re-type the second
+  input. With `--to` the target is one option for the whole request, and
+  every input answers with ITS shortest path to that target — batch semantics
+  preserved (`kndo trace a b c --to lib.js` is three answers).
+- **The answer is the same `TracePath`**, with `roots` absent — the directed
+  form's origin is the input itself, so the field that names which root set
+  anchored a liveness path has honestly nothing to say. For a symbol target
+  the final hop is its in-file keeper, the same vocabulary `used-by` and the
+  liveness form speak.
+- **`--all --max-paths` dies with its vice named**: path enumeration shipped
+  without a consumer or a measurement — speculative surface. One shortest
+  path is the deterministic answer; alternatives return only with a measured
+  need.
+- Two render fixes rode along, caught by the golden regen: the trace header
+  spelled its root set via Rust's `Debug` (`from Production`) instead of the
+  contract spelling — `RootSet::as_str` now exists, discriminant-indexed and
+  serde-tied like `Verb`'s — and the no-path line respelled form-neutral
+  ("not reachable that way").
+
+serve gets the form for free (`options.to` flows through the same Request;
+the trace tool's description names it). 217 tests, 15 gates, clippy clean.

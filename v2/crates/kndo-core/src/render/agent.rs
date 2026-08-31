@@ -235,12 +235,16 @@ impl crate::query::Response {
                         out.push_str(&node_line(&a.node));
                         out.push('\n');
                         match &a.path {
-                            None => out.push_str("  not reachable from the requested roots\n"),
+                            None => out.push_str("  not reachable that way\n"),
                             Some(p) => {
-                                out.push_str(&format!(
-                                    "  from {:?} root {}\n",
-                                    p.roots, p.root.selector
-                                ));
+                                match p.roots {
+                                    Some(set) => out.push_str(&format!(
+                                        "  from {} root {}\n",
+                                        set.as_str(),
+                                        p.root.selector
+                                    )),
+                                    None => out.push_str(&format!("  from {}\n", p.root.selector)),
+                                }
                                 for hop in &p.hops {
                                     out.push_str(&format!(
                                         "  → {} via {}{}\n",

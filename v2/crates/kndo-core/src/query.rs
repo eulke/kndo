@@ -85,6 +85,14 @@ mod tests {
             let json = serde_json::to_string(&verb).unwrap();
             assert_eq!(json, format!("\"{}\"", verb.as_str()));
         }
+        for set in [
+            super::RootSet::Production,
+            super::RootSet::Test,
+            super::RootSet::Tooling,
+        ] {
+            let json = serde_json::to_string(&set).unwrap();
+            assert_eq!(json, format!("\"{}\"", set.as_str()));
+        }
     }
 }
 
@@ -112,6 +120,11 @@ pub struct Options {
     /// reachability flips — never fabricated findings.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub if_deleted: bool,
+    /// `trace`: the directed form — the shortest path from each input TO this
+    /// node, instead of from the root sets. One target for the whole request,
+    /// so results stay 1:1 with inputs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -121,6 +134,14 @@ pub enum RootSet {
     Production,
     Test,
     Tooling,
+}
+
+impl RootSet {
+    /// The one text spelling — indexed by discriminant, tied to serde's
+    /// kebab-case output by a test so a reorder cannot drift silently.
+    pub fn as_str(self) -> &'static str {
+        ["production", "test", "tooling"][self as usize]
+    }
 }
 
 #[derive(Serialize)]
@@ -308,8 +329,10 @@ pub struct TraceAnswer {
 #[derive(Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct TracePath {
-    /// Which root set anchors this path.
-    pub roots: RootSet,
+    /// Which root set anchors this path — absent on the directed form, whose
+    /// origin is the input itself.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub roots: Option<RootSet>,
     /// The rooted file the path starts from.
     pub root: NodeRef,
     /// File hops, root-side first; each names the edge that led into it.
@@ -393,6 +416,7 @@ pub struct FindingBrief {
 
 // ------------------------------------------------------------------ selectors
 
+#[derive(Clone, Copy)]
 enum Selector {
     File(usize),
     Symbol { file: usize, decl: usize },
@@ -513,9 +537,24 @@ impl Snapshot {
                 Verb::Describe => node_verb(&cx, input, describe),
                 Verb::Uses => node_verb(&cx, input, |cx, sel| uses(cx, sel, limit)),
                 Verb::UsedBy => node_verb(&cx, input, |cx, sel| used_by(cx, sel, limit)),
-                Verb::Trace => {
-                    node_verb(&cx, input, |cx, sel| trace(cx, sel, request.options.roots))
-                }
+                Verb::Trace => match request.options.to.as_deref() {
+                    None => node_verb(&cx, input, |cx, sel| trace(cx, sel, request.options.roots)),
+                    Some(raw) => match resolve(cx.graph, raw) {
+                        Resolve::Hit(target) => {
+                            node_verb(&cx, input, |cx, sel| trace_to(cx, sel, target))
+                        }
+                        Resolve::Miss => Outcome::NotFound {
+                            input: raw.to_string(),
+                        },
+                        Resolve::Ambiguous(candidates) => Outcome::Error {
+                            input: raw.to_string(),
+                            message: format!(
+                                "ambiguous — retry with one of: {}",
+                                candidates.join(", ")
+                            ),
+                        },
+                    },
+                },
                 Verb::Impact => node_verb(&cx, input, |cx, sel| {
                     impact(cx, sel, request.options.if_deleted, limit)
                 }),
@@ -1101,7 +1140,7 @@ fn trace(cx: &QueryContext<'_>, selector: Selector, roots: Option<RootSet>) -> A
             return Answer::Trace(TraceAnswer {
                 node,
                 path: Some(TracePath {
-                    roots: set,
+                    roots: Some(set),
                     root,
                     hops,
                     keeper,
@@ -1110,6 +1149,53 @@ fn trace(cx: &QueryContext<'_>, selector: Selector, roots: Option<RootSet>) -> A
         }
     }
     Answer::Trace(TraceAnswer { node, path: None })
+}
+
+/// The directed form: the shortest path from the input's file to the target's
+/// file over the same forward edges, no root set involved — the origin is the
+/// input itself. For a symbol target the final hop is its in-file keeper, in
+/// the same vocabulary the liveness form and `used-by` speak.
+fn trace_to(cx: &QueryContext<'_>, from: Selector, target: Selector) -> Answer {
+    let (from_file, from_decl) = match from {
+        Selector::File(f) => (f, None),
+        Selector::Symbol { file, decl } => (file, Some(decl)),
+    };
+    let (to_file, to_decl) = match target {
+        Selector::File(f) => (f, None),
+        Selector::Symbol { file, decl } => (file, Some(decl)),
+    };
+    let node = node_ref(cx, from_file, from_decl);
+    match shortest_path(cx.graph, &[from_file as u32], to_file as u32) {
+        Some(path) => {
+            let root = node_ref(cx, path[0] as usize, None);
+            let hops: Vec<TraceHop> = path
+                .windows(2)
+                .map(|pair| {
+                    let (via, confidence) = edge_between(cx.graph, pair[0], pair[1]);
+                    TraceHop {
+                        node: node_ref(cx, pair[1] as usize, None),
+                        via,
+                        confidence,
+                    }
+                })
+                .collect();
+            let keeper = to_decl.and_then(|d| {
+                navigate::keepers(cx.graph, cx.index, to_file, d, 1)
+                    .first()
+                    .map(|k| edge_ref(cx, k))
+            });
+            Answer::Trace(TraceAnswer {
+                node,
+                path: Some(TracePath {
+                    roots: None,
+                    root,
+                    hops,
+                    keeper,
+                }),
+            })
+        }
+        None => Answer::Trace(TraceAnswer { node, path: None }),
+    }
 }
 
 fn impact(cx: &QueryContext<'_>, selector: Selector, if_deleted: bool, limit: usize) -> Answer {

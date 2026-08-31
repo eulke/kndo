@@ -69,6 +69,13 @@
               "type": "null"
             }
           ]
+        },
+        "to": {
+          "description": "`trace`: the directed form — the shortest path from each input TO this\nnode, instead of from the root sets. One target for the whole request,\nso results stay 1:1 with inputs.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "additionalProperties": false
