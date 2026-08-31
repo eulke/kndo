@@ -1,0 +1,472 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Response",
+  "type": "object",
+  "properties": {
+    "results": {
+      "description": "1:1 with the request's `inputs`, in order.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Outcome"
+      }
+    },
+    "schema": {
+      "description": "Stamped from [`QUERY_SCHEMA`]; a consumer of any other envelope version\nfails loudly instead of drifting.",
+      "type": "string"
+    },
+    "verb": {
+      "$ref": "#/$defs/Verb"
+    }
+  },
+  "required": [
+    "schema",
+    "verb",
+    "results"
+  ],
+  "$defs": {
+    "DeclarationFacts": {
+      "type": "object",
+      "properties": {
+        "exported_as": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "owner": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reach": {
+          "description": "The reach as the contract spells it: `private`, `scoped:<token>`, or\n`exported`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reach"
+      ]
+    },
+    "DescribeAnswer": {
+      "type": "object",
+      "properties": {
+        "declaration": {
+          "description": "Symbol subjects only: the declaration's own facts.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DeclarationFacts"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "file": {
+          "description": "File subjects only: the file's own facts.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FileFacts"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "findings": {
+          "description": "Ids of current findings on this exact subject.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "kept_by": {
+          "description": "A preview of what keeps it alive (symbols only) — `used-by` lists them\nall; `more: true` says the preview is not the whole story.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeptPreview"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "node": {
+          "$ref": "#/$defs/NodeRef"
+        }
+      },
+      "required": [
+        "node",
+        "findings"
+      ]
+    },
+    "EdgeRef": {
+      "description": "One piece of evidence keeping a node alive — [`navigate::Keeper`], serialized.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "site": {
+          "description": "The concrete source site, when the keeper has one (roots and entry\nsurface are facts, not sites).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SiteRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind"
+      ]
+    },
+    "FileFacts": {
+      "type": "object",
+      "properties": {
+        "declarations": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "extension": {
+          "description": "The extension that claimed the file.",
+          "type": "string"
+        },
+        "importers": {
+          "description": "Files importing this one (bindings and whole-surface alike).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "imports": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "extension",
+        "declarations",
+        "imports",
+        "importers"
+      ]
+    },
+    "FindAnswer": {
+      "type": "object",
+      "properties": {
+        "elided": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "matches": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NodeRef"
+          }
+        }
+      },
+      "required": [
+        "matches",
+        "elided"
+      ]
+    },
+    "ImportUse": {
+      "type": "object",
+      "properties": {
+        "names": {
+          "description": "Bound names, empty for whole-surface shapes.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "target": {
+          "$ref": "#/$defs/ProjectPath"
+        }
+      },
+      "required": [
+        "target",
+        "names"
+      ]
+    },
+    "KeptPreview": {
+      "type": "object",
+      "properties": {
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EdgeRef"
+          }
+        },
+        "more": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "entries",
+        "more"
+      ]
+    },
+    "LineSpan": {
+      "description": "1-based, inclusive line range — display data the engine derives from the\nsubject's byte span against the file's actual newlines. Lines are exact in any\nencoding (a newline is one byte); columns are deliberately absent — every\ninterchange format counts them in its own unit, and a slightly-wrong column is\nworse than none.",
+      "type": "object",
+      "properties": {
+        "end": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "start": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ]
+    },
+    "NodeRef": {
+      "description": "A node, addressable: feed `selector` straight back into any verb.",
+      "type": "object",
+      "properties": {
+        "color": {
+          "$ref": "#/$defs/ReachColor"
+        },
+        "kind": {
+          "description": "`file`, or the declaration's symbol kind.",
+          "type": "string"
+        },
+        "lines": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LineSpan"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "selector": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "selector",
+        "kind",
+        "color"
+      ]
+    },
+    "Outcome": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "const": "ok"
+            }
+          },
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FindAnswer"
+            },
+            {
+              "$ref": "#/$defs/DescribeAnswer"
+            },
+            {
+              "$ref": "#/$defs/UsesAnswer"
+            },
+            {
+              "$ref": "#/$defs/UsedByAnswer"
+            }
+          ],
+          "required": [
+            "status"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "input": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "const": "not-found"
+            }
+          },
+          "required": [
+            "status",
+            "input"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "input": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "const": "error"
+            }
+          },
+          "required": [
+            "status",
+            "input",
+            "message"
+          ]
+        }
+      ]
+    },
+    "ProjectPath": {
+      "description": "A `/`-separated, project-relative path. The one path spelling that crosses crate\nboundaries; OS paths stay at the discovery edge.",
+      "type": "string"
+    },
+    "ReachColor": {
+      "description": "The one projection of the three reachability floods into the color a\nnavigator speaks: `production` wins, then `test-only`, then `tooling-only`,\nthen `unreachable` — the same precedence the analyses' judgments imply.",
+      "type": "string",
+      "enum": [
+        "production",
+        "test-only",
+        "tooling-only",
+        "unreachable"
+      ]
+    },
+    "ReferenceUse": {
+      "type": "object",
+      "properties": {
+        "count": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "name": {
+          "type": "string"
+        },
+        "resolved": {
+          "description": "Where the name resolves, when the pool holds exactly one declaration\nwith it — ambiguity stays honest by absence.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NodeRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "count"
+      ]
+    },
+    "SiteRef": {
+      "type": "object",
+      "properties": {
+        "lines": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LineSpan"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "path": {
+          "$ref": "#/$defs/ProjectPath"
+        }
+      },
+      "required": [
+        "path"
+      ]
+    },
+    "UsedByAnswer": {
+      "type": "object",
+      "properties": {
+        "by_color": {
+          "description": "The deletion question at a glance: keeper sites per color.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          }
+        },
+        "elided": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "kept_by": {
+          "description": "Everything keeping it, most direct first — the exact evidence the\n`unused` judgment counted.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EdgeRef"
+          }
+        },
+        "node": {
+          "$ref": "#/$defs/NodeRef"
+        }
+      },
+      "required": [
+        "node",
+        "kept_by",
+        "by_color",
+        "elided"
+      ]
+    },
+    "UsesAnswer": {
+      "type": "object",
+      "properties": {
+        "elided": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "imports": {
+          "description": "Resolved imports out of the node's file (whole file) or none for a\nsymbol whose file needs no imports for it.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ImportUse"
+          }
+        },
+        "node": {
+          "$ref": "#/$defs/NodeRef"
+        },
+        "references": {
+          "description": "Names the node references, each with its use count and — when exactly\none declaration in the legal pool carries the name — its resolution.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ReferenceUse"
+          }
+        }
+      },
+      "required": [
+        "node",
+        "imports",
+        "references",
+        "elided"
+      ]
+    },
+    "Verb": {
+      "type": "string",
+      "enum": [
+        "find",
+        "describe",
+        "uses",
+        "used-by"
+      ]
+    }
+  }
+}

@@ -1,0 +1,33 @@
+kndo agent format 2 (kndo-query/1)
+verb: find
+[lib.kmock#helper] function · production · 1-1
+elided: 0
+not-found: zzz_nothing
+next: kndo describe lib.kmock#helper · kndo used-by lib.kmock#helper
+---
+kndo agent format 2 (kndo-query/1)
+verb: describe
+[lib.kmock#unused_export] function · production · 2-2
+  reach: exported
+  kept-by: nothing
+  findings: kndo-93f9e44ec482
+[lib.kmock] file · production
+  file: kmock · decls 3 · imports 0 · importers 1
+next: kndo used-by lib.kmock#unused_export · kndo uses lib.kmock#unused_export
+---
+kndo agent format 2 (kndo-query/1)
+verb: uses
+[main.kmock] file · production
+  import lib.kmock {helper}
+  ref helper ×1 → lib.kmock#helper
+  ref local_used ×1 → main.kmock#local_used
+  elided: 0
+next: kndo describe main.kmock
+---
+kndo agent format 2 (kndo-query/1)
+verb: used-by
+[lib.kmock#helper] function · production · 1-1
+  by-color: production 1
+  - binding main.kmock:2
+  elided: 0
+next: kndo describe lib.kmock#helper

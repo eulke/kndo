@@ -12,6 +12,7 @@ mod extract;
 mod graph;
 mod health;
 pub(crate) mod navigate;
+pub mod query;
 mod render;
 mod report;
 mod session;

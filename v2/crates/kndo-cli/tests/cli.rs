@@ -489,3 +489,78 @@ fn doctor_tells_the_truth_about_what_kndo_sees() {
         broken.stdout
     );
 }
+
+#[test]
+fn the_query_verbs_speak_the_contract_end_to_end() {
+    let p = project_with_findings();
+    let root = p.root().to_string_lossy().into_owned();
+
+    // used-by on the orphan's symbol: nothing keeps it, and that IS the answer
+    // (exit 0 — an empty used-by is legitimate, not a failure).
+    let dead = run_args(
+        ["kndo", "used-by", "src/orphan.js#floats", "--root", &root],
+        piped(),
+    );
+    assert_eq!(dead.code, 0, "{}{}", dead.stdout, dead.stderr);
+    let response: serde_json::Value = serde_json::from_str(&dead.stdout).expect("json");
+    assert_eq!(response["schema"], "kndo-query/1");
+    assert_eq!(
+        response["results"][0]["kept_by"]
+            .as_array()
+            .map(|k| k.len()),
+        Some(0),
+        "{}",
+        dead.stdout
+    );
+
+    // used-by on the live symbol lists its keeper with a site.
+    let live = run_args(
+        ["kndo", "used-by", "src/used.js#used", "--root", &root],
+        terminal(),
+    );
+    assert!(live.stdout.contains("- "), "{}", live.stdout);
+    assert!(
+        live.stdout
+            .starts_with("kndo agent format 2 (kndo-query/1)\n"),
+        "the terminal default is the agent text: {}",
+        live.stdout
+    );
+
+    // A bad selector is its own not-found (exit 1), never its sibling's failure.
+    let mixed = run_args(
+        [
+            "kndo",
+            "describe",
+            "src/used.js#used",
+            "src/nope.js",
+            "--root",
+            &root,
+        ],
+        piped(),
+    );
+    assert_eq!(mixed.code, 1, "{}", mixed.stdout);
+    let response: serde_json::Value = serde_json::from_str(&mixed.stdout).expect("json");
+    assert_eq!(response["results"][0]["status"], "ok");
+    assert_eq!(response["results"][1]["status"], "not-found");
+
+    // find ranks and filters.
+    let found = run_args(
+        [
+            "kndo", "find", "used", "--kind", "function", "--root", &root,
+        ],
+        piped(),
+    );
+    let response: serde_json::Value = serde_json::from_str(&found.stdout).expect("json");
+    let selectors: Vec<&str> = response["results"][0]["matches"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| m["selector"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        selectors.first(),
+        Some(&"src/used.js#used"),
+        "exact beats substring: {}",
+        found.stdout
+    );
+}

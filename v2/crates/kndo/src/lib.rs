@@ -12,6 +12,7 @@ pub use kndo_contract::extension::{
 pub use kndo_contract::finding::{Finding, LineSpan, Severity, sort_findings};
 pub use kndo_contract::subject::{FindingId, Subject, SymbolSelector};
 pub use kndo_contract::vocab::{Category, Confidence, ProjectPath, Span, SubjectKind};
+pub use kndo_core::query;
 pub use kndo_core::{
     Abstention, AbstentionReason, AbstentionScope, Activation, ActivationRule, CONTENT_MAX_BYTES,
     CONTENT_MAX_FILES, Categories, CategoryCount, ConductSeverity, ConductSink, ConductTarget,

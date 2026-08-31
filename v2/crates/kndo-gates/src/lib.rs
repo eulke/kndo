@@ -59,6 +59,10 @@ pub const GATES: &[Gate] = &[
         invariant: "the agent render of the everything-specimen report is byte-pinned",
     },
     Gate {
+        name: "query_contract_is_generated_and_pinned",
+        invariant: "query schemas are derived and valid, the agent render is byte-pinned, and used-by empties exactly where unused accused",
+    },
+    Gate {
         name: "frontends_import_only_the_facade",
         invariant: "a frontend's production dependencies contain exactly one kndo crate: kndo",
     },

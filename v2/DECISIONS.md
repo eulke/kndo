@@ -1608,3 +1608,19 @@ elision, affordances-with-data); its design is quarried, not copied.
 **Phasing:** Q1 (this commit) the shared index + unused on top of it. Q2 envelope +
 find/describe/uses/used-by + CLI + agent render + schema + goldens gate. Q3
 trace/impact(--if-deleted)/explain. Q4 serve tools + docs + ledger close.
+
+## 2026-08-31 — Query Q2 shipped: the first four verbs on the one contract
+
+`kndo find/describe/uses/used-by`, exactly as designed: `Snapshot::query(Request)
+-> Response` is the one door; the CLI verbs and (next) the serve tools both build
+the same `Request`. The envelope (`kndo-query/1`) is pure and versioned; its
+request/response schemas are generated and gate-checked beside the report's; the
+agent grammar (selectors as handles, `kept-by:`/`by-color:`/`elided:` always
+explicit, `next:` affordances) is byte-pinned by a multi-verb golden. The new gate
+`query_contract_is_generated_and_pinned` also holds THE certificate: for every
+symbol `unused` accuses on the fixture, `used-by` returns an empty `kept_by` —
+judge and navigator provably one. Two contract touches along the way, both
+one-source moves: `SymbolKind::as_str` (the adapter's own word carried) and
+`ReachColor` (the single projection of the three floods). 210 tests, 15 gates,
+clippy clean; smoke on the demo shows the loop: the dead symbol answers
+`kept-by: nothing` with its finding id beside it.

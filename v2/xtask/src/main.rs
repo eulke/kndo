@@ -198,7 +198,17 @@ fn gen_schema() -> Result<()> {
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     fs::write(dir.join("report.schema.json"), kndo_core::report_schema())
         .map_err(|e| e.to_string())?;
-    println!("wrote schemas/report.schema.json");
+    fs::write(
+        dir.join("query.request.schema.json"),
+        kndo_core::query::request_schema(),
+    )
+    .map_err(|e| e.to_string())?;
+    fs::write(
+        dir.join("query.response.schema.json"),
+        kndo_core::query::response_schema(),
+    )
+    .map_err(|e| e.to_string())?;
+    println!("wrote schemas/report.schema.json + query.request/response.schema.json");
     Ok(())
 }
 

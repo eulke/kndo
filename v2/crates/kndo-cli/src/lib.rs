@@ -34,6 +34,67 @@ enum Command {
     Init(InitArgs),
     /// What kndo sees here: composition, config, cache, baseline
     Doctor(InitPath),
+    /// Search the graph for nodes by name (exact > prefix > substring)
+    Find(QueryArgs),
+    /// One node in full: reach, keepers preview, findings on it
+    Describe(QueryArgs),
+    /// What a node depends on: imports and referenced names, resolved
+    Uses(QueryArgs),
+    /// What keeps a node alive — the deletion question, with sites
+    #[command(name = "used-by")]
+    UsedBy(QueryArgs),
+}
+
+#[derive(clap::Args)]
+struct QueryArgs {
+    /// Selectors (`path`, `path#name`, `path#Owner.member`) — or, for `find`,
+    /// search patterns. Each input gets its own result.
+    #[arg(required = true)]
+    inputs: Vec<String>,
+    /// Project root (defaults to the current directory)
+    #[arg(long)]
+    root: Option<PathBuf>,
+    /// Listing cap (default 50); elision is always reported
+    #[arg(long)]
+    limit: Option<u32>,
+    /// find: keep only this kind (a symbol kind, or `file`)
+    #[arg(long)]
+    kind: Option<String>,
+    /// find: keep only this reachability color
+    #[arg(long, value_enum)]
+    color: Option<ColorArg>,
+    /// json (piped default) or agent (terminal default)
+    #[arg(long, value_enum)]
+    format: Option<QueryFormat>,
+}
+
+#[derive(Debug, ValueEnum, Clone, Copy)]
+enum ColorArg {
+    Production,
+    TestOnly,
+    ToolingOnly,
+    Unreachable,
+}
+
+impl ColorArg {
+    fn into_core(self) -> kndo::query::ReachColor {
+        use kndo::query::ReachColor as C;
+        match self {
+            ColorArg::Production => C::Production,
+            ColorArg::TestOnly => C::TestOnly,
+            ColorArg::ToolingOnly => C::ToolingOnly,
+            ColorArg::Unreachable => C::Unreachable,
+        }
+    }
+}
+
+/// The query renderings: the agent text IS the readable one, so a terminal gets
+/// it and a pipe gets JSON; `human` earns a colored form only when someone
+/// needs more than the agent grammar gives.
+#[derive(Debug, ValueEnum, Clone, Copy)]
+enum QueryFormat {
+    Json,
+    Agent,
 }
 
 #[derive(clap::Args)]
@@ -194,6 +255,69 @@ pub fn run(cli: Cli, host: Host) -> CliOutput {
         Command::Health(args) => health(args, &host),
         Command::Init(args) => init(args),
         Command::Doctor(args) => doctor(args),
+        Command::Find(args) => query_verb(kndo::query::Verb::Find, args, &host),
+        Command::Describe(args) => query_verb(kndo::query::Verb::Describe, args, &host),
+        Command::Uses(args) => query_verb(kndo::query::Verb::Uses, args, &host),
+        Command::UsedBy(args) => query_verb(kndo::query::Verb::UsedBy, args, &host),
+    }
+}
+
+/// One door for all four verbs: analyze (cache-warm this is cheap), build the
+/// Request, render the Response. Exit codes speak per-input truth: 0 every
+/// input answered, 1 something was not found, 2 an input errored (ambiguity
+/// included) — the worst individual status, so scripting semantics survive
+/// batching inputs.
+fn query_verb(verb: kndo::query::Verb, args: QueryArgs, host: &Host) -> CliOutput {
+    let root = args.root.clone().unwrap_or_else(|| PathBuf::from("."));
+    let run = RunArgs {
+        path: None,
+        no_cache: false,
+        threads: None,
+        fail_on: None,
+    };
+    let snapshot = match analyze_at(&root, &run, true, &Categories::All) {
+        Ok(snapshot) => snapshot,
+        Err(refusal) => return refused(refusal),
+    };
+    let request = kndo::query::Request {
+        verb,
+        inputs: args.inputs.clone(),
+        options: kndo::query::Options {
+            limit: args.limit,
+            kind: args.kind.clone(),
+            color: args.color.map(ColorArg::into_core),
+        },
+    };
+    let response = snapshot.query(&request);
+    let code = response
+        .results
+        .iter()
+        .map(|r| match r {
+            kndo::query::Outcome::Ok { .. } => 0,
+            kndo::query::Outcome::NotFound { .. } => 1,
+            kndo::query::Outcome::Error { .. } => 2,
+        })
+        .max()
+        .unwrap_or(0);
+    let format = args.format.unwrap_or({
+        if host.tty {
+            QueryFormat::Agent
+        } else {
+            QueryFormat::Json
+        }
+    });
+    let stdout = match format {
+        QueryFormat::Agent => response.to_agent(),
+        QueryFormat::Json => {
+            let mut json = response.to_json();
+            json.push('\n');
+            json
+        }
+    };
+    CliOutput {
+        stdout,
+        stderr: String::new(),
+        code,
     }
 }
 

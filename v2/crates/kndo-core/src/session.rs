@@ -137,6 +137,7 @@ pub struct Snapshot {
     mode: crate::report::Mode,
     base_health: Option<crate::health::Health>,
     categories: Categories,
+    line_index: BTreeMap<ProjectPath, Vec<u32>>,
     pragma_problems: Vec<crate::suppress::PragmaProblem>,
     composition_diagnostics: Vec<ReportDiagnostic>,
     files_discovered: u32,
@@ -189,6 +190,12 @@ impl Snapshot {
         self.findings
             .iter()
             .filter(move |f| !known.contains(f.id.as_str()))
+    }
+
+    /// Byte-to-line resolution for this snapshot's tree, as computed at analyze
+    /// time — the query verbs speak `path:line` from it.
+    pub(crate) fn line_index(&self) -> &BTreeMap<ProjectPath, Vec<u32>> {
+        &self.line_index
     }
 
     /// Turn this snapshot into a diff against another tree's snapshot: the base's
@@ -451,6 +458,7 @@ impl Session {
             .collect();
         let findings = fill_lines(findings, &line_index);
         timings.analyze = analyze_start.elapsed();
+        let retained_line_index = line_index;
 
         let mut composition = self.composition_diagnostics.clone();
         let baseline = self.read_baseline(&mut composition);
@@ -462,6 +470,7 @@ impl Session {
             mode: crate::report::Mode::Full,
             base_health: None,
             categories: self.config.categories.clone(),
+            line_index: retained_line_index,
             suppressed: suppressed.summary,
             contributions: round.contributions,
             pragma_problems: suppressed.problems,

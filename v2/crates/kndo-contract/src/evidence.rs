@@ -118,6 +118,21 @@ pub enum SymbolKind {
     Other(SmolStr),
 }
 
+impl SymbolKind {
+    /// The one text spelling, the adapter's own word included.
+    pub fn as_str(&self) -> &str {
+        match self {
+            SymbolKind::Function => "function",
+            SymbolKind::Method => "method",
+            SymbolKind::Type => "type",
+            SymbolKind::Constant => "constant",
+            SymbolKind::Variable => "variable",
+            SymbolKind::Module => "module",
+            SymbolKind::Other(word) => word.as_str(),
+        }
+    }
+}
+
 /// How far a declaration's name legally reaches. Not a ladder: `Scoped` carries
 /// the ADAPTER'S OWN WORD for a bounded region ("package", "module", "crate",
 /// "in:a::b") — core never parses or compares tokens, it asks the adapter for

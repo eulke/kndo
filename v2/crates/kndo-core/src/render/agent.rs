@@ -128,6 +128,175 @@ fn section(out: &mut String, header: &str, findings: &[Finding]) {
     }
 }
 
+impl crate::query::Response {
+    pub fn to_json(&self) -> String {
+        serde_json::to_string_pretty(self).expect("query response serializes")
+    }
+
+    /// The query verbs in the agent grammar: one block per input — its node
+    /// line (`[selector] kind · color · lines`) or its not-found/error line —
+    /// with the verb's specifics indented, elision always explicit, and a
+    /// `next:` line of drill-down affordances closing the response.
+    pub fn to_agent(&self) -> String {
+        use crate::query::{Answer, Outcome};
+        let mut out = String::new();
+        out.push_str(&format!(
+            "kndo agent format {AGENT_FORMAT} ({})\n",
+            crate::query::QUERY_SCHEMA
+        ));
+        out.push_str(&format!("verb: {}\n", self.verb.as_str()));
+        let mut first_selector: Option<String> = None;
+        for outcome in &self.results {
+            match outcome {
+                Outcome::NotFound { input } => {
+                    out.push_str(&format!("not-found: {input}\n"));
+                }
+                Outcome::Error { input, message } => {
+                    out.push_str(&format!("error: {input} · {message}\n"));
+                }
+                Outcome::Ok { answer } => match answer {
+                    Answer::Find(a) => {
+                        for m in &a.matches {
+                            out.push_str(&node_line(m));
+                            out.push('\n');
+                        }
+                        out.push_str(&format!("elided: {}\n", a.elided));
+                        if first_selector.is_none() {
+                            first_selector = a.matches.first().map(|m| m.selector.clone());
+                        }
+                    }
+                    Answer::Describe(a) => {
+                        out.push_str(&node_line(&a.node));
+                        out.push('\n');
+                        if let Some(d) = &a.declaration {
+                            out.push_str(&format!("  reach: {}", d.reach));
+                            if let Some(alias) = &d.exported_as {
+                                out.push_str(&format!(" · exported-as {alias}"));
+                            }
+                            if let Some(owner) = &d.owner {
+                                out.push_str(&format!(" · owner {owner}"));
+                            }
+                            out.push('\n');
+                        }
+                        if let Some(f) = &a.file {
+                            out.push_str(&format!(
+                                "  file: {} · decls {} · imports {} · importers {}\n",
+                                f.extension, f.declarations, f.imports, f.importers
+                            ));
+                        }
+                        if let Some(kept) = &a.kept_by {
+                            out.push_str("  kept-by:");
+                            if kept.entries.is_empty() {
+                                out.push_str(" nothing");
+                            }
+                            for e in &kept.entries {
+                                out.push_str(&format!(" {}", edge_text(e)));
+                            }
+                            if kept.more {
+                                out.push_str(" · more");
+                            }
+                            out.push('\n');
+                        }
+                        if !a.findings.is_empty() {
+                            out.push_str(&format!("  findings: {}\n", a.findings.join(" ")));
+                        }
+                        if first_selector.is_none() {
+                            first_selector = Some(a.node.selector.clone());
+                        }
+                    }
+                    Answer::Uses(a) => {
+                        out.push_str(&node_line(&a.node));
+                        out.push('\n');
+                        for i in &a.imports {
+                            let names: Vec<&str> = i.names.iter().map(|n| n.as_str()).collect();
+                            out.push_str(&format!(
+                                "  import {}{}\n",
+                                i.target.as_str(),
+                                if names.is_empty() {
+                                    " (whole surface)".to_string()
+                                } else {
+                                    format!(" {{{}}}", names.join(","))
+                                }
+                            ));
+                        }
+                        for r in &a.references {
+                            out.push_str(&format!("  ref {} ×{}", r.name, r.count));
+                            if let Some(t) = &r.resolved {
+                                out.push_str(&format!(" → {}", t.selector));
+                            }
+                            out.push('\n');
+                        }
+                        out.push_str(&format!("  elided: {}\n", a.elided));
+                        if first_selector.is_none() {
+                            first_selector = Some(a.node.selector.clone());
+                        }
+                    }
+                    Answer::UsedBy(a) => {
+                        out.push_str(&node_line(&a.node));
+                        out.push('\n');
+                        if !a.by_color.is_empty() {
+                            let colors: Vec<String> =
+                                a.by_color.iter().map(|(c, n)| format!("{c} {n}")).collect();
+                            out.push_str(&format!("  by-color: {}\n", colors.join(" · ")));
+                        }
+                        if a.kept_by.is_empty() {
+                            out.push_str("  kept-by: nothing\n");
+                        }
+                        for e in &a.kept_by {
+                            out.push_str(&format!("  - {}\n", edge_text(e)));
+                        }
+                        out.push_str(&format!("  elided: {}\n", a.elided));
+                        if first_selector.is_none() {
+                            first_selector = Some(a.node.selector.clone());
+                        }
+                    }
+                },
+            }
+        }
+        if let Some(selector) = first_selector {
+            let next = match self.verb {
+                crate::query::Verb::Find => {
+                    format!("kndo describe {selector} · kndo used-by {selector}")
+                }
+                crate::query::Verb::Describe => {
+                    format!("kndo used-by {selector} · kndo uses {selector}")
+                }
+                crate::query::Verb::Uses | crate::query::Verb::UsedBy => {
+                    format!("kndo describe {selector}")
+                }
+            };
+            out.push_str(&format!("next: {next}\n"));
+        }
+        out
+    }
+}
+
+fn node_line(node: &crate::query::NodeRef) -> String {
+    let mut line = format!(
+        "[{}] {} · {}",
+        node.selector,
+        node.kind,
+        node.color.as_str()
+    );
+    if let Some(lines) = node.lines {
+        line.push_str(&format!(" · {}-{}", lines.start, lines.end));
+    }
+    line
+}
+
+fn edge_text(edge: &crate::query::EdgeRef) -> String {
+    match &edge.site {
+        Some(site) => {
+            let mut t = format!("{} {}", edge.kind, site.path.as_str());
+            if let Some(lines) = site.lines {
+                t.push_str(&format!(":{}", lines.start));
+            }
+            t
+        }
+        None => edge.kind.to_string(),
+    }
+}
+
 fn mode_word(mode: Mode) -> &'static str {
     match mode {
         Mode::Full => "full",

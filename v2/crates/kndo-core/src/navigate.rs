@@ -19,6 +19,43 @@ use kndo_contract::vocab::Span;
 use smol_str::SmolStr;
 use std::collections::BTreeMap;
 
+/// The one projection of the three reachability floods into the color a
+/// navigator speaks: `production` wins, then `test-only`, then `tooling-only`,
+/// then `unreachable` — the same precedence the analyses' judgments imply.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub enum ReachColor {
+    Production,
+    TestOnly,
+    ToolingOnly,
+    Unreachable,
+}
+
+impl ReachColor {
+    pub fn of(reach: &Reachability, file: usize) -> ReachColor {
+        use kndo_contract::evidence::RootKind as R;
+        if reach.by(R::Production).get(file).copied().unwrap_or(false) {
+            ReachColor::Production
+        } else if reach.by(R::Test).get(file).copied().unwrap_or(false) {
+            ReachColor::TestOnly
+        } else if reach.by(R::Tooling).get(file).copied().unwrap_or(false) {
+            ReachColor::ToolingOnly
+        } else {
+            ReachColor::Unreachable
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ReachColor::Production => "production",
+            ReachColor::TestOnly => "test-only",
+            ReachColor::ToolingOnly => "tooling-only",
+            ReachColor::Unreachable => "unreachable",
+        }
+    }
+}
+
 /// One reference site: which file, where in it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Site {

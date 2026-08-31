@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Request",
+  "type": "object",
+  "properties": {
+    "inputs": {
+      "description": "One input per answer: selectors for the node verbs, search patterns for\n`find`. Results align 1:1, in this order.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "options": {
+      "$ref": "#/$defs/Options",
+      "default": {}
+    },
+    "verb": {
+      "$ref": "#/$defs/Verb"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "verb",
+    "inputs"
+  ],
+  "$defs": {
+    "Options": {
+      "description": "One superset of options; a verb reads what concerns it and ignores the rest,\nso one request shape works everywhere — but an unknown KEY is still a typo\nand still refuses.",
+      "type": "object",
+      "properties": {
+        "color": {
+          "description": "`find`: keep only nodes of this reachability color.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReachColor"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "description": "`find`: keep only this kind (a symbol kind, or `file`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "limit": {
+          "description": "Listing cap (default 50); every listing reports what it elided.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "ReachColor": {
+      "description": "The one projection of the three reachability floods into the color a\nnavigator speaks: `production` wins, then `test-only`, then `tooling-only`,\nthen `unreachable` — the same precedence the analyses' judgments imply.",
+      "type": "string",
+      "enum": [
+        "production",
+        "test-only",
+        "tooling-only",
+        "unreachable"
+      ]
+    },
+    "Verb": {
+      "type": "string",
+      "enum": [
+        "find",
+        "describe",
+        "uses",
+        "used-by"
+      ]
+    }
+  }
+}

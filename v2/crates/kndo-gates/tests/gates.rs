@@ -948,3 +948,140 @@ fn agent_format_matches_its_committed_golden() {
          changed meaning, bump AGENT_FORMAT in the same commit.\n"
     );
 }
+
+#[test]
+fn query_contract_is_generated_and_pinned() {
+    use kndo::query::{Options, Outcome, Request, Verb};
+
+    // The committed schemas are derived, never hand-written.
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    for (file, generated) in [
+        (
+            "query.request.schema.json",
+            kndo_core::query::request_schema(),
+        ),
+        (
+            "query.response.schema.json",
+            kndo_core::query::response_schema(),
+        ),
+    ] {
+        let committed = std::fs::read_to_string(root.join("schemas").join(file))
+            .unwrap_or_else(|_| panic!("schemas/{file} exists — run `cargo xtask gen-schema`"));
+        assert_eq!(
+            committed, generated,
+            "\nschemas/{file} drifted from the types — run `cargo xtask gen-schema` \
+             and commit the result in the same commit.\n"
+        );
+    }
+
+    let p = fixture();
+    let snapshot = run(p.root(), false, Threads::Auto);
+
+    // A live response validates against the committed response schema.
+    let live = snapshot.query(&Request {
+        verb: Verb::UsedBy,
+        inputs: vec!["lib.kmock#helper".to_string(), "nope.kmock".to_string()],
+        options: Options::default(),
+    });
+    let schema: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(root.join("schemas/query.response.schema.json")).unwrap(),
+    )
+    .expect("schema is JSON");
+    let validator = jsonschema::validator_for(&schema).expect("schema compiles");
+    let value: serde_json::Value = serde_json::from_str(&live.to_json()).expect("response is JSON");
+    let errors: Vec<String> = validator
+        .iter_errors(&value)
+        .map(|e| e.to_string())
+        .collect();
+    assert!(errors.is_empty(), "a live response validates: {errors:#?}");
+
+    // The judge/navigator certificate: `used-by` lists the evidence `unused`
+    // counted, so it must come back EMPTY for every symbol `unused` accused —
+    // and non-empty for a symbol it kept.
+    for finding in &snapshot.findings {
+        if finding.category.as_str() != "unused" {
+            continue;
+        }
+        let kndo::Subject::Symbol { path, selector, .. } = &finding.subject else {
+            continue;
+        };
+        let input = format!("{}#{}", path.as_str(), selector.render());
+        let response = snapshot.query(&Request {
+            verb: Verb::UsedBy,
+            inputs: vec![input.clone()],
+            options: Options::default(),
+        });
+        match &response.results[0] {
+            Outcome::Ok { answer } => {
+                let json = serde_json::to_value(answer).unwrap();
+                assert_eq!(
+                    json["kept_by"].as_array().map(|k| k.len()),
+                    Some(0),
+                    "{input}: unused accused it, so used-by must list nothing"
+                );
+                assert_eq!(json["elided"], 0, "{input}");
+            }
+            _ => panic!("{input} must resolve to an ok outcome"),
+        }
+    }
+    match &live.results[0] {
+        Outcome::Ok { answer } => {
+            let json = serde_json::to_value(answer).unwrap();
+            assert!(
+                json["kept_by"].as_array().is_some_and(|k| !k.is_empty()),
+                "helper is kept, used-by must say by what"
+            );
+        }
+        _ => panic!("helper must resolve to an ok outcome"),
+    }
+    assert!(
+        matches!(&live.results[1], Outcome::NotFound { .. }),
+        "a bad selector is its own not-found, never its siblings' failure"
+    );
+
+    // The agent rendering of a fixed multi-verb script is byte-pinned.
+    let script = [
+        Request {
+            verb: Verb::Find,
+            inputs: vec!["helper".to_string(), "zzz_nothing".to_string()],
+            options: Options::default(),
+        },
+        Request {
+            verb: Verb::Describe,
+            inputs: vec![
+                "lib.kmock#unused_export".to_string(),
+                "lib.kmock".to_string(),
+            ],
+            options: Options::default(),
+        },
+        Request {
+            verb: Verb::Uses,
+            inputs: vec!["main.kmock".to_string()],
+            options: Options::default(),
+        },
+        Request {
+            verb: Verb::UsedBy,
+            inputs: vec!["lib.kmock#helper".to_string()],
+            options: Options::default(),
+        },
+    ];
+    let rendered: String = script
+        .iter()
+        .map(|request| snapshot.query(request).to_agent())
+        .collect::<Vec<_>>()
+        .join("---\n");
+    let golden_path =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/expected/query-agent.txt");
+    if std::env::var_os("KNDO_CONFORMANCE").is_some_and(|v| v == "overwrite") {
+        std::fs::write(&golden_path, &rendered).expect("write query golden");
+        return;
+    }
+    let golden = std::fs::read_to_string(&golden_path)
+        .expect("tests/expected/query-agent.txt exists — regenerate deliberately");
+    assert_eq!(
+        rendered, golden,
+        "\nthe query agent grammar moved. If deliberate, regenerate with \
+         KNDO_CONFORMANCE=overwrite and say so in the PR — and if the grammar \
+         changed meaning, bump AGENT_FORMAT in the same commit.\n"
+    );
+}
