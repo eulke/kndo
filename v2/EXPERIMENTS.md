@@ -188,3 +188,18 @@ and `Extend` is dispatch analysis's, both censused; cutting and re-adding would 
 the fingerprint twice for nothing. The rule stands: the next analysis that wants
 confidence-carried-through starts by naming one of these as its input (the
 `test_only.rs` comment about carried uncertainty becomes true then, not before).
+
+### Reflection-driven dispatch conventions (recorded 2026-08-31, M6.c)
+
+Caliper benchmarks, NullPointerTester fixtures, JUnit-3-style `testXxx`: methods
+whose only caller is a framework that finds them reflectively by naming
+convention. Statically they are dead, and kndo reports exactly that (guava's
++251 package-private members after the member-surface rule). The missing fact is
+FRAMEWORK knowledge — which conventions a runner dispatches on — which is
+conduct-plugin territory (`contribute_roots` with `ManifestDependency`
+activation), never adapter or core territory: a `kndo:caliper` or `kndo:junit`
+plugin would anchor declaration roots on the convention and those findings
+disappear for projects that actually depend on the framework. Demand: the guava
+slice above. No plugin is built until an experiment shows the roots land on real
+corpus findings — and no finding is suppressed core-side in the meantime just
+because v1 happened to ship the same false positives.

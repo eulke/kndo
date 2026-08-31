@@ -15,7 +15,7 @@
       "id": "kndo-0e79a122618f",
       "category": "internal-only",
       "severity": "info",
-      "confidence": "possible",
+      "confidence": "probable",
       "subject": {
         "kind": "symbol",
         "path": "src/main/kotlin/demo/Demo.kt",
@@ -33,7 +33,7 @@
       "id": "kndo-564989475f65",
       "category": "internal-only",
       "severity": "info",
-      "confidence": "possible",
+      "confidence": "probable",
       "subject": {
         "kind": "symbol",
         "path": "src/main/kotlin/demo/Demo.kt",

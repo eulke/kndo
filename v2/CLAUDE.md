@@ -7,6 +7,17 @@ the judgment layer — the decisions no gate can make for you. When it disagrees
 gate, the gate wins and this file is stale: fix it in the same PR. The best fate of any
 line here is to be retired by a type or a gate that makes it unnecessary.
 
+## The oracle is a quarry, not a target
+
+v1's findings exist to be explained against, never matched. No v2 behavior, threshold,
+confidence, or wording is ever justified by "v1 did it" — v1 shipped vices (name-fuzzy
+resolution, untiered confidence, reflection false positives it chose to live with), and
+inheriting one to close a numeric gap poisons the one thing v2 is for. Derive every
+judgment from v2's own evidence and contracts; when the numbers then differ from the
+oracle, the COMPARISON explains the difference by naming v1's defect or v2's decision —
+in either direction, including v2 reporting MORE. A sentence of the form "same as v1"
+is never a rationale; at best it is a coincidence worth noting.
+
 ## Measure first
 
 Any work that claims to improve findings — a new analysis, a plugin, an adapter

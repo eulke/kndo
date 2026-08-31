@@ -1154,3 +1154,23 @@ harvested fixtures gained internal-only findings (rust macro-use-mod, java
 nested members, kotlin ctor defaults), each verified by hand; the wire grew
 the spec field, pins rebuilt. The category leaves `Category::parse`'s
 reserved shelf and is judged.
+
+## 2026-08-31 — Owner directive: the oracle is a quarry, not a target
+
+"Do not drag v1's vices along for the metric's sake. v2 must be immaculate even
+when the numbers come out different, because v1's numbers carry its vices, its
+wrongness and its bad measurements." Now law in CLAUDE.md ("The oracle is a
+quarry, not a target"): no v2 behavior, threshold, confidence or wording is ever
+justified by "v1 did it"; every judgment derives from v2's own evidence, and the
+COMPARISON explains differences by naming v1's defect or v2's decision.
+
+Applied immediately to the two places the M6.c entries above had leaned on v1:
+`internal-only`'s confidence was `Possible` *because v1 hedged at Possible* —
+wrong reason; v2's regions are enumerated, absence there is a strong fact, and
+the analysis now carries `Probable` derived from its own residuals (reflection,
+name-pool collisions). And guava's +251 unused had been half-excused as "the
+reflective escape v1 accepted too" — the honest ground is v2's own: statically
+true, framework dispatch is conduct-plugin territory (EXPERIMENTS records the
+`kndo:caliper`-class candidate), and nothing is suppressed to match anyone.
+The M6.c entries above stand as history; where their rationale cites v1, this
+entry supersedes the rationale, not the code.

@@ -15,7 +15,7 @@
       "id": "kndo-6691d4853264",
       "category": "internal-only",
       "severity": "info",
-      "confidence": "possible",
+      "confidence": "probable",
       "subject": {
         "kind": "symbol",
         "path": "src/main/java/com/foo/Widget.java",
@@ -36,7 +36,7 @@
       "id": "kndo-7a31c9765221",
       "category": "internal-only",
       "severity": "info",
-      "confidence": "possible",
+      "confidence": "probable",
       "subject": {
         "kind": "symbol",
         "path": "src/main/java/com/foo/Widget.java",
@@ -57,7 +57,7 @@
       "id": "kndo-b475845d7cf3",
       "category": "internal-only",
       "severity": "info",
-      "confidence": "possible",
+      "confidence": "probable",
       "subject": {
         "kind": "symbol",
         "path": "src/main/java/com/foo/Widget.java",

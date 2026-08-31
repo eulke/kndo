@@ -2,10 +2,14 @@
 //! inside its OWN file could take the language's narrower rung. Fires only for
 //! scope tokens the claiming adapter listed as narrowable — Java can demote
 //! "package" to private, Go has nothing below "package", so identical evidence
-//! is advice in one language and noise in the other. Always `Possible`/`Info`:
-//! name pools cannot prove the absence of a qualified use the way a compiler
-//! can, and `unused` outranks it — a declaration nothing uses at all is dead,
-//! not demotable.
+//! is advice in one language and noise in the other.
+//!
+//! `Probable`/`Info`, derived from this analysis's own evidence: the region is
+//! ENUMERATED (every file that could legally resolve the name is scanned, so
+//! absence of a use there is a strong fact, not a fuzzy one), which leaves two
+//! residuals below `Certain` — reflection, out of static scope everywhere in
+//! kndo, and name-pool collisions within the region. `unused` outranks it: a
+//! declaration nothing uses at all is dead, not demotable.
 
 use super::{Analysis, AnalysisContext, RunContext};
 use kndo_contract::evidence::{ImportShape, Reach, RootTarget, SymbolKind};
@@ -130,14 +134,13 @@ impl Analysis for InternalOnly {
                 if !own_use {
                     continue;
                 }
-                // Any CONFIDENT use beyond the file disqualifies: a binding
-                // importer, or a reference in another file of the REGION — the
-                // only files that can legally resolve the name. Same-named
-                // references OUTSIDE the region are exactly v1's "weaker
-                // matches point outside": they cannot be this symbol, and
-                // `Possible` carries the residual dispatch fuzz (a scoped
-                // method reached through a public supertype stays exported by
-                // its own modifiers, so it never sits here).
+                // Any use beyond the file disqualifies: a binding importer, or
+                // a reference in another file of the REGION — the only files
+                // that can legally resolve the name. Same-named references
+                // OUTSIDE the region cannot be this symbol, so they neither
+                // keep nor disqualify. (A scoped method reached through a
+                // public supertype stays exported by its own modifiers, so it
+                // never sits here.)
                 let used_beyond = bound_names.contains(&(i as u32, d.name.as_str()))
                     || d.exported_as
                         .as_ref()
@@ -167,7 +170,7 @@ impl Analysis for InternalOnly {
                 out.push(Finding::new(
                     Category::INTERNAL_ONLY,
                     Severity::Info,
-                    Confidence::Possible,
+                    Confidence::Probable,
                     Subject::Symbol {
                         path: f.path.clone(),
                         selector,

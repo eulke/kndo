@@ -237,20 +237,22 @@ v2 reports 9,925 findings (5,621 before the 2026-08-31 audit round unified the
 metrics rule; 6,369 before M6.c's scope regions; 6,620 before its second half
 built `internal-only`); the oracle reports 20,244. Category by category:
 
-**internal-only 3,305 vs 7,014 — same order, and the difference is a precision
-tiering v1 could not make.** The rule: a `Scoped` declaration (here:
-package-private) with real uses in its own file and no confident use beyond it
-— no binding importer, no reference anywhere else in its REGION, the only
-files that can legally resolve the name; same-named references outside the
-region are exactly v1's "weaker matches point outside", carried by
-`Possible`/`Info` like v1 did. The gap to 7,014 is deliberate: v1 also fired
-on declarations with ZERO resolved uses, which v2 reports as `unused` at
-`Certain` instead (the 1,017 below absorb that slice — a dead package-private
-is dead, not demotable), and v1's field/enum-member subjects ride looser
-name resolution. Only adapters that DECLARE a narrower rung exists
-(`narrowable_scopes`) fire at all: gin reports zero by design — Go has
-nothing below "package", so the same evidence would be advice nobody can
-take. Category by category:
+**internal-only 3,305 vs 7,014 — v2's number is the ruled one; the oracle's is
+inflated by v1's defects, each named.** v2's rule stands on its own evidence: a
+`Scoped` declaration (here: package-private) with real uses in its own file
+and no use beyond it anywhere in its ENUMERATED region — the only files that
+can legally resolve the name — with a binding importer or an in-region
+reference disqualifying. Because the region is enumerated, absence there is a
+strong fact: `Probable`/`Info`, below `Certain` only for reflection (out of
+static scope everywhere in kndo) and name-pool collisions. The oracle's extra
+~3,700 decompose into v1's vices, not missed truths: it fired on declarations
+with ZERO resolved uses (v2 tiers those as `unused` at `Certain` — dead is not
+demotable; the 1,017 below hold that slice), it could not enumerate regions so
+every finding rode name-fuzzy resolution hedged at `Possible`, and its
+field/enum-member subjects multiplied that fuzz. Only adapters that DECLARE a
+narrower rung exists (`narrowable_scopes`) fire at all: gin reports zero by
+design — Go has nothing below "package", so the same evidence would be advice
+nobody can take. Category by category:
 
 **unused 766 vs 6,525 — and 5,485 of the oracle's are false positives its own
 subject proves.** 84% of v1's guava `unused` findings are `enum-member` rows
@@ -281,8 +283,11 @@ change. M6.c's scope regions then moved unused 766→1,017: package-private is
 `Scoped("package")` now, and a member with a bounded region is no longer part
 of the surface an entry hands out — the +251 are package-private members
 nothing in their package names, concentrated in reflection-driven test
-scaffolding (caliper benchmark bodies, NullPointerTester fixtures): true by
-static reach, reachable only through the reflective escapes v1 accepted too.
+scaffolding (caliper benchmark bodies, NullPointerTester fixtures). They are
+true by static reach and reported on that ground alone; the frameworks that
+invoke them reflectively are framework knowledge — conduct-plugin territory,
+recorded in EXPERIMENTS — and until such a plugin contributes those roots,
+kndo reports what the code alone can prove.
 The migration itself was a measured no-op (fixtures byte-identical) — the
 member-surface rule is the only judgment that moved.
 
@@ -299,7 +304,7 @@ ingestion path already upgrades untested to Certain symbols.
 convention carries their Test roots; multi-release variants
 (`src/main/java16/**`) are unit mates of their base package symmetrically (the
 jar tool merges them), which is what keeps `DefaultMethodSupport` alive in the
-harvested fixture exactly as v1 did.
+harvested fixture.
 
 ## M6.b.2 — Exposed speaks: the first Kotlin measurement
 
@@ -323,9 +328,10 @@ granularity; the recorded presentation question (grouping clone families)
 applies, and v1's far smaller count is v1's weaker Kotlin metrics, not a
 v2 false-positive flood.
 
-**internal-only 31 vs 163** — the same tiering: `internal` declarations used
-only inside their own file (`private` would suffice), `Possible`/`Info`; the
-zero-use slice sits in `unused` at `Certain` instead.
+**internal-only 31 vs 163** — the same decomposition: `internal` declarations
+used only inside their own file (`private` would suffice), `Probable`/`Info`
+over the enumerated module region; v1's zero-use slice sits in `unused` at
+`Certain` instead, and its name-fuzz slice does not survive enumeration.
 
 **unused 38 vs 277 — Kotlin's public-by-default meets library-mode roots**
 (18 before M6.c: `internal` is `Scoped("module")` now — a bounded region the

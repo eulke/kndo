@@ -2544,7 +2544,7 @@
       "id": "kndo-70febcb60254",
       "category": "internal-only",
       "severity": "info",
-      "confidence": "possible",
+      "confidence": "probable",
       "subject": {
         "kind": "symbol",
         "path": "crates/core/messages.rs",
@@ -2562,7 +2562,7 @@
       "id": "kndo-ed431c49d56a",
       "category": "internal-only",
       "severity": "info",
-      "confidence": "possible",
+      "confidence": "probable",
       "subject": {
         "kind": "symbol",
         "path": "crates/core/messages.rs",
@@ -2580,7 +2580,7 @@
       "id": "kndo-b383e72406f5",
       "category": "internal-only",
       "severity": "info",
-      "confidence": "possible",
+      "confidence": "probable",
       "subject": {
         "kind": "symbol",
         "path": "crates/matcher/tests/util.rs",

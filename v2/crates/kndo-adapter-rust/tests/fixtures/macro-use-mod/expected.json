@@ -15,7 +15,7 @@
       "id": "kndo-97b9539791bd",
       "category": "internal-only",
       "severity": "info",
-      "confidence": "possible",
+      "confidence": "probable",
       "subject": {
         "kind": "symbol",
         "path": "src/messages.rs",
