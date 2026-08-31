@@ -1174,3 +1174,38 @@ true, framework dispatch is conduct-plugin territory (EXPERIMENTS records the
 `kndo:caliper`-class candidate), and nothing is suppressed to match anyone.
 The M6.c entries above stand as history; where their rationale cites v1, this
 entry supersedes the rationale, not the code.
+
+## 2026-08-31 — M6.b.3: kndo:swift, the census closes
+
+The sixth built-in, first measured under the quarry-not-target law and first
+language whose DEFAULT visibility is the region mechanism's home case
+(`internal` → `Scoped("module")`, `narrowable(["module"])`). The postures, each
+derived: flat targets (a SwiftPM module has no sub-packages; a file directly
+under `Sources|Tests/` takes that directory as its target — the content-free
+spelling of a `path:` override, Alamofire's layout); no test mirror in `sees`
+(tests are their own module; `@testable import` is the edge, and the module
+REGION still spans every `Tests/` tree since any of them may hold that import);
+toolchain test-runner dispatch roots at `Certain` (XCTest dispatches `test*` by
+name, swift-testing by `@Test` — the runner is the toolchain, the same
+enforcement tier as the layout itself; this is what melted vapor's first-run
+570 unused to 77, all but 12 of them test methods); witness keeps at
+`Possible` for conforming types' non-private methods (external protocols'
+requirements are not statically enumerable); never declared: initializers,
+deinit, enum cases (`.case` dot-shorthand resolves by type, not name — the
+cases' uses still pool as Read references); `Package.swift` and its
+`@swift-*` variants are Tooling manifests, dependencies read by SwiftPM's own
+labeled arguments, parsed with the extraction grammar.
+
+Every node kind verified against tree-sitter-swift 0.7.3's node-types.json
+before writing (the census's own lesson), and the smoke dump caught three
+shapes the types file alone hides: `let` nests inside `value_binding_pattern`,
+same-file `extension Foo` members attach through a two-pass type-id map, and
+`case a, b` binds every identifier seat.
+
+Measurements, decomposed in COMPARISON: vapor 216 (unused 77 — Development
+examples plus dead test scaffolding, sampled; internal-only 85 over enumerated
+regions; duplicate 51, real Client delegation twins), Alamofire 609 (unused
+154 — sampled accused ⇔ zero grep uses: ~130 dead per-case test helpers v1's
+fuzzy pooling kept alive, plus storyboard-instantiated Example types reported
+on static ground, the UIKit-reflection plugin candidate joining caliper's in
+EXPERIMENTS). 167 tests, 13 gates.

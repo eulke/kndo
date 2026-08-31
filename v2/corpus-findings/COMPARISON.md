@@ -360,3 +360,48 @@ recommends but does not enforce (JetBrains' own tree follows it), with two
 fallbacks Java does not need — the `.java` extension (mixed source sets) and
 the package directory (file names are free in Kotlin, so a top-level
 function import may live in any file of its package).
+
+## M6.b.3 — Swift speaks: vapor and Alamofire measured, the census closes
+
+`kndo:swift` is the sixth built-in and the first language whose DEFAULT rung is
+the region mechanism's home case: no modifier means `internal`, so the ordinary
+Swift declaration is `Scoped("module")` (`private`/`fileprivate` are both
+file facts → Private; `public`/`open` → Exported; `narrowable(["module"])`).
+The unit is the SwiftPM target and it is FLAT — subdirectories are
+organizational, and a file directly under `Sources/`/`Tests/` belongs to a
+path-override layout whose directory is itself the target (Alamofire's
+`Source/**`). Tests are a DIFFERENT module: `sees` has no test mirror in
+either direction, because crossing modules always takes an explicit import —
+the `@testable import` IS the edge. The toolchain's own runners dispatch on
+declarations no source line names — XCTest by `test*` name, swift-testing by
+`@Test` — so those root `Certain` in test targets, the same tier as the layout
+root; `override` roots Probable; the non-private methods of conforming types
+root `Possible` (external protocols' requirements are not statically
+enumerable — Codable synthesis, delegates). `Package.swift` and its
+`Package@swift-*.swift` variants are the manifest: Tooling, nothing accusable,
+dependency names read by SwiftPM's own labeled arguments.
+
+**vapor: 216 findings vs the oracle's 593.**
+- unused 77 vs 38: 12 sit in `Sources/Development` (a manually-run example
+  target) and most of the rest are dead test scaffolding; sampled accusations
+  reproduce as zero-use by grep.
+- internal-only 85 vs 383: the tiering — v1's zero-use slice reports here as
+  `unused`, and enumerated module regions replace name-fuzzy resolution.
+- duplicate 51 vs 6: real delegation families (`Client.put`/`delete`/… are
+  structural twins) that v1's weaker Swift metrics never fingerprinted.
+- untested 3 vs 165: the recorded file-vs-symbol granularity gap, unchanged.
+
+**Alamofire: 609 findings vs the oracle's 501.**
+- unused 154 vs 20 — v2 reports MORE, and each sampled accusation grounds:
+  `Tests/AFError+AlamofireTests.swift` is a sheet of per-case helper
+  properties of which ~10 per family are never exercised (accused ⇔ zero
+  grep uses; the used siblings — `isRequestAdaptationError`, 25 uses — stay
+  kept). v1's fuzzier pooling kept dead helpers alive; that defect, not a v2
+  vice, is the delta. The `Example/` app types (storyboard-instantiated
+  UIViewControllers) are statically unreferenced and reported on that ground;
+  storyboard/UIKit reflection is framework knowledge — the same conduct-plugin
+  territory EXPERIMENTS records for caliper.
+- internal-only 268 vs 216: same basis, enumerated regions.
+- duplicate 145 vs 199: v2 fingerprints the WHOLE declaration under the
+  unified rule; v1's different token stream drew different borderline pairs.
+- untested 42 vs 64: granularity, as everywhere.

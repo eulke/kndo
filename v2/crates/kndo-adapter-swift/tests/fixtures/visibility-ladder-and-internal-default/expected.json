@@ -1,0 +1,61 @@
+{
+  "run": {
+    "schema": "kndo-v2/m6",
+    "files_discovered": 4,
+    "files_claimed": 4,
+    "extensions": [
+      {
+        "id": "kndo:swift",
+        "files": 4
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "kndo-b865192f8ae8",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/App/main.swift",
+        "selector": {
+          "Free": "widget"
+        },
+        "span": {
+          "start": 0,
+          "end": 21
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    }
+  ],
+  "fixed": [],
+  "baselined": 0,
+  "abstained": [
+    {
+      "category": "test-only",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    },
+    {
+      "category": "untested",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    }
+  ],
+  "suppressed": {
+    "total": 0,
+    "by_category": []
+  },
+  "plugins": [
+    {
+      "coordinate": "kndo:coverage-lcov",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    }
+  ],
+  "diagnostics": []
+}

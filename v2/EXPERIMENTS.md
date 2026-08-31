@@ -199,7 +199,10 @@ FRAMEWORK knowledge — which conventions a runner dispatches on — which is
 conduct-plugin territory (`contribute_roots` with `ManifestDependency`
 activation), never adapter or core territory: a `kndo:caliper` or `kndo:junit`
 plugin would anchor declaration roots on the convention and those findings
-disappear for projects that actually depend on the framework. Demand: the guava
+disappear for projects that actually depend on the framework. Same family:
+UIKit storyboards instantiate view-controller TYPES by name at runtime
+(Alamofire's `Example/` app) — a `kndo:uikit` conduct plugin's FileExists
+activation on `*.storyboard` could root the named classes. Demand: the guava
 slice above. No plugin is built until an experiment shows the roots land on real
 corpus findings — and no finding is suppressed core-side in the meantime just
 because v1 happened to ship the same false positives.

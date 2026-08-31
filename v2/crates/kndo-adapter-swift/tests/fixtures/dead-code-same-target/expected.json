@@ -1,0 +1,82 @@
+{
+  "run": {
+    "schema": "kndo-v2/m6",
+    "files_discovered": 3,
+    "files_claimed": 3,
+    "extensions": [
+      {
+        "id": "kndo:swift",
+        "files": 3
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "kndo-bdca8a509bee",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/App/Helper.swift",
+        "selector": {
+          "Member": {
+            "owner": "Helper",
+            "name": "dead"
+          }
+        },
+        "span": {
+          "start": 184,
+          "end": 203
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-c736599444aa",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/App/main.swift",
+        "selector": {
+          "Free": "helper"
+        },
+        "span": {
+          "start": 0,
+          "end": 21
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    }
+  ],
+  "fixed": [],
+  "baselined": 0,
+  "abstained": [
+    {
+      "category": "test-only",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    },
+    {
+      "category": "untested",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    }
+  ],
+  "suppressed": {
+    "total": 0,
+    "by_category": []
+  },
+  "plugins": [
+    {
+      "coordinate": "kndo:coverage-lcov",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    }
+  ],
+  "diagnostics": []
+}

@@ -2,10 +2,4231 @@
   "run": {
     "schema": "kndo-v2/m6",
     "files_discovered": 273,
-    "files_claimed": 0,
-    "extensions": []
+    "files_claimed": 251,
+    "extensions": [
+      {
+        "id": "kndo:swift",
+        "files": 251
+      }
+    ]
   },
-  "findings": [],
+  "findings": [
+    {
+      "id": "kndo-01a25a6b6100",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/Development/routes.swift",
+        "selector": {
+          "Free": "NotContentType"
+        },
+        "span": {
+          "start": 13939,
+          "end": 13990
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-1229a1965095",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/Development/routes.swift",
+        "selector": {
+          "Member": {
+            "owner": "UserController",
+            "name": "promoteUser"
+          }
+        },
+        "span": {
+          "start": 13313,
+          "end": 13611
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-1e16d049bd9c",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/Development/routes.swift",
+        "selector": {
+          "Member": {
+            "owner": "UserController",
+            "name": "macroDynamicPathParameter"
+          }
+        },
+        "span": {
+          "start": 12815,
+          "end": 13041
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-4a337e69d823",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/Development/routes.swift",
+        "selector": {
+          "Member": {
+            "owner": "NotContentType",
+            "name": "something"
+          }
+        },
+        "span": {
+          "start": 13967,
+          "end": 13988
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-4deb9d1bc781",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/Development/routes.swift",
+        "selector": {
+          "Member": {
+            "owner": "UserController",
+            "name": "syncRoute"
+          }
+        },
+        "span": {
+          "start": 12706,
+          "end": 12809
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-72c99c99c886",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/Development/routes.swift",
+        "selector": {
+          "Member": {
+            "owner": "UserController",
+            "name": "getUsers"
+          }
+        },
+        "span": {
+          "start": 11753,
+          "end": 11869
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-828e86c1ba98",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/Development/routes.swift",
+        "selector": {
+          "Free": "TestController"
+        },
+        "span": {
+          "start": 11466,
+          "end": 11694
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-9e4a407a32a5",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/Development/routes.swift",
+        "selector": {
+          "Member": {
+            "owner": "UserController",
+            "name": "getCustomHTTPMethod"
+          }
+        },
+        "span": {
+          "start": 11875,
+          "end": 12034
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-b14bf5096f0a",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/Development/routes.swift",
+        "selector": {
+          "Member": {
+            "owner": "UserController",
+            "name": "getLotsOfParameters"
+          }
+        },
+        "span": {
+          "start": 12395,
+          "end": 12700
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-c34d0be58163",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/Development/routes.swift",
+        "selector": {
+          "Member": {
+            "owner": "UserController",
+            "name": "macroDynamicPartialPathParameter"
+          }
+        },
+        "span": {
+          "start": 13047,
+          "end": 13307
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-d9f36f4cf288",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/Development/routes.swift",
+        "selector": {
+          "Member": {
+            "owner": "UserController",
+            "name": "getUser"
+          }
+        },
+        "span": {
+          "start": 12040,
+          "end": 12188
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-ebb140d7c0a7",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/Development/routes.swift",
+        "selector": {
+          "Member": {
+            "owner": "UserController",
+            "name": "getCustomHTTPMethodWithPathParameter"
+          }
+        },
+        "span": {
+          "start": 12194,
+          "end": 12389
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-095685c6ea85",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroIntegrationTests/AuthMiddlewareIntegrationTests.swift",
+        "selector": {
+          "Free": "AuthMiddlewareIntegrationTests"
+        },
+        "span": {
+          "start": 120,
+          "end": 3521
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-2adf48b0dfcc",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroIntegrationTests/AuthMiddlewareIntegrationTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "AuthTestController",
+            "name": "admin"
+          }
+        },
+        "span": {
+          "start": 5273,
+          "end": 5503
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-5e95be7e996f",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroIntegrationTests/AuthMiddlewareIntegrationTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "AuthTestController",
+            "name": "feed"
+          }
+        },
+        "span": {
+          "start": 5053,
+          "end": 5267
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-b8efdfebb6d6",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroIntegrationTests/AuthMiddlewareIntegrationTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "AuthTestController",
+            "name": "promote"
+          }
+        },
+        "span": {
+          "start": 4795,
+          "end": 5047
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-19887b69608c",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroIntegrationTests/ControllerMacroIntegrationTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "TestUserController",
+            "name": "getUsers"
+          }
+        },
+        "span": {
+          "start": 2826,
+          "end": 2940
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-5184365d5515",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroIntegrationTests/ControllerMacroIntegrationTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "TestUserController",
+            "name": "customHTTPMethodWithPathParameter"
+          }
+        },
+        "span": {
+          "start": 3365,
+          "end": 3570
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-c7a571503b74",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroIntegrationTests/ControllerMacroIntegrationTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "TestUserController",
+            "name": "getUser"
+          }
+        },
+        "span": {
+          "start": 2946,
+          "end": 3092
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-ec8bb58c6090",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroIntegrationTests/ControllerMacroIntegrationTests.swift",
+        "selector": {
+          "Free": "ControllerMacroIntegrationTests"
+        },
+        "span": {
+          "start": 120,
+          "end": 2752
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-fb9cab082339",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroIntegrationTests/ControllerMacroIntegrationTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "TestUserController",
+            "name": "syncRoute"
+          }
+        },
+        "span": {
+          "start": 3098,
+          "end": 3199
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-c557647d52e9",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroIntegrationTests/StandaloneMacroIntegrationTests.swift",
+        "selector": {
+          "Free": "StandaloneMacroIntegrationTests"
+        },
+        "span": {
+          "start": 120,
+          "end": 1836
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-3aad61709ad1",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroTests/AuthMiddlewareMacroTests.swift",
+        "selector": {
+          "Free": "AuthMiddlewareMacroTests"
+        },
+        "span": {
+          "start": 110,
+          "end": 13586
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-bd7f3c277e61",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroTests/ControllerMacroTests.swift",
+        "selector": {
+          "Free": "ControllerMacroTests"
+        },
+        "span": {
+          "start": 110,
+          "end": 12575
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-dafbaf2c5dd1",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroTests/HTTPMethodMacroTests.swift",
+        "selector": {
+          "Free": "HTTPMethodMacroTests"
+        },
+        "span": {
+          "start": 110,
+          "end": 20419
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-63419c957bc2",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ApplicationTests.swift",
+        "selector": {
+          "Free": "ApplicationTests"
+        },
+        "span": {
+          "start": 280,
+          "end": 12267
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-070f81ddf8f9",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/AuthenticationTests.swift",
+        "selector": {
+          "Free": "AuthenticationTests"
+        },
+        "span": {
+          "start": 239,
+          "end": 30392
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-23476d29f08a",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/BaseNTests.swift",
+        "selector": {
+          "Free": "expectedHexUpper"
+        },
+        "span": {
+          "start": 7444,
+          "end": 8761
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-2acf581009ee",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/BaseNTests.swift",
+        "selector": {
+          "Free": "expectedBase4"
+        },
+        "span": {
+          "start": 19103,
+          "end": 21487
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-48666bbdd90a",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/BaseNTests.swift",
+        "selector": {
+          "Free": "expectedBase8"
+        },
+        "span": {
+          "start": 21488,
+          "end": 23181
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-9acc14f0c843",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/BaseNTests.swift",
+        "selector": {
+          "Free": "expectedBase2"
+        },
+        "span": {
+          "start": 14578,
+          "end": 19102
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-9dc2307229aa",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/BaseNTests.swift",
+        "selector": {
+          "Free": "expectedBase128"
+        },
+        "span": {
+          "start": 23182,
+          "end": 26038
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-db594573ca05",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/BaseNTests.swift",
+        "selector": {
+          "Free": "expectedHexLower"
+        },
+        "span": {
+          "start": 6126,
+          "end": 7443
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-fee8a35feb3a",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/CacheTests.swift",
+        "selector": {
+          "Free": "CacheTests"
+        },
+        "span": {
+          "start": 64,
+          "end": 1608
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-cee0059c42b1",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ClientTests.swift",
+        "selector": {
+          "Free": "ClientTests"
+        },
+        "span": {
+          "start": 340,
+          "end": 11940
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-068c565af162",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
+        "selector": {
+          "Free": "ConditionalResponseCompressionRouteTests"
+        },
+        "span": {
+          "start": 49740,
+          "end": 60236
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-18a1fc755307",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
+        "selector": {
+          "Free": "compressiblePayload"
+        },
+        "span": {
+          "start": 60240,
+          "end": 61894
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-e079df07631d",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
+        "selector": {
+          "Free": "unknownType"
+        },
+        "span": {
+          "start": 61896,
+          "end": 61975
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-6760ca13da7d",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ContentTests.swift",
+        "selector": {
+          "Free": "ContentTests"
+        },
+        "span": {
+          "start": 194,
+          "end": 31948
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-894e880283ea",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ContentTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "JsonApiContent",
+            "name": "meta"
+          }
+        },
+        "span": {
+          "start": 32278,
+          "end": 32295
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-4a7f4b1850a3",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/Date+RFC1123Tests.swift",
+        "selector": {
+          "Free": "DateRFC1123Tests"
+        },
+        "span": {
+          "start": 134,
+          "end": 4685
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-4af17cdcff30",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/DotEnvTests.swift",
+        "selector": {
+          "Free": "DotEnvTests"
+        },
+        "span": {
+          "start": 90,
+          "end": 1971
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-17c7b7d20a96",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/EndpointCacheTests.swift",
+        "selector": {
+          "Free": "EndpointCacheTests"
+        },
+        "span": {
+          "start": 97,
+          "end": 5276
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-0df0bc7888ac",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/EnvironmentTests.swift",
+        "selector": {
+          "Free": "EnvironmentSecretTests"
+        },
+        "span": {
+          "start": 436,
+          "end": 2067
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-8421a61e72d2",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ErrorTests.swift",
+        "selector": {
+          "Free": "ErrorTests"
+        },
+        "span": {
+          "start": 194,
+          "end": 4514
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-769ee29ed8c6",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/FileETagHashCacheTests.swift",
+        "selector": {
+          "Free": "FileETagHashCacheTests"
+        },
+        "span": {
+          "start": 208,
+          "end": 6025
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-f9183d107d60",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/FileTests.swift",
+        "selector": {
+          "Free": "FileTests"
+        },
+        "span": {
+          "start": 310,
+          "end": 28092
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-f68bcac81455",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/HTTPCacheTests.swift",
+        "selector": {
+          "Free": "HTTPCacheTests"
+        },
+        "span": {
+          "start": 141,
+          "end": 5285
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-b784e2879a57",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/HTTPHeaderTests.swift",
+        "selector": {
+          "Free": "HTTPHeaderTests"
+        },
+        "span": {
+          "start": 151,
+          "end": 24088
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-fba31f2c867d",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/HTTPMediaTypeSetTests.swift",
+        "selector": {
+          "Free": "HTTPMediaTypeSetTests"
+        },
+        "span": {
+          "start": 56,
+          "end": 5133
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-62403a4f38e5",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/HTTPServerConfigurationTests.swift",
+        "selector": {
+          "Free": "SupportedHTTPVersionsTests"
+        },
+        "span": {
+          "start": 1830,
+          "end": 2923
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-80a10e174ace",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/HTTPServerConfigurationTests.swift",
+        "selector": {
+          "Free": "HTTPServerConfigurationTests"
+        },
+        "span": {
+          "start": 83,
+          "end": 4881
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-8c15757e1020",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/HTTPServerConfigurationTests.swift",
+        "selector": {
+          "Free": "HTTP2Tests"
+        },
+        "span": {
+          "start": 168,
+          "end": 1824
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-db7125df7316",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/HTTPServerConfigurationTests.swift",
+        "selector": {
+          "Free": "PreflightValidationTests"
+        },
+        "span": {
+          "start": 2929,
+          "end": 4879
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-1bc8e064bacb",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/MiddlewareTests.swift",
+        "selector": {
+          "Free": "MiddlewareTests"
+        },
+        "span": {
+          "start": 270,
+          "end": 22743
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-9956ec6e1456",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/PipelineTests.swift",
+        "selector": {
+          "Free": "PipelineTests"
+        },
+        "span": {
+          "start": 893,
+          "end": 9993
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-1cd36568127d",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/QueryTests.swift",
+        "selector": {
+          "Free": "QueryTests"
+        },
+        "span": {
+          "start": 117,
+          "end": 13365
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-071028739f91",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/RouteTests.swift",
+        "selector": {
+          "Free": "RouteTests"
+        },
+        "span": {
+          "start": 194,
+          "end": 20217
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-ee826445ccfa",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/SecurityTests.swift",
+        "selector": {
+          "Free": "OTPTests"
+        },
+        "span": {
+          "start": 138,
+          "end": 3380
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-2509f428367d",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ServerTLSTests.swift",
+        "selector": {
+          "Free": "ServerTLSTests"
+        },
+        "span": {
+          "start": 247,
+          "end": 16690
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-19a3f1259fa1",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ServerTests.swift",
+        "selector": {
+          "Free": "CompressionTests"
+        },
+        "span": {
+          "start": 538,
+          "end": 37437
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-37152955fc7c",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ServerTests.swift",
+        "selector": {
+          "Free": "RequestBodyStreamingTests"
+        },
+        "span": {
+          "start": 37443,
+          "end": 57918
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-9d270a86896c",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ServerTests.swift",
+        "selector": {
+          "Free": "AddressConfigurationTests"
+        },
+        "span": {
+          "start": 57924,
+          "end": 68421
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-a412ea67e0a2",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ServerTests.swift",
+        "selector": {
+          "Free": "ServerTests"
+        },
+        "span": {
+          "start": 490,
+          "end": 87694
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-e958c24130f5",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ServerTests.swift",
+        "selector": {
+          "Free": "TLSConfigurationTests"
+        },
+        "span": {
+          "start": 68427,
+          "end": 79251
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-55ef8267ee61",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/SessionTests.swift",
+        "selector": {
+          "Free": "SessionTests"
+        },
+        "span": {
+          "start": 99,
+          "end": 4039
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-895e54e0420a",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/StreamingBodyTests.swift",
+        "selector": {
+          "Free": "StreamingBodyTests"
+        },
+        "span": {
+          "start": 332,
+          "end": 51090
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-f97aaf6947af",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/String+removingPercentEncodingTests.swift",
+        "selector": {
+          "Free": "StringRemovingPercentEncodingTests"
+        },
+        "span": {
+          "start": 229,
+          "end": 3256
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-21ed3d71f713",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/StringProtocol+isCaseInsensitiveEqualASCIITests.swift",
+        "selector": {
+          "Free": "StringProtocolCaseInsensitiveEqualASCIITests"
+        },
+        "span": {
+          "start": 39,
+          "end": 3583
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-243d6b34bea7",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/URITests.swift",
+        "selector": {
+          "Free": "URITests"
+        },
+        "span": {
+          "start": 267,
+          "end": 17230
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-01b1d29e05bb",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/URLEncodedFormTests.swift",
+        "selector": {
+          "Free": "URLEncodedFormTests"
+        },
+        "span": {
+          "start": 73,
+          "end": 31441
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-a26b29780b72",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/Utilities/TestLogging.swift",
+        "selector": {
+          "Free": "isLoggingConfigured"
+        },
+        "span": {
+          "start": 145,
+          "end": 268
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-5f78f73b2007",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/UtilityTests.swift",
+        "selector": {
+          "Free": "UtilityTests"
+        },
+        "span": {
+          "start": 39,
+          "end": 1278
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-287c13df77db",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ValidationTests.swift",
+        "selector": {
+          "Free": "ValidationTests"
+        },
+        "span": {
+          "start": 194,
+          "end": 37332
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-404b4c02b6f5",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/VaporTesting.swift",
+        "selector": {
+          "Free": "VaporTestingTests"
+        },
+        "span": {
+          "start": 148,
+          "end": 3115
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-4186a7bf44dd",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ViewTests.swift",
+        "selector": {
+          "Free": "ViewTests"
+        },
+        "span": {
+          "start": 99,
+          "end": 764
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-b0b5359bbe37",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/WebSocketTests.swift",
+        "selector": {
+          "Free": "WebSocketTests"
+        },
+        "span": {
+          "start": 192,
+          "end": 5207
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-0d95bcd18027",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/Vapor/Client/Client.swift",
+        "selector": {
+          "Member": {
+            "owner": "Client",
+            "name": "put"
+          }
+        },
+        "span": {
+          "start": 1926,
+          "end": 2149
+        }
+      },
+      "message": "structural clone of Sources/Vapor/Client/Client.swift:Client.post"
+    },
+    {
+      "id": "kndo-0d95bcd18027",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/Vapor/Client/Client.swift",
+        "selector": {
+          "Member": {
+            "owner": "Client",
+            "name": "put"
+          }
+        },
+        "span": {
+          "start": 966,
+          "end": 1203
+        }
+      },
+      "message": "structural clone of Sources/Vapor/Client/Client.swift:Client.get"
+    },
+    {
+      "id": "kndo-11f7bfa9e584",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/Vapor/Client/Client.swift",
+        "selector": {
+          "Member": {
+            "owner": "Client",
+            "name": "delete"
+          }
+        },
+        "span": {
+          "start": 1209,
+          "end": 1452
+        }
+      },
+      "message": "structural clone of Sources/Vapor/Client/Client.swift:Client.get"
+    },
+    {
+      "id": "kndo-8e8e1cc8e078",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/Vapor/Client/Client.swift",
+        "selector": {
+          "Member": {
+            "owner": "Client",
+            "name": "patch"
+          }
+        },
+        "span": {
+          "start": 1693,
+          "end": 1920
+        }
+      },
+      "message": "structural clone of Sources/Vapor/Client/Client.swift:Client.post"
+    },
+    {
+      "id": "kndo-8e8e1cc8e078",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/Vapor/Client/Client.swift",
+        "selector": {
+          "Member": {
+            "owner": "Client",
+            "name": "patch"
+          }
+        },
+        "span": {
+          "start": 719,
+          "end": 960
+        }
+      },
+      "message": "structural clone of Sources/Vapor/Client/Client.swift:Client.get"
+    },
+    {
+      "id": "kndo-a2fb2956a5df",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/Vapor/Client/Client.swift",
+        "selector": {
+          "Member": {
+            "owner": "Client",
+            "name": "post"
+          }
+        },
+        "span": {
+          "start": 474,
+          "end": 713
+        }
+      },
+      "message": "structural clone of Sources/Vapor/Client/Client.swift:Client.get"
+    },
+    {
+      "id": "kndo-78dfb7be1ac5",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/Vapor/Content/JSONCoder+Custom.swift",
+        "selector": {
+          "Free": "custom"
+        },
+        "span": {
+          "start": 2321,
+          "end": 3308
+        }
+      },
+      "message": "structural clone of Sources/Vapor/Content/JSONCoder+Custom.swift:custom"
+    },
+    {
+      "id": "kndo-17539a198c2d",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroIntegrationTests/AuthMiddlewareIntegrationTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "AuthMiddlewareIntegrationTests",
+            "name": "optionalAuthRouteAuthenticated"
+          }
+        },
+        "span": {
+          "start": 2151,
+          "end": 2708
+        }
+      },
+      "message": "structural clone of Tests/VaporMacroIntegrationTests/AuthMiddlewareIntegrationTests.swift:AuthMiddlewareIntegrationTests.authRouteReturnsUser"
+    },
+    {
+      "id": "kndo-cdf588eff5d0",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroIntegrationTests/AuthMiddlewareIntegrationTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "AuthMiddlewareIntegrationTests",
+            "name": "authRouteWithPathParameter"
+          }
+        },
+        "span": {
+          "start": 1146,
+          "end": 1705
+        }
+      },
+      "message": "structural clone of Tests/VaporMacroIntegrationTests/AuthMiddlewareIntegrationTests.swift:AuthMiddlewareIntegrationTests.authRouteReturnsUser"
+    },
+    {
+      "id": "kndo-189683823e5d",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroIntegrationTests/ControllerMacroIntegrationTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "ControllerMacroIntegrationTests",
+            "name": "controllerRouteNotFound"
+          }
+        },
+        "span": {
+          "start": 2393,
+          "end": 2750
+        }
+      },
+      "message": "structural clone of Tests/VaporMacroIntegrationTests/AuthMiddlewareIntegrationTests.swift:AuthMiddlewareIntegrationTests.authRouteWithoutCredentialsFails"
+    },
+    {
+      "id": "kndo-34a03ce7d28f",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroIntegrationTests/ControllerMacroIntegrationTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "ControllerMacroIntegrationTests",
+            "name": "controllerGetRoute"
+          }
+        },
+        "span": {
+          "start": 211,
+          "end": 623
+        }
+      },
+      "message": "structural clone of Tests/VaporMacroIntegrationTests/AuthMiddlewareIntegrationTests.swift:AuthMiddlewareIntegrationTests.optionalAuthRouteAnonymous"
+    },
+    {
+      "id": "kndo-579a1e75cb8a",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroIntegrationTests/ControllerMacroIntegrationTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "ControllerMacroIntegrationTests",
+            "name": "controllerCustomHTTPMethodWithPathParameter"
+          }
+        },
+        "span": {
+          "start": 1905,
+          "end": 2387
+        }
+      },
+      "message": "structural clone of Tests/VaporMacroIntegrationTests/AuthMiddlewareIntegrationTests.swift:AuthMiddlewareIntegrationTests.optionalAuthRouteAnonymous"
+    },
+    {
+      "id": "kndo-7e63c5c1c22c",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroIntegrationTests/ControllerMacroIntegrationTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "ControllerMacroIntegrationTests",
+            "name": "controllerCustomHTTPMethod"
+          }
+        },
+        "span": {
+          "start": 1467,
+          "end": 1899
+        }
+      },
+      "message": "structural clone of Tests/VaporMacroIntegrationTests/AuthMiddlewareIntegrationTests.swift:AuthMiddlewareIntegrationTests.optionalAuthRouteAnonymous"
+    },
+    {
+      "id": "kndo-b155de337681",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroIntegrationTests/ControllerMacroIntegrationTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "ControllerMacroIntegrationTests",
+            "name": "controllerPostRoute"
+          }
+        },
+        "span": {
+          "start": 1073,
+          "end": 1461
+        }
+      },
+      "message": "structural clone of Tests/VaporMacroIntegrationTests/AuthMiddlewareIntegrationTests.swift:AuthMiddlewareIntegrationTests.optionalAuthRouteAnonymous"
+    },
+    {
+      "id": "kndo-c1d8b2e931c8",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroIntegrationTests/ControllerMacroIntegrationTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "ControllerMacroIntegrationTests",
+            "name": "controllerGetRouteWithPathParameter"
+          }
+        },
+        "span": {
+          "start": 629,
+          "end": 1067
+        }
+      },
+      "message": "structural clone of Tests/VaporMacroIntegrationTests/AuthMiddlewareIntegrationTests.swift:AuthMiddlewareIntegrationTests.optionalAuthRouteAnonymous"
+    },
+    {
+      "id": "kndo-6b20f4601523",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroIntegrationTests/StandaloneMacroIntegrationTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "StandaloneMacroIntegrationTests",
+            "name": "standaloneGetRouteWithPathParameter"
+          }
+        },
+        "span": {
+          "start": 634,
+          "end": 1064
+        }
+      },
+      "message": "structural clone of Tests/VaporMacroIntegrationTests/StandaloneMacroIntegrationTests.swift:StandaloneMacroIntegrationTests.standaloneGetRoute"
+    },
+    {
+      "id": "kndo-d180ee52ea69",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroIntegrationTests/StandaloneMacroIntegrationTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "StandaloneMacroIntegrationTests",
+            "name": "standaloneDeleteRoute"
+          }
+        },
+        "span": {
+          "start": 1450,
+          "end": 1834
+        }
+      },
+      "message": "structural clone of Tests/VaporMacroIntegrationTests/StandaloneMacroIntegrationTests.swift:StandaloneMacroIntegrationTests.standaloneGetRoute"
+    },
+    {
+      "id": "kndo-d8273311821a",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroIntegrationTests/StandaloneMacroIntegrationTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "StandaloneMacroIntegrationTests",
+            "name": "standalonePostRoute"
+          }
+        },
+        "span": {
+          "start": 1070,
+          "end": 1444
+        }
+      },
+      "message": "structural clone of Tests/VaporMacroIntegrationTests/StandaloneMacroIntegrationTests.swift:StandaloneMacroIntegrationTests.standaloneGetRoute"
+    },
+    {
+      "id": "kndo-9c7580a1a7ec",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroTests/ControllerMacroTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "ControllerMacroTests",
+            "name": "testControllerWithDifferentHTTPMethods"
+          }
+        },
+        "span": {
+          "start": 4746,
+          "end": 9932
+        }
+      },
+      "message": "structural clone of Tests/VaporMacroTests/ControllerMacroTests.swift:ControllerMacroTests.testBasicController"
+    },
+    {
+      "id": "kndo-1b231ad91949",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroTests/HTTPMethodMacroTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "HTTPMethodMacroTests",
+            "name": "testGetMacroWithMultipleDynamicPathParametersOfSameType"
+          }
+        },
+        "span": {
+          "start": 1954,
+          "end": 3118
+        }
+      },
+      "message": "structural clone of Tests/VaporMacroTests/HTTPMethodMacroTests.swift:HTTPMethodMacroTests.testGetMacroWithDynamicPathParameter"
+    },
+    {
+      "id": "kndo-40480d425188",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroTests/HTTPMethodMacroTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "HTTPMethodMacroTests",
+            "name": "testGetMacroFailsWhenMissingRequestParameter"
+          }
+        },
+        "span": {
+          "start": 15950,
+          "end": 16738
+        }
+      },
+      "message": "structural clone of Tests/VaporMacroTests/HTTPMethodMacroTests.swift:HTTPMethodMacroTests.testGetMacroFailsWhenExtraMacroParameter"
+    },
+    {
+      "id": "kndo-5ac4ab5ec57f",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroTests/HTTPMethodMacroTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "HTTPMethodMacroTests",
+            "name": "testGetMacroAutoRegistersInsideFunction"
+          }
+        },
+        "span": {
+          "start": 12675,
+          "end": 13727
+        }
+      },
+      "message": "structural clone of Tests/VaporMacroTests/AuthMiddlewareMacroTests.swift:AuthMiddlewareMacroTests.testControllerMixedAuthRoutes"
+    },
+    {
+      "id": "kndo-69fb51811326",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroTests/HTTPMethodMacroTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "HTTPMethodMacroTests",
+            "name": "testGetMacroWithRoutesBuilderPassedInWithDynamicPathParameters"
+          }
+        },
+        "span": {
+          "start": 18355,
+          "end": 19371
+        }
+      },
+      "message": "structural clone of Tests/VaporMacroTests/AuthMiddlewareMacroTests.swift:AuthMiddlewareMacroTests.testControllerMixedAuthRoutes"
+    },
+    {
+      "id": "kndo-951843e97cbc",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroTests/HTTPMethodMacroTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "HTTPMethodMacroTests",
+            "name": "testHTTPMethodMacroWithRoutesBuilderPassedInWithDynamicPathParameters"
+          }
+        },
+        "span": {
+          "start": 19377,
+          "end": 20417
+        }
+      },
+      "message": "structural clone of Tests/VaporMacroTests/AuthMiddlewareMacroTests.swift:AuthMiddlewareMacroTests.testControllerMixedAuthRoutes"
+    },
+    {
+      "id": "kndo-9e4f5c5f70a0",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroTests/HTTPMethodMacroTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "HTTPMethodMacroTests",
+            "name": "testGetMacroWithMultipleDynamicPathParametersOfDifferentTypes"
+          }
+        },
+        "span": {
+          "start": 3124,
+          "end": 4295
+        }
+      },
+      "message": "structural clone of Tests/VaporMacroTests/HTTPMethodMacroTests.swift:HTTPMethodMacroTests.testGetMacroWithDynamicPathParameter"
+    },
+    {
+      "id": "kndo-ba278b0fb194",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroTests/HTTPMethodMacroTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "HTTPMethodMacroTests",
+            "name": "testGetMacroFailsWhenExtraFunctionParameter"
+          }
+        },
+        "span": {
+          "start": 6172,
+          "end": 7027
+        }
+      },
+      "message": "structural clone of Tests/VaporMacroTests/HTTPMethodMacroTests.swift:HTTPMethodMacroTests.testGetMacroFailsWhenExtraMacroParameter"
+    },
+    {
+      "id": "kndo-be1053659d5f",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroTests/HTTPMethodMacroTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "HTTPMethodMacroTests",
+            "name": "testGetMacroFailsWhenNoParameters"
+          }
+        },
+        "span": {
+          "start": 16744,
+          "end": 17493
+        }
+      },
+      "message": "structural clone of Tests/VaporMacroTests/HTTPMethodMacroTests.swift:HTTPMethodMacroTests.testGetMacroFailsWhenExtraMacroParameter"
+    },
+    {
+      "id": "kndo-ce5694c4dd58",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroTests/HTTPMethodMacroTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "HTTPMethodMacroTests",
+            "name": "testGetMacroAutoRegistersWithDynamicParams"
+          }
+        },
+        "span": {
+          "start": 13733,
+          "end": 14880
+        }
+      },
+      "message": "structural clone of Tests/VaporMacroTests/AuthMiddlewareMacroTests.swift:AuthMiddlewareMacroTests.testControllerMixedAuthRoutes"
+    },
+    {
+      "id": "kndo-dbbcda806559",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroTests/HTTPMethodMacroTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "HTTPMethodMacroTests",
+            "name": "testGetMacroWithInternalAndExternalParameterNames"
+          }
+        },
+        "span": {
+          "start": 4301,
+          "end": 5329
+        }
+      },
+      "message": "structural clone of Tests/VaporMacroTests/HTTPMethodMacroTests.swift:HTTPMethodMacroTests.testGetMacroWithDynamicPathParameter"
+    },
+    {
+      "id": "kndo-f2f786de6909",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroTests/HTTPMethodMacroTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "HTTPMethodMacroTests",
+            "name": "testGetMacroWithRoutesBuilderPassedIn"
+          }
+        },
+        "span": {
+          "start": 17499,
+          "end": 18349
+        }
+      },
+      "message": "structural clone of Tests/VaporMacroTests/AuthMiddlewareMacroTests.swift:AuthMiddlewareMacroTests.testControllerMixedAuthRoutes"
+    },
+    {
+      "id": "kndo-2a2f84a54b39",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "ConditionalResponseCompressionRouteTests",
+            "name": "testRoutingPrioritizesDisabledResponse"
+          }
+        },
+        "span": {
+          "start": 55659,
+          "end": 57166
+        }
+      },
+      "message": "structural clone of Tests/VaporTests/ConditionalResponseCompressionTests.swift:ConditionalResponseCompressionRouteTests.testRoutingPrioritizesEnabledResponse"
+    },
+    {
+      "id": "kndo-47175583771d",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "ConditionalResponseCompressionRouteTests",
+            "name": "testRoutingDoesNotPrioritizeOtherResponse"
+          }
+        },
+        "span": {
+          "start": 57176,
+          "end": 58656
+        }
+      },
+      "message": "structural clone of Tests/VaporTests/ConditionalResponseCompressionTests.swift:ConditionalResponseCompressionRouteTests.testRoutingPrioritizesEnabledResponse"
+    },
+    {
+      "id": "kndo-6c3f98740658",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/FileTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "FileTests",
+            "name": "testNoRedirect"
+          }
+        },
+        "span": {
+          "start": 19372,
+          "end": 20092
+        }
+      },
+      "message": "structural clone of Tests/VaporTests/FileTests.swift:FileTests.testRedirect"
+    },
+    {
+      "id": "kndo-aa3f7d6bb587",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/FileTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "FileTests",
+            "name": "testStreamFileContentHeaderStart"
+          }
+        },
+        "span": {
+          "start": 7047,
+          "end": 8339
+        }
+      },
+      "message": "structural clone of Tests/VaporTests/FileTests.swift:FileTests.testStreamFileContentHeaderTail"
+    },
+    {
+      "id": "kndo-f6b7df71359a",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/FileTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "FileTests",
+            "name": "testStreamFileContentHeadersTailFail"
+          }
+        },
+        "span": {
+          "start": 13042,
+          "end": 14127
+        }
+      },
+      "message": "structural clone of Tests/VaporTests/FileTests.swift:FileTests.testStreamFileContentHeadersStartFail"
+    },
+    {
+      "id": "kndo-ff28a6dd332d",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/FileTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "FileTests",
+            "name": "testDefaultFileAbsolute"
+          }
+        },
+        "span": {
+          "start": 16154,
+          "end": 16945
+        }
+      },
+      "message": "structural clone of Tests/VaporTests/FileTests.swift:FileTests.testDefaultFileRelative"
+    },
+    {
+      "id": "kndo-1c457a9792ba",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/HTTPCacheTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "HTTPCacheTests",
+            "name": "testNoMatching"
+          }
+        },
+        "span": {
+          "start": 1408,
+          "end": 1735
+        }
+      },
+      "message": "structural clone of Tests/VaporTests/HTTPCacheTests.swift:HTTPCacheTests.testNoStore"
+    },
+    {
+      "id": "kndo-2732754aeb3d",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/HTTPCacheTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "HTTPCacheTests",
+            "name": "testObsoleteFormatTwo"
+          }
+        },
+        "span": {
+          "start": 2784,
+          "end": 3196
+        }
+      },
+      "message": "structural clone of Tests/VaporTests/HTTPCacheTests.swift:HTTPCacheTests.testPreferredFormat"
+    },
+    {
+      "id": "kndo-dc3d698b2da7",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/HTTPCacheTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "HTTPCacheTests",
+            "name": "testObsoleteFormatOne"
+          }
+        },
+        "span": {
+          "start": 2360,
+          "end": 2778
+        }
+      },
+      "message": "structural clone of Tests/VaporTests/HTTPCacheTests.swift:HTTPCacheTests.testPreferredFormat"
+    },
+    {
+      "id": "kndo-01a923a127a1",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/HTTPHeaderTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "HTTPHeaderTests",
+            "name": "testValue_directives_multiple_quotedSemicolonEqual"
+          }
+        },
+        "span": {
+          "start": 3506,
+          "end": 3931
+        }
+      },
+      "message": "structural clone of Tests/VaporTests/HTTPHeaderTests.swift:HTTPHeaderTests.testValue_directives_multiple_quote"
+    },
+    {
+      "id": "kndo-10e31af2172d",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/HTTPHeaderTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "HTTPHeaderTests",
+            "name": "testValue_directives_multiple_quotedSemicolon"
+          }
+        },
+        "span": {
+          "start": 3093,
+          "end": 3500
+        }
+      },
+      "message": "structural clone of Tests/VaporTests/HTTPHeaderTests.swift:HTTPHeaderTests.testValue_directives_multiple_quote"
+    },
+    {
+      "id": "kndo-ccdf37e3a882",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/HTTPHeaderTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "HTTPHeaderTests",
+            "name": "testValue_directives_multiple"
+          }
+        },
+        "span": {
+          "start": 2337,
+          "end": 2698
+        }
+      },
+      "message": "structural clone of Tests/VaporTests/HTTPHeaderTests.swift:HTTPHeaderTests.testValue_directives_contentType"
+    },
+    {
+      "id": "kndo-e337eb9f9067",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/HTTPHeaderTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "HTTPHeaderTests",
+            "name": "testValue_directives_quote"
+          }
+        },
+        "span": {
+          "start": 1560,
+          "end": 1970
+        }
+      },
+      "message": "structural clone of Tests/VaporTests/HTTPHeaderTests.swift:HTTPHeaderTests.testValue_directives"
+    },
+    {
+      "id": "kndo-ef93311398ff",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/HTTPHeaderTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "HTTPHeaderTests",
+            "name": "testExpiresHeader"
+          }
+        },
+        "span": {
+          "start": 21908,
+          "end": 22378
+        }
+      },
+      "message": "structural clone of Tests/VaporTests/HTTPHeaderTests.swift:HTTPHeaderTests.testLastModifiedHeader"
+    },
+    {
+      "id": "kndo-19a8c5ea9056",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/URLEncodedFormTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "URLEncodedFormTests",
+            "name": "testDecodeStringWithCommas"
+          }
+        },
+        "span": {
+          "start": 2448,
+          "end": 3104
+        }
+      },
+      "message": "structural clone of Tests/VaporTests/URLEncodedFormTests.swift:URLEncodedFormTests.testDecode"
+    },
+    {
+      "id": "kndo-478dee9c027b",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/URLEncodedFormTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "URLEncodedFormTests",
+            "name": "testDecodeWithoutArrayBrackets"
+          }
+        },
+        "span": {
+          "start": 1420,
+          "end": 2063
+        }
+      },
+      "message": "structural clone of Tests/VaporTests/URLEncodedFormTests.swift:URLEncodedFormTests.testDecode"
+    },
+    {
+      "id": "kndo-67036fea5f3f",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/URLEncodedFormTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "URLEncodedFormTests",
+            "name": "testDecodeUnindexedArray"
+          }
+        },
+        "span": {
+          "start": 4688,
+          "end": 5159
+        }
+      },
+      "message": "structural clone of Tests/VaporTests/URLEncodedFormTests.swift:URLEncodedFormTests.testDecodeIndexedArray"
+    },
+    {
+      "id": "kndo-850820886f4c",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/URLEncodedFormTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "URLEncodedFormTests",
+            "name": "testSubArray3"
+          }
+        },
+        "span": {
+          "start": 27489,
+          "end": 27917
+        }
+      },
+      "message": "structural clone of Tests/VaporTests/URLEncodedFormTests.swift:URLEncodedFormTests.testSubArray2"
+    },
+    {
+      "id": "kndo-e1dd14036634",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/URLEncodedFormTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "URLEncodedFormTests",
+            "name": "testBracketsInTheMiddle"
+          }
+        },
+        "span": {
+          "start": 28391,
+          "end": 28687
+        }
+      },
+      "message": "structural clone of Tests/VaporTests/URLEncodedFormTests.swift:URLEncodedFormTests.testSubArray"
+    },
+    {
+      "id": "kndo-fb1d359ed8a0",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/URLEncodedFormTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "URLEncodedFormTests",
+            "name": "testDecodeCommaSeparatedArray"
+          }
+        },
+        "span": {
+          "start": 775,
+          "end": 1414
+        }
+      },
+      "message": "structural clone of Tests/VaporTests/URLEncodedFormTests.swift:URLEncodedFormTests.testDecode"
+    },
+    {
+      "id": "kndo-6bd4969d2272",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ValidationTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "ValidationTests",
+            "name": "testURL"
+          }
+        },
+        "span": {
+          "start": 23619,
+          "end": 24129
+        }
+      },
+      "message": "structural clone of Tests/VaporTests/ValidationTests.swift:ValidationTests.testEmail"
+    },
+    {
+      "id": "kndo-02a5ed85bfc9",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Performance/Sources/PerformanceServer/main.swift",
+        "selector": {
+          "Free": "large"
+        },
+        "span": {
+          "start": 393,
+          "end": 445
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-48a501da1627",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Performance/Sources/PerformanceServer/main.swift",
+        "selector": {
+          "Member": {
+            "owner": "Payload",
+            "name": "tags"
+          }
+        },
+        "span": {
+          "start": 287,
+          "end": 305
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-f4afe5d83ad5",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Performance/Sources/PerformanceServer/main.swift",
+        "selector": {
+          "Free": "small"
+        },
+        "span": {
+          "start": 345,
+          "end": 392
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-095f174ce6fc",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/Development/configure.swift",
+        "selector": {
+          "Free": "tls"
+        },
+        "span": {
+          "start": 838,
+          "end": 890
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-1f5dde6d40cb",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/Development/configure.swift",
+        "selector": {
+          "Member": {
+            "owner": "TLSData",
+            "name": "sampleServerPrivateKeyPEM"
+          }
+        },
+        "span": {
+          "start": 2357,
+          "end": 4262
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-8e1032acb66a",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/Development/configure.swift",
+        "selector": {
+          "Member": {
+            "owner": "TLSData",
+            "name": "sampleServerCertificatePEM"
+          }
+        },
+        "span": {
+          "start": 913,
+          "end": 2352
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-f7d944b8a685",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/Development/configure.swift",
+        "selector": {
+          "Free": "TLSData"
+        },
+        "span": {
+          "start": 894,
+          "end": 4264
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-42fc045da838",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/Development/routes.swift",
+        "selector": {
+          "Free": "Creds"
+        },
+        "span": {
+          "start": 138,
+          "end": 210
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-53420e20c33b",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/Development/routes.swift",
+        "selector": {
+          "Free": "TestMiddleware"
+        },
+        "span": {
+          "start": 11084,
+          "end": 11464
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-792389f5151d",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/Development/routes.swift",
+        "selector": {
+          "Free": "UserController"
+        },
+        "span": {
+          "start": 11713,
+          "end": 13930
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-cbfc7623a2ac",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/Development/routes.swift",
+        "selector": {
+          "Free": "UserAuthMiddleware"
+        },
+        "span": {
+          "start": 14072,
+          "end": 14429
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-9865af53752a",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroIntegrationTests/AuthMiddlewareIntegrationTests.swift",
+        "selector": {
+          "Free": "AuthTestController"
+        },
+        "span": {
+          "start": 4552,
+          "end": 5505
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-a5ba448c873f",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroIntegrationTests/AuthMiddlewareIntegrationTests.swift",
+        "selector": {
+          "Free": "AuthTestTokenMiddleware"
+        },
+        "span": {
+          "start": 3659,
+          "end": 4216
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-d90fd44f5ac7",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroIntegrationTests/AuthMiddlewareIntegrationTests.swift",
+        "selector": {
+          "Free": "AuthTestUser"
+        },
+        "span": {
+          "start": 3549,
+          "end": 3657
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-fa46bd0994ea",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroIntegrationTests/AuthMiddlewareIntegrationTests.swift",
+        "selector": {
+          "Free": "AuthTestAdminOnlyMiddleware"
+        },
+        "span": {
+          "start": 4218,
+          "end": 4550
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-24166c0980cb",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroIntegrationTests/ControllerMacroIntegrationTests.swift",
+        "selector": {
+          "Free": "TestUserController"
+        },
+        "span": {
+          "start": 2782,
+          "end": 3572
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-61ae493a8bf4",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroIntegrationTests/StandaloneMacroIntegrationTests.swift",
+        "selector": {
+          "Free": "registerStandaloneRoutes"
+        },
+        "span": {
+          "start": 1868,
+          "end": 2471
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+    },
+    {
+      "id": "kndo-117cab863641",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/BaseNTests.swift",
+        "selector": {
+          "Free": "BaseNTests"
+        },
+        "span": {
+          "start": 157,
+          "end": 6040
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-136d591dfe43",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/BaseNTests.swift",
+        "selector": {
+          "Free": "expectedBase32Lower"
+        },
+        "span": {
+          "start": 10080,
+          "end": 11402
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-2bc940b3ef06",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/BaseNTests.swift",
+        "selector": {
+          "Free": "expectedBase64Bcrypt"
+        },
+        "span": {
+          "start": 13590,
+          "end": 14577
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-37795b13e6af",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/BaseNTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "BaseNTests",
+            "name": "checks"
+          }
+        },
+        "span": {
+          "start": 3593,
+          "end": 3722
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-6e737893996a",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/BaseNTests.swift",
+        "selector": {
+          "Free": "expectedBase64"
+        },
+        "span": {
+          "start": 12540,
+          "end": 13589
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-a77402ae9d91",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/BaseNTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "BaseNTests",
+            "name": "printVectors"
+          }
+        },
+        "span": {
+          "start": 4336,
+          "end": 4360
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-cdd15a31e620",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/BaseNTests.swift",
+        "selector": {
+          "Free": "expectedBase32"
+        },
+        "span": {
+          "start": 8762,
+          "end": 10079
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-d193fd11f22d",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/BaseNTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "BaseNTests",
+            "name": "vector"
+          }
+        },
+        "span": {
+          "start": 3417,
+          "end": 3588
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-d933f506173e",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/BaseNTests.swift",
+        "selector": {
+          "Free": "expectedBase32Relaxed"
+        },
+        "span": {
+          "start": 11403,
+          "end": 12539
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-363ea7cdc81e",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/CacheTests.swift",
+        "selector": {
+          "Free": "FooCache"
+        },
+        "span": {
+          "start": 1667,
+          "end": 1990
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-000242ce083b",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ClientTests.swift",
+        "selector": {
+          "Free": "CustomClient"
+        },
+        "span": {
+          "start": 11942,
+          "end": 12548
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-1d4b65ba6cba",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ClientTests.swift",
+        "selector": {
+          "Free": "SomeJSON"
+        },
+        "span": {
+          "start": 12550,
+          "end": 12903
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-3747e0b93570",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ClientTests.swift",
+        "selector": {
+          "Free": "VaporRepoJSON"
+        },
+        "span": {
+          "start": 13010,
+          "end": 13084
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-903d90e35661",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ClientTests.swift",
+        "selector": {
+          "Free": "AnythingResponse"
+        },
+        "span": {
+          "start": 13086,
+          "end": 13187
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-93373c051f29",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ClientTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "ClientTests",
+            "name": "withRemoteApp"
+          }
+        },
+        "span": {
+          "start": 5878,
+          "end": 7395
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+    },
+    {
+      "id": "kndo-a7b3e09a2c5b",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ClientTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "CustomClient",
+            "name": "_requests"
+          }
+        },
+        "span": {
+          "start": 11991,
+          "end": 12040
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-af3e07319f08",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ClientTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "CustomClient",
+            "name": "requests"
+          }
+        },
+        "span": {
+          "start": 12168,
+          "end": 12279
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-b7902585ca65",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ClientTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "SomeNestedJSON",
+            "name": "repos"
+          }
+        },
+        "span": {
+          "start": 12980,
+          "end": 13006
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-d730cfcd6be7",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ClientTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "SomeJSON",
+            "name": "vapor"
+          }
+        },
+        "span": {
+          "start": 12581,
+          "end": 12606
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-f6b9fa32b342",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ClientTests.swift",
+        "selector": {
+          "Free": "SomeNestedJSON"
+        },
+        "span": {
+          "start": 12905,
+          "end": 13008
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-0feed0b54778",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "ConditionalResponseCompressionRouteTests",
+            "name": "disabledMiddleware"
+          }
+        },
+        "span": {
+          "start": 50567,
+          "end": 50641
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-1d7ae01e6eb4",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "ConditionalResponseCompressionRouteTests",
+            "name": "forceDisabledMiddleware"
+          }
+        },
+        "span": {
+          "start": 50913,
+          "end": 51005
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-2bc45ef68792",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "ConditionalResponseCompressionRouteTests",
+            "name": "defaultMiddleware"
+          }
+        },
+        "span": {
+          "start": 50650,
+          "end": 50726
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-5eee4e0d74e6",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "ConditionalResponseCompressionRouteTests",
+            "name": "forceEnabledMiddleware"
+          }
+        },
+        "span": {
+          "start": 50814,
+          "end": 50904
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-7166cb32bb15",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "TestResponder",
+            "name": "transform"
+          }
+        },
+        "span": {
+          "start": 62023,
+          "end": 62080
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-796f756fe592",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "ConditionalResponseCompressionRouteTests",
+            "name": "unsetMiddleware"
+          }
+        },
+        "span": {
+          "start": 50735,
+          "end": 50804
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-82b923eaa141",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "ConditionalResponseCompressionRouteTests",
+            "name": "forceUnsetMiddleware"
+          }
+        },
+        "span": {
+          "start": 51117,
+          "end": 51204
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-884b3b756e68",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "ConditionalResponseCompressionRouteTests",
+            "name": "forceDefaultMiddleware"
+          }
+        },
+        "span": {
+          "start": 51014,
+          "end": 51108
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-fdabb58e8bed",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
+        "selector": {
+          "Free": "markerHeader"
+        },
+        "span": {
+          "start": 259,
+          "end": 347
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-71265cee42d3",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ContentTests.swift",
+        "selector": {
+          "Free": "Meta"
+        },
+        "span": {
+          "start": 32226,
+          "end": 32249
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-55170ab4436f",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/EndpointCacheTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "CurrentActor",
+            "name": "getCurrent"
+          }
+        },
+        "span": {
+          "start": 282,
+          "end": 343
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+    },
+    {
+      "id": "kndo-8e6cdc748a7a",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/EndpointCacheTests.swift",
+        "selector": {
+          "Free": "CurrentActor"
+        },
+        "span": {
+          "start": 160,
+          "end": 349
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-c5a95f7bb2f3",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/EndpointCacheTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "CurrentActor",
+            "name": "increment"
+          }
+        },
+        "span": {
+          "start": 214,
+          "end": 272
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+    },
+    {
+      "id": "kndo-04f4ddeece2f",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ErrorTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "MinimumError",
+            "name": "suggestedFixes"
+          }
+        },
+        "span": {
+          "start": 5814,
+          "end": 5868
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-9c7a25606853",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ErrorTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "FooError",
+            "name": "readableName"
+          }
+        },
+        "span": {
+          "start": 5942,
+          "end": 6008
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-a621ff5b0b76",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ErrorTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "FooError",
+            "name": "documentationLinks"
+          }
+        },
+        "span": {
+          "start": 6796,
+          "end": 7025
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-c3acf82cafec",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ErrorTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "MinimumError",
+            "name": "possibleCauses"
+          }
+        },
+        "span": {
+          "start": 5754,
+          "end": 5808
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-cec857669afc",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ErrorTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "FooError",
+            "name": "suggestedFixes"
+          }
+        },
+        "span": {
+          "start": 6550,
+          "end": 6790
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-d3c158250655",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ErrorTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "FooError",
+            "name": "possibleCauses"
+          }
+        },
+        "span": {
+          "start": 6205,
+          "end": 6544
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-23cb42767fe0",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/MiddlewareTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "OrderStore",
+            "name": "getOrder"
+          }
+        },
+        "span": {
+          "start": 22885,
+          "end": 22939
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+    },
+    {
+      "id": "kndo-3b8234e163b4",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/MiddlewareTests.swift",
+        "selector": {
+          "Free": "OrderMiddleware"
+        },
+        "span": {
+          "start": 22943,
+          "end": 23321
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-7e724e4058c5",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/MiddlewareTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "OrderStore",
+            "name": "addOrder"
+          }
+        },
+        "span": {
+          "start": 22798,
+          "end": 22879
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+    },
+    {
+      "id": "kndo-82c56a206946",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/MiddlewareTests.swift",
+        "selector": {
+          "Free": "OrderStore"
+        },
+        "span": {
+          "start": 22745,
+          "end": 22941
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-a9f215137e06",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/MiddlewareTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "OrderStore",
+            "name": "order"
+          }
+        },
+        "span": {
+          "start": 22768,
+          "end": 22792
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-fa13aa47a7a9",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/MiddlewareTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "OrderMiddleware",
+            "name": "pos"
+          }
+        },
+        "span": {
+          "start": 22989,
+          "end": 23004
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-eb246819496f",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/SecurityTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "OTPTests",
+            "name": "HOTPTest"
+          }
+        },
+        "span": {
+          "start": 2375,
+          "end": 2426
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-3081004d40fe",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ServerTLSTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "TestCredentials",
+            "name": "nioCertificate"
+          }
+        },
+        "span": {
+          "start": 17238,
+          "end": 17275
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-3242392fad8b",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ServerTLSTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "TestCredentials",
+            "name": "privateKeyPath"
+          }
+        },
+        "span": {
+          "start": 17131,
+          "end": 17157
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-778384e59ae7",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ServerTLSTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "TestCredentials",
+            "name": "privateKey"
+          }
+        },
+        "span": {
+          "start": 17195,
+          "end": 17233
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-919348e9a4c2",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ServerTLSTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "TestCredentials",
+            "name": "localhost"
+          }
+        },
+        "span": {
+          "start": 17281,
+          "end": 18090
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+    },
+    {
+      "id": "kndo-d37bbe12d1bf",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ServerTLSTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "TestCredentials",
+            "name": "certificatePath"
+          }
+        },
+        "span": {
+          "start": 17099,
+          "end": 17126
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-d5a1a9045f7d",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ServerTLSTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "TestCredentials",
+            "name": "certificate"
+          }
+        },
+        "span": {
+          "start": 17162,
+          "end": 17190
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-53c6f91a9cf4",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ServerTests.swift",
+        "selector": {
+          "Free": "customServer"
+        },
+        "span": {
+          "start": 87952,
+          "end": 88197
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-5b6654da0172",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ServerTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "CustomServer",
+            "name": "didShutdown"
+          }
+        },
+        "span": {
+          "start": 88292,
+          "end": 88332
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-ba7086eecb85",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ServerTests.swift",
+        "selector": {
+          "Free": "CustomServer"
+        },
+        "span": {
+          "start": 88201,
+          "end": 88909
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-cc7d421b157c",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ServerTests.swift",
+        "selector": {
+          "Free": "Key"
+        },
+        "span": {
+          "start": 87877,
+          "end": 87946
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-cc939ea82968",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ServerTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "CustomServer",
+            "name": "didStart"
+          }
+        },
+        "span": {
+          "start": 88250,
+          "end": 88287
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-079de4ebec0e",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/SessionTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "MockKeyedCache",
+            "name": "ops"
+          }
+        },
+        "span": {
+          "start": 4083,
+          "end": 4105
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-c8f17804abe9",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/SessionTests.swift",
+        "selector": {
+          "Free": "MockKeyedCache"
+        },
+        "span": {
+          "start": 4041,
+          "end": 4942
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-3ff88182875b",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/URLEncodedFormTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "User",
+            "name": "dict"
+          }
+        },
+        "span": {
+          "start": 31550,
+          "end": 31573
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-458046f2484f",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/URLEncodedFormTests.swift",
+        "selector": {
+          "Free": "DateCoding"
+        },
+        "span": {
+          "start": 31772,
+          "end": 31832
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-5d958d3fb7c1",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/URLEncodedFormTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "User",
+            "name": "nums"
+          }
+        },
+        "span": {
+          "start": 31598,
+          "end": 31617
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-811a4900995e",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/URLEncodedFormTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "User",
+            "name": "pets"
+          }
+        },
+        "span": {
+          "start": 31527,
+          "end": 31545
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-8383f4682303",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/URLEncodedFormTests.swift",
+        "selector": {
+          "Free": "DateArrayCoding"
+        },
+        "span": {
+          "start": 31834,
+          "end": 31902
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+    },
+    {
+      "id": "kndo-89ae4e554d93",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/URLEncodedFormTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "Users",
+            "name": "users"
+          }
+        },
+        "span": {
+          "start": 31689,
+          "end": 31706
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-af32052a1239",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/URLEncodedFormTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "DateArrayCoding",
+            "name": "dates"
+          }
+        },
+        "span": {
+          "start": 31883,
+          "end": 31900
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-bf236fb9eb49",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/URLEncodedFormTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "User",
+            "name": "foos"
+          }
+        },
+        "span": {
+          "start": 31578,
+          "end": 31593
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-eafdebb32dc0",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/URLEncodedFormTests.swift",
+        "selector": {
+          "Member": {
+            "owner": "User",
+            "name": "isCool"
+          }
+        },
+        "span": {
+          "start": 31622,
+          "end": 31638
+        }
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+    },
+    {
+      "id": "kndo-13466427d5bf",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "Sources/Development/configure.swift"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-9690ff3d3604",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "Sources/Development/entrypoint.swift"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-24a447d897b6",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "Sources/Development/routes.swift"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    }
+  ],
   "fixed": [],
   "baselined": 0,
   "abstained": [],
@@ -22,5 +4243,136 @@
       "content_budget_cut": false
     }
   ],
-  "diagnostics": []
+  "diagnostics": [
+    {
+      "path": "Sources/Vapor/Authentication/Authenticator.swift",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "Sources/Vapor/Concurrency/RequestBody+Concurrency.swift",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "Sources/Vapor/Content/PlaintextEncoder.swift",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "Sources/Vapor/Environment/Environment+Process.swift",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "Sources/Vapor/HTTP/Server/HTTPServerHandler.swift",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "Sources/Vapor/Middleware/FileMiddleware.swift",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "Sources/Vapor/Request/Request+BodyStream.swift",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "Sources/Vapor/Response/Response+Body.swift",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "Sources/Vapor/Sessions/SessionsMiddleware.swift",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "Sources/Vapor/Utilities/Base32.swift",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "Sources/Vapor/Utilities/BaseN.swift",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "Sources/Vapor/Utilities/DotEnv.swift",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "Sources/Vapor/Utilities/Extendable.swift",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "Sources/Vapor/Utilities/FileIO.swift",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "Sources/VaporTesting/+TestingHTTPResponse.swift",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "Sources/VaporTesting/TestingApplicationNew.swift",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "Sources/VaporTesting/TestingApplicationTester.swift",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "Tests/VaporTests/BaseNTests.swift",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "Tests/VaporTests/ClientTests.swift",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "Tests/VaporTests/EnvironmentTests.swift",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "Tests/VaporTests/FileTests.swift",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "Tests/VaporTests/RequestTests.swift",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "Tests/VaporTests/StreamingBodyTests.swift",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "Tests/VaporTests/URITests.swift",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "Tests/VaporTests/ValidationTests.swift",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    }
+  ]
 }

@@ -8,6 +8,7 @@ members = [
     "crates/kndo-adapter-java",
     "crates/kndo-adapter-kotlin",
     "crates/kndo-adapter-rust",
+    "crates/kndo-adapter-swift",
     "crates/kndo-adapter-ts",
     "crates/kndo-cli",
     "crates/kndo-contract",

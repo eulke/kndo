@@ -305,10 +305,15 @@ Complete (CI verification pending only the credits reset, like M0–M2):
   languages). Five v1 fixtures replay; Exposed claims 809 files, 936
   findings — including the REAL method-level clone families between its parallel
   JDBC/R2DBC test suites — with every delta explained in COMPARISON.
-- **M6.b.3 — swift (next).** The sixth built-in, closing the oracle census's
-  language set: vapor and Alamofire already sit pinned and unmeasured in the
-  corpus. Swift's DEFAULT visibility is `internal` — module scope — which makes
-  the scope-shape mechanism (M6.c) this milestone's natural companion.
+- **M6.b.3 — swift, done.** The sixth built-in closes the census's language
+  set, and it is the region mechanism's home case: Swift's DEFAULT is
+  `internal` → `Scoped("module")`. Flat SwiftPM targets (path-override layouts
+  take the directory as the target), no test mirror (`@testable import` IS the
+  edge), toolchain test-runner dispatch roots (XCTest `test*`, swift-testing
+  `@Test`), manifests as Tooling with labeled-argument dependency reads. Four
+  v1 fixtures replay; vapor measures 216 findings and Alamofire 609 — including
+  ~130 genuinely dead test-case helpers v1's fuzzy pooling kept alive — every
+  delta decomposed in COMPARISON under the quarry-not-target law.
 - **M6.c — internal-only + scope shape.** The census's reason: 7,983 oracle
   `internal-only` findings plus the recorded kotlin/rust granularity gaps wait
   on declarations that can carry a BOUNDED visibility region (EXPERIMENTS,

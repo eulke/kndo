@@ -1,0 +1,42 @@
+{
+  "run": {
+    "schema": "kndo-v2/m6",
+    "files_discovered": 2,
+    "files_claimed": 2,
+    "extensions": [
+      {
+        "id": "kndo:swift",
+        "files": 2
+      }
+    ]
+  },
+  "findings": [],
+  "fixed": [],
+  "baselined": 0,
+  "abstained": [
+    {
+      "category": "test-only",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    },
+    {
+      "category": "untested",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    }
+  ],
+  "suppressed": {
+    "total": 0,
+    "by_category": []
+  },
+  "plugins": [
+    {
+      "coordinate": "kndo:coverage-lcov",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    }
+  ],
+  "diagnostics": []
+}
