@@ -7,7 +7,9 @@
     "extensions": [
       {
         "id": "kndo:python",
-        "files": 83
+        "files": 83,
+        "export_narrowing": "none",
+        "import_cycles": "hazard"
       }
     ]
   },

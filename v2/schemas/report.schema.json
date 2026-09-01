@@ -279,6 +279,14 @@
         "content_budget_cut"
       ]
     },
+    "CycleTolerance": {
+      "description": "Whether an import cycle among this language's files is a defect worth a\nfinding — a LANGUAGE fact, declared as spec data so core never names a\nlanguage. `Hazard`: module-initialization order makes cycles bite (ESM/CJS\nTDZ and partially-initialized modules; Python's circular ImportError).\n`Tolerated` — the default — covers every silent reason at once: the\ncompiler forbids them (Go), resolves them routinely (JVM multi-pass), or\nthe module system makes them idiomatic (Rust modules within a crate);\ninformation is not dressed up as a defect, and silence needs no\nsub-classification to behave.",
+      "type": "string",
+      "enum": [
+        "tolerated",
+        "hazard"
+      ]
+    },
     "DiagnosticLevel": {
       "description": "Closed by design: three levels are the reporting contract.",
       "type": "string",
@@ -296,9 +304,21 @@
         "metrics"
       ]
     },
+    "ExportNarrowing": {
+      "description": "Whether the language offers an expressible visibility strictly below\n`Exported` — can a declaration stop being exported, by editing only itself,\nand keep compiling? TypeScript can drop `export`; a language whose only\nspelling IS the exported one cannot. The `internal-only` analysis is the\nconsumer: an exported declaration used only inside its own file is advice\nwhere narrowing is expressible and an impossibility where it is not.",
+      "type": "string",
+      "enum": [
+        "none",
+        "expressible"
+      ]
+    },
     "ExtensionRun": {
       "type": "object",
       "properties": {
+        "export_narrowing": {
+          "description": "Whether the language can stop exporting a declaration by editing only\nit (`internal-only`'s Exported rung reads it).",
+          "$ref": "#/$defs/ExportNarrowing"
+        },
         "files": {
           "type": "integer",
           "format": "uint32",
@@ -306,11 +326,24 @@
         },
         "id": {
           "type": "string"
+        },
+        "import_cycles": {
+          "description": "Whether the language calls import cycles a hazard (`cyclic` reads it);\n`tolerated` is why a cycle-free-by-compiler language reports none.",
+          "$ref": "#/$defs/CycleTolerance"
+        },
+        "narrowable_scopes": {
+          "description": "The judgment capabilities this extension declared — the one-row answer\nto \"why does kndo (not) report X for this language\". Scope tokens its\nladder can demote (`internal-only`'s Scoped rung reads it); empty means\nthat rung never fires here.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
         "id",
-        "files"
+        "files",
+        "export_narrowing",
+        "import_cycles"
       ]
     },
     "Finding": {

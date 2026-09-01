@@ -7,7 +7,9 @@
     "extensions": [
       {
         "id": "kndo:go",
-        "files": 2
+        "files": 2,
+        "export_narrowing": "none",
+        "import_cycles": "tolerated"
       }
     ]
   },

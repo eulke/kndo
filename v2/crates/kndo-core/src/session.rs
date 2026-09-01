@@ -121,6 +121,14 @@ impl PhaseTimings {
     }
 }
 
+/// The judgment capabilities one extension declared, carried spec → report.
+#[derive(Debug, Clone)]
+pub struct DeclaredCapabilities {
+    pub narrowable_scopes: Vec<SmolStr>,
+    pub export_narrowing: kndo_contract::extension::ExportNarrowing,
+    pub import_cycles: kndo_contract::extension::CycleTolerance,
+}
+
 pub struct Snapshot {
     pub graph: Graph,
     /// Current findings, post-suppression — plugin findings included, under their
@@ -136,6 +144,10 @@ pub struct Snapshot {
     /// even when everything applied cleanly.
     pub contributions: Vec<Contribution>,
     pub timings: PhaseTimings,
+    /// Per extension coordinate, the judgment capabilities its spec declared —
+    /// carried from composition to the report's `extensions` rows, where they
+    /// answer "why does kndo (not) report X for this language".
+    capabilities: Vec<(SmolStr, DeclaredCapabilities)>,
     baseline: Option<Vec<Finding>>,
     mode: crate::report::Mode,
     base_health: Option<crate::health::Health>,
@@ -515,9 +527,25 @@ impl Session {
 
         let mut composition = self.composition_diagnostics.clone();
         let baseline = self.read_baseline(&mut composition);
+        let capabilities = self
+            .extensions
+            .iter()
+            .map(|e| {
+                let s = e.spec();
+                (
+                    SmolStr::new(s.coordinate()),
+                    DeclaredCapabilities {
+                        narrowable_scopes: s.narrowable_scopes().to_vec(),
+                        export_narrowing: s.export_narrowing(),
+                        import_cycles: s.import_cycles(),
+                    },
+                )
+            })
+            .collect();
         Snapshot {
             graph,
             findings,
+            capabilities,
             abstained: outcome.abstained,
             judged: outcome.judged,
             mode: crate::report::Mode::Full,
@@ -652,7 +680,24 @@ impl Snapshot {
                 files_claimed: self.graph.files.len() as u32,
                 extensions: per_extension
                     .into_iter()
-                    .map(|(id, files)| ExtensionRun { id, files })
+                    .map(|(id, files)| {
+                        let caps = self
+                            .capabilities
+                            .iter()
+                            .find(|(c, _)| *c == id)
+                            .map(|(_, caps)| caps);
+                        ExtensionRun {
+                            id,
+                            files,
+                            narrowable_scopes: caps
+                                .map(|c| c.narrowable_scopes.clone())
+                                .unwrap_or_default(),
+                            export_narrowing: caps
+                                .map(|c| c.export_narrowing)
+                                .unwrap_or_default(),
+                            import_cycles: caps.map(|c| c.import_cycles).unwrap_or_default(),
+                        }
+                    })
                     .collect(),
             },
             health,

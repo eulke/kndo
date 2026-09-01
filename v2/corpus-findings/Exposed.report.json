@@ -7,11 +7,18 @@
     "extensions": [
       {
         "id": "kndo:js-ts",
-        "files": 7
+        "files": 7,
+        "export_narrowing": "expressible",
+        "import_cycles": "hazard"
       },
       {
         "id": "kndo:kotlin",
-        "files": 802
+        "files": 802,
+        "narrowable_scopes": [
+          "module"
+        ],
+        "export_narrowing": "none",
+        "import_cycles": "tolerated"
       }
     ]
   },

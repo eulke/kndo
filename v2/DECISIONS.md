@@ -2110,3 +2110,27 @@ exemption, and the unreachable-binding protection in one project). 224 tests, 15
 gates, clippy clean. Recorded asymmetry, deliberately untouched: the Scoped rung
 still pools reachable region files only — changing a shipped analysis's universe
 needs its own corpus proof first.
+
+## 2026-09-01 — The report names each language's judgment capabilities
+
+Follow-through on the owner's question ("shouldn't an adapter subscribe to the
+findings that apply to it?"): the architecture already gates every
+language-sensitive analysis on a declared FACT rather than a subscription —
+`CycleTolerance`, `narrowable_scopes`, `ExportNarrowing`, evidence-stream
+pairing, `signature_span` — because facts carry their reason in the type,
+compose across languages inside one finding (a mixed-language cycle fires if
+ANY participant declares the hazard), and keep zero-measured distinct from
+not-judged (the distinction `dogfood_zero_means_measured` polices). A
+subscription table would be identity-branching — the wrong-floor signal — with
+two new failure modes the fact model makes unrepresentable: silencing real
+findings by identity, and enabling categories without the evidence to judge.
+
+What WAS missing is legibility: the answer to "why does kndo (not) report X
+for this language" lived only in contract doc comments. Now every
+`run.extensions` row carries the declared trio — `narrowable_scopes`,
+`export_narrowing`, `import_cycles` — so the report answers it itself: a Go
+row reads `"import_cycles": "tolerated"`, which IS why no cycle findings exist
+there. Envelope and schema only; renders unchanged (JSON and `serve` carry it;
+a dedicated human surface waits for demand). Every conformance fixture
+regenerated, the diff audited to contain only the new row fields. 224 tests,
+15 gates, clippy clean.

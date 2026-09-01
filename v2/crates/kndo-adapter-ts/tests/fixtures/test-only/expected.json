@@ -7,7 +7,9 @@
     "extensions": [
       {
         "id": "kndo:js-ts",
-        "files": 4
+        "files": 4,
+        "export_narrowing": "expressible",
+        "import_cycles": "hazard"
       }
     ]
   },

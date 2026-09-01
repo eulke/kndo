@@ -7,11 +7,18 @@
     "extensions": [
       {
         "id": "kndo:js-ts",
-        "files": 10
+        "files": 10,
+        "export_narrowing": "expressible",
+        "import_cycles": "hazard"
       },
       {
         "id": "kndo:swift",
-        "files": 98
+        "files": 98,
+        "narrowable_scopes": [
+          "module"
+        ],
+        "export_narrowing": "none",
+        "import_cycles": "tolerated"
       }
     ]
   },

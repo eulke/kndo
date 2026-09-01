@@ -7,7 +7,12 @@
     "extensions": [
       {
         "id": "kndo:kotlin",
-        "files": 4
+        "files": 4,
+        "narrowable_scopes": [
+          "module"
+        ],
+        "export_narrowing": "none",
+        "import_cycles": "tolerated"
       }
     ]
   },

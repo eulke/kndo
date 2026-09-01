@@ -7,7 +7,12 @@
     "extensions": [
       {
         "id": "kndo:java",
-        "files": 2
+        "files": 2,
+        "narrowable_scopes": [
+          "package"
+        ],
+        "export_narrowing": "none",
+        "import_cycles": "tolerated"
       }
     ]
   },

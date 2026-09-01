@@ -507,3 +507,10 @@ Note for kndo-on-kndo: the repository's `.ignore` quarries v1's source (and the 
 M-1 spike) so the dogfood judges v2 — the kndo being built — while git tracks everything;
 same mechanism and reasoning as the fixture-corpus exclusion. The quarry entries retire
 at the root swap.
+
+**Capability legibility**: every `run.extensions` row carries the judgment
+capabilities its adapter declared (`narrowable_scopes`, `export_narrowing`,
+`import_cycles`) — the report's own answer to "why does kndo (not) report X
+for this language". Gating is by declared language facts, never by an adapter
+subscribing to finding categories: a fact carries its reason, composes across
+languages inside one finding, and keeps a judged zero distinct from silence.

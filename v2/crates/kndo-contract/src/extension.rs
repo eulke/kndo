@@ -75,6 +75,7 @@ pub enum MutatesGraph {
 /// sub-classification to behave.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum CycleTolerance {
     #[default]
     Tolerated,
@@ -102,6 +103,7 @@ pub fn is_reserved_coordinate(coordinate: &str) -> bool {
 /// where narrowing is expressible and an impossibility where it is not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum ExportNarrowing {
     #[default]
     None,

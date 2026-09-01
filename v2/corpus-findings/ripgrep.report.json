@@ -7,7 +7,12 @@
     "extensions": [
       {
         "id": "kndo:rust",
-        "files": 110
+        "files": 110,
+        "narrowable_scopes": [
+          "crate"
+        ],
+        "export_narrowing": "none",
+        "import_cycles": "tolerated"
       }
     ]
   },

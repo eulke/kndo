@@ -7,7 +7,12 @@
     "extensions": [
       {
         "id": "kndo:swift",
-        "files": 251
+        "files": 251,
+        "narrowable_scopes": [
+          "module"
+        ],
+        "export_narrowing": "none",
+        "import_cycles": "tolerated"
       }
     ]
   },

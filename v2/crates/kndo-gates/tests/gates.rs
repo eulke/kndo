@@ -888,10 +888,16 @@ fn agent_format_matches_its_committed_golden() {
                 ExtensionRun {
                     id: SmolStr::new("kndo:python"),
                     files: 7,
+                    narrowable_scopes: Vec::new(),
+                    export_narrowing: Default::default(),
+                    import_cycles: Default::default(),
                 },
                 ExtensionRun {
                     id: SmolStr::new("kndo:swift"),
                     files: 4,
+                    narrowable_scopes: Vec::new(),
+                    export_narrowing: Default::default(),
+                    import_cycles: Default::default(),
                 },
             ],
         },
