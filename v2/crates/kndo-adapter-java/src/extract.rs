@@ -415,7 +415,7 @@ fn references_and_comments(root: Node<'_>, source: &[u8], out: &mut EvidenceSink
             let Some(parent) = n.parent() else {
                 return;
             };
-            if !is_use(n, parent) {
+            if !is_use(n, parent, source) {
                 return;
             }
             out.reference(tk::text(n, source), classify(n, parent), tk::span(n));
@@ -425,8 +425,27 @@ fn references_and_comments(root: Node<'_>, source: &[u8], out: &mut EvidenceSink
 
 /// Binding and naming positions are not uses; the bias stays keep-alive — only
 /// unambiguous declaration-name and binder positions are excluded.
-fn is_use(n: Node<'_>, parent: Node<'_>) -> bool {
+fn is_use(n: Node<'_>, parent: Node<'_>, source: &[u8]) -> bool {
     match parent.kind() {
+        // Inside a qualified type, only the named type itself — and an
+        // uppercase-initial qualifier (`Map` in `Map.Entry`) — is a use:
+        // `java.util.function.Function` names ONE type, and its lowercase
+        // segments are package spelling, the same judgment the walker already
+        // applies to import and package paths. The grammar cannot split
+        // package from outer class; the JLS case convention can, and its
+        // failure mode only ever KEEPS a reference (an uppercase package
+        // segment stays a harmless extra use — never a dropped real one).
+        "scoped_type_identifier" => {
+            let named_leaf = n.next_named_sibling().is_none()
+                && parent
+                    .parent()
+                    .is_none_or(|gp| gp.kind() != "scoped_type_identifier");
+            named_leaf
+                || !tk::text(n, source)
+                    .as_bytes()
+                    .first()
+                    .is_some_and(|b| b.is_ascii_lowercase())
+        }
         "class_declaration"
         | "interface_declaration"
         | "enum_declaration"
@@ -456,7 +475,25 @@ fn classify(n: Node<'_>, parent: Node<'_>) -> RefKind {
         "method_reference" => RefKind::Call,
         "object_creation_expression" if n.kind() == "type_identifier" => RefKind::Call,
         "superclass" | "super_interfaces" | "extends_interfaces" | "type_list" => RefKind::Extend,
-        _ if n.kind() == "type_identifier" => RefKind::TypeUse,
+        // A generic or qualified supertype interposes wrapper nodes between
+        // the clause and the identifier (`extends Base<T>` puts `generic_type`
+        // there); the clause is found through them. Type ARGUMENTS are not the
+        // supertype — the walk never crosses `type_arguments`.
+        _ if n.kind() == "type_identifier" => {
+            let mut a = parent;
+            while matches!(a.kind(), "generic_type" | "scoped_type_identifier") {
+                match a.parent() {
+                    Some(p) => a = p,
+                    None => break,
+                }
+            }
+            match a.kind() {
+                "superclass" | "super_interfaces" | "extends_interfaces" | "type_list" => {
+                    RefKind::Extend
+                }
+                _ => RefKind::TypeUse,
+            }
+        }
         _ => RefKind::Read,
     }
 }

@@ -2029,3 +2029,31 @@ before any build. Two adapter facts the instrument surfaced — java's qualified
 segments entering the reference stream (keep-alive inflation, `unused` false
 negatives) and generic supertypes bypassing `RefKind::Extend` — are recorded as their
 own candidate in EXPERIMENTS with a fix sketch and their measurement.
+
+## 2026-09-01 — kndo:java: qualified-type segments are spelling, not references
+
+The Scoped-comparison instrument's collateral discovery, fixed and measured.
+tree-sitter-java types every segment of a qualified type as `type_identifier`, so
+`java.util.function.Function` also emitted references named `java`, `util`,
+`function` — and pooled keep-alive matching let a declaration sharing a segment's
+name live on unrelated qualified mentions (guava's `Tables.java` package-private
+`function` fields, seven instrument rows). The walker already refused exactly this
+for import and package paths; the same judgment now covers type positions: inside
+`scoped_type_identifier`, only the named type itself and an uppercase-initial
+qualifier (`Map` in `Map.Entry` — an outer class, which the grammar cannot
+distinguish from a package) are references. The JLS case convention decides, and
+its failure mode only ever KEEPS a reference — an uppercase package segment stays a
+harmless extra use, while no real use can be dropped. Alongside: supertype names
+classify as `RefKind::Extend` through `generic_type`/qualified wrappers
+(`extends Base<T>`), never crossing `type_arguments`; core consumes `Extend`
+nowhere today, so that half is evidence honesty for future consumers.
+
+Measured on the corpus: 266 references dropped across guava (890,419 → 890,153),
+**finding delta zero at the pin** — every collision-named declaration also carries
+real expression uses, so the inflation was latent. Shipped anyway, deliberately:
+the channel's failure mode is a DEAD declaration silently kept alive by an
+unrelated spelling — invisible exactly until it matters, which is the one leak
+direction a dead-code tool must not have. Two extraction tests failed before the
+fix and pin both behaviors now; adapter version 2→3; conformance fixtures
+byte-identical (reports carry findings, not reference kinds); every non-java
+corpus report unchanged. 223 tests, 15 gates, clippy clean.

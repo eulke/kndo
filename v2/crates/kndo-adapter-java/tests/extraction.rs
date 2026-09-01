@@ -213,3 +213,50 @@ fn a_javadoc_pragma_strips_to_its_text() {
     // what lets `kndo:allow` START its comment inside a doc block.
     assert_eq!(c.text.start, 3, "doc star belongs to the marker: {c:#?}");
 }
+
+#[test]
+fn qualified_type_segments_are_spelling_not_uses() {
+    let ev = ev(
+        "src/main/java/com/foo/Uses.java",
+        "package com.foo;\n\
+         public class Uses {\n\
+           public java.util.function.Function<String, Integer> f() { return null; }\n\
+           java.util.Map.Entry<String, Integer> e;\n\
+         }\n",
+    );
+    let named = |name: &str| ev.references.iter().filter(|r| r.name == name).count();
+    assert_eq!(
+        named("java") + named("util") + named("function"),
+        0,
+        "lowercase qualifier segments are package spelling, never uses: {:#?}",
+        ev.references
+    );
+    assert!(named("Function") >= 1, "the named type stays a reference");
+    assert!(named("Map") >= 1, "an uppercase outer-class qualifier stays");
+    assert!(named("Entry") >= 1);
+}
+
+#[test]
+fn generic_and_qualified_supertypes_classify_as_extend() {
+    use kndo_contract::evidence::RefKind;
+    let ev = ev(
+        "src/main/java/com/foo/Sub.java",
+        "package com.foo;\n\
+         public class Sub extends Base<String> implements I<Long>, J {\n}\n\
+         class Base<T> {}\n\
+         interface I<T> {}\n\
+         interface J {}\n",
+    );
+    let kind_of = |name: &str| {
+        ev.references
+            .iter()
+            .find(|r| r.name == name)
+            .map(|r| r.kind)
+    };
+    assert_eq!(kind_of("Base"), Some(RefKind::Extend));
+    assert_eq!(kind_of("I"), Some(RefKind::Extend));
+    assert_eq!(kind_of("J"), Some(RefKind::Extend));
+    // A supertype's type ARGUMENTS are ordinary type uses, not Extend.
+    assert_eq!(kind_of("String"), Some(RefKind::TypeUse));
+    assert_eq!(kind_of("Long"), Some(RefKind::TypeUse));
+}

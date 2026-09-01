@@ -27,7 +27,10 @@ pub struct JavaAdapter {
 impl JavaAdapter {
     pub fn new() -> Self {
         JavaAdapter {
-            spec: kndo_toolkit::jvm_manifest::jvm_spec("kndo:java", 2, &["java"], &["package"]),
+            // 3: qualified-type package segments left the reference stream
+            // (spelling, not uses), and supertype names classify as Extend
+            // through generic/qualified wrappers.
+            spec: kndo_toolkit::jvm_manifest::jvm_spec("kndo:java", 3, &["java"], &["package"]),
         }
     }
 }

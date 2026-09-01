@@ -131,9 +131,18 @@ fields named `function`, and seven instrument rows resolved against them. Direct
 Related grammar fact: extends-position references classify as `Extend` only for raw
 supertypes; a generic supertype's identifier reaches the stream as `TypeUse` (the
 `generic_type` node owns it), so `RefKind::Extend` consumers see a grammar-shaped
-subset. Fix sketch: emit only the leaf segment of `scoped_type_identifier` and
-classify through `generic_type` to the enclosing clause — adapter version bump,
-conformance re-audit, and a guava `unused`-delta corpus measure as the experiment.
+subset. Fixed 2026-09-01 (adapter version 3): lowercase qualifier segments of
+`scoped_type_identifier` left the reference stream — an uppercase qualifier (`Map`
+in `Map.Entry`, an outer class the grammar cannot tell from a package) stays, the
+JLS-case rule whose failure mode only ever KEEPS a reference — and supertype names
+classify as `Extend` through `generic_type`/qualified wrappers, never crossing
+`type_arguments`. Measured: 266 segment references dropped across guava (890,419 →
+890,153), finding delta ZERO at the pin — every collision-named declaration also
+carries real expression uses, so the inflation was latent, not active. Shipped for
+the direction (a dead declaration silently kept alive by an unrelated spelling is
+the one leak a dead-code tool must not have); two extraction tests failed before
+the fix and pin both behaviors; conformance fixtures stayed byte-identical
+(reports carry findings, not reference kinds).
 
 ### Visibility-ladder shape (module-and-descendants scope)
 v1's linear rung ladder could not express Rust's module-and-descendants privacy — a
