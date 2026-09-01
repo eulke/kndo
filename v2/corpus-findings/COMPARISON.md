@@ -814,7 +814,7 @@ candidates on ripgrep, every one a type, a primitive, a tool attribute or a
 |---|---|---|---|
 | ripgrep | every manifest | 0 | 0 |
 | gin | every manifest | 0 | 0 |
-| vite | 1 of 185 manifests eligible for a reached importer | 1 — `test-package-a`, imported by `playground/nested-deps/test-package-b` from a COMMITTED `node_modules` | 1 (the same) |
+| vite | 184 manifests abstain (41 unreached, 117 with unclaimed importers, 26 all-test); the rest judged | 1 — `test-package-a`, imported by `playground/nested-deps/test-package-b` from a COMMITTED `node_modules` | 1 (the same) |
 | lodash | 0 — `test/*.html`, `*.css` unclaimed | 0 | 1 — `@playwright/test` in `playwright.config.js`, declared nowhere |
 | guava · Exposed · vapor · flask · Alamofire | 0 — underivable | 0 | — |
 
