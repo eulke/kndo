@@ -34,19 +34,29 @@ pub struct TypeScriptAdapter {
 
 impl TypeScriptAdapter {
     pub fn new() -> Self {
-        let spec = kndo_toolkit::source_adapter_spec(
+        // Its own builder chain, not `source_adapter_spec`: this adapter
+        // declares more than the shared spelling (the export-narrowing
+        // capability below), which is exactly the toolkit fn's escape hatch.
+        let spec = ExtensionSpec::builder(
             "kndo:js-ts",
             // 4: claims mts/cts (real sources in the wild — vite ships them),
             // and resolution learned the .mjs→.mts/.cjs→.cts swaps, query/
             // fragment stripping, and .d.ts answering .js specifiers.
             4,
-            &["ts", "tsx", "js", "jsx", "mjs", "cjs", "mts", "cts"],
-            &["**/package.json"],
-            &[],
-            // ESM/CJS initialization order makes cycles bite: TDZ errors and
-            // partially-initialized modules at run time.
-            kndo_contract::extension::CycleTolerance::Hazard,
-        );
+        )
+        .suffixes(&["ts", "tsx", "js", "jsx", "mjs", "cjs", "mts", "cts"])
+        .emits(kndo_contract::evidence::EvidenceStreams::of(&[
+            kndo_contract::evidence::EvidenceStream::Comments,
+            kndo_contract::evidence::EvidenceStream::Metrics,
+        ]))
+        .manifests(&["**/package.json"])
+        // Dropping `export` is the language-checked narrowing: tsc turns any
+        // missed external use into a compile error.
+        .export_narrowing(kndo_contract::extension::ExportNarrowing::Expressible)
+        // ESM/CJS initialization order makes cycles bite: TDZ errors and
+        // partially-initialized modules at run time.
+        .import_cycles(kndo_contract::extension::CycleTolerance::Hazard)
+        .build();
         let mut resolution_exts = Vec::new();
         for ext in spec.suffixes() {
             resolution_exts.push(format!(".{ext}"));

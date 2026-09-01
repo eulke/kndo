@@ -55,9 +55,10 @@ pub(crate) fn extension_spec(spec: awire::ExtensionSpec) -> ExtensionSpec {
             .map(SmolStr::new)
             .collect(),
         claims: spec.claims.into_iter().map(SmolStr::new).collect(),
-        // The wire world speaks no cycle vocabulary; absence defaults to
-        // silence, like every other undeclared capability.
+        // The wire world speaks no cycle or narrowing vocabulary; absence
+        // defaults to silence, like every other undeclared capability.
         import_cycles: Default::default(),
+        export_narrowing: Default::default(),
         emits: EvidenceStreams::of(
             &spec
                 .emits

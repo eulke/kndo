@@ -94,6 +94,20 @@ pub fn is_reserved_coordinate(coordinate: &str) -> bool {
     coordinate.starts_with("kndo:")
 }
 
+/// Whether the language offers an expressible visibility strictly below
+/// `Exported` — can a declaration stop being exported, by editing only itself,
+/// and keep compiling? TypeScript can drop `export`; a language whose only
+/// spelling IS the exported one cannot. The `internal-only` analysis is the
+/// consumer: an exported declaration used only inside its own file is advice
+/// where narrowing is expressible and an impossibility where it is not.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ExportNarrowing {
+    #[default]
+    None,
+    Expressible,
+}
+
 /// What an extension IS, as data — the one manifest for every capability. Fields
 /// come in three clusters with one gate each: extraction (gated by `claims`),
 /// conduct (gated by `activation` + `mutates_graph`), ingestion (gated by
@@ -105,6 +119,7 @@ pub struct ExtensionSpec {
     // -- extraction --
     suffixes: Vec<SmolStr>,
     narrowable_scopes: Vec<SmolStr>,
+    export_narrowing: ExportNarrowing,
     import_cycles: CycleTolerance,
     claims: Vec<SmolStr>,
     emits: EvidenceStreams,
@@ -137,6 +152,7 @@ impl ExtensionSpec {
                 version,
                 suffixes: Vec::new(),
                 narrowable_scopes: Vec::new(),
+                export_narrowing: ExportNarrowing::None,
                 import_cycles: CycleTolerance::Tolerated,
                 claims: Vec::new(),
                 emits: EvidenceStreams::none(),
@@ -178,6 +194,11 @@ impl ExtensionSpec {
     /// (the default) means the analysis never fires for this adapter's files.
     pub fn narrowable_scopes(&self) -> &[SmolStr] {
         &self.narrowable_scopes
+    }
+
+    /// See [`ExportNarrowing`]; the `internal-only` analysis is the consumer.
+    pub fn export_narrowing(&self) -> ExportNarrowing {
+        self.export_narrowing
     }
 
     /// See [`CycleTolerance`]; the `cyclic` analysis is the consumer.
@@ -243,6 +264,9 @@ pub struct ExtensionSpecParts {
     pub version: u32,
     pub suffixes: Vec<SmolStr>,
     pub narrowable_scopes: Vec<SmolStr>,
+    /// Wire components cannot declare `Expressible` yet — the world speaks no
+    /// narrowing vocabulary; defaults to `None` (silence) like every absence.
+    pub export_narrowing: ExportNarrowing,
     /// Wire components cannot declare `Hazard` yet — the world speaks no cycle
     /// vocabulary; defaults to `Tolerated` (silence) like every other absence.
     pub import_cycles: CycleTolerance,
@@ -279,6 +303,7 @@ impl From<ExtensionSpecParts> for ExtensionSpec {
             version: parts.version,
             suffixes: parts.suffixes,
             narrowable_scopes: parts.narrowable_scopes,
+            export_narrowing: parts.export_narrowing,
             import_cycles: parts.import_cycles,
             claims: parts.claims,
             emits: parts.emits,
@@ -327,6 +352,14 @@ impl ExtensionSpecBuilder {
     /// default-compatibility rule: `internal-only` stays silent.
     pub fn narrowable(mut self, scopes: &[&'static str]) -> Self {
         self.spec.narrowable_scopes = scopes.iter().map(|s| SmolStr::new_static(s)).collect();
+        self
+    }
+
+    /// Declare where `Exported` sits on the language's ladder (see
+    /// [`ExportNarrowing`]). Omitted ⇒ `None` — the `internal-only` analysis
+    /// never advises dropping an export for this adapter's files.
+    pub fn export_narrowing(mut self, narrowing: ExportNarrowing) -> Self {
+        self.spec.export_narrowing = narrowing;
         self
     }
 

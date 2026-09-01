@@ -12148,6 +12148,1128 @@
       "message": "byte-identical to playground/transform-plugin/plugin-dep-load.js"
     },
     {
+      "id": "kndo-7ddd63d56995",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/module-runner/importMetaResolver.ts",
+        "selector": {
+          "Free": "ImportMetaResolver"
+        },
+        "span": {
+          "start": 79,
+          "end": 152
+        }
+      },
+      "lines": {
+        "start": 3,
+        "end": 3
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+    },
+    {
+      "id": "kndo-71724797f4e4",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/build.ts",
+        "selector": {
+          "Free": "enhanceRollupError"
+        },
+        "span": {
+          "start": 29442,
+          "end": 30435
+        }
+      },
+      "lines": {
+        "start": 946,
+        "end": 973
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+    },
+    {
+      "id": "kndo-9d8ffe13d9da",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/build.ts",
+        "selector": {
+          "Free": "clearLine"
+        },
+        "span": {
+          "start": 34288,
+          "end": 34452
+        }
+      },
+      "lines": {
+        "start": 1113,
+        "end": 1119
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+    },
+    {
+      "id": "kndo-de06ba830ee0",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/build.ts",
+        "selector": {
+          "Free": "toOutputFilePathWithoutRuntime"
+        },
+        "span": {
+          "start": 51496,
+          "end": 52512
+        }
+      },
+      "lines": {
+        "start": 1703,
+        "end": 1738
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+    },
+    {
+      "id": "kndo-078982fbe99b",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/nativeConfigCompat.ts",
+        "selector": {
+          "Free": "analyzeConfigModuleReferences"
+        },
+        "span": {
+          "start": 2799,
+          "end": 4609
+        }
+      },
+      "lines": {
+        "start": 97,
+        "end": 155
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+    },
+    {
+      "id": "kndo-366bfb4080c7",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/nativeConfigCompat.ts",
+        "selector": {
+          "Free": "ConfigImportRef"
+        },
+        "span": {
+          "start": 820,
+          "end": 933
+        }
+      },
+      "lines": {
+        "start": 29,
+        "end": 34
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+    },
+    {
+      "id": "kndo-da06035fb2f1",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/nativeConfigCompat.ts",
+        "selector": {
+          "Free": "NativeConfigIncompatibilityType"
+        },
+        "span": {
+          "start": 316,
+          "end": 493
+        }
+      },
+      "lines": {
+        "start": 9,
+        "end": 15
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+    },
+    {
+      "id": "kndo-ea82dd23cfc3",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/nativeConfigCompat.ts",
+        "selector": {
+          "Free": "findEsmSyntaxInCjs"
+        },
+        "span": {
+          "start": 4765,
+          "end": 5142
+        }
+      },
+      "lines": {
+        "start": 164,
+        "end": 176
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+    },
+    {
+      "id": "kndo-f41e111a446a",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/nativeConfigCompat.ts",
+        "selector": {
+          "Free": "classifyImportRef"
+        },
+        "span": {
+          "start": 1418,
+          "end": 2356
+        }
+      },
+      "lines": {
+        "start": 50,
+        "end": 80
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+    },
+    {
+      "id": "kndo-b9532ebd21e9",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/nodeResolve.ts",
+        "selector": {
+          "Free": "NodeResolveWithViteOptions"
+        },
+        "span": {
+          "start": 215,
+          "end": 292
+        }
+      },
+      "lines": {
+        "start": 6,
+        "end": 9
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+    },
+    {
+      "id": "kndo-bc13f4d598c5",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugin.ts",
+        "selector": {
+          "Free": "PluginContextMetaExtension"
+        },
+        "span": {
+          "start": 2673,
+          "end": 2735
+        }
+      },
+      "lines": {
+        "start": 69,
+        "end": 71
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+    },
+    {
+      "id": "kndo-510d1bdf45c7",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/asset.ts",
+        "selector": {
+          "Free": "registerCustomMime"
+        },
+        "span": {
+          "start": 2986,
+          "end": 3684
+        }
+      },
+      "lines": {
+        "start": 99,
+        "end": 110
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+    },
+    {
+      "id": "kndo-7f34c3fbb906",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/asset.ts",
+        "selector": {
+          "Free": "noInlineRE"
+        },
+        "span": {
+          "start": 1522,
+          "end": 1560
+        }
+      },
+      "lines": {
+        "start": 59,
+        "end": 59
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this declaration"
+    },
+    {
+      "id": "kndo-94c99355ea87",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/asset.ts",
+        "selector": {
+          "Free": "fileToDevUrl"
+        },
+        "span": {
+          "start": 13879,
+          "end": 15400
+        }
+      },
+      "lines": {
+        "start": 445,
+        "end": 489
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+    },
+    {
+      "id": "kndo-10fa0cb85d45",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/css.ts",
+        "selector": {
+          "Free": "importCssRE"
+        },
+        "span": {
+          "start": 68353,
+          "end": 68441
+        }
+      },
+      "lines": {
+        "start": 2090,
+        "end": 2091
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this declaration"
+    },
+    {
+      "id": "kndo-13f0982d24be",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/css.ts",
+        "selector": {
+          "Free": "cssDataUriRE"
+        },
+        "span": {
+          "start": 68240,
+          "end": 68339
+        }
+      },
+      "lines": {
+        "start": 2088,
+        "end": 2089
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this declaration"
+    },
+    {
+      "id": "kndo-b13258f42826",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/css.ts",
+        "selector": {
+          "Free": "CSSAtImportResolvers"
+        },
+        "span": {
+          "start": 47321,
+          "end": 47414
+        }
+      },
+      "lines": {
+        "start": 1364,
+        "end": 1368
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+    },
+    {
+      "id": "kndo-e7aee3d12268",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/css.ts",
+        "selector": {
+          "Free": "StylePreprocessorResults"
+        },
+        "span": {
+          "start": 80620,
+          "end": 80804
+        }
+      },
+      "lines": {
+        "start": 2489,
+        "end": 2495
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+    },
+    {
+      "id": "kndo-8d5532436a12",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/dynamicImportVars.ts",
+        "selector": {
+          "Free": "dynamicImportHelperId"
+        },
+        "span": {
+          "start": 1141,
+          "end": 1198
+        }
+      },
+      "lines": {
+        "start": 29,
+        "end": 29
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this declaration"
+    },
+    {
+      "id": "kndo-01046a961d82",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/esbuild.ts",
+        "selector": {
+          "Free": "TSCompilerOptions"
+        },
+        "span": {
+          "start": 2522,
+          "end": 2591
+        }
+      },
+      "lines": {
+        "start": 77,
+        "end": 77
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+    },
+    {
+      "id": "kndo-38ee0baab9a8",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/esbuild.ts",
+        "selector": {
+          "Free": "defaultEsbuildSupported"
+        },
+        "span": {
+          "start": 1505,
+          "end": 1583
+        }
+      },
+      "lines": {
+        "start": 40,
+        "end": 43
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this declaration"
+    },
+    {
+      "id": "kndo-40fafb293e43",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/esbuild.ts",
+        "selector": {
+          "Free": "ESBuildTransformResult"
+        },
+        "span": {
+          "start": 1896,
+          "end": 1987
+        }
+      },
+      "lines": {
+        "start": 55,
+        "end": 57
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+    },
+    {
+      "id": "kndo-2353dc7e37af",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/html.ts",
+        "selector": {
+          "Free": "isAsyncScriptMap"
+        },
+        "span": {
+          "start": 5195,
+          "end": 5280
+        }
+      },
+      "lines": {
+        "start": 173,
+        "end": 176
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this declaration"
+    },
+    {
+      "id": "kndo-81f4e095269e",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/html.ts",
+        "selector": {
+          "Free": "parseRelAttr"
+        },
+        "span": {
+          "start": 38196,
+          "end": 38302
+        }
+      },
+      "lines": {
+        "start": 1110,
+        "end": 1112
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+    },
+    {
+      "id": "kndo-c82802ed7c56",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/html.ts",
+        "selector": {
+          "Free": "htmlProxyMap"
+        },
+        "span": {
+          "start": 2672,
+          "end": 2813
+        }
+      },
+      "lines": {
+        "start": 88,
+        "end": 97
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this declaration"
+    },
+    {
+      "id": "kndo-79c0edd018b8",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/importAnalysis.ts",
+        "selector": {
+          "Free": "canSkipImportAnalysis"
+        },
+        "span": {
+          "start": 2299,
+          "end": 2391
+        }
+      },
+      "lines": {
+        "start": 87,
+        "end": 88
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this declaration"
+    },
+    {
+      "id": "kndo-7fdbb9f624bc",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/importAnalysis.ts",
+        "selector": {
+          "Free": "interopNamedImports"
+        },
+        "span": {
+          "start": 32888,
+          "end": 34367
+        }
+      },
+      "lines": {
+        "start": 951,
+        "end": 1014
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+    },
+    {
+      "id": "kndo-fb2d72ff5249",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/importAnalysis.ts",
+        "selector": {
+          "Free": "createParseErrorInfo"
+        },
+        "span": {
+          "start": 31477,
+          "end": 32572
+        }
+      },
+      "lines": {
+        "start": 907,
+        "end": 937
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+    },
+    {
+      "id": "kndo-f34659ed8c8f",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/importAnalysisBuild.ts",
+        "selector": {
+          "Free": "isModernFlag"
+        },
+        "span": {
+          "start": 1230,
+          "end": 1265
+        }
+      },
+      "lines": {
+        "start": 35,
+        "end": 35
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this declaration"
+    },
+    {
+      "id": "kndo-063c5a3dfe54",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/importMetaGlob.ts",
+        "selector": {
+          "Free": "TransformGlobImportResult"
+        },
+        "span": {
+          "start": 11784,
+          "end": 11891
+        }
+      },
+      "lines": {
+        "start": 409,
+        "end": 413
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+    },
+    {
+      "id": "kndo-12fe847decee",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/importMetaGlob.ts",
+        "selector": {
+          "Free": "toAbsoluteGlob"
+        },
+        "span": {
+          "start": 19068,
+          "end": 20308
+        }
+      },
+      "lines": {
+        "start": 644,
+        "end": 690
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+    },
+    {
+      "id": "kndo-67654fea7659",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/importMetaGlob.ts",
+        "selector": {
+          "Free": "ParsedImportGlob"
+        },
+        "span": {
+          "start": 963,
+          "end": 1189
+        }
+      },
+      "lines": {
+        "start": 21,
+        "end": 31
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+    },
+    {
+      "id": "kndo-ece5c56907a8",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/importMetaGlob.ts",
+        "selector": {
+          "Free": "isVirtualModule"
+        },
+        "span": {
+          "start": 21100,
+          "end": 21294
+        }
+      },
+      "lines": {
+        "start": 722,
+        "end": 725
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+    },
+    {
+      "id": "kndo-9761391bb812",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/index.ts",
+        "selector": {
+          "Free": "viteAliasCustomResolver"
+        },
+        "span": {
+          "start": 9098,
+          "end": 9328
+        }
+      },
+      "lines": {
+        "start": 295,
+        "end": 302
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this declaration"
+    },
+    {
+      "id": "kndo-5ab6a883cafc",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/license.ts",
+        "selector": {
+          "Free": "LicenseEntry"
+        },
+        "span": {
+          "start": 266,
+          "end": 538
+        }
+      },
+      "lines": {
+        "start": 8,
+        "end": 25
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+    },
+    {
+      "id": "kndo-19c0497adc32",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/optimizedDeps.ts",
+        "selector": {
+          "Free": "throwFileNotFoundInOptimizedDep"
+        },
+        "span": {
+          "start": 4583,
+          "end": 5061
+        }
+      },
+      "lines": {
+        "start": 139,
+        "end": 149
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+    },
+    {
+      "id": "kndo-25b7deb6c967",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/resolve.ts",
+        "selector": {
+          "Free": "resolvePackageEntry"
+        },
+        "span": {
+          "start": 29078,
+          "end": 31659
+        }
+      },
+      "lines": {
+        "start": 911,
+        "end": 1000
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+    },
+    {
+      "id": "kndo-8f877e7c616d",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/plugins/resolve.ts",
+        "selector": {
+          "Free": "ResolvePluginOptionsWithOverrides"
+        },
+        "span": {
+          "start": 4860,
+          "end": 4953
+        }
+      },
+      "lines": {
+        "start": 178,
+        "end": 179
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+    },
+    {
+      "id": "kndo-f4a2f1b542c3",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/server/bundledDev.ts",
+        "selector": {
+          "Free": "MemoryFiles"
+        },
+        "span": {
+          "start": 933,
+          "end": 1605
+        }
+      },
+      "lines": {
+        "start": 28,
+        "end": 59
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+    },
+    {
+      "id": "kndo-96e5b9d699ea",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/server/hmr.ts",
+        "selector": {
+          "Free": "getSortedPluginsByHotUpdateHook"
+        },
+        "span": {
+          "start": 9686,
+          "end": 10489
+        }
+      },
+      "lines": {
+        "start": 372,
+        "end": 399
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+    },
+    {
+      "id": "kndo-b975b728f08c",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/server/hmr.ts",
+        "selector": {
+          "Free": "ServerHotChannelApi"
+        },
+        "span": {
+          "start": 33436,
+          "end": 33526
+        }
+      },
+      "lines": {
+        "start": 1157,
+        "end": 1160
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+    },
+    {
+      "id": "kndo-58fd74229560",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/server/transformRequest.ts",
+        "selector": {
+          "Free": "ERR_LOAD_PUBLIC_URL"
+        },
+        "span": {
+          "start": 1210,
+          "end": 1253
+        }
+      },
+      "lines": {
+        "start": 41,
+        "end": 41
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this declaration"
+    },
+    {
+      "id": "kndo-b22cbbe05d14",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/server/ws.ts",
+        "selector": {
+          "Free": "HMR_HEADER"
+        },
+        "span": {
+          "start": 1469,
+          "end": 1492
+        }
+      },
+      "lines": {
+        "start": 34,
+        "end": 34
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this declaration"
+    },
+    {
+      "id": "kndo-bc0a9e17e0b5",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/ssr/ssrStacktrace.ts",
+        "selector": {
+          "Free": "rebindErrorStacktrace"
+        },
+        "span": {
+          "start": 2420,
+          "end": 2805
+        }
+      },
+      "lines": {
+        "start": 77,
+        "end": 92
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+    },
+    {
+      "id": "kndo-4895d09c43cc",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/utils.ts",
+        "selector": {
+          "Free": "splitRE"
+        },
+        "span": {
+          "start": 14276,
+          "end": 14302
+        }
+      },
+      "lines": {
+        "start": 480,
+        "end": 480
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this declaration"
+    },
+    {
+      "id": "kndo-8572443a1f08",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/utils.ts",
+        "selector": {
+          "Free": "ViteDebugScope"
+        },
+        "span": {
+          "start": 5523,
+          "end": 5561
+        }
+      },
+      "lines": {
+        "start": 185,
+        "end": 185
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+    },
+    {
+      "id": "kndo-d5247aff766d",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/utils.ts",
+        "selector": {
+          "Free": "parseSrcset"
+        },
+        "span": {
+          "start": 24597,
+          "end": 24992
+        }
+      },
+      "lines": {
+        "start": 820,
+        "end": 831
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+    },
+    {
+      "id": "kndo-d820a85a3352",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/utils.ts",
+        "selector": {
+          "Free": "isCaseInsensitiveFS"
+        },
+        "span": {
+          "start": 6709,
+          "end": 6763
+        }
+      },
+      "lines": {
+        "start": 228,
+        "end": 228
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this declaration"
+    },
+    {
+      "id": "kndo-d8bd44f4cb4b",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/utils.ts",
+        "selector": {
+          "Free": "arrayEqual"
+        },
+        "span": {
+          "start": 51746,
+          "end": 51960
+        }
+      },
+      "lines": {
+        "start": 1761,
+        "end": 1768
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+    },
+    {
+      "id": "kndo-483bd3dc5a2f",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/shared/forwardConsole.ts",
+        "selector": {
+          "Free": "ForwardConsoleLogLevel"
+        },
+        "span": {
+          "start": 180,
+          "end": 283
+        }
+      },
+      "lines": {
+        "start": 7,
+        "end": 13
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+    },
+    {
+      "id": "kndo-7eef4ac83b50",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/shared/invokeMethods.ts",
+        "selector": {
+          "Free": "CachedFetchResult"
+        },
+        "span": {
+          "start": 185,
+          "end": 348
+        }
+      },
+      "lines": {
+        "start": 11,
+        "end": 17
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+    },
+    {
       "id": "kndo-d32eecc129da",
       "category": "test-only",
       "severity": "info",

@@ -1,0 +1,95 @@
+{
+  "run": {
+    "schema": "kndo-v2/m6",
+    "mode": "full",
+    "files_discovered": 5,
+    "files_claimed": 4,
+    "extensions": [
+      {
+        "id": "kndo:js-ts",
+        "files": 4
+      }
+    ]
+  },
+  "health": {
+    "implicated": 1,
+    "subjects": 10,
+    "by_category": [
+      {
+        "category": "unused",
+        "findings": 1
+      }
+    ],
+    "by_package": [
+      {
+        "name": "export-narrowing",
+        "manifest": "package.json",
+        "implicated": 1,
+        "subjects": 10
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "kndo-f37454f2c62b",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "dead.js"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-22a8799373af",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "lib.js",
+        "selector": {
+          "Free": "local"
+        },
+        "span": {
+          "start": 50,
+          "end": 84
+        }
+      },
+      "lines": {
+        "start": 2,
+        "end": 2
+      },
+      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+    }
+  ],
+  "fixed": [],
+  "baselined": 0,
+  "abstained": [
+    {
+      "category": "test-only",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    },
+    {
+      "category": "untested",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    }
+  ],
+  "suppressed": {
+    "total": 0,
+    "by_category": []
+  },
+  "plugins": [
+    {
+      "coordinate": "kndo:coverage-lcov",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    }
+  ],
+  "diagnostics": []
+}

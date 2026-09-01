@@ -2057,3 +2057,56 @@ direction a dead-code tool must not have. Two extraction tests failed before the
 fix and pin both behaviors now; adapter version 2→3; conformance fixtures
 byte-identical (reports carry findings, not reference kinds); every non-java
 corpus report unchanged. 223 tests, 15 gates, clippy clean.
+
+## 2026-09-01 — Export-narrowing: internal-only's Exported rung, js-ts first
+
+The pinned residue (EXPERIMENTS, the ladder's two-rung slice: vite's 147) shipped
+as a second rung of the SAME analysis: `internal-only` now judges `Exported`
+declarations wherever the claiming adapter declared narrowing expressible — a new
+spec capability, `ExportNarrowing` (`None` default; js-ts alone declares
+`Expressible`, because dropping `export` is the narrowing tsc itself then
+enforces; the wire world defaults to `None` like every undeclared capability).
+One claim, two mechanisms: the Scoped rung disqualifies by uses across its
+ENUMERATED region; the Exported rung has no region, so its disqualifier is total —
+
+- own-file use required (else `unused` owns it), and the floor is the file's
+  top-level surface (owner-None; owned members wait for their own demand);
+- whole-file-rooted files exempt: an entry's exports are the outside world's
+  surface, a test's are its runner's;
+- any whole-surface importer (namespace, side-effect, reexport-all, glob)
+  exempts the file;
+- a binding import of the name, or a same-named reference in ANY claimed file,
+  disqualifies — REACHABLE OR NOT. The live subgraph is the wrong universe for
+  narrowing advice: an unreachable file still compiles against the export it
+  spells. Three audited false positives bought this rule (vite's `__tests_dts__`
+  type-tests — claimed, rooted by nothing, imported by nothing, still naming the
+  symbols), and the engine test pins it adversarially: gating the binding set by
+  reachability makes the test fail by accusing `spelled`.
+
+Instrument before build, then the engine equal to the instrument: 51 candidates
+on vite under the final floor, and the shipped analysis reports the same 51,
+path-for-path and symbol-for-symbol. Eight hand-audited across shapes (functions,
+types, regex constants): the name does not exist outside its declaring file
+anywhere in the checkout, unclaimed file types included. lodash: 0 (a built
+single-file library).
+
+Against the oracle's 147: a strict subset — 51 shared, zero v2-only. The 96
+oracle-only decompose into named vices: 18 `playground/` findings (deliberate e2e
+fixture apps; `dead-accept.js#value` is dead on purpose), the packages/vite bulk
+is type-only re-exports v1 could not see (`BuildOptions` sits in `index.ts`'s
+`export type {...}` — v1 accused documented public API), and the rest is v2's
+name-pool conservatism.
+
+Corpus: vite 974 → 1,025 findings, health unchanged at 85.2 (`internal-only` is
+Info and does not implicate); every other repo byte-identical. One dogfood catch
+worth recording: the first draft grew `source_adapter_spec` a seventh positional
+parameter and kndo-on-kndo immediately reported two adapters' `new` as
+duplicates — the boilerplate echo of the "adjacent same-typed parameters" law.
+Resolved by reshape, never by allowlist: the shared fn keeps six parameters and
+js-ts, the one adapter declaring more, writes its own builder chain — the fn's
+own documented escape hatch. Conformance grew the `export-narrowing` fixture
+(the 23rd js-ts fixture: the finding, the entry exemption, the namespace
+exemption, and the unreachable-binding protection in one project). 224 tests, 15
+gates, clippy clean. Recorded asymmetry, deliberately untouched: the Scoped rung
+still pools reachable region files only — changing a shipped analysis's universe
+needs its own corpus proof first.

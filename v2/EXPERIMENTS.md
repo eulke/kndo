@@ -210,6 +210,23 @@ an Exported name is nameable from anywhere, so "all uses in own file" is a weake
 fact than region-enumerated absence. Zero-FP definition first, corpus count
 second — the demand number is pinned here.
 
+**Residue resolved (2026-09-01):** shipped as `internal-only`'s Exported rung,
+gated by a new spec capability (`ExportNarrowing`; js-ts alone declares
+`Expressible` — dropping `export` is the narrowing tsc itself then enforces).
+The zero-FP floor: own-file use required (`unused` owns the rest), whole-file-
+rooted files exempt (entries, tests, tooling are outside surface), any
+whole-surface importer exempts the file, and the disqualifier is the WHOLE
+COMPILATION — binding imports and same-named references pool over every claimed
+file, unreachable ones included, because an unreachable file still compiles
+against what it spells (three audited FPs in vite's `__tests_dts__` type-tests
+bought that rule, and the engine test proves it adversarially: gating by
+reachability makes it fail). Corpus: vite +51 (974 → 1,025 findings; health
+85.2 unchanged — Info does not implicate), the engine's set equal to the
+instrument's, all 51 inside the oracle's 147; the 96 oracle-only decompose
+into 18 playground e2e fixtures, type-only re-exports v1 missed
+(`BuildOptions` is index.ts public API), and name-pool conservatism.
+lodash: 0. DECISIONS 2026-09-01 carries the full decomposition.
+
 **Scoped-comparison verdict (2026-08-31):** the region-subset half of
 `private-type-leak` (fire when the signature's audience strictly contains the named
 type's region — Exported-vs-Scoped, Scoped-vs-narrower-Scoped) was instrumented

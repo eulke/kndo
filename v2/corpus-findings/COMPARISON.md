@@ -715,3 +715,28 @@ scope but Dev, with gradle configuration words and maven `<scope>test</scope>`
 read as declarations) reports zero on the corpus, and the mechanism is pinned
 by an engine test: a prod mutual pair fires, the same shape dev-side is
 silence.
+
+## Export-narrowing: internal-only's Exported rung (2026-09-01)
+
+vite gains 51 `internal-only` findings (974 → 1,025; health 85.2 unchanged —
+Info does not implicate): exported symbols whose name exists nowhere outside
+their own file, in files that are not entries, not whole-surface-imported, not
+rooted. The engine's 51 equal the pre-build instrument's 51 exactly, and all
+51 sit inside the oracle's 147 — a strict subset, zero v2-only.
+
+The 96 the oracle reports and v2 refuses, by mechanism:
+
+- **18 in `playground/`** — deliberately-disconnected e2e fixture apps
+  (`hmr-full-bundle-mode/dead-accept.js#value` is dead on purpose); v2's
+  rooting and reachability universe keep fixture apparatus out of advice.
+- **The `packages/vite` bulk: type-only re-exports v1 could not see.**
+  `BuildOptions`, `ModulePreloadOptions`, `ImportMetaEnv`, … sit in
+  `index.ts`'s `export type {...}` lists — documented public API v1 accused;
+  v2's binding set includes `TypeOnly` imports, so they are silent.
+- **Name-pool conservatism** — a same-named reference in ANY claimed file
+  disqualifies, unreachable files included: three of the instrument's own
+  first-draft candidates fell to `__tests_dts__` type-tests (claimed, rooted
+  by nothing, still spelling the names), and that rule is now the floor.
+
+lodash: 0 candidates (a built single-file library). Every other repo:
+byte-identical — only js-ts declares `ExportNarrowing::Expressible`.

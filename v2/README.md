@@ -423,6 +423,18 @@ package-level `cyclic` over declared sibling dependencies at publish-relevant
 scopes — under which BOTH oracle package-cycles dissolve as vices (guava's
 pair never existed at the pin; Exposed's closes test-scoped, publish-safe).
 
+**Export-narrowing** gives `internal-only` its Exported rung: where the
+adapter declares the narrowing expressible (`ExportNarrowing` — js-ts first,
+because dropping `export` is checked by tsc), an exported declaration whose
+every use sits in its own file is advice. The disqualifier is the whole
+COMPILATION, not the live subgraph — a binding import or a same-named
+reference anywhere, unreachable files included (vite's `__tests_dts__`
+type-tests proved that rule) — plus entry/test/tooling whole-file exemption.
+Corpus: vite +51, every one inside the oracle's 147, and each of the oracle's
+96 extras a named vice (playground e2e fixtures, type-only re-exports v1
+could not see — `BuildOptions` is documented public API — and name-pool
+conservatism).
+
 **`private-type-leak`** closes the visibility pair: an exported callable whose
 signature — the promise region the adapter now marks
 (`Declaration.signature_span`) — names a private type. Exported-vs-Private

@@ -110,6 +110,10 @@ pub struct RunContext<'a> {
     /// strictly narrower rung (`ExtensionSpec::narrowable_scopes`) — the fact
     /// `internal-only` reads before advising anything.
     pub narrowables: &'a [(smol_str::SmolStr, Vec<smol_str::SmolStr>)],
+    /// Adapter coordinates whose language can stop exporting a declaration by
+    /// editing only it (`ExtensionSpec::export_narrowing`) — the fact
+    /// `internal-only`'s Exported branch reads before advising anything.
+    pub export_narrowables: &'a [smol_str::SmolStr],
     /// Adapter coordinates whose language declared import cycles a hazard
     /// (`ExtensionSpec::import_cycles`) — the fact `cyclic` reads before
     /// accusing anything.
@@ -207,6 +211,7 @@ pub fn run_all(
     graph: &Graph,
     coverage: Option<crate::coverage::Coverage>,
     narrowables: &[(smol_str::SmolStr, Vec<smol_str::SmolStr>)],
+    export_narrowables: &[smol_str::SmolStr],
     cycle_hazards: &[smol_str::SmolStr],
     analyses: &[&dyn Analysis],
 ) -> AnalysisOutcome {
@@ -218,6 +223,7 @@ pub fn run_all(
         index,
         coverage,
         narrowables,
+        export_narrowables,
         cycle_hazards,
     };
     let mut findings = Vec::new();

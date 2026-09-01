@@ -453,6 +453,15 @@ impl Session {
             })
             .map(|e| SmolStr::new(e.spec().coordinate()))
             .collect();
+        let export_narrowables: Vec<SmolStr> = self
+            .extensions
+            .iter()
+            .filter(|e| {
+                e.spec().export_narrowing()
+                    == kndo_contract::extension::ExportNarrowing::Expressible
+            })
+            .map(|e| SmolStr::new(e.spec().coordinate()))
+            .collect();
         let all: [&dyn crate::analysis::Analysis; 9] = [
             &Cyclic,
             &PrivateTypeLeak,
@@ -472,6 +481,7 @@ impl Session {
             &graph,
             round.coverage,
             &narrowables,
+            &export_narrowables,
             &cycle_hazards,
             &selected,
         );

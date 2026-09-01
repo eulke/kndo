@@ -85,3 +85,55 @@ fn test_color_separates_test_only_from_unused_and_untested() {
         snap.findings
     );
 }
+
+#[test]
+fn export_narrowing_fires_only_where_nothing_else_spells_the_name() {
+    let p = TempProject::new();
+    p.file("package.json", r#"{ "name": "demo", "main": "main.js" }"#);
+    // The entry: whole-file-rooted, so its own exports are outside surface.
+    p.file(
+        "main.js",
+        "import { used } from './lib.js';\n\
+         import * as everything from './ns.js';\n\
+         export function fromEntry() { return used() + everything.viaNs(); }\n",
+    );
+    // `local`: exported, used only here — the finding. `used`: bound by the
+    // entry's import. `spelled`: used only here too, BUT an unreachable file
+    // still imports it — the whole compilation disqualifies, not the live
+    // subgraph.
+    p.file(
+        "lib.js",
+        "export function used() { return local(); }\n\
+         export function local() { return local; }\n\
+         export function spelled() { return spelled; }\n",
+    );
+    // Namespace-imported: anything here may be used through the namespace.
+    p.file("ns.js", "export function viaNs() { return viaNs; }\n");
+    // Unreachable (nothing imports it, nothing roots it), and it BINDS the
+    // name without ever referencing it — only the whole-compilation binding
+    // set can protect `spelled` here; a reachability-gated one would accuse.
+    p.file(
+        "dead.js",
+        "import { spelled } from './lib.js';\nexport const d = 1;\n",
+    );
+    let snap = kndo::open(p.root().to_path_buf(), Config::default())
+        .unwrap()
+        .analyze(RunMode::Full)
+        .unwrap();
+    let internal = subjects(&snap, &Category::INTERNAL_ONLY);
+    assert_eq!(
+        internal,
+        vec!["symbol:lib.js:local".to_string()],
+        "exactly the locally-used, never-imported export fires: {internal:?}"
+    );
+    let finding = snap
+        .findings
+        .iter()
+        .find(|f| f.category == Category::INTERNAL_ONLY)
+        .unwrap();
+    assert!(
+        finding.message.contains("declared exported"),
+        "the Exported rung speaks its own message: {}",
+        finding.message
+    );
+}
