@@ -251,3 +251,44 @@ fn manifest_dependencies_report_every_section() {
             .is_empty()
     );
 }
+
+#[test]
+fn scripts_that_invoke_a_dependency_by_name_mark_it_used_by_the_manifest() {
+    let path = ProjectPath::new("package.json");
+    let json = r#"{
+        "name": "demo",
+        "dependencies": { "express": "^4", "lodash": "*", "vite": "^5" },
+        "devDependencies": { "eslint": "^9", "@biomejs/biome": "^1", "typescript": "^5" },
+        "scripts": {
+            "lint": "eslint . && @biomejs/biome check src",
+            "dev": "node ./node_modules/vite/bin/vite.js --port 3000",
+            "typecheck": "tsc -p .",
+            "express-ish": "echo expressive lodash-es"
+        }
+    }"#;
+    let mut used: Vec<(&str, bool)> = Vec::new();
+    let deps = TypeScriptAdapter::new().manifest_dependencies(&SourceFile {
+        path: &path,
+        content: json.as_bytes(),
+    });
+    for d in &deps {
+        used.push((d.name.as_str(), d.used_by_manifest));
+    }
+    used.sort();
+    assert_eq!(
+        used,
+        [
+            // A scoped name is one word, its own slash included.
+            ("@biomejs/biome", true),
+            ("eslint", true),
+            // `expressive` and `lodash-es` are other words, not this name.
+            ("express", false),
+            ("lodash", false),
+            // A binary spelled differently from its package (`tsc`) is not a
+            // mention: the flag records what the manifest says, not what it means.
+            ("typescript", false),
+            // A path into the package reaches it by name.
+            ("vite", true),
+        ]
+    );
+}

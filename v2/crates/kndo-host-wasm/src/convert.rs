@@ -59,6 +59,7 @@ pub(crate) fn extension_spec(spec: awire::ExtensionSpec) -> ExtensionSpec {
         // defaults to silence, like every other undeclared capability.
         import_cycles: Default::default(),
         export_narrowing: Default::default(),
+        dependency_scoping: Default::default(),
         emits: EvidenceStreams::of(
             &spec
                 .emits

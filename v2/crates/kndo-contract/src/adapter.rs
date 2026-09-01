@@ -38,6 +38,10 @@ pub enum DependencyScope {
     Build,
     Optional,
     Peer,
+    /// Stated by the manifest as a transitive requirement (`// indirect` in
+    /// go.mod): resolver bookkeeping the project's own code never imports, so
+    /// it is never a usage claim and never accused of being unused.
+    Transitive,
 }
 
 /// One dependency declaration as one manifest states it. `scope: None` means the
@@ -51,6 +55,10 @@ pub struct DependencyDeclaration {
     pub name: SmolStr,
     pub scope: Option<DependencyScope>,
     pub version_req: Option<SmolStr>,
+    /// The manifest itself uses the dependency outside its declaration — an npm
+    /// `scripts` entry invoking its binary — so no import is needed for it to
+    /// be in use. A manifest-level fact only the declaring adapter can read.
+    pub used_by_manifest: bool,
 }
 
 impl DependencyDeclaration {
@@ -63,6 +71,7 @@ impl DependencyDeclaration {
             name,
             scope: None,
             version_req: None,
+            used_by_manifest: false,
         }
     }
 }

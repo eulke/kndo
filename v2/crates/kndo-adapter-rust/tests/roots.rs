@@ -212,3 +212,20 @@ winapi = "0.3"
         ]
     );
 }
+
+#[test]
+fn optional_dependencies_declare_optional_whatever_their_table() {
+    use kndo_contract::adapter::DependencyScope as S;
+    let path = ProjectPath::new("Cargo.toml");
+    let deps = RustAdapter::new().manifest_dependencies(&SourceFile {
+        path: &path,
+        content: b"[package]\nname = \"x\"\n\n[dependencies]\nplain = \"1\"\narbitrary = { version = \"1.3\", optional = true }\n",
+    });
+    let scope = |name: &str| deps.iter().find(|d| d.name == name).and_then(|d| d.scope);
+    assert_eq!(scope("plain"), Some(S::Prod));
+    assert_eq!(
+        scope("arbitrary"),
+        Some(S::Optional),
+        "a feature gate is not a usage claim"
+    );
+}

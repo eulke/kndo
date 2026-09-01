@@ -311,3 +311,55 @@ export function App() { return <Panel title="x" />; }
         ev.references
     );
 }
+
+#[test]
+fn package_specifiers_inside_string_literals_are_possible_imports() {
+    use kndo_contract::evidence::{ImportShape, ImportTarget};
+    use kndo_contract::vocab::Confidence;
+    let ev = kndo_testkit::extract_evidence(
+        &kndo_adapter_ts::TypeScriptAdapter::new(),
+        "src/plugin.ts",
+        "import x from 'real-dep';\n\
+         const v = _require('core-js/package.json').version;\n\
+         polyfills.add(`regenerator-runtime/runtime.js`);\n\
+         const code = `import \"systemjs/dist/s.min.js\";`;\n\
+         const prose = 'the quick brown fox';\n\
+         const alone = 'lonely-dep';\n\
+         export { x, v, code, prose, alone };\n",
+    );
+    let possible: Vec<&str> = ev
+        .imports
+        .iter()
+        .filter(|i| i.confidence == Confidence::Possible)
+        .map(|i| match &i.target {
+            ImportTarget::Package(p) => p.as_str(),
+            _ => "?",
+        })
+        .collect();
+    assert_eq!(
+        possible,
+        vec![
+            "core-js/package.json",
+            "regenerator-runtime/runtime.js",
+            "systemjs/dist/s.min.js",
+            "lonely-dep",
+        ],
+        "specifier-shaped literals with a path, or a literal that is one whole \
+         specifier — never prose words: {possible:?}"
+    );
+    assert!(
+        ev.imports
+            .iter()
+            .filter(|i| i.confidence == Confidence::Possible)
+            .all(|i| matches!(i.shape, ImportShape::SideEffect)),
+        "a spelled specifier binds nothing"
+    );
+    // The real import is still exactly one, at its own confidence.
+    assert_eq!(
+        ev.imports
+            .iter()
+            .filter(|i| matches!(&i.target, ImportTarget::Package(p) if p == "real-dep"))
+            .count(),
+        1
+    );
+}

@@ -138,10 +138,21 @@ pub fn dependencies(manifest: &SourceFile<'_>) -> Vec<DependencyDeclaration> {
     let mut collect = |table: Option<&toml::Value>, scope: Option<DependencyScope>| {
         if let Some(toml::Value::Table(map)) = table {
             for (name, spec) in map {
+                // `optional = true` is a feature gate: the dependency is in
+                // the build only when a feature asks — never a usage claim.
+                let optional = spec
+                    .get("optional")
+                    .and_then(toml::Value::as_bool)
+                    .unwrap_or(false);
                 out.push(DependencyDeclaration {
                     name: SmolStr::new(name),
-                    scope,
+                    scope: if optional {
+                        Some(DependencyScope::Optional)
+                    } else {
+                        scope
+                    },
                     version_req: comparable_req(spec),
+                    used_by_manifest: false,
                 });
             }
         }

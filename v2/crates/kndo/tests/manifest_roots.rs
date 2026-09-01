@@ -119,3 +119,93 @@ fn package_cycles_fire_on_prod_mutuals_and_never_on_dev_pairs() {
     );
     assert!(dev.is_empty(), "{dev:?}");
 }
+
+#[test]
+fn dependency_usage_is_judged_per_manifest_through_the_adapters_spelling() {
+    use kndo_testkit::TempProject;
+    let p = TempProject::new();
+    p.file(
+        "package.json",
+        r#"{ "name": "app", "main": "main.js",
+             "dependencies": { "used-dep": "1", "spelled-dep": "1", "idle-dep": "1" } }"#,
+    );
+    p.file(
+        "main.js",
+        "import x from 'used-dep';\n\
+         const meta = _require('spelled-dep/package.json');\n\
+         export const y = x + meta;\n",
+    );
+    p.file(
+        "go.mod",
+        "module example.com/app\n\ngo 1.22\n\nrequire (\n\tgithub.com/a/b v1.0.0\n\tgithub.com/c/d v1.0.0 // indirect\n)\n",
+    );
+    p.file(
+        "main.go",
+        "package main\n\nimport \"github.com/a/b/sub\"\n\nfunc main() { sub.Run() }\n",
+    );
+    let snap = kndo::open(p.root().to_path_buf(), kndo::Config::default())
+        .unwrap()
+        .analyze(kndo::RunMode::Full)
+        .unwrap();
+    let by_manifest = |m: &str| {
+        snap.graph
+            .manifest_declarations
+            .iter()
+            .find(|d| d.manifest.as_str() == m)
+            .unwrap_or_else(|| panic!("no declarations for {m}"))
+    };
+    let npm = by_manifest("package.json");
+    assert!(
+        npm.judgeable,
+        "js-ts derives package identity from specifiers"
+    );
+    let n = |name: &str| {
+        let ix = npm
+            .declarations
+            .iter()
+            .position(|d| d.name == name)
+            .unwrap();
+        npm.users[ix].len()
+    };
+    assert_eq!(n("used-dep"), 1, "a binding import is a use");
+    assert_eq!(
+        n("spelled-dep"),
+        1,
+        "a specifier spelled in a string literal is a use"
+    );
+    assert_eq!(n("idle-dep"), 0, "nothing names idle-dep");
+    let gomod = by_manifest("go.mod");
+    assert!(gomod.judgeable);
+    let scope_of = |name: &str| {
+        gomod
+            .declarations
+            .iter()
+            .find(|d| d.name == name)
+            .unwrap()
+            .scope
+    };
+    assert_eq!(
+        scope_of("github.com/a/b"),
+        None,
+        "a direct requirement carries no scope"
+    );
+    assert_eq!(
+        scope_of("github.com/c/d"),
+        Some(kndo_contract::adapter::DependencyScope::Transitive),
+        "`// indirect` declares Transitive"
+    );
+    let g = |name: &str| {
+        let ix = gomod
+            .declarations
+            .iter()
+            .position(|d| d.name == name)
+            .unwrap();
+        gomod.users[ix].len()
+    };
+    assert_eq!(
+        g("github.com/a/b"),
+        1,
+        "an import path under the module path is a use"
+    );
+    assert_eq!(g("github.com/c/d"), 0);
+}

@@ -232,7 +232,10 @@ fn qualified_type_segments_are_spelling_not_uses() {
         ev.references
     );
     assert!(named("Function") >= 1, "the named type stays a reference");
-    assert!(named("Map") >= 1, "an uppercase outer-class qualifier stays");
+    assert!(
+        named("Map") >= 1,
+        "an uppercase outer-class qualifier stays"
+    );
     assert!(named("Entry") >= 1);
 }
 

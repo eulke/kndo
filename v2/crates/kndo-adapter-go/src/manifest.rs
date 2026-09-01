@@ -4,7 +4,9 @@
 //! against. Targets need no manifest here: `package main` + `func main` and
 //! `_test.go` are extraction's to see.
 
-use kndo_contract::adapter::{PackageEntry, ResolveContext, SourceFile};
+use kndo_contract::adapter::{
+    DependencyDeclaration, DependencyScope, PackageEntry, ResolveContext, SourceFile,
+};
 use smol_str::SmolStr;
 
 pub fn packages(manifest: &SourceFile<'_>, _cx: &ResolveContext<'_>) -> Vec<PackageEntry> {
@@ -33,15 +35,28 @@ pub fn packages(manifest: &SourceFile<'_>, _cx: &ResolveContext<'_>) -> Vec<Pack
     }]
 }
 
-/// The module paths this `go.mod` requires — single-line and block form alike,
-/// `// indirect` included (an indirect dependency is still in the build).
-/// Activation evidence for plugin `ManifestDependency` rules.
-pub fn dependencies(manifest: &SourceFile<'_>) -> Vec<SmolStr> {
+/// The module paths this `go.mod` requires — single-line and block form alike.
+/// A `// indirect` requirement is still in the build (activation's
+/// `ManifestDependency` rules see it) but states no usage claim: it declares
+/// `Transitive`. Direct requirements carry no scope — go.mod has no sections,
+/// which the adapter declares as `DependencyScoping::Unscoped`.
+pub fn dependencies(manifest: &SourceFile<'_>) -> Vec<DependencyDeclaration> {
     let Ok(text) = std::str::from_utf8(manifest.content) else {
         return Vec::new();
     };
     let mut out = Vec::new();
     let mut in_block = false;
+    let mut push = |module: &str, line: &str| {
+        let scope = line
+            .contains("// indirect")
+            .then_some(DependencyScope::Transitive);
+        out.push(DependencyDeclaration {
+            name: SmolStr::new(module.trim_matches('"')),
+            scope,
+            version_req: None,
+            used_by_manifest: false,
+        });
+    };
     for line in text.lines() {
         let line = line.trim();
         if in_block {
@@ -50,7 +65,7 @@ pub fn dependencies(manifest: &SourceFile<'_>) -> Vec<SmolStr> {
             } else if let Some(module) = line.split_whitespace().next()
                 && !module.starts_with("//")
             {
-                out.push(SmolStr::new(module.trim_matches('"')));
+                push(module, line);
             }
             continue;
         }
@@ -64,7 +79,7 @@ pub fn dependencies(manifest: &SourceFile<'_>) -> Vec<SmolStr> {
         if rest.starts_with('(') {
             in_block = true;
         } else if let Some(module) = rest.split_whitespace().next() {
-            out.push(SmolStr::new(module.trim_matches('"')));
+            push(module, rest);
         }
     }
     out

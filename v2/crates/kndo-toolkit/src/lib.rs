@@ -451,12 +451,14 @@ pub mod jvm_manifest {
                     name: SmolStr::new(format!("{g}:{a}")),
                     scope,
                     version_req: None,
+                    used_by_manifest: false,
                 });
             }
             out.push(DependencyDeclaration {
                 name: SmolStr::new(a),
                 scope,
                 version_req: None,
+                used_by_manifest: false,
             });
         };
         for line in text.lines() {
@@ -540,6 +542,7 @@ pub mod jvm_manifest {
                                 name: SmolStr::new(name),
                                 scope,
                                 version_req: None,
+                                used_by_manifest: false,
                             });
                         }
                         continue;
@@ -558,11 +561,13 @@ pub mod jvm_manifest {
                                 name: SmolStr::new(format!("{g}:{a}")),
                                 scope,
                                 version_req: None,
+                                used_by_manifest: false,
                             });
                             out.push(DependencyDeclaration {
                                 name: SmolStr::new(a),
                                 scope,
                                 version_req: None,
+                                used_by_manifest: false,
                             });
                         }
                     }
@@ -668,6 +673,28 @@ pub fn source_adapter_spec(
     narrowable: &'static [&'static str],
     import_cycles: kndo_contract::extension::CycleTolerance,
 ) -> kndo_contract::extension::ExtensionSpec {
+    source_adapter_builder(
+        coordinate,
+        version,
+        suffixes,
+        manifests,
+        narrowable,
+        import_cycles,
+    )
+    .build()
+}
+
+/// The same shared spelling, still open: an adapter that declares a capability
+/// beyond it chains the declaration and builds — one place for the common
+/// part, no positional parameter per capability.
+pub fn source_adapter_builder(
+    coordinate: &'static str,
+    version: u32,
+    suffixes: &[&'static str],
+    manifests: &[&'static str],
+    narrowable: &'static [&'static str],
+    import_cycles: kndo_contract::extension::CycleTolerance,
+) -> kndo_contract::extension::ExtensionSpecBuilder {
     use kndo_contract::evidence::{EvidenceStream, EvidenceStreams};
     kndo_contract::extension::ExtensionSpec::builder(coordinate, version)
         .suffixes(suffixes)
@@ -678,5 +705,25 @@ pub fn source_adapter_spec(
         .manifests(manifests)
         .narrowable(narrowable)
         .import_cycles(import_cycles)
-        .build()
+}
+
+/// Specifier → dependency matching, the two shapes every path-addressed
+/// ecosystem shares: a specifier names a dependency when it IS the name or
+/// continues it past the ecosystem's path separator (`lodash/fp` → `lodash`,
+/// `github.com/x/y/z` → `github.com/x/y`, `serde::Value` → `serde`).
+pub mod dependency_match {
+    /// `spec == dep` or `spec` starts with `dep` followed by `separator`.
+    pub fn by_path(specifier: &str, dependency: &str, separator: &str) -> bool {
+        specifier == dependency
+            || specifier
+                .strip_prefix(dependency)
+                .is_some_and(|rest| rest.starts_with(separator))
+    }
+
+    /// Cargo's spelling: hyphens in the package name are underscores in code,
+    /// and the crate root is the first `::` segment.
+    pub fn by_crate(specifier: &str, dependency: &str) -> bool {
+        let krate = dependency.replace('-', "_");
+        by_path(specifier, &krate, "::")
+    }
 }

@@ -692,9 +692,7 @@ impl Snapshot {
                             narrowable_scopes: caps
                                 .map(|c| c.narrowable_scopes.clone())
                                 .unwrap_or_default(),
-                            export_narrowing: caps
-                                .map(|c| c.export_narrowing)
-                                .unwrap_or_default(),
+                            export_narrowing: caps.map(|c| c.export_narrowing).unwrap_or_default(),
                             import_cycles: caps.map(|c| c.import_cycles).unwrap_or_default(),
                         }
                     })

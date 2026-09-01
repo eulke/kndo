@@ -31,9 +31,11 @@ pub struct RustAdapter {
 impl RustAdapter {
     pub fn new() -> Self {
         RustAdapter {
+            // 3: `use` items inside function bodies are imports; `optional`
+            // dependencies declare `Optional`.
             spec: kndo_toolkit::source_adapter_spec(
                 "kndo:rust",
-                2,
+                3,
                 &["rs"],
                 &["**/Cargo.toml"],
                 &["crate"],
@@ -89,5 +91,11 @@ impl Extension for RustAdapter {
 
     fn manifest_dependencies(&self, manifest: &SourceFile<'_>) -> Vec<DependencyDeclaration> {
         manifest::dependencies(manifest)
+    }
+
+    fn imports_dependency(&self, specifier: &str, dependency: &str) -> Option<bool> {
+        Some(kndo_toolkit::dependency_match::by_crate(
+            specifier, dependency,
+        ))
     }
 }

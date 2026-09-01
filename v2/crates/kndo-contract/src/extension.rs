@@ -110,6 +110,23 @@ pub enum ExportNarrowing {
     Expressible,
 }
 
+/// How the ecosystem's manifests state a dependency's usage scope. `Scoped`
+/// manifests have sections (npm `dependencies`/`devDependencies`, Cargo
+/// `[dev-dependencies]`), so a declaration with no scope is one the source could
+/// not classify and no usage judgment reads it. `Unscoped` ecosystems have no
+/// sections at all — every direct requirement in `go.mod` is a build
+/// requirement — so an unscoped declaration IS the usage claim, and "only tests
+/// import it" has no section to move it to. `unused` and `test-only` are the
+/// consumers, on their dependency subjects.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub enum DependencyScoping {
+    #[default]
+    Scoped,
+    Unscoped,
+}
+
 /// What an extension IS, as data — the one manifest for every capability. Fields
 /// come in three clusters with one gate each: extraction (gated by `claims`),
 /// conduct (gated by `activation` + `mutates_graph`), ingestion (gated by
@@ -122,6 +139,7 @@ pub struct ExtensionSpec {
     suffixes: Vec<SmolStr>,
     narrowable_scopes: Vec<SmolStr>,
     export_narrowing: ExportNarrowing,
+    dependency_scoping: DependencyScoping,
     import_cycles: CycleTolerance,
     claims: Vec<SmolStr>,
     emits: EvidenceStreams,
@@ -155,6 +173,7 @@ impl ExtensionSpec {
                 suffixes: Vec::new(),
                 narrowable_scopes: Vec::new(),
                 export_narrowing: ExportNarrowing::None,
+                dependency_scoping: DependencyScoping::Scoped,
                 import_cycles: CycleTolerance::Tolerated,
                 claims: Vec::new(),
                 emits: EvidenceStreams::none(),
@@ -201,6 +220,12 @@ impl ExtensionSpec {
     /// See [`ExportNarrowing`]; the `internal-only` analysis is the consumer.
     pub fn export_narrowing(&self) -> ExportNarrowing {
         self.export_narrowing
+    }
+
+    /// See [`DependencyScoping`]; the dependency subjects of `unused` and
+    /// `test-only` are the consumers.
+    pub fn dependency_scoping(&self) -> DependencyScoping {
+        self.dependency_scoping
     }
 
     /// See [`CycleTolerance`]; the `cyclic` analysis is the consumer.
@@ -269,6 +294,9 @@ pub struct ExtensionSpecParts {
     /// Wire components cannot declare `Expressible` yet — the world speaks no
     /// narrowing vocabulary; defaults to `None` (silence) like every absence.
     pub export_narrowing: ExportNarrowing,
+    /// Wire components cannot declare `Unscoped` yet; defaults to `Scoped`, under
+    /// which an unscoped declaration is never a usage claim — silence.
+    pub dependency_scoping: DependencyScoping,
     /// Wire components cannot declare `Hazard` yet — the world speaks no cycle
     /// vocabulary; defaults to `Tolerated` (silence) like every other absence.
     pub import_cycles: CycleTolerance,
@@ -306,6 +334,7 @@ impl From<ExtensionSpecParts> for ExtensionSpec {
             suffixes: parts.suffixes,
             narrowable_scopes: parts.narrowable_scopes,
             export_narrowing: parts.export_narrowing,
+            dependency_scoping: parts.dependency_scoping,
             import_cycles: parts.import_cycles,
             claims: parts.claims,
             emits: parts.emits,
@@ -362,6 +391,14 @@ impl ExtensionSpecBuilder {
     /// never advises dropping an export for this adapter's files.
     pub fn export_narrowing(mut self, narrowing: ExportNarrowing) -> Self {
         self.spec.export_narrowing = narrowing;
+        self
+    }
+
+    /// Declare how this ecosystem's manifests scope dependencies (see
+    /// [`DependencyScoping`]). Omitted ⇒ `Scoped`: unscoped declarations are
+    /// never read as usage claims.
+    pub fn dependency_scoping(mut self, scoping: DependencyScoping) -> Self {
+        self.spec.dependency_scoping = scoping;
         self
     }
 
@@ -729,6 +766,20 @@ pub trait Extension: Send + Sync {
     fn manifest_dependencies(&self, manifest: &SourceFile<'_>) -> Vec<DependencyDeclaration> {
         let _ = manifest;
         Vec::new()
+    }
+
+    /// Does the import specifier `specifier` name the declared dependency
+    /// `dependency`? Pure language knowledge — npm spells `lodash/fp` for
+    /// `lodash`, Cargo spells `serde_json::Value` for `serde-json`, Go spells a
+    /// module path prefix — evaluated by the engine at assembly for every
+    /// package-shaped import of a manifest's own files against that manifest's
+    /// declarations. `None` = this ecosystem cannot derive package identity
+    /// from a specifier (a JVM artifact id names no package; a Swift package
+    /// name is not its module name), and the manifest's dependencies are never
+    /// judged — abstention, not accusation. The default answers nothing.
+    fn imports_dependency(&self, specifier: &str, dependency: &str) -> Option<bool> {
+        let _ = (specifier, dependency);
+        None
     }
 
     /// The files whose names `path` SEES with no import naming them — the rest

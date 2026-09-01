@@ -424,3 +424,30 @@ fn macro_template_names_root_their_declarations() {
         "declarations the template never names stay unrooted"
     );
 }
+
+#[test]
+fn use_items_inside_function_bodies_are_imports() {
+    use kndo_contract::evidence::ImportTarget;
+    let ev = kndo_testkit::extract_evidence(
+        &kndo_adapter_rust::RustAdapter::new(),
+        "src/lib.rs",
+        "pub fn describe(b: &[u8]) -> String {\n    use bstr::ByteSlice;\n    b.as_bstr().to_string()\n}\n\
+         mod inner {\n    pub fn f() { use winapi_util::file; let _ = file::typ; }\n}\n",
+    );
+    let packages: Vec<&str> = ev
+        .imports
+        .iter()
+        .filter_map(|i| match &i.target {
+            ImportTarget::Package(p) => Some(p.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        packages.iter().any(|p| p.starts_with("bstr")),
+        "a function-body `use` is an import: {packages:?}"
+    );
+    assert!(
+        packages.iter().any(|p| p.starts_with("winapi_util")),
+        "…inside a nested module too: {packages:?}"
+    );
+}

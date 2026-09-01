@@ -33,7 +33,93 @@ pub fn extract(source: &[u8], tree: &tree_sitter::Tree, out: &mut EvidenceSink) 
         declarations(root, source, &aliases, out);
     }
     imports(root, source, out);
+    literal_specifiers(root, source, out);
     references_and_comments(root, source, out);
+}
+
+/// Package specifiers spelled inside string and template literals — the code
+/// a build plugin injects (`\`import "systemjs/dist/s.min.js"\``), a
+/// `createRequire`d path (`_require('core-js/package.json')`), a polyfill
+/// list. Each lands as a `Possible` side-effect import of the package it
+/// spells: enough for a declared dependency to count as used (silence over
+/// accusation), too weak to resolve to a sibling or to be judged unresolved.
+/// A token qualifies when it is specifier-shaped and either carries a path
+/// separator or is the literal's whole text — a bare word inside prose is not
+/// a package.
+fn literal_specifiers(root: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
+    let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    let mut pending = vec![root];
+    while let Some(node) = pending.pop() {
+        let mut cursor = node.walk();
+        let children: Vec<Node<'_>> = node.named_children(&mut cursor).collect();
+        // Strings among the direct children emit in source order; containers
+        // are pushed reversed so the stack pops them in source order too.
+        for child in &children {
+            if matches!(child.kind(), "string" | "template_string") {
+                literal_tokens(*child, source, &mut seen, out);
+            }
+        }
+        for child in children.into_iter().rev() {
+            match child.kind() {
+                // Sources of import/export statements and `require`/`import()`
+                // arguments are imports already, at their own confidence.
+                "import_statement" | "export_statement" => {}
+                "call_expression" if is_require_or_import(child, source) => {}
+                "string" | "template_string" => {}
+                _ => pending.push(child),
+            }
+        }
+    }
+}
+
+fn literal_tokens(
+    literal: Node<'_>,
+    source: &[u8],
+    seen: &mut std::collections::BTreeSet<String>,
+    out: &mut EvidenceSink,
+) {
+    let mut c = literal.walk();
+    for frag in literal.named_children(&mut c) {
+        if frag.kind() != "string_fragment" {
+            continue;
+        }
+        let text = tk::text(frag, source);
+        let separators =
+            |ch: char| ch.is_whitespace() || matches!(ch, '\'' | '"' | '`' | ';' | ',' | '(' | ')');
+        for token in text.split(separators) {
+            if !specifier_shaped(token) || (!token.contains('/') && token != text.trim()) {
+                continue;
+            }
+            if seen.insert(token.to_string()) {
+                out.import(
+                    ImportTarget::Package(SmolStr::new(token)),
+                    ImportShape::SideEffect,
+                    tk::span(literal),
+                    Confidence::Possible,
+                );
+            }
+        }
+    }
+}
+
+fn is_require_or_import(call: Node<'_>, source: &[u8]) -> bool {
+    call.child_by_field_name("function")
+        .is_some_and(|f| matches!(tk::text(f, source), "require" | "import"))
+}
+
+/// A bare npm specifier: an optional `@scope/`, then lowercase/digit-led
+/// segments of `[a-z0-9._-]`, `/`-separated — never a relative or absolute
+/// path, never a URL.
+fn specifier_shaped(token: &str) -> bool {
+    let body = token.strip_prefix('@').unwrap_or(token);
+    let first = body.chars().next();
+    first.is_some_and(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+        && body.chars().all(|c| {
+            c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '.' | '_' | '-' | '/')
+        })
+        && !body.contains("//")
+        && !body.ends_with('/')
+        && (!token.starts_with('@') || body.contains('/'))
 }
 
 /// Local name → the name the module system exports it under, from clause exports

@@ -181,6 +181,7 @@ pub fn dependencies(manifest: &SourceFile<'_>) -> Vec<DependencyDeclaration> {
     let Ok(json) = serde_json::from_slice::<serde_json::Value>(manifest.content) else {
         return Vec::new();
     };
+    let scripts = script_words(&json);
     let mut out = Vec::new();
     for (section, scope) in [
         ("dependencies", DependencyScope::Prod),
@@ -194,11 +195,54 @@ pub fn dependencies(manifest: &SourceFile<'_>) -> Vec<DependencyDeclaration> {
                     name: SmolStr::new(name),
                     scope: Some(scope),
                     version_req: comparable_req(req.as_str().unwrap_or_default()),
+                    used_by_manifest: scripts.contains(name.as_str()),
                 });
             }
         }
     }
     out
+}
+
+/// The words `scripts` entries are made of, split on everything a package name
+/// cannot contain: `"lint": "eslint . && tsc"` uses `eslint` by name — through its
+/// binary, without any import — and a script may spell a scoped name
+/// (`@biomejs/biome check`) or a path into the package (`vite/bin/vite.js`) too.
+fn script_words(json: &serde_json::Value) -> BTreeSet<&str> {
+    let mut words = BTreeSet::new();
+    if let Some(serde_json::Value::Object(scripts)) = json.get("scripts") {
+        for value in scripts.values().filter_map(serde_json::Value::as_str) {
+            for word in value.split(|c: char| !(c.is_ascii_alphanumeric() || "@/._-".contains(c))) {
+                words.insert(word);
+                if let Some(package) = path_package(word) {
+                    words.insert(package);
+                }
+            }
+        }
+    }
+    words
+}
+
+/// The package a path-shaped word reaches into: `vite/bin/vite.js` and
+/// `./node_modules/vite/bin/vite.js` → `vite`, `@scope/name/cli` → `@scope/name`;
+/// a bare name has no path, and a relative path names no package.
+fn path_package(word: &str) -> Option<&str> {
+    const INSTALL_DIR: &str = "node_modules/";
+    let word = match word.rfind(INSTALL_DIR) {
+        Some(at) => &word[at + INSTALL_DIR.len()..],
+        None => word,
+    };
+    if word.starts_with('.') {
+        return None;
+    }
+    let mut parts = word.splitn(3, '/');
+    let first = parts.next()?;
+    let second = parts.next()?;
+    if first.starts_with('@') {
+        parts.next()?;
+        Some(&word[..first.len() + 1 + second.len()])
+    } else {
+        Some(first)
+    }
 }
 
 /// A requirement worth comparing across manifests. Protocol and wildcard forms

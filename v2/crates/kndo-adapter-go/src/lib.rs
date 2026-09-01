@@ -27,16 +27,21 @@ pub struct GoAdapter {
 impl GoAdapter {
     pub fn new() -> Self {
         GoAdapter {
-            spec: kndo_toolkit::source_adapter_spec(
+            // 4: go.mod `// indirect` requirements declare `Transitive`.
+            spec: kndo_toolkit::source_adapter_builder(
                 "kndo:go",
-                3,
+                4,
                 &["go"],
                 &["**/go.mod"],
                 &[],
                 // The compiler forbids import cycles: one could only be a
                 // resolution artifact here.
                 kndo_contract::extension::CycleTolerance::Tolerated,
-            ),
+            )
+            // go.mod has no sections: every direct requirement is a build
+            // requirement, and "only tests import it" has nowhere to move.
+            .dependency_scoping(kndo_contract::extension::DependencyScoping::Unscoped)
+            .build(),
         }
     }
 }
@@ -72,9 +77,13 @@ impl Extension for GoAdapter {
         manifest: &SourceFile<'_>,
     ) -> Vec<kndo_contract::adapter::DependencyDeclaration> {
         manifest::dependencies(manifest)
-            .into_iter()
-            .map(kndo_contract::adapter::DependencyDeclaration::name_only)
-            .collect()
+    }
+
+    fn imports_dependency(&self, specifier: &str, dependency: &str) -> Option<bool> {
+        // An import path names the module whose path prefixes it.
+        Some(kndo_toolkit::dependency_match::by_path(
+            specifier, dependency, "/",
+        ))
     }
 
     fn sees(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {

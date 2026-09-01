@@ -50,6 +50,7 @@ pub fn extract(
         out,
     };
     cx.items(root);
+    cx.nested_uses(root);
     let impls = std::mem::take(&mut cx.impls);
     for node in impls {
         cx.impl_members(node);
@@ -374,6 +375,38 @@ impl<'a> ItemPass<'a, '_> {
             }
             let attrs = attributes_of(m, self.source);
             root_for_attrs(&attrs, id, self.out);
+        }
+    }
+
+    /// `use` items inside function and block bodies (`fn f() { use bstr::ByteSlice;
+    /// … }`) are imports like any other — the item walk only sees module-level
+    /// items, so this pass collects the rest, each with the `mod` stack of its
+    /// enclosing modules.
+    fn nested_uses(&mut self, root: Node<'a>) {
+        let mut pending: Vec<Node<'a>> = vec![root];
+        while let Some(node) = pending.pop() {
+            let mut cursor = node.walk();
+            let children: Vec<Node<'a>> = node.named_children(&mut cursor).collect();
+            for child in children.into_iter().rev() {
+                if child.kind() == "use_declaration" {
+                    if child.parent().is_some_and(|p| p.kind() == "block") {
+                        let mut stack = Vec::new();
+                        let mut up = child.parent();
+                        while let Some(a) = up {
+                            if a.kind() == "mod_item"
+                                && let Some(n) = a.child_by_field_name("name")
+                            {
+                                stack.push(tk::text(n, self.source).to_string());
+                            }
+                            up = a.parent();
+                        }
+                        stack.reverse();
+                        self.uses.push((child, stack));
+                    }
+                    continue;
+                }
+                pending.push(child);
+            }
         }
     }
 

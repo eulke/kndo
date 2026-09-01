@@ -87,3 +87,28 @@ fn require_lines_report_dependency_names_both_forms() {
         ]
     );
 }
+
+#[test]
+fn indirect_requirements_declare_transitive_and_direct_ones_no_scope() {
+    use kndo_contract::adapter::DependencyScope;
+    let path = ProjectPath::new("go.mod");
+    let deps = GoAdapter::new().manifest_dependencies(&SourceFile {
+        path: &path,
+        content: b"module example.com/m\n\nrequire github.com/x/single v1.0.0 // indirect\n\nrequire (\n\tgithub.com/a/b v1.2.3\n\tgithub.com/c/d v0.1.0 // indirect\n)\n",
+    });
+    let scope = |name: &str| deps.iter().find(|d| d.name == name).map(|d| d.scope);
+    assert_eq!(
+        scope("github.com/a/b"),
+        Some(None),
+        "direct: go.mod states no scope"
+    );
+    assert_eq!(
+        scope("github.com/c/d"),
+        Some(Some(DependencyScope::Transitive))
+    );
+    assert_eq!(
+        scope("github.com/x/single"),
+        Some(Some(DependencyScope::Transitive)),
+        "the single-line form carries the marker too"
+    );
+}
