@@ -9,13 +9,15 @@
         "id": "kndo:js-ts",
         "files": 3,
         "export_narrowing": "expressible",
-        "import_cycles": "hazard"
+        "import_cycles": "hazard",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "path-prefix"
       }
     ]
   },
   "health": {
     "implicated": 2,
-    "subjects": 6,
+    "subjects": 9,
     "by_category": [
       {
         "category": "cyclic",
@@ -31,13 +33,13 @@
         "name": "@demo/a",
         "manifest": "packages/a/package.json",
         "implicated": 2,
-        "subjects": 4
+        "subjects": 6
       },
       {
         "name": "@demo/b",
         "manifest": "packages/b/package.json",
         "implicated": 0,
-        "subjects": 2
+        "subjects": 3
       }
     ]
   },

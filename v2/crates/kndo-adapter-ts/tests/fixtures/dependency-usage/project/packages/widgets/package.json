@@ -1,0 +1,5 @@
+{
+  "name": "widgets",
+  "main": "src/index.js",
+  "dependencies": { "widget-dep": "^1.0.0" }
+}

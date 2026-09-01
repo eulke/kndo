@@ -2,9 +2,18 @@
 //! carries its own Test root) is doing its job; a file that is not, and that no
 //! production or tooling color reaches while the test color does, exists only to be
 //! tested — the waste signal this category names.
+//!
+//! Dependency subjects are the same verdict on a manifest's production-scope
+//! declarations, over the floor [`super::dependency`] shares with `unused`:
+//! every importing file is a test, so a test-scope declaration would suffice.
+//! Never under an `Unscoped` ecosystem — with no section to move to, the
+//! verdict has no action.
 
-use super::{AbstentionReason, Analysis, AnalysisContext, RunContext, has_root_of};
+use super::{
+    AbstentionReason, Analysis, AnalysisContext, RunContext, dependency, has_root_of, is_test_file,
+};
 use kndo_contract::evidence::RootKind;
+use kndo_contract::extension::DependencyScoping;
 use kndo_contract::finding::{Finding, Severity};
 use kndo_contract::subject::Subject;
 use kndo_contract::vocab::{Category, Confidence};
@@ -54,6 +63,26 @@ impl Analysis for TestOnly {
                     "only tests reach this file — no production or tooling root does",
                 ));
             }
+        }
+        dependency::abstain(cx);
+        for dep in dependency::judged(cx) {
+            if dep.manifest.scoping == DependencyScoping::Unscoped
+                || dep.users.is_empty()
+                || !dep.users.iter().all(|&i| is_test_file(g, i as usize))
+            {
+                continue;
+            }
+            out.push(Finding::new(
+                Category::TEST_ONLY,
+                Severity::Info,
+                Confidence::Probable,
+                Subject::Dependency {
+                    owner_manifest: dep.manifest.manifest.clone(),
+                    name: dep.declaration.name.clone(),
+                },
+                "",
+                "declared as a production dependency, but only test files import it — a test-scope declaration would suffice",
+            ));
         }
         out
     }

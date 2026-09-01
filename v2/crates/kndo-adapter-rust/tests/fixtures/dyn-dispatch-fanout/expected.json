@@ -12,7 +12,9 @@
           "crate"
         ],
         "export_narrowing": "none",
-        "import_cycles": "tolerated"
+        "import_cycles": "tolerated",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "crate-root"
       }
     ]
   },

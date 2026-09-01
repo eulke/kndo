@@ -9,13 +9,15 @@
         "id": "kndo:go",
         "files": 2,
         "export_narrowing": "none",
-        "import_cycles": "tolerated"
+        "import_cycles": "tolerated",
+        "dependency_scoping": "unscoped",
+        "dependency_identity": "path-prefix"
       }
     ]
   },
   "health": {
     "implicated": 1,
-    "subjects": 6,
+    "subjects": 7,
     "by_category": [
       {
         "category": "unused",
@@ -33,7 +35,7 @@
         "name": "example.com/b",
         "manifest": "modb/go.mod",
         "implicated": 0,
-        "subjects": 2
+        "subjects": 3
       }
     ]
   },

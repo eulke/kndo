@@ -93,7 +93,7 @@ fn literal_tokens(
             if seen.insert(token.to_string()) {
                 out.import(
                     ImportTarget::Package(SmolStr::new(token)),
-                    ImportShape::SideEffect,
+                    ImportShape::Mention,
                     tk::span(literal),
                     Confidence::Possible,
                 );

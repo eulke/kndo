@@ -12,7 +12,9 @@
           "module"
         ],
         "export_narrowing": "none",
-        "import_cycles": "tolerated"
+        "import_cycles": "tolerated",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "underivable"
       }
     ]
   },
@@ -5105,7 +5107,26 @@
   ],
   "fixed": [],
   "baselined": 0,
-  "abstained": [],
+  "abstained": [
+    {
+      "category": "unused",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 2
+        }
+      }
+    },
+    {
+      "category": "test-only",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 2
+        }
+      }
+    }
+  ],
   "suppressed": {
     "total": 0,
     "by_category": []

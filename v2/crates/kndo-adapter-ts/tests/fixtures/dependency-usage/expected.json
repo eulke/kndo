@@ -1,0 +1,116 @@
+{
+  "run": {
+    "schema": "kndo-v2/m6",
+    "mode": "full",
+    "files_discovered": 6,
+    "files_claimed": 3,
+    "extensions": [
+      {
+        "id": "kndo:js-ts",
+        "files": 3,
+        "export_narrowing": "expressible",
+        "import_cycles": "hazard",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "path-prefix"
+      }
+    ]
+  },
+  "health": {
+    "implicated": 1,
+    "subjects": 12,
+    "by_category": [
+      {
+        "category": "unused",
+        "findings": 1
+      }
+    ],
+    "by_package": [
+      {
+        "name": "dependency-usage",
+        "manifest": "package.json",
+        "implicated": 1,
+        "subjects": 10
+      },
+      {
+        "name": "widgets",
+        "manifest": "packages/widgets/package.json",
+        "implicated": 0,
+        "subjects": 2
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "kndo-2da046c0c016",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "probable",
+      "subject": {
+        "kind": "dependency",
+        "owner_manifest": "package.json",
+        "name": "idle-dep"
+      },
+      "message": "declared as a production dependency, but no file imports it and the manifest never names it"
+    },
+    {
+      "id": "kndo-07f43fe10573",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "dependency",
+        "owner_manifest": "package.json",
+        "name": "test-dep"
+      },
+      "message": "declared as a production dependency, but only test files import it — a test-scope declaration would suffice"
+    }
+  ],
+  "fixed": [],
+  "baselined": 0,
+  "abstained": [
+    {
+      "category": "unused",
+      "reason": {
+        "unclaimed-importers": {
+          "suffixes": [
+            "vue"
+          ]
+        }
+      },
+      "scope": {
+        "manifests": {
+          "unjudged": 1
+        }
+      }
+    },
+    {
+      "category": "test-only",
+      "reason": {
+        "unclaimed-importers": {
+          "suffixes": [
+            "vue"
+          ]
+        }
+      },
+      "scope": {
+        "manifests": {
+          "unjudged": 1
+        }
+      }
+    }
+  ],
+  "suppressed": {
+    "total": 0,
+    "by_category": []
+  },
+  "plugins": [
+    {
+      "coordinate": "kndo:coverage-lcov",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    }
+  ],
+  "diagnostics": []
+}

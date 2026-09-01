@@ -234,6 +234,10 @@ pub enum ImportShape {
     /// Everything the target exports, imported unbound (`use x::*`): nothing names
     /// what was taken, so the whole surface stays alive.
     Glob,
+    /// The specifier is spelled in the file — a string literal a loader or a
+    /// runtime may resolve — never imported by the language: enough for a
+    /// declared dependency to count as used, never a reachability edge.
+    Mention,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ContractFingerprint)]

@@ -706,24 +706,3 @@ pub fn source_adapter_builder(
         .narrowable(narrowable)
         .import_cycles(import_cycles)
 }
-
-/// Specifier → dependency matching, the two shapes every path-addressed
-/// ecosystem shares: a specifier names a dependency when it IS the name or
-/// continues it past the ecosystem's path separator (`lodash/fp` → `lodash`,
-/// `github.com/x/y/z` → `github.com/x/y`, `serde::Value` → `serde`).
-pub mod dependency_match {
-    /// `spec == dep` or `spec` starts with `dep` followed by `separator`.
-    pub fn by_path(specifier: &str, dependency: &str, separator: &str) -> bool {
-        specifier == dependency
-            || specifier
-                .strip_prefix(dependency)
-                .is_some_and(|rest| rest.starts_with(separator))
-    }
-
-    /// Cargo's spelling: hyphens in the package name are underscores in code,
-    /// and the crate root is the first `::` segment.
-    pub fn by_crate(specifier: &str, dependency: &str) -> bool {
-        let krate = dependency.replace('-', "_");
-        by_path(specifier, &krate, "::")
-    }
-}

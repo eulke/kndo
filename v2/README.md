@@ -512,8 +512,8 @@ at the root swap.
 
 **Capability legibility**: every `run.extensions` row carries the judgment
 capabilities its adapter declared (`narrowable_scopes`, `export_narrowing`,
-`import_cycles`) — the report's own answer to "why does kndo (not) report X
-for this language". Gating is by declared language facts, never by an adapter
+`import_cycles`, `dependency_scoping`, `dependency_identity`) — the report's own
+answer to "why does kndo (not) report X for this language". Gating is by declared language facts, never by an adapter
 subscribing to finding categories: a fact carries its reason, composes across
 languages inside one finding, and keeps a judged zero distinct from silence.
 
@@ -524,12 +524,11 @@ and risk suggest. Each tranche keeps the M6 discipline — instrument first, the
 number decides, every difference explained — and a cut is the owner's DECISIONS
 entry, never a builder's shortcut.
 
-- **M7.a — the dependency family, second pass**: `deps-unused` on PRODUCTION scope
-  (peer/optional exempt, workspace siblings resolved, adapter-visible implicit uses,
-  Python abstaining on ambiguous import names) and `deps-test-only` on the same
-  machinery — instrumented over the six manifest ecosystems, audited, shipped or
-  deferred with the number. Then `undeclared` on the shared floor (ancestor
-  manifests, declared builtins, alias exclusion).
+- **M7.a — the dependency family, second pass** — **shipped 2026-09-01** for
+  `unused`/`test-only` on production-scope declarations: one corpus finding
+  (ripgrep `fst`), zero false, every skip a typed `manifests`-scoped abstention
+  (COMPARISON has the table; DECISIONS the contract change). Remaining: `undeclared`
+  on the shared floor (ancestor manifests, declared builtins, alias exclusion).
 - **M7.b — `crap` with real coverage**: capture coverage from a real producer for a
   corpus repo (flask/pytest-cov, vite/vitest), count complex-and-untested
   candidates, decide the threshold semantics from the number.

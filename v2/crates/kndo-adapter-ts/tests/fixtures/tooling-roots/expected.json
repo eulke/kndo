@@ -9,7 +9,9 @@
         "id": "kndo:js-ts",
         "files": 4,
         "export_narrowing": "expressible",
-        "import_cycles": "hazard"
+        "import_cycles": "hazard",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "path-prefix"
       }
     ]
   },

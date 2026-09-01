@@ -2178,3 +2178,56 @@ and the honest answer is that two verdicts over-generalized their number.
 
 The consolidated plan for what remains — these reopenings and the swap-blocking
 surfaces the 2026-09-01 audit recorded — is README's M7 section.
+
+## 2026-09-01 — dependency subjects ship; the health universe grows; identity is declared data
+
+**Decision.** `unused` and `test-only` judge production-scope dependency
+declarations (`Subject::Dependency`), on one shared floor: the manifest's adapter
+declares a `DependencyIdentity` (how a specifier names a declaration — `PathPrefix`
+for npm and Go, `CrateRoot` for Cargo, `Underivable` by default) and its
+`dependency_importers` (unclaimed suffixes that could carry its imports); a manifest
+is judged when identity is derivable, no such unclaimed file sits in its package, an
+owned file is reached, and not every owned file is a test — each failure a
+`manifests`-scoped abstention with its reason. A declaration is in use when any file
+the adapter claims imports it (tree-wide: hoisting), when a literal mentions it
+(`ImportShape::Mention`, new — it keeps a declaration and draws no reachability
+edge), or when the manifest names it outside its declaration (`used_by_manifest`).
+`unused` is `Warning`/`Probable` (a runtime can inject a use no import shows);
+`test-only` is `Info`/`Probable` and never fires under `DependencyScoping::Unscoped`.
+
+**Measurement.** Corpus: 119 declarations judged (ripgrep 61, vite 43, gin 15), one
+finding (ripgrep `crates/index/Cargo.toml`: `fst`), zero false; the pre-build
+instrument's floor exactly. vite abstains on 43 manifests for unclaimed
+`.vue`/`.astro`/`.html`/`.css` importers, 3 all-test packages, 4 unreached
+packages; JVM/Swift/Python manifests abstain as underivable (12/49/2/5). Health's
+universe grows by the judged declarations: ripgrep 2,557 → 2,618, vite 5,052 →
+5,095, gin 1,304 → 1,319; every other corpus cell byte-identical.
+
+**Why declared data, not a callback.** The first cut asked the adapter
+`imports_dependency(specifier, dependency) -> Option<bool>`, `None` meaning
+"cannot derive". A manifest whose files carried no package-shaped import never
+asked, stayed "judgeable", and accused every JVM dependency in two fixtures — a
+callback never invoked cannot abstain. `DependencyIdentity` is spec data: an adapter
+cannot claim to derive identity without saying how, `Underivable` is the default,
+and the run's `extensions` rows show it. The same reasoning retired a core list of
+"inert" suffixes: which unclaimed files can import is the ecosystem's fact, so each
+adapter declares `dependency_importers` (js-ts: the single-file-component, page,
+stylesheet and template families) and Cargo/Go declare none.
+
+**Two defects the gates caught.** The dogfood accused `thiserror` in two of kndo's
+own crates — named only in `#[derive(thiserror::Error)]`; crate paths inside
+attributes are now imports (rust adapter 4). The corpus re-measure showed flask
+losing a real cycle: the tranche-A rule "a `Possible` package import never resolves"
+also matched Python's `Possible` absolute imports; `ImportShape::Mention` replaces
+it, and the contract fingerprint moved.
+
+**Contract change, audited.** 80 conformance reports regenerated: 69 differ only by
+the two new `run.extensions` rows (`dependency_scoping`, `dependency_identity`);
+the eleven with substance are go/go-work-multi-module (+1 judged), the four
+`*-dependency-skip` fixtures and java/multi-release-variants (v1's "skipped"
+diagnostic is now a typed `specifier-identity-underivable` abstention),
+rust/workspace-deps (`serde` declared in `app`, never used — a true positive on a
+harvested fixture), ts/deep-import (+1), ts/dependency-hygiene (`chai` `test-only`,
+the fixture's own intent), ts/esm-dead-code (`left-pad` `unused`),
+ts/npm-workspace-monorepo (+3 judged), plus the new ts/dependency-usage.
+`GRAPH_SEMANTICS_VERSION` 9 (`users` tree-wide, identity from the spec).

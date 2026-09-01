@@ -253,18 +253,23 @@ fn manifest_dependencies_report_every_section() {
 }
 
 #[test]
-fn scripts_that_invoke_a_dependency_by_name_mark_it_used_by_the_manifest() {
+fn manifest_fields_naming_a_dependency_mark_it_used_by_the_manifest() {
     let path = ProjectPath::new("package.json");
     let json = r#"{
         "name": "demo",
-        "dependencies": { "express": "^4", "lodash": "*", "vite": "^5" },
+        "description": "an express server with lodash helpers",
+        "keywords": ["lodash"],
+        "dependencies": {
+            "express": "^4", "lodash": "*", "vite": "^5", "jsdom": "^24", "@scope/shim": "^1"
+        },
         "devDependencies": { "eslint": "^9", "@biomejs/biome": "^1", "typescript": "^5" },
         "scripts": {
             "lint": "eslint . && @biomejs/biome check src",
             "dev": "node ./node_modules/vite/bin/vite.js --port 3000",
             "typecheck": "tsc -p .",
             "express-ish": "echo expressive lodash-es"
-        }
+        },
+        "browser": { "jsdom": false, "./node-only.js": "@scope/shim/browser" }
     }"#;
     let mut used: Vec<(&str, bool)> = Vec::new();
     let deps = TypeScriptAdapter::new().manifest_dependencies(&SourceFile {
@@ -280,9 +285,14 @@ fn scripts_that_invoke_a_dependency_by_name_mark_it_used_by_the_manifest() {
         [
             // A scoped name is one word, its own slash included.
             ("@biomejs/biome", true),
+            // A `browser` alias names the package it maps to, path and all.
+            ("@scope/shim", true),
             ("eslint", true),
-            // `expressive` and `lodash-es` are other words, not this name.
+            // `expressive` and `lodash-es` are other words, not this name; prose
+            // (`description`, `keywords`) never counts.
             ("express", false),
+            // A `browser` key disabling a package names it.
+            ("jsdom", true),
             ("lodash", false),
             // A binary spelled differently from its package (`tsc`) is not a
             // mention: the flag records what the manifest says, not what it means.

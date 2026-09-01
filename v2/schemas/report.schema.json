@@ -135,6 +135,45 @@
           "description": "No test root anchors anything: with zero test evidence, \"tests never reach\nthis\" describes every declaration equally and accuses none.",
           "type": "string",
           "const": "no-test-roots-anywhere"
+        },
+        {
+          "description": "The manifest's claiming extension declares no spelling that derives a\npackage from an import specifier (`DependencyIdentity::Underivable`), so\n\"nothing imports this dependency\" cannot be told from \"the imports spell\nit differently\" — JVM coordinates, Swift products, Python distributions.",
+          "type": "string",
+          "const": "specifier-identity-underivable"
+        },
+        {
+          "description": "Files no extension claims sit inside the package with a suffix the\nclaiming extension declares can import\n(`ExtensionSpec::dependency_importers`) — a `.vue` component, an `.html`\npage — so an import of the dependency may exist where nothing can see it.",
+          "type": "object",
+          "properties": {
+            "unclaimed-importers": {
+              "type": "object",
+              "properties": {
+                "suffixes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "suffixes"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "unclaimed-importers"
+          ]
+        },
+        {
+          "description": "No root reaches any file the package owns: dead or apparatus, its\ndependencies are moot and the file findings already say so.",
+          "type": "string",
+          "const": "nothing-reaches-owned-files"
+        },
+        {
+          "description": "Every file the package owns is a test: a fixture package, whose\ndependencies serve the tests by construction.",
+          "type": "string",
+          "const": "owned-files-are-tests"
         }
       ]
     },
@@ -166,6 +205,29 @@
           "additionalProperties": false,
           "required": [
             "files"
+          ]
+        },
+        {
+          "description": "Dependency subjects only: this many declaring manifests went unjudged,\nevery file still judged as usual.",
+          "type": "object",
+          "properties": {
+            "manifests": {
+              "type": "object",
+              "properties": {
+                "unjudged": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "unjudged"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "manifests"
           ]
         }
       ]
@@ -287,6 +349,34 @@
         "hazard"
       ]
     },
+    "DependencyIdentity": {
+      "description": "How an import specifier names a declared dependency — the ecosystem's\nspelling, as data: the engine matches every package-shaped import of an\nadapter's files against its manifests' declarations without calling back\ninto the adapter, and an adapter cannot claim to derive identity without\nsaying how. `unused` and `test-only` read it on their dependency subjects.",
+      "oneOf": [
+        {
+          "description": "Specifiers name nothing this vocabulary can match with a declaration (a\nJVM artifact id names no package, a Swift package name is not its module\nname, a Python distribution is not its import name): every usage\njudgment abstains, and says so.",
+          "type": "string",
+          "const": "underivable"
+        },
+        {
+          "description": "The specifier is the declared name or a `/`-path under it: `lodash/fp`\nnames `lodash`, a scoped `@s/n` carries its own separator, and a Go\nimport path names the module whose path prefixes it.",
+          "type": "string",
+          "const": "path-prefix"
+        },
+        {
+          "description": "The specifier's leading `::` segment is the declared name with `-`\nspelled `_`: `serde_json::Value` names `serde-json`.",
+          "type": "string",
+          "const": "crate-root"
+        }
+      ]
+    },
+    "DependencyScoping": {
+      "description": "How the ecosystem's manifests state a dependency's usage scope. `Scoped`\nmanifests have sections (npm `dependencies`/`devDependencies`, Cargo\n`[dev-dependencies]`), so a declaration with no scope is one the source could\nnot classify and no usage judgment reads it. `Unscoped` ecosystems have no\nsections at all — every direct requirement in `go.mod` is a build\nrequirement — so an unscoped declaration IS the usage claim, and \"only tests\nimport it\" has no section to move it to. `unused` and `test-only` are the\nconsumers, on their dependency subjects.",
+      "type": "string",
+      "enum": [
+        "scoped",
+        "unscoped"
+      ]
+    },
     "DiagnosticLevel": {
       "description": "Closed by design: three levels are the reporting contract.",
       "type": "string",
@@ -315,6 +405,14 @@
     "ExtensionRun": {
       "type": "object",
       "properties": {
+        "dependency_identity": {
+          "description": "How this extension's import specifiers name a declared dependency —\n`underivable` is why no dependency finding can exist for its manifests.",
+          "$ref": "#/$defs/DependencyIdentity"
+        },
+        "dependency_scoping": {
+          "description": "Whether the manifests this extension reads have dependency sections\n(`scoped`) or one flat requirement list (`unscoped`) — under `unscoped`,\n`test-only` never fires on a dependency: there is no section to move it to.",
+          "$ref": "#/$defs/DependencyScoping"
+        },
         "export_narrowing": {
           "description": "Whether the language can stop exporting a declaration by editing only\nit (`internal-only`'s Exported rung reads it).",
           "$ref": "#/$defs/ExportNarrowing"
@@ -343,7 +441,9 @@
         "id",
         "files",
         "export_narrowing",
-        "import_cycles"
+        "import_cycles",
+        "dependency_scoping",
+        "dependency_identity"
       ]
     },
     "Finding": {

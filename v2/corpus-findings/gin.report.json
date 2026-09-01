@@ -9,20 +9,22 @@
         "id": "kndo:go",
         "files": 99,
         "export_narrowing": "none",
-        "import_cycles": "tolerated"
+        "import_cycles": "tolerated",
+        "dependency_scoping": "unscoped",
+        "dependency_identity": "path-prefix"
       }
     ]
   },
   "health": {
     "implicated": 0,
-    "subjects": 1304,
+    "subjects": 1319,
     "by_category": [],
     "by_package": [
       {
         "name": "github.com/gin-gonic/gin",
         "manifest": "go.mod",
         "implicated": 0,
-        "subjects": 1304
+        "subjects": 1319
       }
     ]
   },

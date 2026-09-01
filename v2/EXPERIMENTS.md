@@ -56,14 +56,21 @@ exist) and three resolver/claim fixes worth more than the analyses.
 corpus vs a 124-finding fixture cliff + 195 ancestor-declared (workspace
 hoisting) + ambient modules + self-imports — the model needs those classes AND
 a corpus repo shaped like an ordinary application before it can be judged.
-**deps-unused/test-only deferred, then REOPENED 2026-09-01** (the owner's
-challenge; DECISIONS has the reasoning): the tooling-invisibility argument holds
-for DEV scope only. The second pass measures PRODUCTION-scope dependencies no
-claimed file imports — peer/optional exempt, workspace siblings resolved,
-adapter-visible implicit uses (JSX ⇒ its runtime), Python abstaining on
-ambiguous import names; go.mod `test-only` stays unactionable by construction
-(no dev section). Plan: README M7.a. Also recorded:
-discovery does not follow symlinks (three vite findings live on that boundary —
+**deps-unused/test-only deferred, REOPENED, then SHIPPED 2026-09-01** (the
+owner's challenge; DECISIONS has the reasoning): the tooling-invisibility
+argument holds for DEV scope only, so the second pass judges PRODUCTION-scope
+declarations — the same `unused`/`test-only` categories on a `dependency`
+subject, no new rule. Corpus: one finding (ripgrep `crates/index`: `fst`), zero
+false, 119 declarations judged across ripgrep/vite/gin, every skip a typed
+`manifests`-scoped abstention (COMPARISON has the table). Residue, each with
+its number: 43 vite manifests abstain on unclaimed `.vue`/`.astro`/`.html`/
+`.css` importers (M7.d's demand); JVM, Swift and Python abstain as
+`specifier-identity-underivable` until a declared spelling exists (Python's
+distribution → module mapping is the deptry-shaped experiment); `test-only`
+never fires under an `Unscoped` ecosystem (go.mod has no section to move to);
+a binary spelled unlike its package (`tsc` for `typescript`) is not a manifest
+mention — dev-scope today, so nothing is accused. Also recorded: discovery
+does not follow symlinks (three vite findings live on that boundary —
 following them is its own experiment if a corpus repo ever hinges on it).
 
 ### cyclic (import cycles) — SHIPPED 2026-08-31

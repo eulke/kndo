@@ -351,7 +351,7 @@ fn package_specifiers_inside_string_literals_are_possible_imports() {
         ev.imports
             .iter()
             .filter(|i| i.confidence == Confidence::Possible)
-            .all(|i| matches!(i.shape, ImportShape::SideEffect)),
+            .all(|i| matches!(i.shape, ImportShape::Mention)),
         "a spelled specifier binds nothing"
     );
     // The real import is still exactly one, at its own confidence.

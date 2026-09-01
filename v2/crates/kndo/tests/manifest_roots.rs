@@ -156,7 +156,7 @@ fn dependency_usage_is_judged_per_manifest_through_the_adapters_spelling() {
     };
     let npm = by_manifest("package.json");
     assert!(
-        npm.judgeable,
+        npm.identity != kndo::DependencyIdentity::Underivable,
         "js-ts derives package identity from specifiers"
     );
     let n = |name: &str| {
@@ -175,7 +175,7 @@ fn dependency_usage_is_judged_per_manifest_through_the_adapters_spelling() {
     );
     assert_eq!(n("idle-dep"), 0, "nothing names idle-dep");
     let gomod = by_manifest("go.mod");
-    assert!(gomod.judgeable);
+    assert!(gomod.identity != kndo::DependencyIdentity::Underivable);
     let scope_of = |name: &str| {
         gomod
             .declarations

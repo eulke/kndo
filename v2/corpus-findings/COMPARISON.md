@@ -740,3 +740,54 @@ The 96 the oracle reports and v2 refuses, by mechanism:
 
 lodash: 0 candidates (a built single-file library). Every other repo:
 byte-identical — only js-ts declares `ExportNarrowing::Expressible`.
+
+## The dependency family, second pass: `unused` and `test-only` on declarations (2026-09-01)
+
+Production-scope dependency declarations are subjects of `unused` and
+`test-only`, judged per manifest over one shared floor: the claiming adapter
+derives package identity from specifiers (`DependencyIdentity`), no unclaimed
+file the adapter says could import sits inside the package
+(`dependency_importers`), at least one owned file is reached, and not every
+owned file is a test. Each failed condition is a `manifests`-scoped abstention
+in the envelope, never a silent skip. A declaration is in use when any file the
+adapter claims — inside the package or across it — imports it, when a string
+literal mentions it (`ImportShape::Mention`), or when the manifest names it
+outside its declaration (`scripts`, `browser`, a tool config).
+
+| repo | judged declarations | `unused` | `test-only` | unjudged manifests (reason) |
+|---|---|---|---|---|
+| ripgrep | 61 | 1 — `crates/index/Cargo.toml`: `fst` | 0 | 0 |
+| vite | 43 | 0 | 0 | 43 unclaimed importers (`.astro .css .html .scss .vue`), 3 all-test packages, 4 unreached packages |
+| gin | 15 | 0 | 0 — unscoped: nowhere to move | 0 |
+| lodash | 0 | 0 | 0 | 0 — dev sections only |
+| guava · Exposed · vapor · flask | 0 | 0 | 0 | 12 · 49 · 2 · 5 — specifier identity underivable |
+| Alamofire | 0 | 0 | 0 | 0 — no declarations |
+
+One finding on the corpus: `fst`, declared in ripgrep's `crates/index/Cargo.toml`,
+never `use`d, never spelled in a qualified path, never named by the manifest.
+The pre-build instrument reached the same floor — one true positive, zero
+false — after naming the vice classes, each now a rule rather than a filter:
+
+- **Cross-package use (11 in vite).** A dependency the root declares and only
+  a workspace member imports: hoisting keeps it in use, so `users` is tree-wide.
+- **Mentions (25 in vite).** `core-js/modules/…` injected at run time is spelled
+  in a string, never imported: `ImportShape::Mention` keeps the declaration and
+  draws no edge. The confidence-based rule it replaces had also silenced
+  Python's `Possible` absolute imports — flask lost the `js_example`
+  `__init__` ↔ `views` cycle for one measurement, restored here.
+- **Manifest naming (1 in vite).** A `browser` map aliasing
+  `@vitejs/test-resolve-browser-field-bare-import-success`: `used_by_manifest`
+  reads every field but the dependency sections and prose.
+- **Unclaimed importers (39 instrument rows, 43 manifests).** `.vue`, `.astro`,
+  `.html`, `.css` files nothing claims — the adapter declares which suffixes
+  cast doubt, the abstention names them, and M7.d's web adapters are the
+  answer.
+- **Attribute-only crates (2 in kndo itself).** `thiserror` named only in
+  `#[derive(thiserror::Error)]`: the dogfood gate caught it, and crate paths
+  inside attributes are imports (rust adapter 4).
+
+The oracle's 198 `deps-unused` / 14 `deps-test-only` are v1's number over every
+scope under name-fuzzy resolution; v2 judges production scope only, under a
+declared identity, and abstains where it cannot see. Health's universe grows by
+the judged declarations — ripgrep 2,557 → 2,618, vite 5,052 → 5,095, gin
+1,304 → 1,319 — and every other cell of the table is byte-identical.

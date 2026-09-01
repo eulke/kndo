@@ -8,6 +8,7 @@
 //! the same [`Reachability`] instead of building its own.
 
 mod cyclic;
+mod dependency;
 mod duplicate;
 mod internal_only;
 mod private_type_leak;
@@ -28,10 +29,13 @@ pub use unused::Unused;
 pub use version_skew::VersionSkew;
 
 use crate::graph::Graph;
-use kndo_contract::evidence::{EvidenceStream, RootKind};
+use kndo_contract::evidence::{EvidenceStream, RootKind, RootTarget};
 use kndo_contract::finding::{Finding, sort_findings};
 use kndo_contract::vocab::Category;
+use kndo_contract::vocab::ProjectPath;
 use serde::Serialize;
+use smol_str::SmolStr;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 /// Which root colors reach each file: seeded by the file's own roots of that kind
@@ -76,6 +80,18 @@ pub fn has_root_of(graph: &Graph, file: usize, kind: RootKind) -> bool {
         .any(|r| r.kind == kind)
 }
 
+/// Is this file a test as a whole — a whole-file Test root, its own or anchored?
+/// A production file with an inline test module carries a declaration-targeted
+/// Test root and is NOT one: its imports serve production.
+pub fn is_test_file(graph: &Graph, file: usize) -> bool {
+    let f = &graph.files[file];
+    f.evidence
+        .roots
+        .iter()
+        .chain(&f.anchored)
+        .any(|r| r.kind == RootKind::Test && matches!(r.target, RootTarget::WholeFile))
+}
+
 fn flood(graph: &Graph, kind: RootKind) -> Vec<bool> {
     let n = graph.files.len();
     let mut reached = vec![false; n];
@@ -118,6 +134,10 @@ pub struct RunContext<'a> {
     /// (`ExtensionSpec::import_cycles`) — the fact `cyclic` reads before
     /// accusing anything.
     pub cycle_hazards: &'a [smol_str::SmolStr],
+    /// Parallel to `Graph::manifest_declarations`: why each manifest's
+    /// dependency usage goes unjudged this run, `None` where it is judged —
+    /// derived once, read by every dependency-subject verdict.
+    pub manifests: Vec<Option<AbstentionReason>>,
 }
 
 pub struct AnalysisContext<'a> {
@@ -125,11 +145,19 @@ pub struct AnalysisContext<'a> {
     /// Per-file, for THIS analysis: did the claiming adapter declare every stream it
     /// requires? Unmeasured files must produce no findings.
     pub measured: &'a [bool],
+    /// Where an analysis records the parts of the run it declined to judge —
+    /// drained by the engine into the run's abstentions under this analysis's
+    /// category, so a partial silence is as legible as a whole-run one.
+    abstentions: std::cell::RefCell<Vec<(AbstentionReason, AbstentionScope)>>,
 }
 
 impl<'a> AnalysisContext<'a> {
     pub fn graph(&self) -> &'a Graph {
         self.run.graph
+    }
+
+    pub fn abstain(&self, reason: AbstentionReason, scope: AbstentionScope) {
+        self.abstentions.borrow_mut().push((reason, scope));
     }
 }
 
@@ -153,7 +181,14 @@ pub trait Analysis: Sync {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum AbstentionScope {
     WholeRun,
-    Files { unmeasured: u32 },
+    Files {
+        unmeasured: u32,
+    },
+    /// Dependency subjects only: this many declaring manifests went unjudged,
+    /// every file still judged as usual.
+    Manifests {
+        unjudged: u32,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -170,6 +205,24 @@ pub enum AbstentionReason {
     /// No test root anchors anything: with zero test evidence, "tests never reach
     /// this" describes every declaration equally and accuses none.
     NoTestRootsAnywhere,
+    /// The manifest's claiming extension declares no spelling that derives a
+    /// package from an import specifier (`DependencyIdentity::Underivable`), so
+    /// "nothing imports this dependency" cannot be told from "the imports spell
+    /// it differently" — JVM coordinates, Swift products, Python distributions.
+    SpecifierIdentityUnderivable,
+    /// Files no extension claims sit inside the package with a suffix the
+    /// claiming extension declares can import
+    /// (`ExtensionSpec::dependency_importers`) — a `.vue` component, an `.html`
+    /// page — so an import of the dependency may exist where nothing can see it.
+    UnclaimedImporters {
+        suffixes: Vec<SmolStr>,
+    },
+    /// No root reaches any file the package owns: dead or apparatus, its
+    /// dependencies are moot and the file findings already say so.
+    NothingReachesOwnedFiles,
+    /// Every file the package owns is a test: a fixture package, whose
+    /// dependencies serve the tests by construction.
+    OwnedFilesAreTests,
 }
 
 impl fmt::Display for AbstentionReason {
@@ -183,6 +236,28 @@ impl fmt::Display for AbstentionReason {
             }
             AbstentionReason::NoTestRootsAnywhere => {
                 write!(f, "no test root anchors any file in this graph")
+            }
+            AbstentionReason::SpecifierIdentityUnderivable => {
+                write!(
+                    f,
+                    "the claiming extension derives no package identity from import specifiers"
+                )
+            }
+            AbstentionReason::UnclaimedImporters { suffixes } => {
+                write!(f, "files nothing claims could import: ")?;
+                for (i, suffix) in suffixes.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, ".{suffix}")?;
+                }
+                Ok(())
+            }
+            AbstentionReason::NothingReachesOwnedFiles => {
+                write!(f, "no root reaches any file the package owns")
+            }
+            AbstentionReason::OwnedFilesAreTests => {
+                write!(f, "every file the package owns is a test")
             }
         }
     }
@@ -205,6 +280,9 @@ pub struct AnalysisOutcome {
     /// absent here — abstained, or no analysis ships for it yet — is un-judged, and
     /// nothing about it (a suppression included) may be called stale.
     pub judged: std::collections::BTreeSet<Category>,
+    /// The dependency declarations the usage judgment counted, by declaring
+    /// manifest — health's dependency universe. Empty when `unused` never ran.
+    pub dependency_universe: BTreeMap<ProjectPath, BTreeSet<SmolStr>>,
 }
 
 pub fn run_all(
@@ -217,6 +295,7 @@ pub fn run_all(
 ) -> AnalysisOutcome {
     let reach = Reachability::compute(graph);
     let index = crate::navigate::Index::build(graph, &reach);
+    let manifests = dependency::eligibility(graph, &reach);
     let run = RunContext {
         graph,
         reach,
@@ -225,6 +304,7 @@ pub fn run_all(
         narrowables,
         export_narrowables,
         cycle_hazards,
+        manifests,
     };
     let mut findings = Vec::new();
     let mut abstained = Vec::new();
@@ -266,15 +346,29 @@ pub fn run_all(
         let cx = AnalysisContext {
             run: &run,
             measured: &measured,
+            abstentions: Default::default(),
         };
         findings.extend(analysis.run(&cx));
+        for (reason, scope) in cx.abstentions.into_inner() {
+            abstained.push(Abstention {
+                category: analysis.category(),
+                reason,
+                scope,
+            });
+        }
         judged.insert(analysis.category());
     }
 
+    let dependency_universe = if judged.contains(&Category::UNUSED) {
+        dependency::universe(&run)
+    } else {
+        BTreeMap::new()
+    };
     sort_findings(&mut findings);
     AnalysisOutcome {
         findings,
         abstained,
         judged,
+        dependency_universe,
     }
 }

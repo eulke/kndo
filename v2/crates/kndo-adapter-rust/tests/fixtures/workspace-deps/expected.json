@@ -12,20 +12,27 @@
           "crate"
         ],
         "export_narrowing": "none",
-        "import_cycles": "tolerated"
+        "import_cycles": "tolerated",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "crate-root"
       }
     ]
   },
   "health": {
-    "implicated": 0,
-    "subjects": 4,
-    "by_category": [],
+    "implicated": 1,
+    "subjects": 6,
+    "by_category": [
+      {
+        "category": "unused",
+        "findings": 1
+      }
+    ],
     "by_package": [
       {
         "name": "app",
         "manifest": "app/Cargo.toml",
-        "implicated": 0,
-        "subjects": 2
+        "implicated": 1,
+        "subjects": 4
       },
       {
         "name": "base",
@@ -35,7 +42,20 @@
       }
     ]
   },
-  "findings": [],
+  "findings": [
+    {
+      "id": "kndo-3809f4130e91",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "probable",
+      "subject": {
+        "kind": "dependency",
+        "owner_manifest": "app/Cargo.toml",
+        "name": "serde"
+      },
+      "message": "declared as a production dependency, but no file imports it and the manifest never names it"
+    }
+  ],
   "fixed": [],
   "baselined": 0,
   "abstained": [

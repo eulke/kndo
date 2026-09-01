@@ -31,6 +31,13 @@ pub struct ExtensionRun {
     /// Whether the language calls import cycles a hazard (`cyclic` reads it);
     /// `tolerated` is why a cycle-free-by-compiler language reports none.
     pub import_cycles: kndo_contract::extension::CycleTolerance,
+    /// Whether the manifests this extension reads have dependency sections
+    /// (`scoped`) or one flat requirement list (`unscoped`) — under `unscoped`,
+    /// `test-only` never fires on a dependency: there is no section to move it to.
+    pub dependency_scoping: kndo_contract::extension::DependencyScoping,
+    /// How this extension's import specifiers name a declared dependency —
+    /// `underivable` is why no dependency finding can exist for its manifests.
+    pub dependency_identity: kndo_contract::extension::DependencyIdentity,
 }
 
 /// What this report's `findings`/`fixed` split was computed against. `full` is a

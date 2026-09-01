@@ -41,6 +41,8 @@ impl GoAdapter {
             // go.mod has no sections: every direct requirement is a build
             // requirement, and "only tests import it" has nowhere to move.
             .dependency_scoping(kndo_contract::extension::DependencyScoping::Unscoped)
+            // An import path names the module whose path prefixes it.
+            .dependency_identity(kndo_contract::extension::DependencyIdentity::PathPrefix)
             .build(),
         }
     }
@@ -77,13 +79,6 @@ impl Extension for GoAdapter {
         manifest: &SourceFile<'_>,
     ) -> Vec<kndo_contract::adapter::DependencyDeclaration> {
         manifest::dependencies(manifest)
-    }
-
-    fn imports_dependency(&self, specifier: &str, dependency: &str) -> Option<bool> {
-        // An import path names the module whose path prefixes it.
-        Some(kndo_toolkit::dependency_match::by_path(
-            specifier, dependency, "/",
-        ))
     }
 
     fn sees(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {

@@ -20,7 +20,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Bump when the SAME evidence assembles into a DIFFERENT graph — resolution
 /// candidate changes, reachability semantics, new assembled fields. Folded into the
 /// graph cache key beside the contract fingerprint and the adapter set.
-pub const GRAPH_SEMANTICS_VERSION: u32 = 8;
+pub const GRAPH_SEMANTICS_VERSION: u32 = 9;
 
 #[derive(Serialize, Deserialize)]
 pub struct GraphFile {
@@ -126,27 +126,60 @@ pub struct ManifestDeclarations {
     /// Sorted by name, then scope order, then requirement — deterministic
     /// whatever order the manifest stated them in.
     pub declarations: Vec<kndo_contract::adapter::DependencyDeclaration>,
-    /// Whether the claiming adapter can derive package identity from a
-    /// specifier at all ([`Extension::imports_dependency`] answered); when it
-    /// cannot, `users` is empty and no dependency here is ever judged —
-    /// abstention, never accusation.
-    pub judgeable: bool,
-    /// The claiming adapter's coordinate — whose spelling judged `users` and
-    /// whose declared [`kndo_contract::extension::DependencyScoping`] decides
-    /// which scopes are usage claims.
+    /// The claiming adapter's declared
+    /// [`kndo_contract::extension::DependencyIdentity`] — the spelling that
+    /// judged `users`. `Underivable` leaves every `users` list empty and no
+    /// dependency here ever judged: abstention, never accusation.
+    pub identity: kndo_contract::extension::DependencyIdentity,
+    /// The claiming adapter's coordinate.
     pub adapter: SmolStr,
-    /// The files this manifest's package owns (nearest-boundary ownership;
-    /// directory prefix when no package declares itself) — sorted indices into
-    /// `Graph::files`. The universe every dependency here is judged against.
+    /// The claiming adapter's declared
+    /// [`kndo_contract::extension::DependencyScoping`]: under `Unscoped` an
+    /// unscoped declaration is a usage claim, and "only tests import it" has
+    /// no section to move to.
+    pub scoping: kndo_contract::extension::DependencyScoping,
+    /// The claiming adapter's declared
+    /// [`kndo_contract::extension::ExtensionSpec::dependency_importers`]:
+    /// suffixes of unclaimed files that could import this manifest's
+    /// dependencies, and so cast doubt on any usage judgment.
+    pub importers: Vec<SmolStr>,
+    /// The package this manifest declares, as an index into `Graph::packages`;
+    /// `None` for a manifest that declares none, which owns by directory.
+    pub package: Option<u32>,
+    /// The files this manifest's package owns ([`ManifestDeclarations::owns`])
+    /// — sorted indices into `Graph::files`.
     pub owned: Vec<u32>,
     /// Parallel to `declarations`: whether each is a usage claim the engine
-    /// judges at all — the adapter derives package identity (`judgeable`) AND
+    /// judges at all — the adapter derives package identity (`identity`) AND
     /// the scope is one that claims use: production, or unscoped under an
-    /// `Unscoped` ecosystem. Health's universe counts exactly these.
+    /// `Unscoped` ecosystem.
     pub judged: Vec<bool>,
-    /// Parallel to `declarations`: the owned files whose package-shaped imports
-    /// name each dependency — sorted, deduplicated indices into `Graph::files`.
+    /// Parallel to `declarations`: the files this adapter claims, anywhere in
+    /// the tree, whose package-shaped imports name each dependency — sorted,
+    /// deduplicated indices into `Graph::files`. `owned` tells the package's
+    /// own users from cross-package ones.
     pub users: Vec<Vec<u32>>,
+}
+
+impl ManifestDeclarations {
+    /// Does this manifest's package own `path`, whose owning package per
+    /// [`Graph::package_of`] is `path_package`? Nearest-boundary ownership
+    /// when the manifest declares a package; the manifest's own directory
+    /// otherwise. One rule for the claimed files judged against a declaration
+    /// and for the unclaimed files that cast doubt on the judgment.
+    pub fn owns(&self, path: &str, path_package: Option<u32>) -> bool {
+        match self.package {
+            Some(ix) => path_package == Some(ix),
+            None => {
+                let dir = self
+                    .manifest
+                    .as_str()
+                    .rsplit_once('/')
+                    .map_or("", |(d, _)| d);
+                dir.is_empty() || path.strip_prefix(dir).is_some_and(|r| r.starts_with('/'))
+            }
+        }
+    }
 }
 
 impl Graph {
@@ -154,10 +187,11 @@ impl Graph {
         serde_json::to_string(self).expect("graph serializes")
     }
 
-    /// For every manifest, which owned files use each declared dependency —
-    /// through the claiming adapter's spelling knowledge
-    /// ([`Extension::imports_dependency`]). A manifest whose adapter cannot
-    /// derive package identity stays unjudgeable, with every `users` list empty.
+    /// For every manifest, which files use each declared dependency — under
+    /// the claiming adapter's declared spelling
+    /// ([`kndo_contract::extension::DependencyIdentity`]), over every file that
+    /// adapter claims. A manifest whose adapter derives no identity keeps every
+    /// `users` list empty.
     fn judge_dependency_usage(
         &mut self,
         files: &[DiscoveredFile],
@@ -174,19 +208,48 @@ impl Graph {
             .iter()
             .map(|f| self.package_of(f.path.as_str()))
             .collect();
+        // Per claiming adapter, every distinct package-shaped specifier and the
+        // files importing it: a declaration is matched against specifiers, never
+        // against files, so the cost is declarations × distinct specifiers.
+        let mut specifiers: BTreeMap<&str, BTreeMap<&str, Vec<u32>>> = BTreeMap::new();
+        for (i, f) in self.files.iter().enumerate() {
+            for import in &f.evidence.imports {
+                if let ImportTarget::Package(spec) = &import.target {
+                    let importers = specifiers
+                        .entry(f.adapter.as_str())
+                        .or_default()
+                        .entry(spec.as_str())
+                        .or_default();
+                    if importers.last() != Some(&(i as u32)) {
+                        importers.push(i as u32);
+                    }
+                }
+            }
+        }
         struct Judged {
-            judgeable: bool,
+            identity: kndo_contract::extension::DependencyIdentity,
             adapter: SmolStr,
+            scoping: kndo_contract::extension::DependencyScoping,
+            importers: Vec<SmolStr>,
+            package: Option<u32>,
             owned: Vec<u32>,
             judged: Vec<bool>,
             users: Vec<Vec<u32>>,
         }
         let mut judged: Vec<Judged> = Vec::with_capacity(self.manifest_declarations.len());
         for md in &self.manifest_declarations {
+            let package = self
+                .packages
+                .iter()
+                .position(|p| p.manifest == md.manifest)
+                .map(|i| i as u32);
             let Some(coordinate) = claimant.get(&md.manifest) else {
                 judged.push(Judged {
-                    judgeable: false,
+                    identity: Default::default(),
                     adapter: SmolStr::default(),
+                    scoping: Default::default(),
+                    importers: Vec::new(),
+                    package,
                     owned: Vec::new(),
                     judged: vec![false; md.declarations.len()],
                     users: vec![Vec::new(); md.declarations.len()],
@@ -194,50 +257,34 @@ impl Graph {
                 continue;
             };
             let adapter = adapter_by_id(adapters, coordinate);
-            let unscoped = adapter.spec().dependency_scoping()
-                == kndo_contract::extension::DependencyScoping::Unscoped;
-            let package = self
-                .packages
+            let identity = adapter.spec().dependency_identity();
+            let judgeable = identity != kndo_contract::extension::DependencyIdentity::Underivable;
+            let scoping = adapter.spec().dependency_scoping();
+            let unscoped = scoping == kndo_contract::extension::DependencyScoping::Unscoped;
+            let ownership = ManifestDeclarations {
+                package,
+                ..ManifestDeclarations::unjudged(md.manifest.clone(), Vec::new())
+            };
+            let owned: Vec<u32> = (0..self.files.len())
+                .filter(|&i| ownership.owns(self.files[i].path.as_str(), owners[i]))
+                .map(|i| i as u32)
+                .collect();
+            let claimed = specifiers.get(coordinate.as_str());
+            let users: Vec<Vec<u32>> = md
+                .declarations
                 .iter()
-                .position(|p| p.manifest == md.manifest)
-                .map(|i| i as u32);
-            let dir = md.manifest.as_str().rsplit_once('/').map_or("", |(d, _)| d);
-            let owned: Vec<usize> = (0..self.files.len())
-                .filter(|&i| match package {
-                    Some(ix) => owners[i] == Some(ix),
-                    None => {
-                        let p = self.files[i].path.as_str();
-                        dir.is_empty() || p.strip_prefix(dir).is_some_and(|r| r.starts_with('/'))
-                    }
+                .map(|dd| {
+                    let mut using: Vec<u32> = claimed
+                        .into_iter()
+                        .flatten()
+                        .filter(|(spec, _)| judgeable && identity.names(spec, dd.name.as_str()))
+                        .flat_map(|(_, importers)| importers.iter().copied())
+                        .collect();
+                    using.sort_unstable();
+                    using.dedup();
+                    using
                 })
                 .collect();
-            let mut judgeable = true;
-            let mut users: Vec<Vec<u32>> = Vec::with_capacity(md.declarations.len());
-            'decls: for dd in &md.declarations {
-                let mut using = Vec::new();
-                for &i in &owned {
-                    for import in &self.files[i].evidence.imports {
-                        let ImportTarget::Package(spec) = &import.target else {
-                            continue;
-                        };
-                        match adapter.imports_dependency(spec.as_str(), dd.name.as_str()) {
-                            Some(true) => {
-                                using.push(i as u32);
-                                break;
-                            }
-                            Some(false) => {}
-                            None => {
-                                judgeable = false;
-                                break 'decls;
-                            }
-                        }
-                    }
-                }
-                users.push(using);
-            }
-            if !judgeable {
-                users = vec![Vec::new(); md.declarations.len()];
-            }
             let claims: Vec<bool> = md
                 .declarations
                 .iter()
@@ -251,16 +298,22 @@ impl Graph {
                 })
                 .collect();
             judged.push(Judged {
-                judgeable,
+                identity,
                 adapter: coordinate.clone(),
-                owned: owned.iter().map(|&i| i as u32).collect(),
+                scoping,
+                importers: adapter.spec().dependency_importers().to_vec(),
+                package,
+                owned,
                 judged: claims,
                 users,
             });
         }
         for (md, j) in self.manifest_declarations.iter_mut().zip(judged) {
-            md.judgeable = j.judgeable;
+            md.identity = j.identity;
             md.adapter = j.adapter;
+            md.scoping = j.scoping;
+            md.importers = j.importers;
+            md.package = j.package;
             md.owned = j.owned;
             md.judged = j.judged;
             md.users = j.users;
@@ -421,17 +474,31 @@ fn collect_manifest_declarations(
                     ))
             });
             declarations.dedup();
-            ManifestDeclarations {
-                manifest,
-                declarations,
-                judgeable: false,
-                adapter: SmolStr::default(),
-                owned: Vec::new(),
-                judged: Vec::new(),
-                users: Vec::new(),
-            }
+            ManifestDeclarations::unjudged(manifest, declarations)
         })
         .collect()
+}
+
+impl ManifestDeclarations {
+    /// The declarations before assembly judged them: no adapter, nothing owned,
+    /// nothing counted.
+    fn unjudged(
+        manifest: ProjectPath,
+        declarations: Vec<kndo_contract::adapter::DependencyDeclaration>,
+    ) -> ManifestDeclarations {
+        ManifestDeclarations {
+            manifest,
+            declarations,
+            identity: Default::default(),
+            adapter: SmolStr::default(),
+            scoping: Default::default(),
+            importers: Vec::new(),
+            package: None,
+            owned: Vec::new(),
+            judged: Vec::new(),
+            users: Vec::new(),
+        }
+    }
 }
 
 fn adapter_by_id<'a>(adapters: &'a [Box<dyn Extension>], id: &str) -> &'a dyn Extension {
@@ -548,10 +615,10 @@ fn resolve_file(
                 continue;
             }
         };
-        // A `Possible` package-shaped import (a specifier spelled inside a
-        // string literal) is enough for a declared dependency to count as used,
-        // never enough to draw a reachability edge to a workspace sibling.
-        if !relative && import.confidence == kndo_contract::vocab::Confidence::Possible {
+        // A mention (a specifier spelled inside a string literal) is enough for
+        // a declared dependency to count as used, never enough to draw a
+        // reachability edge to a workspace sibling.
+        if matches!(import.shape, kndo_contract::evidence::ImportShape::Mention) {
             per_import.push(Vec::new());
             continue;
         }

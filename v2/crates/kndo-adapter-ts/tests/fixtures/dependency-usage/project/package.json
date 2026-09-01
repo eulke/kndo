@@ -1,0 +1,17 @@
+{
+  "name": "dependency-usage",
+  "main": "src/main.js",
+  "scripts": { "build": "bundle-tool src/main.js" },
+  "browser": { "./src/node-only.js": "aliased-shim" },
+  "dependencies": {
+    "used-dep": "^1.0.0",
+    "spelled-dep": "^1.0.0",
+    "test-dep": "^1.0.0",
+    "idle-dep": "^1.0.0",
+    "bundle-tool": "^1.0.0",
+    "aliased-shim": "^1.0.0"
+  },
+  "devDependencies": { "idle-dev-dep": "^1.0.0" },
+  "peerDependencies": { "idle-peer": "^1.0.0" },
+  "optionalDependencies": { "idle-optional": "^1.0.0" }
+}

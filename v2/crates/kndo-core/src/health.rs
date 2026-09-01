@@ -1,12 +1,11 @@
 //! Project health: how much of the judged graph is implicated by findings, as a
 //! ratio of two counted integers — never a weighted score. The universe is the
-//! graph's own: every declaration plus every claimed file. A finding counts when
-//! it is first-party (extension findings are advisory by the two-tier decision),
-//! warning or worse (`Info` is the advisory severity tier), and lands on a
-//! subject inside that universe (symbol or file; dependency-shaped findings join
-//! when their own universe — declared dependencies — is a counted thing).
-//! Subjects are counted DISTINCT: a function that is both unused and duplicated
-//! is one problem unit, not two penalties.
+//! judged one ([`Universe`]): every declaration plus every claimed file, plus
+//! every dependency declaration the usage judgment counted. A finding counts
+//! when it is first-party (extension findings are advisory by the two-tier
+//! decision), warning or worse (`Info` is the advisory severity tier), and lands
+//! on a subject inside that universe. Subjects are counted DISTINCT: a function
+//! that is both unused and duplicated is one problem unit, not two penalties.
 //!
 //! Health measures the CURRENT tree. The baseline acknowledges debt and hides it
 //! from the report's listing — never from health: baselining everything must not
@@ -18,9 +17,63 @@
 
 use kndo_contract::finding::{Finding, Severity};
 use kndo_contract::subject::Subject;
-use kndo_contract::vocab::Category;
+use kndo_contract::vocab::{Category, ProjectPath};
 use serde::Serialize;
+use smol_str::SmolStr;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
+
+/// What health divides by. Files and declarations are the graph's own;
+/// dependency declarations join only where the usage judgment counted them, so
+/// a dependency-subject finding implicates exactly when its subject was judged
+/// — never a finding on something outside the ratio's denominator.
+#[derive(Debug, Clone, Default)]
+pub struct Universe {
+    /// Every claimed file plus every declaration.
+    pub graph_subjects: u32,
+    /// The dependency declarations the usage judgment counted, by declaring
+    /// manifest.
+    pub dependencies: BTreeMap<ProjectPath, BTreeSet<SmolStr>>,
+}
+
+impl Universe {
+    pub fn of(
+        graph: &crate::graph::Graph,
+        dependencies: BTreeMap<ProjectPath, BTreeSet<SmolStr>>,
+    ) -> Universe {
+        Universe {
+            graph_subjects: (graph.files.len()
+                + graph
+                    .files
+                    .iter()
+                    .map(|f| f.evidence.declarations.len())
+                    .sum::<usize>()) as u32,
+            dependencies,
+        }
+    }
+
+    pub fn size(&self) -> u32 {
+        self.graph_subjects
+            + self
+                .dependencies
+                .values()
+                .map(|names| names.len() as u32)
+                .sum::<u32>()
+    }
+
+    fn contains(&self, subject: &Subject) -> bool {
+        match subject {
+            Subject::Symbol { .. } | Subject::File { .. } => true,
+            Subject::Dependency {
+                owner_manifest,
+                name,
+            } => self
+                .dependencies
+                .get(owner_manifest)
+                .is_some_and(|names| names.contains(name)),
+            _ => false,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -66,15 +119,16 @@ impl Health {
     /// the abstention channel already says why.
     pub fn measure(
         findings: &[Finding],
-        subjects: u32,
+        universe: &Universe,
         judged: &BTreeSet<Category>,
     ) -> Option<Health> {
+        let subjects = universe.size();
         if subjects == 0 || !judged.contains(&Category::UNUSED) {
             return None;
         }
         let mut implicated: HashSet<&Subject> = HashSet::new();
         let mut by_category: BTreeMap<&Category, u32> = BTreeMap::new();
-        for finding in findings.iter().filter(|f| counts(f)) {
+        for finding in findings.iter().filter(|f| counts(f, universe)) {
             implicated.insert(&finding.subject);
             *by_category.entry(&finding.category).or_insert(0) += 1;
         }
@@ -94,10 +148,14 @@ impl Health {
 
     /// Partition the measurement by owning package — same universe, same
     /// counting rule, split by [`crate::graph::Graph::package_of`] on each
-    /// subject's path. The whole always reconciles: every bucket's subjects
-    /// sum to the top-level count.
-    pub fn partition(&mut self, graph: &crate::graph::Graph, findings: &[Finding]) {
-        use smol_str::SmolStr;
+    /// subject's path (a dependency's path is its manifest). The whole always
+    /// reconciles: every bucket's subjects sum to the top-level count.
+    pub fn partition(
+        &mut self,
+        graph: &crate::graph::Graph,
+        findings: &[Finding],
+        universe: &Universe,
+    ) {
         // Buckets by package INDEX — two same-named packages (parallel trees)
         // stay two rows, told apart by their manifests.
         let mut subjects: BTreeMap<Option<u32>, u32> = BTreeMap::new();
@@ -106,8 +164,13 @@ impl Health {
                 .entry(graph.package_of(f.path.as_str()))
                 .or_insert(0) += 1 + f.evidence.declarations.len() as u32;
         }
+        for (manifest, names) in &universe.dependencies {
+            *subjects
+                .entry(graph.package_of(manifest.as_str()))
+                .or_insert(0) += names.len() as u32;
+        }
         let mut implicated: BTreeMap<Option<u32>, HashSet<&Subject>> = BTreeMap::new();
-        for finding in findings.iter().filter(|f| counts(f)) {
+        for finding in findings.iter().filter(|f| counts(f, universe)) {
             implicated
                 .entry(graph.package_of(finding.subject.path().as_str()))
                 .or_default()
@@ -143,13 +206,10 @@ impl Health {
     }
 }
 
-fn counts(finding: &Finding) -> bool {
+fn counts(finding: &Finding, universe: &Universe) -> bool {
     !finding.category.is_extension()
         && finding.severity.at_least(Severity::Warning)
-        && matches!(
-            finding.subject,
-            Subject::Symbol { .. } | Subject::File { .. }
-        )
+        && universe.contains(&finding.subject)
 }
 
 #[cfg(test)]
@@ -171,6 +231,13 @@ mod tests {
         Finding::new(category, severity, Confidence::Certain, subject, "", "m")
     }
 
+    fn graph_free(subjects: u32) -> Universe {
+        Universe {
+            graph_subjects: subjects,
+            ..Default::default()
+        }
+    }
+
     fn judged_with_unused() -> BTreeSet<Category> {
         BTreeSet::from([Category::UNUSED])
     }
@@ -183,7 +250,7 @@ mod tests {
             finding(Category::DUPLICATE, Severity::Warning, hot),
             finding(Category::UNUSED, Severity::Warning, symbol("b.py", "g")),
         ];
-        let h = Health::measure(&findings, 10, &judged_with_unused()).unwrap();
+        let h = Health::measure(&findings, &graph_free(10), &judged_with_unused()).unwrap();
         assert_eq!(h.implicated, 2, "one subject, one problem unit");
         assert_eq!(h.subjects, 10);
         assert_eq!(h.score_text(), "80.0");
@@ -216,7 +283,7 @@ mod tests {
                 },
             ),
         ];
-        let h = Health::measure(&findings, 4, &judged_with_unused()).unwrap();
+        let h = Health::measure(&findings, &graph_free(4), &judged_with_unused()).unwrap();
         assert_eq!(h.implicated, 0);
         assert!(h.by_category.is_empty());
         assert_eq!(h.score_text(), "100.0");
@@ -224,7 +291,7 @@ mod tests {
 
     #[test]
     fn no_reachability_judgment_means_no_health() {
-        assert!(Health::measure(&[], 5, &BTreeSet::new()).is_none());
-        assert!(Health::measure(&[], 0, &judged_with_unused()).is_none());
+        assert!(Health::measure(&[], &graph_free(5), &BTreeSet::new()).is_none());
+        assert!(Health::measure(&[], &graph_free(0), &judged_with_unused()).is_none());
     }
 }

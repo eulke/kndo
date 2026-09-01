@@ -9,7 +9,9 @@
         "id": "kndo:python",
         "files": 3,
         "export_narrowing": "none",
-        "import_cycles": "hazard"
+        "import_cycles": "hazard",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "underivable"
       }
     ]
   },

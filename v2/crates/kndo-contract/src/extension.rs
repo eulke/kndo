@@ -118,13 +118,55 @@ pub enum ExportNarrowing {
 /// requirement — so an unscoped declaration IS the usage claim, and "only tests
 /// import it" has no section to move it to. `unused` and `test-only` are the
 /// consumers, on their dependency subjects.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum DependencyScoping {
     #[default]
     Scoped,
     Unscoped,
+}
+
+/// How an import specifier names a declared dependency — the ecosystem's
+/// spelling, as data: the engine matches every package-shaped import of an
+/// adapter's files against its manifests' declarations without calling back
+/// into the adapter, and an adapter cannot claim to derive identity without
+/// saying how. `unused` and `test-only` read it on their dependency subjects.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub enum DependencyIdentity {
+    /// Specifiers name nothing this vocabulary can match with a declaration (a
+    /// JVM artifact id names no package, a Swift package name is not its module
+    /// name, a Python distribution is not its import name): every usage
+    /// judgment abstains, and says so.
+    #[default]
+    Underivable,
+    /// The specifier is the declared name or a `/`-path under it: `lodash/fp`
+    /// names `lodash`, a scoped `@s/n` carries its own separator, and a Go
+    /// import path names the module whose path prefixes it.
+    PathPrefix,
+    /// The specifier's leading `::` segment is the declared name with `-`
+    /// spelled `_`: `serde_json::Value` names `serde-json`.
+    CrateRoot,
+}
+
+impl DependencyIdentity {
+    /// Does `specifier` name `dependency` under this spelling? Never asked under
+    /// `Underivable` — the engine abstains first — and `false` there.
+    pub fn names(self, specifier: &str, dependency: &str) -> bool {
+        fn under(specifier: &str, dependency: &str, separator: &str) -> bool {
+            specifier == dependency
+                || specifier
+                    .strip_prefix(dependency)
+                    .is_some_and(|rest| rest.starts_with(separator))
+        }
+        match self {
+            DependencyIdentity::Underivable => false,
+            DependencyIdentity::PathPrefix => under(specifier, dependency, "/"),
+            DependencyIdentity::CrateRoot => under(specifier, &dependency.replace('-', "_"), "::"),
+        }
+    }
 }
 
 /// What an extension IS, as data — the one manifest for every capability. Fields
@@ -140,6 +182,8 @@ pub struct ExtensionSpec {
     narrowable_scopes: Vec<SmolStr>,
     export_narrowing: ExportNarrowing,
     dependency_scoping: DependencyScoping,
+    dependency_identity: DependencyIdentity,
+    dependency_importers: Vec<SmolStr>,
     import_cycles: CycleTolerance,
     claims: Vec<SmolStr>,
     emits: EvidenceStreams,
@@ -174,6 +218,8 @@ impl ExtensionSpec {
                 narrowable_scopes: Vec::new(),
                 export_narrowing: ExportNarrowing::None,
                 dependency_scoping: DependencyScoping::Scoped,
+                dependency_identity: DependencyIdentity::Underivable,
+                dependency_importers: Vec::new(),
                 import_cycles: CycleTolerance::Tolerated,
                 claims: Vec::new(),
                 emits: EvidenceStreams::none(),
@@ -226,6 +272,22 @@ impl ExtensionSpec {
     /// `test-only` are the consumers.
     pub fn dependency_scoping(&self) -> DependencyScoping {
         self.dependency_scoping
+    }
+
+    /// See [`DependencyIdentity`]; the engine's dependency-usage judgment is
+    /// the consumer, and `Underivable` is its abstention.
+    pub fn dependency_identity(&self) -> DependencyIdentity {
+        self.dependency_identity
+    }
+
+    /// Suffixes of files that can carry this ecosystem's imports without being
+    /// claimed by this extension — a `.vue` component, an `.html` page, a `.css`
+    /// sheet for npm. The dependency-usage judgment abstains on a manifest whose
+    /// package holds an unclaimed file with one of these: an import of the
+    /// dependency may sit where nothing can see it. Empty ⇒ only claimed files
+    /// import, and nothing unclaimed casts doubt.
+    pub fn dependency_importers(&self) -> &[SmolStr] {
+        &self.dependency_importers
     }
 
     /// See [`CycleTolerance`]; the `cyclic` analysis is the consumer.
@@ -297,6 +359,11 @@ pub struct ExtensionSpecParts {
     /// Wire components cannot declare `Unscoped` yet; defaults to `Scoped`, under
     /// which an unscoped declaration is never a usage claim — silence.
     pub dependency_scoping: DependencyScoping,
+    /// Wire components cannot declare a spelling yet; defaults to `Underivable`,
+    /// under which every dependency-usage judgment abstains — silence.
+    pub dependency_identity: DependencyIdentity,
+    /// Wire components cannot declare importer suffixes yet; defaults to none.
+    pub dependency_importers: Vec<SmolStr>,
     /// Wire components cannot declare `Hazard` yet — the world speaks no cycle
     /// vocabulary; defaults to `Tolerated` (silence) like every other absence.
     pub import_cycles: CycleTolerance,
@@ -335,6 +402,8 @@ impl From<ExtensionSpecParts> for ExtensionSpec {
             narrowable_scopes: parts.narrowable_scopes,
             export_narrowing: parts.export_narrowing,
             dependency_scoping: parts.dependency_scoping,
+            dependency_identity: parts.dependency_identity,
+            dependency_importers: parts.dependency_importers,
             import_cycles: parts.import_cycles,
             claims: parts.claims,
             emits: parts.emits,
@@ -399,6 +468,23 @@ impl ExtensionSpecBuilder {
     /// never read as usage claims.
     pub fn dependency_scoping(mut self, scoping: DependencyScoping) -> Self {
         self.spec.dependency_scoping = scoping;
+        self
+    }
+
+    /// Declare how this ecosystem's import specifiers name a declared
+    /// dependency (see [`DependencyIdentity`]). Omitted ⇒ `Underivable`: the
+    /// dependency-usage judgment abstains for every manifest this adapter reads.
+    pub fn dependency_identity(mut self, identity: DependencyIdentity) -> Self {
+        self.spec.dependency_identity = identity;
+        self
+    }
+
+    /// Declare the suffixes of unclaimed files that can carry this ecosystem's
+    /// imports (see [`ExtensionSpec::dependency_importers`]). Omitted ⇒ none:
+    /// only the files this extension claims import, and an unclaimed file
+    /// never makes the dependency-usage judgment abstain.
+    pub fn dependency_importers(mut self, suffixes: &'static [&'static str]) -> Self {
+        self.spec.dependency_importers = suffixes.iter().map(|s| SmolStr::new_static(s)).collect();
         self
     }
 
@@ -766,20 +852,6 @@ pub trait Extension: Send + Sync {
     fn manifest_dependencies(&self, manifest: &SourceFile<'_>) -> Vec<DependencyDeclaration> {
         let _ = manifest;
         Vec::new()
-    }
-
-    /// Does the import specifier `specifier` name the declared dependency
-    /// `dependency`? Pure language knowledge — npm spells `lodash/fp` for
-    /// `lodash`, Cargo spells `serde_json::Value` for `serde-json`, Go spells a
-    /// module path prefix — evaluated by the engine at assembly for every
-    /// package-shaped import of a manifest's own files against that manifest's
-    /// declarations. `None` = this ecosystem cannot derive package identity
-    /// from a specifier (a JVM artifact id names no package; a Swift package
-    /// name is not its module name), and the manifest's dependencies are never
-    /// judged — abstention, not accusation. The default answers nothing.
-    fn imports_dependency(&self, specifier: &str, dependency: &str) -> Option<bool> {
-        let _ = (specifier, dependency);
-        None
     }
 
     /// The files whose names `path` SEES with no import naming them — the rest

@@ -6,8 +6,14 @@
 //! with the navigation verbs, so `used-by` lists exactly the evidence this
 //! judgment counted. This analysis asks it with `limit 1`: emptiness is the
 //! accusation.
+//!
+//! Dependency subjects are the same verdict on a manifest's production-scope
+//! declarations, over the floor [`super::dependency`] shares with `test-only`:
+//! nothing in the tree imports it and the manifest never names it. `Probable`,
+//! not `Certain` — a dependency's uses are visible only where an import spells
+//! them, and a runtime that injects one leaves no import to see.
 
-use super::{AbstentionReason, Analysis, AnalysisContext, RunContext};
+use super::{AbstentionReason, Analysis, AnalysisContext, RunContext, dependency};
 use crate::navigate;
 use kndo_contract::finding::{Finding, Severity};
 use kndo_contract::subject::{Subject, SymbolSelector};
@@ -75,6 +81,23 @@ impl Analysis for Unused {
                     "nothing references, roots, or imports this declaration",
                 ));
             }
+        }
+        dependency::abstain(cx);
+        for dep in dependency::judged(cx) {
+            if !dep.users.is_empty() {
+                continue;
+            }
+            out.push(Finding::new(
+                Category::UNUSED,
+                Severity::Warning,
+                Confidence::Probable,
+                Subject::Dependency {
+                    owner_manifest: dep.manifest.manifest.clone(),
+                    name: dep.declaration.name.clone(),
+                },
+                "",
+                "declared as a production dependency, but no file imports it and the manifest never names it",
+            ));
         }
         out
     }

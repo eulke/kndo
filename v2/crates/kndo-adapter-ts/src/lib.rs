@@ -49,6 +49,15 @@ impl TypeScriptAdapter {
         // Dropping `export` is the language-checked narrowing: tsc turns any
         // missed external use into a compile error.
         .export_narrowing(kndo_contract::extension::ExportNarrowing::Expressible)
+        // `lodash/fp` names `lodash`; a scoped name carries its own slash.
+        .dependency_identity(kndo_contract::extension::DependencyIdentity::PathPrefix)
+        // Files that carry ESM imports without being JS/TS: single-file
+        // components, pages with module scripts, stylesheets with `@import`,
+        // markdown-with-modules, server templates that embed JS.
+        .dependency_importers(&[
+            "vue", "svelte", "astro", "marko", "html", "htm", "css", "scss", "sass", "less",
+            "styl", "pcss", "mdx", "coffee", "ejs", "pug",
+        ])
         .build();
         let mut resolution_exts = Vec::new();
         for ext in spec.suffixes() {
@@ -111,13 +120,6 @@ impl Extension for TypeScriptAdapter {
 
     fn manifest_dependencies(&self, manifest: &SourceFile<'_>) -> Vec<DependencyDeclaration> {
         manifest::dependencies(manifest)
-    }
-
-    fn imports_dependency(&self, specifier: &str, dependency: &str) -> Option<bool> {
-        // `lodash/fp` names `lodash`; a scoped name carries its own slash.
-        Some(kndo_toolkit::dependency_match::by_path(
-            specifier, dependency, "/",
-        ))
     }
 }
 

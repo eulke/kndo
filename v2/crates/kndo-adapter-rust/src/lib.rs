@@ -31,18 +31,22 @@ pub struct RustAdapter {
 impl RustAdapter {
     pub fn new() -> Self {
         RustAdapter {
-            // 3: `use` items inside function bodies are imports; `optional`
-            // dependencies declare `Optional`.
-            spec: kndo_toolkit::source_adapter_spec(
+            // 4: crate paths inside attributes (`#[derive(thiserror::Error)]`)
+            // are imports.
+            spec: kndo_toolkit::source_adapter_builder(
                 "kndo:rust",
-                3,
+                4,
                 &["rs"],
                 &["**/Cargo.toml"],
                 &["crate"],
                 // Modules within a crate reference each other freely — legal,
                 // routine structure, never an initialization hazard.
                 kndo_contract::extension::CycleTolerance::Tolerated,
-            ),
+            )
+            // `serde_json::Value` names `serde-json`: the crate root segment,
+            // hyphens spelled as underscores.
+            .dependency_identity(kndo_contract::extension::DependencyIdentity::CrateRoot)
+            .build(),
         }
     }
 }
@@ -91,11 +95,5 @@ impl Extension for RustAdapter {
 
     fn manifest_dependencies(&self, manifest: &SourceFile<'_>) -> Vec<DependencyDeclaration> {
         manifest::dependencies(manifest)
-    }
-
-    fn imports_dependency(&self, specifier: &str, dependency: &str) -> Option<bool> {
-        Some(kndo_toolkit::dependency_match::by_crate(
-            specifier, dependency,
-        ))
     }
 }

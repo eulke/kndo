@@ -242,7 +242,7 @@ fn adapter_conformance_fixtures_are_byte_identical() {
     // the pinned reports GROW as analyses land, which is the point of pinning them.
     let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
     let corpora = [
-        (manifest.join("../kndo-adapter-ts/tests/fixtures"), 23),
+        (manifest.join("../kndo-adapter-ts/tests/fixtures"), 24),
         (manifest.join("../kndo-adapter-rust/tests/fixtures"), 26),
         (manifest.join("../kndo-adapter-go/tests/fixtures"), 8),
         (manifest.join("../kndo-adapter-java/tests/fixtures"), 6),
@@ -874,7 +874,10 @@ fn agent_format_matches_its_committed_golden() {
     // output: the Info and dependency-subject findings must not implicate.
     let health = kndo::Health::measure(
         &findings,
-        40,
+        &kndo::Universe {
+            graph_subjects: 40,
+            ..Default::default()
+        },
         &std::collections::BTreeSet::from([Category::UNUSED]),
     );
     let report = Report {
@@ -891,6 +894,8 @@ fn agent_format_matches_its_committed_golden() {
                     narrowable_scopes: Vec::new(),
                     export_narrowing: Default::default(),
                     import_cycles: Default::default(),
+                    dependency_scoping: Default::default(),
+                    dependency_identity: Default::default(),
                 },
                 ExtensionRun {
                     id: SmolStr::new("kndo:swift"),
@@ -898,6 +903,8 @@ fn agent_format_matches_its_committed_golden() {
                     narrowable_scopes: Vec::new(),
                     export_narrowing: Default::default(),
                     import_cycles: Default::default(),
+                    dependency_scoping: Default::default(),
+                    dependency_identity: Default::default(),
                 },
             ],
         },

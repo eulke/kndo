@@ -9,13 +9,15 @@
         "id": "kndo:js-ts",
         "files": 4,
         "export_narrowing": "expressible",
-        "import_cycles": "hazard"
+        "import_cycles": "hazard",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "path-prefix"
       }
     ]
   },
   "health": {
     "implicated": 0,
-    "subjects": 7,
+    "subjects": 8,
     "by_category": [],
     "by_package": [
       {
@@ -28,7 +30,7 @@
         "name": "app-root",
         "manifest": "package.json",
         "implicated": 0,
-        "subjects": 2
+        "subjects": 3
       }
     ]
   },

@@ -127,6 +127,8 @@ pub struct DeclaredCapabilities {
     pub narrowable_scopes: Vec<SmolStr>,
     pub export_narrowing: kndo_contract::extension::ExportNarrowing,
     pub import_cycles: kndo_contract::extension::CycleTolerance,
+    pub dependency_scoping: kndo_contract::extension::DependencyScoping,
+    pub dependency_identity: kndo_contract::extension::DependencyIdentity,
 }
 
 pub struct Snapshot {
@@ -139,6 +141,9 @@ pub struct Snapshot {
     /// Categories whose analysis actually ran — health refuses to measure when
     /// reachability itself is absent from this set.
     pub judged: std::collections::BTreeSet<kndo_contract::vocab::Category>,
+    /// The dependency declarations the usage judgment counted, by manifest —
+    /// the part of health's universe the graph alone cannot state.
+    dependency_universe: BTreeMap<ProjectPath, BTreeSet<SmolStr>>,
     pub suppressed: crate::suppress::SuppressedSummary,
     /// What each active plugin asserted, in registration order — always reported,
     /// even when everything applied cleanly.
@@ -229,24 +234,22 @@ impl Snapshot {
     /// the invocation pinned, never cross-run state.
     pub fn against(&mut self, base: &Snapshot, mode: crate::report::Mode) {
         self.baseline = Some(base.findings.clone());
-        self.base_health =
-            crate::health::Health::measure(&base.findings, subjects_of(&base.graph), &base.judged)
-                .map(|mut h| {
-                    h.partition(&base.graph, &base.findings);
-                    h
-                });
+        let universe = base.universe();
+        self.base_health = crate::health::Health::measure(&base.findings, &universe, &base.judged)
+            .map(|mut h| {
+                h.partition(&base.graph, &base.findings, &universe);
+                h
+            });
         self.mode = mode;
     }
 }
 
-/// The health universe: every declaration plus every claimed file.
-fn subjects_of(graph: &Graph) -> u32 {
-    (graph.files.len()
-        + graph
-            .files
-            .iter()
-            .map(|f| f.evidence.declarations.len())
-            .sum::<usize>()) as u32
+impl Snapshot {
+    /// The health universe: every declaration plus every claimed file, plus the
+    /// dependency declarations this run's usage judgment counted.
+    fn universe(&self) -> crate::health::Universe {
+        crate::health::Universe::of(&self.graph, self.dependency_universe.clone())
+    }
 }
 
 pub struct GatePolicy {
@@ -538,6 +541,8 @@ impl Session {
                         narrowable_scopes: s.narrowable_scopes().to_vec(),
                         export_narrowing: s.export_narrowing(),
                         import_cycles: s.import_cycles(),
+                        dependency_scoping: s.dependency_scoping(),
+                        dependency_identity: s.dependency_identity(),
                     },
                 )
             })
@@ -548,6 +553,7 @@ impl Session {
             capabilities,
             abstained: outcome.abstained,
             judged: outcome.judged,
+            dependency_universe: outcome.dependency_universe,
             mode: crate::report::Mode::Full,
             base_health: None,
             categories: self.config.categories.clone(),
@@ -661,12 +667,12 @@ impl Snapshot {
         let findings: Vec<Finding> = self.new_findings().cloned().collect();
         let baselined = (self.findings.len() - findings.len()) as u32;
 
+        let universe = self.universe();
         let health =
-            crate::health::Health::measure(&self.findings, subjects_of(&self.graph), &self.judged)
-                .map(|mut h| {
-                    h.partition(&self.graph, &self.findings);
-                    h
-                });
+            crate::health::Health::measure(&self.findings, &universe, &self.judged).map(|mut h| {
+                h.partition(&self.graph, &self.findings, &universe);
+                h
+            });
 
         Report {
             run: RunInfo {
@@ -694,6 +700,12 @@ impl Snapshot {
                                 .unwrap_or_default(),
                             export_narrowing: caps.map(|c| c.export_narrowing).unwrap_or_default(),
                             import_cycles: caps.map(|c| c.import_cycles).unwrap_or_default(),
+                            dependency_scoping: caps
+                                .map(|c| c.dependency_scoping)
+                                .unwrap_or_default(),
+                            dependency_identity: caps
+                                .map(|c| c.dependency_identity)
+                                .unwrap_or_default(),
                         }
                     })
                     .collect(),

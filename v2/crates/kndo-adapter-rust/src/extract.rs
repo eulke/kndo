@@ -812,8 +812,9 @@ fn references_and_comments(root: Node<'_>, source: &[u8], out: &mut EvidenceSink
                 }
                 // Attribute strings name items by convention (`schemars(schema_with =
                 // "f")`, `serde(with = "m")`): every identifier-shaped word is a use.
-                "attribute_item" => {
+                "attribute_item" | "inner_attribute_item" => {
                     attribute_string_references(n, source, out);
+                    attribute_path_imports(n, source, &mut seen_paths, out);
                     return;
                 }
                 _ => {}
@@ -909,6 +910,17 @@ fn path_import(node: Node<'_>, source: &[u8], seen: &mut BTreeSet<String>, out: 
     if segments.len() < 2 {
         return;
     }
+    emit_path_import(&segments, tk::span(node), seen, out);
+}
+
+/// One deduplicated import per distinct path, binding every segment after the
+/// leading keywords.
+fn emit_path_import(
+    segments: &[String],
+    span: kndo_contract::vocab::Span,
+    seen: &mut BTreeSet<String>,
+    out: &mut EvidenceSink,
+) {
     let bound: Vec<&String> = segments
         .iter()
         .skip_while(|s| matches!(s.as_str(), "crate" | "self" | "super"))
@@ -917,7 +929,7 @@ fn path_import(node: Node<'_>, source: &[u8], seen: &mut BTreeSet<String>, out: 
         return;
     }
     let joined = segments.join("::");
-    if !seen.insert(joined.clone()) {
+    if !seen.insert(joined) {
         return;
     }
     let bindings = bound
@@ -928,11 +940,60 @@ fn path_import(node: Node<'_>, source: &[u8], seen: &mut BTreeSet<String>, out: 
         })
         .collect();
     out.import(
-        target_for(&segments),
+        target_for(segments),
         ImportShape::Bindings(bindings),
-        tk::span(node),
+        span,
         Confidence::Certain,
     );
+}
+
+/// Crate paths spelled inside an attribute — `#[derive(thiserror::Error)]`,
+/// `#[tokio::main]`, `#[cfg_attr(…, derive(schemars::JsonSchema))]` — are the
+/// only place a derive-macro crate is ever named: an import like any qualified
+/// path, or `unused` would accuse the crate in every manifest declaring it. The
+/// attribute's own path is a parsed node; inside its token tree, `a::b` is a run
+/// of identifier tokens joined by `::`.
+fn attribute_path_imports(
+    attr: Node<'_>,
+    source: &[u8],
+    seen: &mut BTreeSet<String>,
+    out: &mut EvidenceSink,
+) {
+    tk::walk(attr, &mut |n| match n.kind() {
+        "scoped_identifier" => path_import(n, source, seen, out),
+        "token_tree" => {
+            let mut run: Vec<String> = Vec::new();
+            let mut start = 0u32;
+            let mut end = 0u32;
+            let mut after_separator = false;
+            let mut flush = |run: &mut Vec<String>, start: u32, end: u32| {
+                if run.len() >= 2 {
+                    emit_path_import(run, kndo_contract::vocab::Span::new(start, end), seen, out);
+                }
+                run.clear();
+            };
+            let mut cursor = n.walk();
+            for token in n.children(&mut cursor) {
+                match token.kind() {
+                    "identifier" if run.is_empty() || after_separator => {
+                        if run.is_empty() {
+                            start = token.start_byte() as u32;
+                        }
+                        end = token.end_byte() as u32;
+                        run.push(tk::text(token, source).to_string());
+                        after_separator = false;
+                    }
+                    "::" if !run.is_empty() && !after_separator => after_separator = true,
+                    _ => {
+                        flush(&mut run, start, end);
+                        after_separator = false;
+                    }
+                }
+            }
+            flush(&mut run, start, end);
+        }
+        _ => {}
+    });
 }
 
 /// Binding and naming positions are not uses. The bias is deliberate: excluding too

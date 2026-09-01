@@ -451,3 +451,40 @@ fn use_items_inside_function_bodies_are_imports() {
         "…inside a nested module too: {packages:?}"
     );
 }
+
+#[test]
+fn crate_paths_inside_attributes_are_package_imports() {
+    let ev = extract(
+        "src/lib.rs",
+        r#"
+#[derive(Debug, thiserror::Error)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub enum Fail {
+    #[error("x")]
+    X,
+}
+
+#[tokio::main]
+async fn main() {}
+"#,
+    );
+    let specs: Vec<&str> = ev
+        .imports
+        .iter()
+        .filter_map(|i| match &i.target {
+            ImportTarget::Package(s) => Some(s.as_str()),
+            _ => None,
+        })
+        .collect();
+    for expected in ["thiserror::Error", "schemars::JsonSchema", "tokio::main"] {
+        assert!(
+            specs.contains(&expected),
+            "{expected} missing from {specs:?}"
+        );
+    }
+    // A bare derive and a helper attribute name no crate.
+    assert!(
+        !specs.iter().any(|s| *s == "Debug" || *s == "error"),
+        "{specs:?}"
+    );
+}

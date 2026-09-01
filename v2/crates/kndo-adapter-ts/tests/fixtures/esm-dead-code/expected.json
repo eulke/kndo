@@ -9,29 +9,43 @@
         "id": "kndo:js-ts",
         "files": 3,
         "export_narrowing": "expressible",
-        "import_cycles": "hazard"
+        "import_cycles": "hazard",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "path-prefix"
       }
     ]
   },
   "health": {
-    "implicated": 2,
-    "subjects": 6,
+    "implicated": 3,
+    "subjects": 7,
     "by_category": [
       {
         "category": "unused",
-        "findings": 2
+        "findings": 3
       }
     ],
     "by_package": [
       {
         "name": "esm-dead-code",
         "manifest": "package.json",
-        "implicated": 2,
-        "subjects": 6
+        "implicated": 3,
+        "subjects": 7
       }
     ]
   },
   "findings": [
+    {
+      "id": "kndo-efd2ed08e471",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "probable",
+      "subject": {
+        "kind": "dependency",
+        "owner_manifest": "package.json",
+        "name": "left-pad"
+      },
+      "message": "declared as a production dependency, but no file imports it and the manifest never names it"
+    },
     {
       "id": "kndo-d80c9e16e375",
       "category": "unused",

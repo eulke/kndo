@@ -9,7 +9,9 @@
         "id": "kndo:python",
         "files": 83,
         "export_narrowing": "none",
-        "import_cycles": "hazard"
+        "import_cycles": "hazard",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "underivable"
       }
     ]
   },
@@ -472,7 +474,26 @@
   ],
   "fixed": [],
   "baselined": 0,
-  "abstained": [],
+  "abstained": [
+    {
+      "category": "unused",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 5
+        }
+      }
+    },
+    {
+      "category": "test-only",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 5
+        }
+      }
+    }
+  ],
   "suppressed": {
     "total": 0,
     "by_category": []

@@ -181,21 +181,16 @@ pub fn dependencies(manifest: &SourceFile<'_>) -> Vec<DependencyDeclaration> {
     let Ok(json) = serde_json::from_slice::<serde_json::Value>(manifest.content) else {
         return Vec::new();
     };
-    let scripts = script_words(&json);
+    let mentioned = mentions(&json);
     let mut out = Vec::new();
-    for (section, scope) in [
-        ("dependencies", DependencyScope::Prod),
-        ("devDependencies", DependencyScope::Dev),
-        ("peerDependencies", DependencyScope::Peer),
-        ("optionalDependencies", DependencyScope::Optional),
-    ] {
+    for (section, scope) in SECTIONS {
         if let Some(serde_json::Value::Object(map)) = json.get(section) {
             for (name, req) in map {
                 out.push(DependencyDeclaration {
                     name: SmolStr::new(name),
                     scope: Some(scope),
                     version_req: comparable_req(req.as_str().unwrap_or_default()),
-                    used_by_manifest: scripts.contains(name.as_str()),
+                    used_by_manifest: mentioned.contains(name.as_str()),
                 });
             }
         }
@@ -203,23 +198,62 @@ pub fn dependencies(manifest: &SourceFile<'_>) -> Vec<DependencyDeclaration> {
     out
 }
 
-/// The words `scripts` entries are made of, split on everything a package name
-/// cannot contain: `"lint": "eslint . && tsc"` uses `eslint` by name — through its
-/// binary, without any import — and a script may spell a scoped name
-/// (`@biomejs/biome check`) or a path into the package (`vite/bin/vite.js`) too.
-fn script_words(json: &serde_json::Value) -> BTreeSet<&str> {
+/// Every section npm installs from, with the scope it declares.
+const SECTIONS: [(&str, DependencyScope); 4] = [
+    ("dependencies", DependencyScope::Prod),
+    ("devDependencies", DependencyScope::Dev),
+    ("peerDependencies", DependencyScope::Peer),
+    ("optionalDependencies", DependencyScope::Optional),
+];
+
+/// Fields that describe the package rather than use anything: a dependency
+/// named in prose is not in use.
+const PROSE: [&str; 3] = ["name", "description", "keywords"];
+
+/// The words this manifest spells outside its dependency sections and its
+/// prose, split on everything a package name cannot contain: `"lint": "eslint .
+/// && tsc"` names `eslint` — through its binary, without any import — a
+/// `browser` map names the package it aliases to, a tool config names its
+/// plugins. A path into a package names the package too
+/// (`vite/bin/vite.js`, `./node_modules/vite/bin/vite.js`).
+fn mentions(json: &serde_json::Value) -> BTreeSet<&str> {
     let mut words = BTreeSet::new();
-    if let Some(serde_json::Value::Object(scripts)) = json.get("scripts") {
-        for value in scripts.values().filter_map(serde_json::Value::as_str) {
-            for word in value.split(|c: char| !(c.is_ascii_alphanumeric() || "@/._-".contains(c))) {
-                words.insert(word);
-                if let Some(package) = path_package(word) {
-                    words.insert(package);
-                }
+    if let serde_json::Value::Object(fields) = json {
+        for (key, value) in fields {
+            let excluded =
+                SECTIONS.iter().any(|(section, _)| section == key) || PROSE.contains(&key.as_str());
+            if !excluded {
+                words_of_value(value, &mut words);
             }
         }
     }
     words
+}
+
+fn words_of_value<'a>(value: &'a serde_json::Value, words: &mut BTreeSet<&'a str>) {
+    match value {
+        serde_json::Value::String(text) => words_of(text, words),
+        serde_json::Value::Array(items) => items.iter().for_each(|v| words_of_value(v, words)),
+        serde_json::Value::Object(fields) => {
+            for (key, value) in fields {
+                words_of(key, words);
+                words_of_value(value, words);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn words_of<'a>(text: &'a str, words: &mut BTreeSet<&'a str>) {
+    for word in text.split(|c: char| !(c.is_ascii_alphanumeric() || "@/._-".contains(c))) {
+        if word.is_empty() {
+            continue;
+        }
+        words.insert(word);
+        if let Some(package) = path_package(word) {
+            words.insert(package);
+        }
+    }
 }
 
 /// The package a path-shaped word reaches into: `vite/bin/vite.js` and
