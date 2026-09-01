@@ -488,3 +488,69 @@ async fn main() {}
         "{specs:?}"
     );
 }
+
+#[test]
+fn type_headed_and_use_bound_paths_are_not_imports() {
+    let ev = extract(
+        "src/lib.rs",
+        r#"
+use std::io;
+mod jsont;
+
+fn f() -> io::Result<()> {
+    let v: Vec<u8> = Vec::new();
+    let d = jsont::Data::new(v);
+    regex::Regex::new("x").unwrap();
+    Ok(())
+}
+"#,
+    );
+    let specs: Vec<&str> = ev
+        .imports
+        .iter()
+        .filter_map(|i| match &i.target {
+            ImportTarget::Package(s) => Some(s.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert!(specs.contains(&"std::io"), "{specs:?}");
+    assert!(
+        specs.contains(&"regex::Regex::new"),
+        "a crate-rooted path: {specs:?}"
+    );
+    assert!(
+        specs.contains(&"jsont::Data::new"),
+        "a sibling module path: {specs:?}"
+    );
+    assert!(
+        !specs
+            .iter()
+            .any(|s| s.starts_with("io::") || s.starts_with("Vec::")),
+        "a use-bound or type-headed path names no crate: {specs:?}"
+    );
+}
+
+#[test]
+fn primitive_and_tool_attribute_heads_name_no_crate() {
+    let ev = extract(
+        "src/lib.rs",
+        r#"
+#[rustfmt::skip]
+#[clippy::cognitive_complexity = "10"]
+pub fn f() -> u64 {
+    let c = char::from_u32(65);
+    let m = u64::MAX;
+    usize::try_from(m).map(|_| m).unwrap_or(f64::MAX as u64)
+}
+"#,
+    );
+    let specs: Vec<&str> = ev
+        .imports
+        .iter()
+        .filter_map(|i| match &i.target {
+            ImportTarget::Package(s) => Some(s.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert!(specs.is_empty(), "{specs:?}");
+}

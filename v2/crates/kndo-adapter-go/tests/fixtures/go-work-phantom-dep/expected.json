@@ -11,7 +11,7 @@
         "export_narrowing": "none",
         "import_cycles": "tolerated",
         "dependency_scoping": "unscoped",
-        "dependency_identity": "path-prefix"
+        "dependency_identity": "module-path"
       }
     ]
   },
@@ -34,7 +34,20 @@
       }
     ]
   },
-  "findings": [],
+  "findings": [
+    {
+      "id": "kndo-f60fa3f05df1",
+      "category": "undeclared",
+      "severity": "warning",
+      "confidence": "probable",
+      "subject": {
+        "kind": "dependency",
+        "owner_manifest": "modb/go.mod",
+        "name": "example.com/a"
+      },
+      "message": "imported by 1 reached file but declared by no manifest from here up: it resolves only through hoisting or a transitive dependency"
+    }
+  ],
   "fixed": [],
   "baselined": 0,
   "abstained": [

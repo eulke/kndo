@@ -459,12 +459,11 @@ own deliberate fixtures, unmodeled vite resolution features, and symlinks),
 and **`version-skew`** — diverging comparable requirements across manifests,
 `info`, peer-exempt — ships on the new `DependencyDeclaration` evidence
 (`manifest_dependencies` grew scope and requirement; activation reads the same
-stream). `undeclared` and dependency-`unused` deferred with their numbers:
-the corpus is a pathological instrument for the first (2–3 true positives vs
-a 124-finding fixture cliff) and structural evidence cannot reach zero-FP for
-the second (config-driven tooling). The resolver fixes that rode along moved
-vite 1077→913 findings — query-suffix stripping, `.d.ts`/`.mts`/`.cts` swaps,
-and `mts`/`cts` claimed at all.
+stream). `undeclared` and dependency-`unused` were deferred with their numbers
+and shipped in M7.a on one shared floor — the corpus has since been a
+pathological instrument for both, and the floor is what made it legible. The
+resolver fixes that rode along moved vite 1077→913 findings — query-suffix
+stripping, `.d.ts`/`.mts`/`.cts` swaps, and `mts`/`cts` claimed at all.
 
 Eighth row: **presentation and the filter disposition**. `--quiet` (the verdict
 line alone — the exit code already carries the gate), `--verbose` (the phases
@@ -524,11 +523,13 @@ and risk suggest. Each tranche keeps the M6 discipline — instrument first, the
 number decides, every difference explained — and a cut is the owner's DECISIONS
 entry, never a builder's shortcut.
 
-- **M7.a — the dependency family, second pass** — **shipped 2026-09-01** for
-  `unused`/`test-only` on production-scope declarations: one corpus finding
-  (ripgrep `fst`), zero false, every skip a typed `manifests`-scoped abstention
-  (COMPARISON has the table; DECISIONS the contract change). Remaining: `undeclared`
-  on the shared floor (ancestor manifests, declared builtins, alias exclusion).
+- **M7.a — the dependency family, second pass** — **shipped 2026-09-01**:
+  `unused`/`test-only` on production-scope declarations (one corpus finding,
+  ripgrep `fst`, zero false) and `undeclared` on the same floor (one corpus
+  finding, vite's committed-`node_modules` fixture, zero false; the accusation
+  path proven by ablation and four harvested fixtures) — every skip a typed
+  `manifests`-scoped abstention. COMPARISON has the tables; DECISIONS the contract
+  changes.
 - **M7.b — `crap` with real coverage**: capture coverage from a real producer for a
   corpus repo (flask/pytest-cov, vite/vitest), count complex-and-untested
   candidates, decide the threshold semantics from the number.

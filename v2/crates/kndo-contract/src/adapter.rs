@@ -55,11 +55,6 @@ pub struct DependencyDeclaration {
     pub name: SmolStr,
     pub scope: Option<DependencyScope>,
     pub version_req: Option<SmolStr>,
-    /// The manifest itself names the dependency outside its declaration — a
-    /// `scripts` entry invoking its binary, a `browser`/`exports` alias, a tool
-    /// config listing it as a plugin — so no import is needed for it to be in
-    /// use. A manifest-level fact only the declaring adapter can read.
-    pub used_by_manifest: bool,
 }
 
 impl DependencyDeclaration {
@@ -72,7 +67,6 @@ impl DependencyDeclaration {
             name,
             scope: None,
             version_req: None,
-            used_by_manifest: false,
         }
     }
 }

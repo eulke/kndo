@@ -11,7 +11,7 @@
         "export_narrowing": "expressible",
         "import_cycles": "hazard",
         "dependency_scoping": "scoped",
-        "dependency_identity": "path-prefix"
+        "dependency_identity": "package-name"
       },
       {
         "id": "kndo:kotlin",
@@ -50,7 +50,7 @@
       },
       {
         "name": "exposed-core",
-        "manifest": "settings.gradle.kts",
+        "manifest": "exposed-core/build.gradle.kts",
         "implicated": 3,
         "subjects": 2569
       },
@@ -104,7 +104,7 @@
       },
       {
         "name": "exposed-gradle-plugin",
-        "manifest": "documentation-website/Writerside/snippets/settings.gradle.kts",
+        "manifest": "documentation-website/Writerside/snippets/exposed-gradle-plugin/build.gradle.kts",
         "implicated": 0,
         "subjects": 13
       },
@@ -22990,7 +22990,7 @@
       "reason": "specifier-identity-underivable",
       "scope": {
         "manifests": {
-          "unjudged": 49
+          "unjudged": 62
         }
       }
     },
@@ -22999,7 +22999,16 @@
       "reason": "specifier-identity-underivable",
       "scope": {
         "manifests": {
-          "unjudged": 49
+          "unjudged": 62
+        }
+      }
+    },
+    {
+      "category": "undeclared",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 62
         }
       }
     }

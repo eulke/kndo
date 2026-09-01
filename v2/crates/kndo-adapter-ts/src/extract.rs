@@ -551,7 +551,52 @@ fn dynamic_import(call: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
         }
         _ => ImportShape::SideEffect,
     };
-    out.import(target, shape, tk::span(call), Confidence::Certain);
+    // A load the file itself makes conditional — inside a function, a branch,
+    // a guard, a `||` fallback — is the optional-dependency idiom: `Probable`,
+    // a use that keeps its target alive and never an accusation's ground.
+    let confidence = if is_conditional(call) {
+        Confidence::Probable
+    } else {
+        Confidence::Certain
+    };
+    out.import(target, shape, tk::span(call), confidence);
+}
+
+fn is_conditional(call: Node<'_>) -> bool {
+    let mut node = call;
+    while let Some(parent) = node.parent() {
+        match parent.kind() {
+            "program" => return false,
+            "function_declaration"
+            | "function_expression"
+            | "generator_function_declaration"
+            | "generator_function"
+            | "arrow_function"
+            | "method_definition"
+            | "class_body"
+            | "if_statement"
+            | "else_clause"
+            | "try_statement"
+            | "catch_clause"
+            | "finally_clause"
+            | "switch_statement"
+            | "for_statement"
+            | "for_in_statement"
+            | "while_statement"
+            | "do_statement"
+            | "ternary_expression" => return true,
+            "binary_expression"
+                if parent
+                    .child_by_field_name("operator")
+                    .is_some_and(|op| matches!(op.kind(), "||" | "&&" | "??")) =>
+            {
+                return true;
+            }
+            _ => {}
+        }
+        node = parent;
+    }
+    false
 }
 
 /// Binding and naming positions are not uses. The bias is deliberate: excluding too

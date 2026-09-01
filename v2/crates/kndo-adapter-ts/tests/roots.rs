@@ -253,7 +253,7 @@ fn manifest_dependencies_report_every_section() {
 }
 
 #[test]
-fn manifest_fields_naming_a_dependency_mark_it_used_by_the_manifest() {
+fn manifest_mentions_are_what_it_spells_outside_declarations_and_prose() {
     let path = ProjectPath::new("package.json");
     let json = r#"{
         "name": "demo",
@@ -267,38 +267,38 @@ fn manifest_fields_naming_a_dependency_mark_it_used_by_the_manifest() {
             "lint": "eslint . && @biomejs/biome check src",
             "dev": "node ./node_modules/vite/bin/vite.js --port 3000",
             "typecheck": "tsc -p .",
+            "site": "npx marky-markdown@^9.0.1 && npx @scope/tool@1.2.3 run",
             "express-ish": "echo expressive lodash-es"
         },
         "browser": { "jsdom": false, "./node-only.js": "@scope/shim/browser" }
     }"#;
-    let mut used: Vec<(&str, bool)> = Vec::new();
-    let deps = TypeScriptAdapter::new().manifest_dependencies(&SourceFile {
+    let mentions = TypeScriptAdapter::new().manifest_mentions(&SourceFile {
         path: &path,
         content: json.as_bytes(),
     });
-    for d in &deps {
-        used.push((d.name.as_str(), d.used_by_manifest));
+    let has = |name: &str| mentions.iter().any(|m| m == name);
+    // A scoped name is one word, its own slash included; a `browser` alias names
+    // the package it maps to, path and all; a `browser` key disabling a package
+    // names it; a path into a package and a versioned invocation name the package.
+    for named in [
+        "eslint",
+        "@biomejs/biome",
+        "@scope/shim",
+        "jsdom",
+        "vite",
+        "marky-markdown",
+        "@scope/tool",
+    ] {
+        assert!(has(named), "{named} missing from {mentions:?}");
     }
-    used.sort();
-    assert_eq!(
-        used,
-        [
-            // A scoped name is one word, its own slash included.
-            ("@biomejs/biome", true),
-            // A `browser` alias names the package it maps to, path and all.
-            ("@scope/shim", true),
-            ("eslint", true),
-            // `expressive` and `lodash-es` are other words, not this name; prose
-            // (`description`, `keywords`) never counts.
-            ("express", false),
-            // A `browser` key disabling a package names it.
-            ("jsdom", true),
-            ("lodash", false),
-            // A binary spelled differently from its package (`tsc`) is not a
-            // mention: the flag records what the manifest says, not what it means.
-            ("typescript", false),
-            // A path into the package reaches it by name.
-            ("vite", true),
-        ]
+    // `expressive` and `lodash-es` are other words; prose (`description`,
+    // `keywords`) never counts; a binary spelled unlike its package (`tsc`) is
+    // not a mention of `typescript`.
+    for unnamed in ["express", "lodash", "typescript"] {
+        assert!(!has(unnamed), "{unnamed} wrongly in {mentions:?}");
+    }
+    assert!(
+        mentions.windows(2).all(|w| w[0] < w[1]),
+        "sorted, deduplicated"
     );
 }

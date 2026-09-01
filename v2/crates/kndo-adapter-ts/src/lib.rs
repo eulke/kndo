@@ -24,6 +24,63 @@ use tree_sitter::Language;
 /// publish beside themselves.
 pub(crate) const TYPE_DECLARATION_EXT: &str = "d.ts";
 
+/// Node's own modules (`module.builtinModules`) plus the specifier schemes a
+/// runtime resolves itself: never a dependency to declare. Subpaths
+/// (`fs/promises`, `assert/strict`) match through the package-name spelling.
+const NODE_BUILTINS: &[&str] = &[
+    "node:",
+    "bun:",
+    "deno:",
+    "npm:",
+    "jsr:",
+    "data:",
+    "http:",
+    "https:",
+    "virtual:",
+    "assert",
+    "async_hooks",
+    "buffer",
+    "child_process",
+    "cluster",
+    "console",
+    "constants",
+    "crypto",
+    "dgram",
+    "diagnostics_channel",
+    "dns",
+    "domain",
+    "events",
+    "fs",
+    "http",
+    "http2",
+    "https",
+    "inspector",
+    "module",
+    "net",
+    "os",
+    "path",
+    "perf_hooks",
+    "process",
+    "punycode",
+    "querystring",
+    "readline",
+    "repl",
+    "stream",
+    "string_decoder",
+    "sys",
+    "timers",
+    "tls",
+    "trace_events",
+    "tty",
+    "url",
+    "util",
+    "v8",
+    "vm",
+    "wasi",
+    "worker_threads",
+    "zlib",
+];
+
 pub struct TypeScriptAdapter {
     spec: ExtensionSpec,
     /// Dotted resolution candidates in TS priority order, derived once from the
@@ -36,9 +93,8 @@ impl TypeScriptAdapter {
     pub fn new() -> Self {
         let spec = kndo_toolkit::source_adapter_builder(
             "kndo:js-ts",
-            // 5: package specifiers spelled inside string literals land as
-            // `Possible` imports (a runtime-injected `core-js/…` is a use).
-            5,
+            // 6: a `require`/`import()` that runs conditionally is `Probable`.
+            6,
             &["ts", "tsx", "js", "jsx", "mjs", "cjs", "mts", "cts"],
             &["**/package.json"],
             &[],
@@ -50,7 +106,13 @@ impl TypeScriptAdapter {
         // missed external use into a compile error.
         .export_narrowing(kndo_contract::extension::ExportNarrowing::Expressible)
         // `lodash/fp` names `lodash`; a scoped name carries its own slash.
-        .dependency_identity(kndo_contract::extension::DependencyIdentity::PathPrefix)
+        .dependency_identity(kndo_contract::extension::DependencyIdentity::PackageName)
+        .dependency_builtins(kndo_contract::extension::DependencyBuiltins::Named(
+            NODE_BUILTINS
+                .iter()
+                .map(|s| smol_str::SmolStr::new_static(s))
+                .collect(),
+        ))
         // Files that carry ESM imports without being JS/TS: single-file
         // components, pages with module scripts, stylesheets with `@import`,
         // markdown-with-modules, server templates that embed JS.
@@ -120,6 +182,10 @@ impl Extension for TypeScriptAdapter {
 
     fn manifest_dependencies(&self, manifest: &SourceFile<'_>) -> Vec<DependencyDeclaration> {
         manifest::dependencies(manifest)
+    }
+
+    fn manifest_mentions(&self, manifest: &SourceFile<'_>) -> Vec<smol_str::SmolStr> {
+        manifest::mentions(manifest)
     }
 }
 

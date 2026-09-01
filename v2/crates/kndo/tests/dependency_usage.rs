@@ -20,7 +20,7 @@ fn dependency_findings(snap: &kndo::Snapshot) -> Vec<(String, String, String)> {
             )),
             _ => None,
         })
-        .filter(|(c, _, _)| c == "unused" || c == "test-only")
+        .filter(|(c, _, _)| c == "unused" || c == "test-only" || c == "undeclared")
         .collect();
     out.sort();
     out
@@ -45,9 +45,11 @@ fn production_dependencies_are_judged_by_who_imports_them() {
   "optionalDependencies": { "idle-optional": "^1" }
 }"#,
     );
+    // `phantom-dep`: imported, declared nowhere. `fs`: the platform's. `spelled`:
+    // an alias the tree names in a literal. `optional-x`: a conditional load.
     p.file(
         "src/index.js",
-        "import { a } from \"imported-dep\";\nexport function app() { return a(); }\n",
+        "import { a } from \"imported-dep\";\nimport { ph } from \"phantom-dep\";\nimport fs from \"fs\";\nimport { s } from \"spelled\";\nconst alias = \"spelled\";\nfunction lazy() { return require(\"optional-x\"); }\nexport function app() { return a(ph, fs, s, alias, lazy); }\n",
     );
     p.file(
         "src/index.test.js",
@@ -101,7 +103,7 @@ fn production_dependencies_are_judged_by_who_imports_them() {
     );
     p.file(
         "gomod/main.go",
-        "package main\n\nimport \"github.com/x/direct\"\n\nfunc main() { direct.Run() }\n",
+        "package main\n\nimport (\n\t\"fmt\"\n\t\"github.com/x/direct\"\n\t\"github.com/x/phantom/sub\"\n)\n\nfunc main() { fmt.Println(direct.Run(), sub.Go()) }\n",
     );
     p.file(
         "gomod/main_test.go",
@@ -113,6 +115,16 @@ fn production_dependencies_are_judged_by_who_imports_them() {
         "[project]\nname = \"pyapp\"\ndependencies = [\"requests\"]\n",
     );
     p.file("py/app.py", "import requests\n\nprint(requests)\n");
+    // Cargo: a crate-rooted `use` accuses; `std`, a type-headed path and a
+    // path continuing a `use` never do.
+    p.file(
+        "rs/Cargo.toml",
+        "[package]\nname = \"rsapp\"\nversion = \"0.0.0\"\n\n[dependencies]\ndeclared-crate = \"1\"\n",
+    );
+    p.file(
+        "rs/src/main.rs",
+        "use declared_crate::x;\nuse phantom_crate::y;\nuse std::io;\n\nfn main() -> io::Result<()> {\n    let v: Vec<u8> = Vec::new();\n    std::process::exit(x(y(v)))\n}\n",
+    );
 
     let session = kndo::open(p.root(), Config::default()).expect("open");
     let snap = session.analyze(RunMode::Full).expect("analyze");
@@ -121,6 +133,21 @@ fn production_dependencies_are_judged_by_who_imports_them() {
         dependency_findings(&snap),
         [
             ("test-only".into(), "package.json".into(), "test-dep".into()),
+            (
+                "undeclared".into(),
+                "gomod/go.mod".into(),
+                "github.com/x/phantom/sub".into()
+            ),
+            (
+                "undeclared".into(),
+                "package.json".into(),
+                "phantom-dep".into()
+            ),
+            (
+                "undeclared".into(),
+                "rs/Cargo.toml".into(),
+                "phantom_crate".into()
+            ),
             (
                 "unused".into(),
                 "gomod/go.mod".into(),
@@ -151,47 +178,30 @@ fn production_dependencies_are_judged_by_who_imports_them() {
         .collect();
     abstentions.sort();
     let one = "Manifests { unjudged: 1 }".to_string();
-    assert_eq!(
-        abstentions,
-        [
-            (
-                "test-only".into(),
-                "NothingReachesOwnedFiles".into(),
-                one.clone()
-            ),
-            ("test-only".into(), "OwnedFilesAreTests".into(), one.clone()),
-            (
-                "test-only".into(),
-                "SpecifierIdentityUnderivable".into(),
-                one.clone()
-            ),
-            (
-                "test-only".into(),
-                "unclaimed-importers:vue".into(),
-                one.clone()
-            ),
-            (
-                "unused".into(),
-                "NothingReachesOwnedFiles".into(),
-                one.clone()
-            ),
-            ("unused".into(), "OwnedFilesAreTests".into(), one.clone()),
-            (
-                "unused".into(),
-                "SpecifierIdentityUnderivable".into(),
-                one.clone()
-            ),
-            ("unused".into(), "unclaimed-importers:vue".into(), one),
-        ]
-    );
+    let expected: Vec<(String, String, String)> = ["test-only", "undeclared", "unused"]
+        .iter()
+        .flat_map(|category| {
+            [
+                "NothingReachesOwnedFiles",
+                "OwnedFilesAreTests",
+                "SpecifierIdentityUnderivable",
+                "unclaimed-importers:vue",
+            ]
+            .map(|reason| (category.to_string(), reason.to_string(), one.clone()))
+        })
+        .collect();
+    assert_eq!(abstentions, expected);
     assert!(
-        snap.judged.contains(&Category::UNUSED) && snap.judged.contains(&Category::TEST_ONLY),
+        [Category::UNUSED, Category::TEST_ONLY, Category::UNDECLARED]
+            .iter()
+            .all(|c| snap.judged.contains(c)),
         "a manifest-scoped abstention is not a whole-run one"
     );
 
-    // Health divides by what was judged: the root's six production declarations
-    // and the Go module's three direct requirements, on top of files and
-    // declarations — never a dev, peer, optional, transitive or unjudged one.
+    // Health divides by what was judged: the root's six production declarations,
+    // the Go module's three direct requirements and the Cargo package's one, on
+    // top of files and declarations — never a dev, peer, optional, transitive,
+    // unjudged or undeclared one.
     let report = snap.report();
     let health = report.health.expect("health is measured");
     let graph_subjects: u32 = snap
@@ -200,7 +210,7 @@ fn production_dependencies_are_judged_by_who_imports_them() {
         .iter()
         .map(|f| 1 + f.evidence.declarations.len() as u32)
         .sum();
-    assert_eq!(health.subjects - graph_subjects, 6 + 3, "{health:#?}");
+    assert_eq!(health.subjects - graph_subjects, 6 + 3 + 1, "{health:#?}");
     // Per package, the same rule: the files and declarations the package owns
     // (`package_of`), plus the dependencies its manifest had judged. A manifest
     // without an entry declares no package here, so its files fall to the

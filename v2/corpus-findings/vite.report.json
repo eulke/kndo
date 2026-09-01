@@ -11,7 +11,7 @@
         "export_narrowing": "expressible",
         "import_cycles": "hazard",
         "dependency_scoping": "scoped",
-        "dependency_identity": "path-prefix"
+        "dependency_identity": "package-name"
       }
     ]
   },
@@ -1017,7 +1017,7 @@
       "id": "kndo-af213e2df259",
       "category": "cyclic",
       "severity": "warning",
-      "confidence": "certain",
+      "confidence": "probable",
       "subject": {
         "kind": "file",
         "path": "packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic/entry-cyclic.js"
@@ -1116,7 +1116,7 @@
       "id": "kndo-44d6ba92502c",
       "category": "cyclic",
       "severity": "warning",
-      "confidence": "certain",
+      "confidence": "probable",
       "subject": {
         "kind": "file",
         "path": "packages/vite/src/node/ssr/runtime/__tests__/fixtures/hmr-evaluated-import-race/evaluated.js"
@@ -1259,7 +1259,7 @@
       "id": "kndo-ef7de1a81363",
       "category": "cyclic",
       "severity": "warning",
-      "confidence": "certain",
+      "confidence": "probable",
       "subject": {
         "kind": "file",
         "path": "playground/multiple-entrypoints/entrypoints/a0.js"
@@ -1980,6 +1980,18 @@
         "end": 305
       },
       "message": "exported, but its signature references `UntilBrowserLogAfterCallback`, which is private — consumers can call this and never name that type"
+    },
+    {
+      "id": "kndo-62afebc9f507",
+      "category": "undeclared",
+      "severity": "warning",
+      "confidence": "probable",
+      "subject": {
+        "kind": "dependency",
+        "owner_manifest": "playground/nested-deps/test-package-b/package.json",
+        "name": "test-package-a"
+      },
+      "message": "imported by 1 reached file but declared by no manifest from here up: it resolves only through hoisting or a transitive dependency"
     },
     {
       "id": "kndo-3e74b12d252b",
@@ -13274,171 +13286,6 @@
       "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
     },
     {
-      "id": "kndo-d32eecc129da",
-      "category": "test-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "packages/vite/src/module-runner/constants.ts"
-      },
-      "message": "only tests reach this file — no production or tooling root does"
-    },
-    {
-      "id": "kndo-270d660e35eb",
-      "category": "test-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "packages/vite/src/module-runner/createImportMeta.ts"
-      },
-      "message": "only tests reach this file — no production or tooling root does"
-    },
-    {
-      "id": "kndo-4ce3581a2cb2",
-      "category": "test-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "packages/vite/src/module-runner/esmEvaluator.ts"
-      },
-      "message": "only tests reach this file — no production or tooling root does"
-    },
-    {
-      "id": "kndo-98a16c1d0720",
-      "category": "test-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "packages/vite/src/module-runner/evaluatedModules.ts"
-      },
-      "message": "only tests reach this file — no production or tooling root does"
-    },
-    {
-      "id": "kndo-7937186a5eb6",
-      "category": "test-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "packages/vite/src/module-runner/hmrHandler.ts"
-      },
-      "message": "only tests reach this file — no production or tooling root does"
-    },
-    {
-      "id": "kndo-c461e76c86a1",
-      "category": "test-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "packages/vite/src/module-runner/hmrLogger.ts"
-      },
-      "message": "only tests reach this file — no production or tooling root does"
-    },
-    {
-      "id": "kndo-06b784535e7b",
-      "category": "test-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "packages/vite/src/module-runner/index.ts"
-      },
-      "message": "only tests reach this file — no production or tooling root does"
-    },
-    {
-      "id": "kndo-2e9ec9e03908",
-      "category": "test-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "packages/vite/src/module-runner/runner.ts"
-      },
-      "message": "only tests reach this file — no production or tooling root does"
-    },
-    {
-      "id": "kndo-213b984be12b",
-      "category": "test-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "packages/vite/src/module-runner/sourcemap/decoder.ts"
-      },
-      "message": "only tests reach this file — no production or tooling root does"
-    },
-    {
-      "id": "kndo-528bb4a2c278",
-      "category": "test-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "packages/vite/src/module-runner/sourcemap/index.ts"
-      },
-      "message": "only tests reach this file — no production or tooling root does"
-    },
-    {
-      "id": "kndo-7d2d4084bc4f",
-      "category": "test-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "packages/vite/src/module-runner/sourcemap/interceptor.ts"
-      },
-      "message": "only tests reach this file — no production or tooling root does"
-    },
-    {
-      "id": "kndo-fa9e57f86f43",
-      "category": "test-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "packages/vite/src/module-runner/types.ts"
-      },
-      "message": "only tests reach this file — no production or tooling root does"
-    },
-    {
-      "id": "kndo-fd6395f1538c",
-      "category": "test-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "packages/vite/src/module-runner/utils.ts"
-      },
-      "message": "only tests reach this file — no production or tooling root does"
-    },
-    {
-      "id": "kndo-020419bdff62",
-      "category": "test-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "packages/vite/src/shared/hmr.ts"
-      },
-      "message": "only tests reach this file — no production or tooling root does"
-    },
-    {
-      "id": "kndo-1a70367d8789",
-      "category": "test-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "packages/vite/src/shared/hmrHandler.ts"
-      },
-      "message": "only tests reach this file — no production or tooling root does"
-    },
-    {
       "id": "kndo-2cdcd3428bd5",
       "category": "test-only",
       "severity": "info",
@@ -13557,20 +13404,35 @@
   "abstained": [
     {
       "category": "unused",
+      "reason": "nothing-reaches-owned-files",
+      "scope": {
+        "manifests": {
+          "unjudged": 41
+        }
+      }
+    },
+    {
+      "category": "unused",
       "reason": {
         "unclaimed-importers": {
           "suffixes": [
             "astro",
             "css",
             "html",
+            "less",
+            "pcss",
+            "pug",
+            "sass",
             "scss",
+            "styl",
+            "svelte",
             "vue"
           ]
         }
       },
       "scope": {
         "manifests": {
-          "unjudged": 43
+          "unjudged": 117
         }
       }
     },
@@ -13579,16 +13441,16 @@
       "reason": "owned-files-are-tests",
       "scope": {
         "manifests": {
-          "unjudged": 3
+          "unjudged": 26
         }
       }
     },
     {
-      "category": "unused",
+      "category": "test-only",
       "reason": "nothing-reaches-owned-files",
       "scope": {
         "manifests": {
-          "unjudged": 4
+          "unjudged": 41
         }
       }
     },
@@ -13600,14 +13462,20 @@
             "astro",
             "css",
             "html",
+            "less",
+            "pcss",
+            "pug",
+            "sass",
             "scss",
+            "styl",
+            "svelte",
             "vue"
           ]
         }
       },
       "scope": {
         "manifests": {
-          "unjudged": 43
+          "unjudged": 117
         }
       }
     },
@@ -13616,16 +13484,50 @@
       "reason": "owned-files-are-tests",
       "scope": {
         "manifests": {
-          "unjudged": 3
+          "unjudged": 26
         }
       }
     },
     {
-      "category": "test-only",
+      "category": "undeclared",
       "reason": "nothing-reaches-owned-files",
       "scope": {
         "manifests": {
-          "unjudged": 4
+          "unjudged": 41
+        }
+      }
+    },
+    {
+      "category": "undeclared",
+      "reason": {
+        "unclaimed-importers": {
+          "suffixes": [
+            "astro",
+            "css",
+            "html",
+            "less",
+            "pcss",
+            "pug",
+            "sass",
+            "scss",
+            "styl",
+            "svelte",
+            "vue"
+          ]
+        }
+      },
+      "scope": {
+        "manifests": {
+          "unjudged": 117
+        }
+      }
+    },
+    {
+      "category": "undeclared",
+      "reason": "owned-files-are-tests",
+      "scope": {
+        "manifests": {
+          "unjudged": 26
         }
       }
     }

@@ -11,7 +11,7 @@
         "export_narrowing": "none",
         "import_cycles": "tolerated",
         "dependency_scoping": "unscoped",
-        "dependency_identity": "path-prefix"
+        "dependency_identity": "module-path"
       }
     ]
   },

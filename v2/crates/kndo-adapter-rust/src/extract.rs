@@ -46,6 +46,7 @@ pub fn extract(
         impls: Vec::new(),
         redirects: BTreeMap::new(),
         uses: Vec::new(),
+        use_locals: BTreeSet::new(),
         stack: Vec::new(),
         out,
     };
@@ -63,8 +64,9 @@ pub fn extract(
         cx.use_declaration(node, &stack);
     }
     let free_declarations = std::mem::take(&mut cx.free_declarations);
+    let use_locals = std::mem::take(&mut cx.use_locals);
     macro_template_roots(root, source, &free_declarations, out);
-    references_and_comments(root, source, out);
+    references_and_comments(root, source, &use_locals, out);
 }
 
 /// Names a `macro_rules!` template references are resolved at every EXPANSION
@@ -146,6 +148,9 @@ struct ItemPass<'a, 'o> {
     /// declare the same alias twice.
     redirects: BTreeMap<String, Vec<Vec<String>>>,
     uses: Vec<(Node<'a>, Vec<String>)>,
+    /// Every local name a `use` in this file binds — the roots a qualified
+    /// path may continue from instead of naming a crate.
+    use_locals: BTreeSet<String>,
     /// Inline-`mod` names enclosing the current item. `self::`/`super::` in a `use`
     /// or a `mod foo;` mean something different inside `mod tests { ... }` than at
     /// the top of the file; rebasing against this stack keeps the emitted specifier
@@ -454,6 +459,7 @@ impl<'a> ItemPass<'a, '_> {
             let target = target_for(&leaf.segments);
             let last = leaf.segments.last().unwrap().clone();
             let local = leaf.alias.unwrap_or_else(|| last.clone());
+            self.use_locals.insert(local.clone());
             let shape = match (leaf.glob, public) {
                 (true, true) => ImportShape::ReexportAll,
                 (true, false) => ImportShape::Glob,
@@ -788,7 +794,12 @@ fn function_metrics(node: Node<'_>, source: &[u8]) -> kndo_contract::evidence::F
     tk::function_metrics(node, &METRICS, source)
 }
 
-fn references_and_comments(root: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
+fn references_and_comments(
+    root: Node<'_>,
+    source: &[u8],
+    use_locals: &BTreeSet<String>,
+    out: &mut EvidenceSink,
+) {
     let mut seen_paths: BTreeSet<String> = BTreeSet::new();
     tk::walk_pruned(
         root,
@@ -800,7 +811,7 @@ fn references_and_comments(root: Node<'_>, source: &[u8], out: &mut EvidenceSink
                     return;
                 }
                 "scoped_identifier" | "scoped_type_identifier" => {
-                    path_import(n, source, &mut seen_paths, out);
+                    path_import(n, source, use_locals, &mut seen_paths, out);
                     // Fall through is deliberate in spirit: the identifiers inside the
                     // path still land as references via their own visits.
                     return;
@@ -814,7 +825,7 @@ fn references_and_comments(root: Node<'_>, source: &[u8], out: &mut EvidenceSink
                 // "f")`, `serde(with = "m")`): every identifier-shaped word is a use.
                 "attribute_item" | "inner_attribute_item" => {
                     attribute_string_references(n, source, out);
-                    attribute_path_imports(n, source, &mut seen_paths, out);
+                    attribute_path_imports(n, source, use_locals, &mut seen_paths, out);
                     return;
                 }
                 _ => {}
@@ -897,7 +908,13 @@ fn attribute_string_references(attr: Node<'_>, source: &[u8], out: &mut Evidence
 /// deliberate — the path's own identifiers land as same-file references, which is
 /// the keep that matters there, and a missed edge degrades to `Unresolved`,
 /// keep-alive, never an accusation.
-fn path_import(node: Node<'_>, source: &[u8], seen: &mut BTreeSet<String>, out: &mut EvidenceSink) {
+fn path_import(
+    node: Node<'_>,
+    source: &[u8],
+    use_locals: &BTreeSet<String>,
+    seen: &mut BTreeSet<String>,
+    out: &mut EvidenceSink,
+) {
     // Only the outermost scoped node carries the whole path.
     if node
         .parent()
@@ -910,8 +927,30 @@ fn path_import(node: Node<'_>, source: &[u8], seen: &mut BTreeSet<String>, out: 
     if segments.len() < 2 {
         return;
     }
+    // A path headed by a type (`Vec::new`, `Self::x`, `u64::MAX`) or by a name a
+    // `use` in this file already binds (`io::Result` after `use std::io`)
+    // continues something in scope: it names no module or crate, and the `use`
+    // that bound it carries the import. Its identifiers still land as
+    // references. A tool attribute (`#[rustfmt::skip]`) names no crate either.
+    let head = segments[0].as_str();
+    if head.starts_with(|c: char| c.is_ascii_uppercase())
+        || PRIMITIVE_TYPES.contains(&head)
+        || TOOL_ATTRIBUTES.contains(&head)
+        || use_locals.contains(head)
+    {
+        return;
+    }
     emit_path_import(&segments, tk::span(node), seen, out);
 }
+
+/// The language's own scalar and string types, which paths may head (`u64::MAX`).
+const PRIMITIVE_TYPES: &[&str] = &[
+    "bool", "char", "str", "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64",
+    "i128", "isize", "f32", "f64",
+];
+
+/// Registered tool namespaces an attribute path may head: not crates.
+const TOOL_ATTRIBUTES: &[&str] = &["rustfmt", "clippy", "rustdoc", "miri", "diagnostic"];
 
 /// One deduplicated import per distinct path, binding every segment after the
 /// leading keywords.
@@ -956,18 +995,24 @@ fn emit_path_import(
 fn attribute_path_imports(
     attr: Node<'_>,
     source: &[u8],
+    use_locals: &BTreeSet<String>,
     seen: &mut BTreeSet<String>,
     out: &mut EvidenceSink,
 ) {
     tk::walk(attr, &mut |n| match n.kind() {
-        "scoped_identifier" => path_import(n, source, seen, out),
+        "scoped_identifier" => path_import(n, source, use_locals, seen, out),
         "token_tree" => {
             let mut run: Vec<String> = Vec::new();
             let mut start = 0u32;
             let mut end = 0u32;
             let mut after_separator = false;
             let mut flush = |run: &mut Vec<String>, start: u32, end: u32| {
-                if run.len() >= 2 {
+                let head = run.first().map(String::as_str).unwrap_or("");
+                if run.len() >= 2
+                    && !head.starts_with(|c: char| c.is_ascii_uppercase())
+                    && !TOOL_ATTRIBUTES.contains(&head)
+                    && !use_locals.contains(head)
+                {
                     emit_path_import(run, kndo_contract::vocab::Span::new(start, end), seen, out);
                 }
                 run.clear();

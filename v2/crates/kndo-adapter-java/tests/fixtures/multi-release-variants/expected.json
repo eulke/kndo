@@ -53,6 +53,15 @@
       "category": "untested",
       "reason": "no-test-roots-anywhere",
       "scope": "whole-run"
+    },
+    {
+      "category": "undeclared",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 1
+        }
+      }
     }
   ],
   "suppressed": {

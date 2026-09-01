@@ -52,10 +52,17 @@ experiment decomposed every one (COMPARISON has the per-finding record):
 else 0 — zero measured noise), carried by `DependencyDeclaration` evidence
 (js-ts and rust rich; JVM/go/python/swift name-only until their version models
 exist) and three resolver/claim fixes worth more than the analyses.
-**`undeclared` deferred with its number**: 2–3 honest true positives on this
-corpus vs a 124-finding fixture cliff + 195 ancestor-declared (workspace
-hoisting) + ambient modules + self-imports — the model needs those classes AND
-a corpus repo shaped like an ordinary application before it can be judged.
+**`undeclared` deferred with its number, then SHIPPED 2026-09-01** on the
+shared floor: the instrument's 905 ripgrep candidates were all Rust
+type/primitive/tool/`use`-bound path heads (an adapter precision fix, not a
+rule), the 124-finding fixture cliff and the 195 ancestor-declared are the
+floor's eligibility and manifest chain, ambient modules and aliases are
+mentions. Corpus: one finding (vite's committed-`node_modules` fixture, true by
+definition), zero false; the accusation path proven by ablation (lodash's
+`@playwright/test` sits behind the `.html` importer doubt — M7.d lifts it) and
+by four harvested fixtures. Residue with its number: tsconfig `paths` aliases
+never surfaced (0 after the mention and invalid-name rules); Rust heads bound by
+a parent module's glob import (0 on ripgrep).
 **deps-unused/test-only deferred, REOPENED, then SHIPPED 2026-09-01** (the
 owner's challenge; DECISIONS has the reasoning): the tooling-invisibility
 argument holds for DEV scope only, so the second pass judges PRODUCTION-scope

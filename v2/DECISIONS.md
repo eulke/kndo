@@ -2231,3 +2231,42 @@ harvested fixture), ts/deep-import (+1), ts/dependency-hygiene (`chai` `test-onl
 the fixture's own intent), ts/esm-dead-code (`left-pad` `unused`),
 ts/npm-workspace-monorepo (+3 judged), plus the new ts/dependency-usage.
 `GRAPH_SEMANTICS_VERSION` 9 (`users` tree-wide, identity from the spec).
+
+## 2026-09-01 — `undeclared` ships on the shared floor; identity spelled per ecosystem
+
+**Decision.** `undeclared` judges a reached file's `Certain` package-shaped imports
+against the manifest chain (nearest first, ancestors for hoisting), on the same
+floor as the dependency subjects; exempt: a self-reference resolved in the tree, a
+platform module (`DependencyBuiltins` — Node's list plus specifier schemes, Go's
+undotted first segment, Rust's `std`/`core`/`alloc`/`proc_macro`/`test`), a name the
+file declares, a declaration in the chain (`@types/` through the identity), a
+mention in any manifest (`Extension::manifest_mentions`, which also replaces the
+`used_by_manifest` flag: one scan, two consumers) or in any literal in the tree.
+`Warning`/`Probable`; never a health subject. `DependencyIdentity::PathPrefix`
+split into `PackageName` (npm: scope/name, `package_of` spells what a finding
+reports) and `ModulePath` (Go: the path is reported whole — the module boundary is
+the declaration's to say). A `require`/`import()` inside a function, branch or
+guard is `Probable` (js-ts 6): the optional-dependency idiom accuses nothing, and
+`unresolved`'s Certain-only rule keeps it silent there too. Rust qualified paths
+headed by a type, a primitive, a tool attribute or a `use`-bound local are not
+imports (rust adapter 5). Manifests without declarations hold a
+`ManifestDeclarations` entry — a package.json with no `dependencies` is still what
+its files' imports answer to. `scripts` tokens with a path root what they name.
+
+**Measurement.** Corpus: one `undeclared` finding (vite's
+`playground/nested-deps/test-package-b`, importing from a committed
+`node_modules` — true by definition), zero false; ripgrep 905 → 0 candidates
+through the adapter fix alone; ablation with the importer doubt off surfaces
+lodash's `@playwright/test`, the first measurement's true positive. Side effects:
+lodash 21 → 16 (build scripts rooted), vite 1,024 → 1,010 (typecheck-script roots
+reach `module-runner/`). COMPARISON has the table.
+
+**Contract change, audited.** 51 conformance reports regenerated: 29 differ only
+by the identity value's new spelling; go/go-work-phantom-dep (`example.com/a`),
+rust/workspace-deps (`rand_chacha`), ts/npm-workspace-monorepo (`@demo/a`,
+`left-pad` — the fixture's own comment names the phantom) and ts/dependency-usage
+(`phantom-dep`) gain the harvested `undeclared` findings; ts/cli-only-dependency
+abstains `nothing-reaches-owned-files` (no sources); sixteen JVM/Swift/Python
+fixtures whose manifest declares nothing now abstain as underivable under
+`unused` and `undeclared`. Fingerprint re-pinned (`used_by_manifest` gone,
+`DependencyBuiltins` in the spec).

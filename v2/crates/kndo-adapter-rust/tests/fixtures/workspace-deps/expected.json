@@ -44,6 +44,18 @@
   },
   "findings": [
     {
+      "id": "kndo-681b0a1c50a5",
+      "category": "undeclared",
+      "severity": "warning",
+      "confidence": "probable",
+      "subject": {
+        "kind": "dependency",
+        "owner_manifest": "app/Cargo.toml",
+        "name": "rand_chacha"
+      },
+      "message": "imported by 1 reached file but declared by no manifest from here up: it resolves only through hoisting or a transitive dependency"
+    },
+    {
       "id": "kndo-3809f4130e91",
       "category": "unused",
       "severity": "warning",

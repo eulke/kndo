@@ -358,12 +358,17 @@
           "const": "underivable"
         },
         {
-          "description": "The specifier is the declared name or a `/`-path under it: `lodash/fp`\nnames `lodash`, a scoped `@s/n` carries its own separator, and a Go\nimport path names the module whose path prefixes it.",
+          "description": "npm's spelling: the specifier is a package name — `@scope/name` or\n`name` — or a `/`-path under it (`lodash/fp` names `lodash`); a\n`@types/` declaration names the package it types (`@types/babel__core`\nnames `@babel/core`).",
           "type": "string",
-          "const": "path-prefix"
+          "const": "package-name"
         },
         {
-          "description": "The specifier's leading `::` segment is the declared name with `-`\nspelled `_`: `serde_json::Value` names `serde-json`.",
+          "description": "Go's spelling: the specifier is an import path and a declared module\npath prefixes it (`github.com/x/y/sub` names `github.com/x/y`). Where\nthe module boundary falls is the declaration's to say, so a path no\ndeclaration prefixes is reported whole.",
+          "type": "string",
+          "const": "module-path"
+        },
+        {
+          "description": "Cargo's spelling: the specifier's leading `::` segment is the declared\nname with `-` spelled `_` (`serde_json::Value` names `serde-json`).",
           "type": "string",
           "const": "crate-root"
         }

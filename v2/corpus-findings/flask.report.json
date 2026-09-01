@@ -492,6 +492,15 @@
           "unjudged": 5
         }
       }
+    },
+    {
+      "category": "undeclared",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 5
+        }
+      }
     }
   ],
   "suppressed": {

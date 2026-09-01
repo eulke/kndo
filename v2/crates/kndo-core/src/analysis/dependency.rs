@@ -7,9 +7,7 @@
 //! A manifest is judged when its adapter derives package identity from
 //! specifiers, no unclaimed file its adapter says could import sits inside its
 //! package, at least one owned file is reached, and not every owned file is a
-//! test. Each
-//! failed condition is a named abstention, never a silent skip — except on a
-//! manifest with no usage claim to judge, where there is no judgment to decline.
+//! test. Each failed condition is a named abstention, never a silent skip.
 
 use super::{AbstentionReason, AbstentionScope, AnalysisContext, Reachability, RunContext};
 use crate::graph::{Graph, ManifestDeclarations};
@@ -44,11 +42,6 @@ pub(super) fn eligibility(graph: &Graph, reach: &Reachability) -> Vec<Option<Abs
         .map(|md| {
             if md.identity == kndo_contract::extension::DependencyIdentity::Underivable {
                 return Some(AbstentionReason::SpecifierIdentityUnderivable);
-            }
-            if !md.judged.iter().any(|&j| j) {
-                // Nothing here claims use (a workspace pool, dev sections only):
-                // no judgment to decline.
-                return None;
             }
             let suffixes: BTreeSet<SmolStr> = unclaimed
                 .iter()
@@ -90,7 +83,7 @@ pub(super) struct JudgedDependency<'a> {
 
 /// Every declaration judged this run: an eligible manifest, a judged scope, and
 /// the manifest not naming it itself (a `scripts` binary, an alias — used
-/// without any import).
+/// without any import; `ManifestDeclarations::mentions`).
 pub(super) fn judged<'a>(cx: &AnalysisContext<'a>) -> impl Iterator<Item = JudgedDependency<'a>> {
     let run = cx.run;
     run.graph
@@ -102,7 +95,13 @@ pub(super) fn judged<'a>(cx: &AnalysisContext<'a>) -> impl Iterator<Item = Judge
             md.declarations
                 .iter()
                 .enumerate()
-                .filter(move |(i, dd)| md.judged[*i] && !dd.used_by_manifest)
+                .filter(move |(i, dd)| {
+                    md.judged[*i]
+                        && md
+                            .mentions
+                            .binary_search_by(|m| m.as_str().cmp(dd.name.as_str()))
+                            .is_err()
+                })
                 .map(move |(i, dd)| JudgedDependency {
                     manifest: md,
                     declaration: dd,
@@ -157,4 +156,24 @@ pub(super) fn abstain(cx: &AnalysisContext<'_>) {
     for (reason, unjudged) in groups {
         cx.abstain(reason, AbstentionScope::Manifests { unjudged });
     }
+}
+
+/// The manifests a file answers to, nearest first: every manifest whose
+/// directory prefixes the path. The nearest is the one that should declare
+/// what the file imports; the rest are the ancestors hoisting may resolve
+/// through.
+pub(super) fn manifest_chain(graph: &Graph, path: &str) -> Vec<usize> {
+    let mut chain: Vec<(usize, usize)> = graph
+        .manifest_declarations
+        .iter()
+        .enumerate()
+        .filter_map(|(ix, md)| {
+            let dir = md.manifest.as_str().rsplit_once('/').map_or("", |(d, _)| d);
+            let prefixes =
+                dir.is_empty() || path.strip_prefix(dir).is_some_and(|r| r.starts_with('/'));
+            prefixes.then_some((dir.len(), ix))
+        })
+        .collect();
+    chain.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+    chain.into_iter().map(|(_, ix)| ix).collect()
 }

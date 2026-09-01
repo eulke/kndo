@@ -142,12 +142,18 @@ pub enum DependencyIdentity {
     /// judgment abstains, and says so.
     #[default]
     Underivable,
-    /// The specifier is the declared name or a `/`-path under it: `lodash/fp`
-    /// names `lodash`, a scoped `@s/n` carries its own separator, and a Go
-    /// import path names the module whose path prefixes it.
-    PathPrefix,
-    /// The specifier's leading `::` segment is the declared name with `-`
-    /// spelled `_`: `serde_json::Value` names `serde-json`.
+    /// npm's spelling: the specifier is a package name — `@scope/name` or
+    /// `name` — or a `/`-path under it (`lodash/fp` names `lodash`); a
+    /// `@types/` declaration names the package it types (`@types/babel__core`
+    /// names `@babel/core`).
+    PackageName,
+    /// Go's spelling: the specifier is an import path and a declared module
+    /// path prefixes it (`github.com/x/y/sub` names `github.com/x/y`). Where
+    /// the module boundary falls is the declaration's to say, so a path no
+    /// declaration prefixes is reported whole.
+    ModulePath,
+    /// Cargo's spelling: the specifier's leading `::` segment is the declared
+    /// name with `-` spelled `_` (`serde_json::Value` names `serde-json`).
     CrateRoot,
 }
 
@@ -163,8 +169,103 @@ impl DependencyIdentity {
         }
         match self {
             DependencyIdentity::Underivable => false,
-            DependencyIdentity::PathPrefix => under(specifier, dependency, "/"),
+            DependencyIdentity::PackageName => {
+                under(specifier, dependency, "/")
+                    || dependency
+                        .strip_prefix("@types/")
+                        .is_some_and(|typed| under(specifier, &typed_package(typed), "/"))
+            }
+            DependencyIdentity::ModulePath => under(specifier, dependency, "/"),
             DependencyIdentity::CrateRoot => under(specifier, &dependency.replace('-', "_"), "::"),
+        }
+    }
+
+    /// The package a specifier names, spelled as a declaration would — what an
+    /// `undeclared` finding reports. `None` for a specifier that names no
+    /// package under this spelling: an empty one, a scheme-qualified one, a
+    /// subpath import or alias (`#x`, `~x`, `@/x`), a scope without a name.
+    pub fn package_of(self, specifier: &str) -> Option<&str> {
+        if specifier.is_empty() {
+            return None;
+        }
+        // `node:fs`, `data:…`, `virtual:x`: a scheme names the platform's own
+        // resolution, never a package — under a `/`-separated spelling.
+        let scheme_qualified = specifier
+            .split('/')
+            .next()
+            .is_some_and(|first| first.contains(':'));
+        match self {
+            DependencyIdentity::Underivable => None,
+            DependencyIdentity::PackageName => {
+                if scheme_qualified || specifier.starts_with(['#', '~', '.', '/']) {
+                    return None;
+                }
+                let mut parts = specifier.splitn(3, '/');
+                let first = parts.next()?;
+                if let Some(scope) = first.strip_prefix('@') {
+                    let name = parts.next().filter(|n| !n.is_empty())?;
+                    if scope.is_empty() {
+                        return None;
+                    }
+                    Some(&specifier[..first.len() + 1 + name.len()])
+                } else {
+                    Some(first)
+                }
+            }
+            DependencyIdentity::ModulePath => (!scheme_qualified).then_some(specifier),
+            DependencyIdentity::CrateRoot => {
+                let first = specifier.split("::").next()?;
+                let identifier = !first.is_empty()
+                    && first.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+                identifier.then_some(first)
+            }
+        }
+    }
+}
+
+/// DefinitelyTyped's encoding of the package a `@types/` declaration types:
+/// `babel__core` is `@babel/core`, anything else is itself.
+fn typed_package(typed: &str) -> String {
+    match typed.split_once("__") {
+        Some((scope, name)) => format!("@{scope}/{name}"),
+        None => typed.to_string(),
+    }
+}
+
+/// Which specifiers name the platform's own modules rather than a dependency —
+/// never declared, never undeclared. Data, the way [`DependencyIdentity`] is,
+/// so an adapter cannot claim a builtin set without spelling it.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub enum DependencyBuiltins {
+    /// Nothing is the platform's: every package-shaped specifier is a dependency.
+    #[default]
+    None,
+    /// A named list, each entry matched under the ecosystem's
+    /// [`DependencyIdentity`] spelling (`fs/promises` is `fs`); an entry ending
+    /// in `:` is a scheme prefix (`node:` covers `node:fs`).
+    Named(Vec<SmolStr>),
+    /// Go's rule: an import path whose first segment carries no `.` is the
+    /// standard library — module paths are domain-qualified.
+    UndottedFirstSegment,
+}
+
+impl DependencyBuiltins {
+    pub fn covers(&self, specifier: &str, identity: DependencyIdentity) -> bool {
+        match self {
+            DependencyBuiltins::None => false,
+            DependencyBuiltins::Named(names) => names.iter().any(|name| {
+                if name.ends_with(':') {
+                    specifier.starts_with(name.as_str())
+                } else {
+                    identity.names(specifier, name)
+                }
+            }),
+            DependencyBuiltins::UndottedFirstSegment => specifier
+                .split('/')
+                .next()
+                .is_some_and(|first| !first.contains('.')),
         }
     }
 }
@@ -184,6 +285,7 @@ pub struct ExtensionSpec {
     dependency_scoping: DependencyScoping,
     dependency_identity: DependencyIdentity,
     dependency_importers: Vec<SmolStr>,
+    dependency_builtins: DependencyBuiltins,
     import_cycles: CycleTolerance,
     claims: Vec<SmolStr>,
     emits: EvidenceStreams,
@@ -220,6 +322,7 @@ impl ExtensionSpec {
                 dependency_scoping: DependencyScoping::Scoped,
                 dependency_identity: DependencyIdentity::Underivable,
                 dependency_importers: Vec::new(),
+                dependency_builtins: DependencyBuiltins::None,
                 import_cycles: CycleTolerance::Tolerated,
                 claims: Vec::new(),
                 emits: EvidenceStreams::none(),
@@ -288,6 +391,11 @@ impl ExtensionSpec {
     /// import, and nothing unclaimed casts doubt.
     pub fn dependency_importers(&self) -> &[SmolStr] {
         &self.dependency_importers
+    }
+
+    /// See [`DependencyBuiltins`]; `undeclared` is the consumer.
+    pub fn dependency_builtins(&self) -> &DependencyBuiltins {
+        &self.dependency_builtins
     }
 
     /// See [`CycleTolerance`]; the `cyclic` analysis is the consumer.
@@ -364,6 +472,8 @@ pub struct ExtensionSpecParts {
     pub dependency_identity: DependencyIdentity,
     /// Wire components cannot declare importer suffixes yet; defaults to none.
     pub dependency_importers: Vec<SmolStr>,
+    /// Wire components cannot declare builtins yet; defaults to none.
+    pub dependency_builtins: DependencyBuiltins,
     /// Wire components cannot declare `Hazard` yet — the world speaks no cycle
     /// vocabulary; defaults to `Tolerated` (silence) like every other absence.
     pub import_cycles: CycleTolerance,
@@ -404,6 +514,7 @@ impl From<ExtensionSpecParts> for ExtensionSpec {
             dependency_scoping: parts.dependency_scoping,
             dependency_identity: parts.dependency_identity,
             dependency_importers: parts.dependency_importers,
+            dependency_builtins: parts.dependency_builtins,
             import_cycles: parts.import_cycles,
             claims: parts.claims,
             emits: parts.emits,
@@ -485,6 +596,14 @@ impl ExtensionSpecBuilder {
     /// never makes the dependency-usage judgment abstain.
     pub fn dependency_importers(mut self, suffixes: &'static [&'static str]) -> Self {
         self.spec.dependency_importers = suffixes.iter().map(|s| SmolStr::new_static(s)).collect();
+        self
+    }
+
+    /// Declare which specifiers name the platform's own modules (see
+    /// [`DependencyBuiltins`]). Omitted ⇒ none: every package-shaped specifier
+    /// is a dependency.
+    pub fn dependency_builtins(mut self, builtins: DependencyBuiltins) -> Self {
+        self.spec.dependency_builtins = builtins;
         self
     }
 
@@ -850,6 +969,16 @@ pub trait Extension: Send + Sync {
     /// the dependency analyses (version-skew today) read scope and requirement —
     /// through the same discovered-manifest pipeline `roots` and `packages` ride.
     fn manifest_dependencies(&self, manifest: &SourceFile<'_>) -> Vec<DependencyDeclaration> {
+        let _ = manifest;
+        Vec::new()
+    }
+
+    /// Names this manifest spells outside its dependency declarations — a
+    /// `scripts` entry invoking a binary, a `browser`/`exports` alias, a tool
+    /// config listing a plugin — so a dependency it names is in use without any
+    /// import, and a package it names is not undeclared. The default names
+    /// nothing.
+    fn manifest_mentions(&self, manifest: &SourceFile<'_>) -> Vec<SmolStr> {
         let _ = manifest;
         Vec::new()
     }

@@ -301,7 +301,6 @@ impl Extension for WasmExtension {
                     name: smol_str::SmolStr::new(name),
                     scope: None,
                     version_req: None,
-                    used_by_manifest: false,
                 })
                 .collect()
         })

@@ -54,7 +54,6 @@ pub fn dependencies(manifest: &SourceFile<'_>) -> Vec<DependencyDeclaration> {
             name: SmolStr::new(module.trim_matches('"')),
             scope,
             version_req: None,
-            used_by_manifest: false,
         });
     };
     for line in text.lines() {

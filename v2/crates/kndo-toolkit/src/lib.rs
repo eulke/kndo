@@ -451,14 +451,12 @@ pub mod jvm_manifest {
                     name: SmolStr::new(format!("{g}:{a}")),
                     scope,
                     version_req: None,
-                    used_by_manifest: false,
                 });
             }
             out.push(DependencyDeclaration {
                 name: SmolStr::new(a),
                 scope,
                 version_req: None,
-                used_by_manifest: false,
             });
         };
         for line in text.lines() {
@@ -542,7 +540,6 @@ pub mod jvm_manifest {
                                 name: SmolStr::new(name),
                                 scope,
                                 version_req: None,
-                                used_by_manifest: false,
                             });
                         }
                         continue;
@@ -561,13 +558,11 @@ pub mod jvm_manifest {
                                 name: SmolStr::new(format!("{g}:{a}")),
                                 scope,
                                 version_req: None,
-                                used_by_manifest: false,
                             });
                             out.push(DependencyDeclaration {
                                 name: SmolStr::new(a),
                                 scope,
                                 version_req: None,
-                                used_by_manifest: false,
                             });
                         }
                     }

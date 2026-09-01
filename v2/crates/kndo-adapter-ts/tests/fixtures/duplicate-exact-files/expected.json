@@ -11,7 +11,7 @@
         "export_narrowing": "expressible",
         "import_cycles": "hazard",
         "dependency_scoping": "scoped",
-        "dependency_identity": "path-prefix"
+        "dependency_identity": "package-name"
       }
     ]
   },

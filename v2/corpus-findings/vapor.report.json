@@ -5125,6 +5125,15 @@
           "unjudged": 2
         }
       }
+    },
+    {
+      "category": "undeclared",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 2
+        }
+      }
     }
   ],
   "suppressed": {

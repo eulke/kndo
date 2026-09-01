@@ -62,6 +62,7 @@ pub(crate) fn extension_spec(spec: awire::ExtensionSpec) -> ExtensionSpec {
         dependency_scoping: Default::default(),
         dependency_identity: Default::default(),
         dependency_importers: Vec::new(),
+        dependency_builtins: Default::default(),
         emits: EvidenceStreams::of(
             &spec
                 .emits

@@ -41,8 +41,10 @@ impl GoAdapter {
             // go.mod has no sections: every direct requirement is a build
             // requirement, and "only tests import it" has nowhere to move.
             .dependency_scoping(kndo_contract::extension::DependencyScoping::Unscoped)
-            // An import path names the module whose path prefixes it.
-            .dependency_identity(kndo_contract::extension::DependencyIdentity::PathPrefix)
+            // An import path names the module whose path prefixes it; a path
+            // whose first segment carries no `.` is the standard library.
+            .dependency_identity(kndo_contract::extension::DependencyIdentity::ModulePath)
+            .dependency_builtins(kndo_contract::extension::DependencyBuiltins::UndottedFirstSegment)
             .build(),
         }
     }

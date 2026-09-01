@@ -152,7 +152,6 @@ pub fn dependencies(manifest: &SourceFile<'_>) -> Vec<DependencyDeclaration> {
                         scope
                     },
                     version_req: comparable_req(spec),
-                    used_by_manifest: false,
                 });
             }
         }

@@ -93,10 +93,11 @@ pub struct Graph {
     /// Every discovered file some extension claims as a manifest, sorted —
     /// manifests are never source, so they are never "unclaimed importers".
     pub manifests: Vec<ProjectPath>,
-    /// Every discovered manifest's dependency declarations, path-sorted — the
-    /// raw material of the manifest-to-manifest analyses (version-skew), built
-    /// from the same [`for_each_manifest`] pipeline activation reads, so the
-    /// two can never disagree about what a manifest declares.
+    /// Every discovered manifest's dependency declarations (an entry per
+    /// manifest, declarations or not), path-sorted — the raw material of the
+    /// dependency analyses, built from the same [`for_each_manifest`] pipeline
+    /// activation reads, so the two can never disagree about what a manifest
+    /// declares.
     pub manifest_declarations: Vec<ManifestDeclarations>,
     /// Every discovered path, claimed or not, sorted — the tree as discovery
     /// saw it. `unresolved` reads it to tell "no such file" (a defect) from "a
@@ -143,6 +144,14 @@ pub struct ManifestDeclarations {
     /// suffixes of unclaimed files that could import this manifest's
     /// dependencies, and so cast doubt on any usage judgment.
     pub importers: Vec<SmolStr>,
+    /// The claiming adapter's declared
+    /// [`kndo_contract::extension::DependencyBuiltins`] — the platform's own
+    /// modules, never a dependency to declare.
+    pub builtins: kndo_contract::extension::DependencyBuiltins,
+    /// Names the manifest spells outside its declarations, sorted and
+    /// deduplicated ([`Extension::manifest_mentions`]): a dependency it names
+    /// is in use without any import; a package it names is not undeclared.
+    pub mentions: Vec<SmolStr>,
     /// The package this manifest declares, as an index into `Graph::packages`;
     /// `None` for a manifest that declares none, which owns by directory.
     pub package: Option<u32>,
@@ -198,10 +207,15 @@ impl Graph {
         adapters: &[Box<dyn Extension>],
     ) {
         let mut claimant: BTreeMap<ProjectPath, SmolStr> = BTreeMap::new();
+        let mut mentions: BTreeMap<ProjectPath, Vec<SmolStr>> = BTreeMap::new();
         for_each_manifest(files, adapters, |adapter, manifest| {
             claimant
                 .entry(manifest.path.clone())
                 .or_insert_with(|| SmolStr::new(adapter.spec().coordinate()));
+            mentions
+                .entry(manifest.path.clone())
+                .or_default()
+                .extend(adapter.manifest_mentions(&manifest));
         });
         let owners: Vec<Option<u32>> = self
             .files
@@ -231,6 +245,8 @@ impl Graph {
             adapter: SmolStr,
             scoping: kndo_contract::extension::DependencyScoping,
             importers: Vec<SmolStr>,
+            builtins: kndo_contract::extension::DependencyBuiltins,
+            mentions: Vec<SmolStr>,
             package: Option<u32>,
             owned: Vec<u32>,
             judged: Vec<bool>,
@@ -249,6 +265,8 @@ impl Graph {
                     adapter: SmolStr::default(),
                     scoping: Default::default(),
                     importers: Vec::new(),
+                    builtins: Default::default(),
+                    mentions: Vec::new(),
                     package,
                     owned: Vec::new(),
                     judged: vec![false; md.declarations.len()],
@@ -302,6 +320,13 @@ impl Graph {
                 adapter: coordinate.clone(),
                 scoping,
                 importers: adapter.spec().dependency_importers().to_vec(),
+                builtins: adapter.spec().dependency_builtins().clone(),
+                mentions: {
+                    let mut names = mentions.remove(&md.manifest).unwrap_or_default();
+                    names.sort();
+                    names.dedup();
+                    names
+                },
                 package,
                 owned,
                 judged: claims,
@@ -313,6 +338,8 @@ impl Graph {
             md.adapter = j.adapter;
             md.scoping = j.scoping;
             md.importers = j.importers;
+            md.builtins = j.builtins;
+            md.mentions = j.mentions;
             md.package = j.package;
             md.owned = j.owned;
             md.judged = j.judged;
@@ -439,8 +466,8 @@ fn collect_packages(
     packages
 }
 
-/// One entry per declaring manifest, path-sorted, declarations name-sorted —
-/// the deterministic projection of every adapter's `manifest_dependencies`.
+/// One entry per manifest, path-sorted, declarations name-sorted — the
+/// deterministic projection of every adapter's `manifest_dependencies`.
 fn collect_manifest_declarations(
     files: &[DiscoveredFile],
     adapters: &[Box<dyn Extension>],
@@ -449,14 +476,13 @@ fn collect_manifest_declarations(
         ProjectPath,
         Vec<kndo_contract::adapter::DependencyDeclaration>,
     > = std::collections::BTreeMap::new();
+    // Every manifest has an entry, declarations or not: a manifest that declares
+    // nothing is still the one its files' imports answer to.
     for_each_manifest(files, adapters, |adapter, manifest| {
-        let declarations = adapter.manifest_dependencies(&manifest);
-        if !declarations.is_empty() {
-            by_manifest
-                .entry(manifest.path.clone())
-                .or_default()
-                .extend(declarations);
-        }
+        by_manifest
+            .entry(manifest.path.clone())
+            .or_default()
+            .extend(adapter.manifest_dependencies(&manifest));
     });
     by_manifest
         .into_iter()
@@ -493,6 +519,8 @@ impl ManifestDeclarations {
             adapter: SmolStr::default(),
             scoping: Default::default(),
             importers: Vec::new(),
+            builtins: Default::default(),
+            mentions: Vec::new(),
             package: None,
             owned: Vec::new(),
             judged: Vec::new(),

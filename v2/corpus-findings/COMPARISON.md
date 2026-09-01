@@ -791,3 +791,48 @@ scope under name-fuzzy resolution; v2 judges production scope only, under a
 declared identity, and abstains where it cannot see. Health's universe grows by
 the judged declarations — ripgrep 2,557 → 2,618, vite 5,052 → 5,095, gin
 1,304 → 1,319 — and every other cell of the table is byte-identical.
+
+## `undeclared` on the shared floor (2026-09-01)
+
+A package a reached file imports that no manifest from its own up to the root
+declares. Same floor as the dependency subjects above (the nearest manifest must
+be judged), then only the author's own unconditional statement accuses — a
+`require` inside a function, branch or `||` guard is `Probable` now, the
+optional-dependency idiom — and everything the project itself provides exempts:
+a self-reference resolved in the tree (a sibling package must still be
+declared: the phantom-internal pattern), a platform module
+(`DependencyBuiltins`: Node's list and specifier schemes, Go's undotted first
+segment, Rust's `std`/`core`/`alloc`), a name the file declares, a declaration
+in the chain (`@types/` included), a mention in any manifest or any literal in
+the tree. Rust's qualified paths stopped pretending: `Vec::new`, `u64::MAX`,
+`io::Result` after `use std::io`, `#[rustfmt::skip]` name no crate and are no
+longer imports (rust adapter 5) — the instrument's first pass had 905
+candidates on ripgrep, every one a type, a primitive, a tool attribute or a
+`use`-bound continuation.
+
+| repo | judged | `undeclared` | ablation: the same rule with the importer doubt off |
+|---|---|---|---|
+| ripgrep | every manifest | 0 | 0 |
+| gin | every manifest | 0 | 0 |
+| vite | 1 of 185 manifests eligible for a reached importer | 1 — `test-package-a`, imported by `playground/nested-deps/test-package-b` from a COMMITTED `node_modules` | 1 (the same) |
+| lodash | 0 — `test/*.html`, `*.css` unclaimed | 0 | 1 — `@playwright/test` in `playwright.config.js`, declared nowhere |
+| guava · Exposed · vapor · flask · Alamofire | 0 — underivable | 0 | — |
+
+One finding on the corpus, true by the definition and vendored by construction:
+vite's fixture ships the dependency inside a checked-in `node_modules`. The
+accusation path is validated by the ablation (lodash's `@playwright/test`, the
+true positive the first measurement named) and by the harvested fixtures
+(go-work-phantom-dep's `example.com/a` across `go.work`, npm-workspace-monorepo's
+`@demo/a` and `left-pad`, workspace-deps' `rand_chacha`). The oracle's 293 were
+v1 over every scope with name-fuzzy resolution and no floor: 195
+ancestor-declared, 124 fixture-tree packages, ambient modules, self-imports —
+each now a rule or an abstention, never a filter.
+
+Two side effects rode along, both keep-alive: a `scripts` token with a path
+roots what it names (`node lib/main/build-site`, `tsc -p src/module-runner`), so
+lodash loses three `unused` build scripts and two `test-only` files they reach
+(21 → 16), and vite loses fifteen `test-only` files under `module-runner/` and
+`shared/` that its typecheck script reaches (1,024 → 1,010); manifests without
+declarations now hold an entry, so the JVM/Swift/Python abstentions count every
+manifest (guava 12 → 16, Exposed 49 → 62) and vite's unclaimed-importer doubt
+names 117 manifests with the full suffix family the js-ts adapter declares.

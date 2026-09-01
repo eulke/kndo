@@ -86,6 +86,15 @@
   "baselined": 0,
   "abstained": [
     {
+      "category": "unused",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 1
+        }
+      }
+    },
+    {
       "category": "test-only",
       "reason": "no-test-roots-anywhere",
       "scope": "whole-run"
@@ -94,6 +103,15 @@
       "category": "untested",
       "reason": "no-test-roots-anywhere",
       "scope": "whole-run"
+    },
+    {
+      "category": "undeclared",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 1
+        }
+      }
     }
   ],
   "suppressed": {

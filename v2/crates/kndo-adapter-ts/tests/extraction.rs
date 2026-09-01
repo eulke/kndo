@@ -5,6 +5,7 @@ use kndo_adapter_ts::TypeScriptAdapter;
 use kndo_contract::evidence::{
     FileEvidence, ImportShape, ImportTarget, Reach, RefKind, SymbolKind,
 };
+use kndo_contract::vocab::Confidence;
 
 fn extract(path: &str, source: &str) -> FileEvidence {
     kndo_testkit::extract_evidence(&TypeScriptAdapter::new(), path, source)
@@ -315,7 +316,6 @@ export function App() { return <Panel title="x" />; }
 #[test]
 fn package_specifiers_inside_string_literals_are_possible_imports() {
     use kndo_contract::evidence::{ImportShape, ImportTarget};
-    use kndo_contract::vocab::Confidence;
     let ev = kndo_testkit::extract_evidence(
         &kndo_adapter_ts::TypeScriptAdapter::new(),
         "src/plugin.ts",
@@ -362,4 +362,37 @@ fn package_specifiers_inside_string_literals_are_possible_imports() {
             .count(),
         1
     );
+}
+
+#[test]
+fn conditional_requires_are_probable() {
+    let ev = extract(
+        "src/index.js",
+        r#"
+const a = require("a");
+function f() {
+  return require("b");
+}
+const c = process.env.X ? require("c") : null;
+const d = maybe || require("d");
+try {
+  require("e");
+} catch {}
+"#,
+    );
+    let confidence = |name: &str| {
+        ev.imports
+            .iter()
+            .find(|i| matches!(&i.target, ImportTarget::Package(s) if s == name))
+            .map(|i| i.confidence)
+            .unwrap_or_else(|| panic!("{name} missing"))
+    };
+    assert_eq!(confidence("a"), Confidence::Certain);
+    for conditional in ["b", "c", "d", "e"] {
+        assert_eq!(
+            confidence(conditional),
+            Confidence::Probable,
+            "{conditional}"
+        );
+    }
 }

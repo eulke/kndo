@@ -31,11 +31,10 @@ pub struct RustAdapter {
 impl RustAdapter {
     pub fn new() -> Self {
         RustAdapter {
-            // 4: crate paths inside attributes (`#[derive(thiserror::Error)]`)
-            // are imports.
+            // 5: type-headed and `use`-bound qualified paths are not imports.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:rust",
-                4,
+                5,
                 &["rs"],
                 &["**/Cargo.toml"],
                 &["crate"],
@@ -46,6 +45,12 @@ impl RustAdapter {
             // `serde_json::Value` names `serde-json`: the crate root segment,
             // hyphens spelled as underscores.
             .dependency_identity(kndo_contract::extension::DependencyIdentity::CrateRoot)
+            .dependency_builtins(kndo_contract::extension::DependencyBuiltins::Named(
+                ["std", "core", "alloc", "proc_macro", "test"]
+                    .iter()
+                    .map(|s| smol_str::SmolStr::new_static(s))
+                    .collect(),
+            ))
             .build(),
         }
     }

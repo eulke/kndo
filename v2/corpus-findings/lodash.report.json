@@ -11,24 +11,24 @@
         "export_narrowing": "expressible",
         "import_cycles": "hazard",
         "dependency_scoping": "scoped",
-        "dependency_identity": "path-prefix"
+        "dependency_identity": "package-name"
       }
     ]
   },
   "health": {
-    "implicated": 18,
+    "implicated": 15,
     "subjects": 187,
     "by_category": [
       {
         "category": "unused",
-        "findings": 18
+        "findings": 15
       }
     ],
     "by_package": [
       {
         "name": "lodash",
         "manifest": "package.json",
-        "implicated": 18,
+        "implicated": 15,
         "subjects": 187
       }
     ]
@@ -123,39 +123,6 @@
       "message": "no root anchors this file and no reachable file imports it"
     },
     {
-      "id": "kndo-7cca5427a00c",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "lib/fp/build-doc.js"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-1fff70f7fd2c",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "lib/main/build-doc.js"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-b4caf1b25ebf",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "lib/main/build-site.js"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
       "id": "kndo-092aec366c1b",
       "category": "unused",
       "severity": "warning",
@@ -242,33 +209,60 @@
         "path": "lodash.js"
       },
       "message": "byte-identical to dist/lodash.js"
-    },
-    {
-      "id": "kndo-52c77982755b",
-      "category": "test-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "fp/_baseConvert.js"
-      },
-      "message": "only tests reach this file — no production or tooling root does"
-    },
-    {
-      "id": "kndo-05c2d3c918a4",
-      "category": "test-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "fp/placeholder.js"
-      },
-      "message": "only tests reach this file — no production or tooling root does"
     }
   ],
   "fixed": [],
   "baselined": 0,
-  "abstained": [],
+  "abstained": [
+    {
+      "category": "unused",
+      "reason": {
+        "unclaimed-importers": {
+          "suffixes": [
+            "css",
+            "html"
+          ]
+        }
+      },
+      "scope": {
+        "manifests": {
+          "unjudged": 1
+        }
+      }
+    },
+    {
+      "category": "test-only",
+      "reason": {
+        "unclaimed-importers": {
+          "suffixes": [
+            "css",
+            "html"
+          ]
+        }
+      },
+      "scope": {
+        "manifests": {
+          "unjudged": 1
+        }
+      }
+    },
+    {
+      "category": "undeclared",
+      "reason": {
+        "unclaimed-importers": {
+          "suffixes": [
+            "css",
+            "html"
+          ]
+        }
+      },
+      "scope": {
+        "manifests": {
+          "unjudged": 1
+        }
+      }
+    }
+  ],
   "suppressed": {
     "total": 0,
     "by_category": []

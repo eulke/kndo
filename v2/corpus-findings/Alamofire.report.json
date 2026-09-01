@@ -11,7 +11,7 @@
         "export_narrowing": "expressible",
         "import_cycles": "hazard",
         "dependency_scoping": "scoped",
-        "dependency_identity": "path-prefix"
+        "dependency_identity": "package-name"
       },
       {
         "id": "kndo:swift",
@@ -13764,7 +13764,35 @@
   ],
   "fixed": [],
   "baselined": 0,
-  "abstained": [],
+  "abstained": [
+    {
+      "category": "unused",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 1
+        }
+      }
+    },
+    {
+      "category": "test-only",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 1
+        }
+      }
+    },
+    {
+      "category": "undeclared",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 1
+        }
+      }
+    }
+  ],
   "suppressed": {
     "total": 0,
     "by_category": []

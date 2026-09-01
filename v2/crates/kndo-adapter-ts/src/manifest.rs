@@ -82,7 +82,9 @@ pub fn roots(
             };
             for token in command.split(|c: char| c.is_whitespace() || c == ';' || c == '&') {
                 let token = token.trim_matches(|c| c == '"' || c == '\'');
-                if exts.iter().any(|e| token.ends_with(e.as_str()))
+                // A path-shaped token (`node lib/main/build-site`) or a source
+                // suffix; a bare word (`eslint src`) names no file to root.
+                if (token.contains('/') || exts.iter().any(|e| token.ends_with(e.as_str())))
                     && let Some(path) = resolve_in_dir(dir, token, cx, exts)
                 {
                     script_files.insert(path);
@@ -181,7 +183,6 @@ pub fn dependencies(manifest: &SourceFile<'_>) -> Vec<DependencyDeclaration> {
     let Ok(json) = serde_json::from_slice::<serde_json::Value>(manifest.content) else {
         return Vec::new();
     };
-    let mentioned = mentions(&json);
     let mut out = Vec::new();
     for (section, scope) in SECTIONS {
         if let Some(serde_json::Value::Object(map)) = json.get(section) {
@@ -190,12 +191,23 @@ pub fn dependencies(manifest: &SourceFile<'_>) -> Vec<DependencyDeclaration> {
                     name: SmolStr::new(name),
                     scope: Some(scope),
                     version_req: comparable_req(req.as_str().unwrap_or_default()),
-                    used_by_manifest: mentioned.contains(name.as_str()),
                 });
             }
         }
     }
     out
+}
+
+/// The words this manifest spells outside its dependency sections and its
+/// prose, sorted — see [`mentioned_words`].
+pub fn mentions(manifest: &SourceFile<'_>) -> Vec<SmolStr> {
+    let Ok(json) = serde_json::from_slice::<serde_json::Value>(manifest.content) else {
+        return Vec::new();
+    };
+    mentioned_words(&json)
+        .into_iter()
+        .map(SmolStr::new)
+        .collect()
 }
 
 /// Every section npm installs from, with the scope it declares.
@@ -215,8 +227,9 @@ const PROSE: [&str; 3] = ["name", "description", "keywords"];
 /// && tsc"` names `eslint` — through its binary, without any import — a
 /// `browser` map names the package it aliases to, a tool config names its
 /// plugins. A path into a package names the package too
-/// (`vite/bin/vite.js`, `./node_modules/vite/bin/vite.js`).
-fn mentions(json: &serde_json::Value) -> BTreeSet<&str> {
+/// (`vite/bin/vite.js`, `./node_modules/vite/bin/vite.js`), and so does a
+/// versioned invocation (`npx marky-markdown@^9`).
+fn mentioned_words(json: &serde_json::Value) -> BTreeSet<&str> {
     let mut words = BTreeSet::new();
     if let serde_json::Value::Object(fields) = json {
         for (key, value) in fields {
@@ -253,7 +266,19 @@ fn words_of<'a>(text: &'a str, words: &mut BTreeSet<&'a str>) {
         if let Some(package) = path_package(word) {
             words.insert(package);
         }
+        if let Some(package) = versioned_package(word) {
+            words.insert(package);
+        }
     }
+}
+
+/// The package a `name@version` word invokes: `marky-markdown@^9` → the name,
+/// `@scope/name@1.2.3` → the scoped name; a word with no version yields nothing.
+fn versioned_package(word: &str) -> Option<&str> {
+    let body = word.strip_prefix('@').unwrap_or(word);
+    let at = body.find('@')?;
+    let end = word.len() - body.len() + at;
+    (end > 0).then(|| &word[..end])
 }
 
 /// The package a path-shaped word reaches into: `vite/bin/vite.js` and
