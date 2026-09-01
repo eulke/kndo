@@ -516,3 +516,38 @@ capabilities its adapter declared (`narrowable_scopes`, `export_narrowing`,
 for this language". Gating is by declared language facts, never by an adapter
 subscribing to finding categories: a fact carries its reason, composes across
 languages inside one finding, and keeps a judged zero distinct from silence.
+
+## M7 — the swap plan (recorded 2026-09-01)
+
+Everything between here and replacing v1 at the repository root, in the order value
+and risk suggest. Each tranche keeps the M6 discipline — instrument first, the
+number decides, every difference explained — and a cut is the owner's DECISIONS
+entry, never a builder's shortcut.
+
+- **M7.a — the dependency family, second pass**: `deps-unused` on PRODUCTION scope
+  (peer/optional exempt, workspace siblings resolved, adapter-visible implicit uses,
+  Python abstaining on ambiguous import names) and `deps-test-only` on the same
+  machinery — instrumented over the six manifest ecosystems, audited, shipped or
+  deferred with the number. Then `undeclared` on the shared floor (ancestor
+  manifests, declared builtins, alias exclusion).
+- **M7.b — `crap` with real coverage**: capture coverage from a real producer for a
+  corpus repo (flask/pytest-cov, vite/vitest), count complex-and-untested
+  candidates, decide the threshold semantics from the number.
+- **M7.c — framework conduct plugins** (swap-blocking): v1's nine, each through the
+  reflection-dispatch rule — a plugin lands only when its roots land on real
+  findings, proven baseline-then-plugin like the coverage plugin; v1's harvested
+  plugin fixtures are the first instrument, ordered by v1's measured impact.
+- **M7.d — the web adapters** (swap-blocking): html and css rebuilt on the extension
+  contract (vite's playground gap is the measured demand); json only after its own
+  demand check.
+- **M7.e — coverage ingesters**: jacoco, go-cover, cobertura — each from a captured
+  real-producer fixture, never a hand-written one.
+- **M7.f — the product cortex** (swap-blocking): the docs site rebuilt against v2's
+  real behavior; release channels re-pointed at v2's artifact under the one-producer
+  test law (release.yml + git-cliff, install.sh, the Action, the Homebrew template);
+  Windows back in the CI matrix; `xtask bench` on the recorded baseline; gen-stdlib
+  verified dead or ported.
+- **M7.g — the root swap**: v2 becomes the repository root; v1 stays in history.
+- Candidates beside the plan, measured when a tranche touches them: JVM package
+  (directory) cycles; the dataless rules (hollow-test, speculative-abstraction,
+  churn × complexity).

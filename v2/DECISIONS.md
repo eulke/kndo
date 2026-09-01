@@ -2134,3 +2134,47 @@ there. Envelope and schema only; renders unchanged (JSON and `serve` carry it;
 a dedicated human surface waits for demand). Every conformance fixture
 regenerated, the diff audited to contain only the new row fields. 224 tests,
 15 gates, clippy clean.
+
+## 2026-09-01 — The refused list, re-reviewed under the owner's challenge
+
+The owner asked whether the refused categories were refused too easily — "unused
+dependencies you could delete from the manifest, you don't see that as useful?" —
+and the honest answer is that two verdicts over-generalized their number.
+
+- **`deps-unused` / `deps-test-only`: reopened.** The deferral said "config-driven
+  tooling is invisible to structural evidence" — true for DEV dependencies, where
+  eslint, prettier and vitest live and run from scripts, never from imports. It does
+  not hold for PRODUCTION dependencies, whose whole contract is "the shipped code
+  imports me": a prod dependency no claimed file imports is a real finding (the class
+  depcheck, knip, cargo-machete, deptry and `go mod tidy` exist for), and the scope
+  split the manifest itself declares (`DependencyScope`, shipped with the family) is
+  the floor. The remaining exemptions are declared facts, not guesses: peer and
+  optional scopes, workspace siblings resolved through `packages`, and implicit uses
+  an adapter can SEE (JSX present ⇒ the JSX runtime package is used). Python's
+  dist-name ≠ import-name gap abstains unless the derivation is unambiguous. Measured
+  before built: the 198 + 14 oracle findings are the demand, the prod-scope
+  instrument decides. `deps-test-only` (a prod dependency only test-rooted files
+  import) rides the same machinery.
+- **`crap`: reopened as an instrument problem, not a value verdict.** Demand read 0
+  because the corpus carries no coverage — an artifact of the measuring setup. Both
+  inputs exist in v2 (metrics winnowing, lcov ingestion); the experiment is to
+  CAPTURE coverage from a real producer for a corpus repo (flask via pytest-cov,
+  vite via vitest) and count. "Complex and untested" is a typed accusation with two
+  measured inputs; the threshold is the design question the number answers.
+- **`undeclared`: stays deferred, with its path.** 2–3 true positives on this corpus
+  of well-kept libraries; its value lives in hoisted monorepo apps. It shares the
+  bare-specifier → package machinery `deps-unused` builds, plus ancestor-manifest
+  resolution, adapter-declared builtin lists, and alias exclusion. Reopens after
+  M7.a, on that shared floor.
+- **New candidate: JVM package (directory) cycles.** File-level JVM cycles were
+  retired correctly (multi-pass compilation makes them routine), but cycles between
+  PACKAGES are the jdepend/ArchUnit metric — a different unit, never measured. Row
+  in EXPERIMENTS.
+- **Verdicts that stand:** `--strict` (its function is `[check] fail-on`), the JSONL
+  query batch (`serve` is the amortizer), `trace --all` (no consumer), `deep-import`
+  (6/6 oracle consumers are test/tooling; reopens on a corpus case), v1's
+  file-level JVM cycles and manufactured package-cycles, and the 96 `internal-only`
+  extras — each refused with its number, none a lost capability.
+
+The consolidated plan for what remains — these reopenings and the swap-blocking
+surfaces the 2026-09-01 audit recorded — is README's M7 section.

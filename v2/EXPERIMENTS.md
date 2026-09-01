@@ -56,9 +56,13 @@ exist) and three resolver/claim fixes worth more than the analyses.
 corpus vs a 124-finding fixture cliff + 195 ancestor-declared (workspace
 hoisting) + ambient modules + self-imports — the model needs those classes AND
 a corpus repo shaped like an ordinary application before it can be judged.
-**deps-unused/test-only deferred**: config-driven tooling is invisible to
-structural evidence (zero-FP unreachable without per-tool knowledge); go.mod
-`test-only` is unactionable by construction (no dev section). Also recorded:
+**deps-unused/test-only deferred, then REOPENED 2026-09-01** (the owner's
+challenge; DECISIONS has the reasoning): the tooling-invisibility argument holds
+for DEV scope only. The second pass measures PRODUCTION-scope dependencies no
+claimed file imports — peer/optional exempt, workspace siblings resolved,
+adapter-visible implicit uses (JSX ⇒ its runtime), Python abstaining on
+ambiguous import names; go.mod `test-only` stays unactionable by construction
+(no dev section). Plan: README M7.a. Also recorded:
 discovery does not follow symlinks (three vite findings live on that boundary —
 following them is its own experiment if a corpus repo ever hinges on it).
 
@@ -98,11 +102,20 @@ cross-package consumers, which the corpus lacks. Cost it would need anyway:
 `declares_surface` package knowledge, package-pair subjects, consumer-role
 gating. Build only when a corpus repo shows a production-role deep-import.
 
-### crap (complexity × uncoverage)
+### crap (complexity × uncoverage) — REOPENED 2026-09-01
 Oracle demand 0 — corpus runs carry no coverage, so v1's own analysis never
-fired there. v2 has both inputs (metrics winnowing, lcov ingestion); build
-only with a measurement from a coverage-bearing corpus repo, as its own
-experiment.
+fired there: an instrument gap, not a value verdict (DECISIONS 2026-09-01). v2
+has both inputs (metrics winnowing, lcov ingestion); the experiment CAPTURES
+coverage from a real producer for a corpus repo (flask via pytest-cov, vite via
+vitest) and counts complex-and-untested candidates. Plan: README M7.b.
+
+### JVM package (directory) cycles
+File-level JVM cycles were retired as vice (multi-pass compilation makes them
+routine legal structure), but cycles between PACKAGES — directories, the unit
+jdepend and ArchUnit judge — are a different claim, never measured. Candidate
+(2026-09-01): a directory-level SCC over resolved imports for adapters whose
+compilation unit is the package; zero-FP definition first (parent/child package
+references are routine in Java too), guava count second.
 
 ### hollow-test rule
 A test that asserts nothing / covers nothing real. No decision recorded; needs a
