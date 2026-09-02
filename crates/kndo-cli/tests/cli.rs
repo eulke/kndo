@@ -315,6 +315,25 @@ fn a_pinned_base_side_changes_nothing_but_the_work() {
     assert_eq!(first.code, 1, "{}{}", first.stdout, first.stderr);
 }
 
+/// With everything staged and nothing untracked in sight, the worktree IS the
+/// index and `--staged` judges it in place; an untracked file the walk would
+/// see sends the run back to the materialized index. Both roads report the
+/// same bytes — the file that decided the road is in neither tree.
+#[test]
+fn a_fully_staged_worktree_stands_in_for_the_index() {
+    let p = committed_project();
+    p.file(
+        "src/leftover.js",
+        "export function leftover() { return 9; }\n",
+    );
+    sh_git(p.root(), &["add", "-A"]);
+    let in_place = check(&p, &["--staged", "--format", "json"], piped());
+    p.file("notes.txt", "not staged, not ignored\n");
+    let materialized = check(&p, &["--staged", "--format", "json"], piped());
+    assert_eq!(in_place.stdout, materialized.stdout);
+    assert_eq!(in_place.code, 1, "{}{}", in_place.stdout, in_place.stderr);
+}
+
 #[test]
 fn diff_mode_compares_the_worktree_against_a_ref() {
     let p = committed_project();

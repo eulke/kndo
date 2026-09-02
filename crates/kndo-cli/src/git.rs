@@ -5,6 +5,8 @@
 //! files only, by construction — which is also why the worktree's untracked
 //! `.kndo/plugins/` is copied in afterwards: both sides of a comparison must run
 //! the same composition, or the diff reports the composition, not the change.
+//! One tree is never materialized: when the worktree already IS the index as
+//! discovery sees it ([`worktree_is_the_index`]), `--staged` judges it in place.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -89,15 +91,51 @@ impl Comparison {
         }
     }
 
-    /// The current side: `--staged` compares the INDEX (written out as a tree —
-    /// plumbing, side-effect-free for the worktree), while a ref diff compares
-    /// the worktree itself, in place.
+    /// The current side: `--staged` compares the INDEX — written out as a tree
+    /// (plumbing, side-effect-free for the worktree) unless the worktree already
+    /// is the index as discovery sees it, in which case the worktree is judged
+    /// in place and nothing is materialized — while a ref diff compares the
+    /// worktree itself, in place.
     pub fn current_tree(&self, root: &Path) -> Result<Option<String>, String> {
         match self {
-            Comparison::Staged => git(root, &["write-tree"]).map(Some),
+            Comparison::Staged => {
+                if worktree_is_the_index(root)? {
+                    Ok(None)
+                } else {
+                    git(root, &["write-tree"]).map(Some)
+                }
+            }
             Comparison::Against(_) => Ok(None),
         }
     }
+}
+
+/// Whether the worktree IS the index as discovery would see it: no tracked file
+/// differs from the index (content or presence), and no untracked file is
+/// visible under the tree's own `.gitignore` files — the one exclusion source
+/// discovery shares with git. `.git/info/exclude` and the global excludes are
+/// machine state discovery never consults, so an untracked file only they hide
+/// still counts; a file only `.ignore` hides, or a hidden entry the walk would
+/// skip, counts too — the conservative direction, which costs a materialization
+/// and never a wrong tree. `.kndo/` is kndo's own and never analyzed.
+pub fn worktree_is_the_index(root: &Path) -> Result<bool, String> {
+    let diff = Command::new("git")
+        .args(["diff", "--quiet", "--no-ext-diff"])
+        .current_dir(root)
+        .output()
+        .map_err(|e| format!("could not run git: {e}"))?;
+    match diff.status.code() {
+        Some(0) => {}
+        Some(1) => return Ok(false),
+        _ => return Err(String::from_utf8_lossy(&diff.stderr).trim().to_string()),
+    }
+    let untracked = git(
+        root,
+        &["ls-files", "--others", "--exclude-per-directory=.gitignore"],
+    )?;
+    Ok(untracked
+        .lines()
+        .all(|line| line == ".kndo" || line.starts_with(".kndo/")))
 }
 
 /// An archived tree holds tracked files only; the analysis composition also loads
@@ -119,5 +157,80 @@ fn copy_untracked_plugins(root: &Path, tree: &Path) {
             continue;
         }
         let _ = std::fs::copy(entry.path(), target.join(&name));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn committed() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::write(dir.path().join("a.txt"), "a\n").unwrap();
+        std::fs::write(dir.path().join(".gitignore"), "ignored.txt\n").unwrap();
+        for args in [
+            &["init", "-q"][..],
+            &["add", "-A"][..],
+            &[
+                "-c",
+                "user.email=t@t",
+                "-c",
+                "user.name=t",
+                "commit",
+                "-qm",
+                "base",
+            ][..],
+        ] {
+            let out = Command::new("git")
+                .args(args)
+                .current_dir(dir.path())
+                .output()
+                .expect("git runs");
+            assert!(
+                out.status.success(),
+                "{}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+        }
+        dir
+    }
+
+    #[test]
+    fn the_worktree_is_the_index_only_when_nothing_unstaged_is_visible() {
+        let repo = committed();
+        let root = repo.path();
+        assert!(worktree_is_the_index(root).unwrap(), "clean after a commit");
+        std::fs::write(root.join("a.txt"), "changed\n").unwrap();
+        assert!(
+            !worktree_is_the_index(root).unwrap(),
+            "an unstaged modification"
+        );
+        git(root, &["add", "-A"]).unwrap();
+        assert!(
+            worktree_is_the_index(root).unwrap(),
+            "staged: the index caught up"
+        );
+        std::fs::write(root.join("new.txt"), "x\n").unwrap();
+        assert!(
+            !worktree_is_the_index(root).unwrap(),
+            "an untracked file discovery would see"
+        );
+        std::fs::remove_file(root.join("new.txt")).unwrap();
+        std::fs::write(root.join("ignored.txt"), "x\n").unwrap();
+        assert!(
+            worktree_is_the_index(root).unwrap(),
+            "an untracked file .gitignore hides is invisible to both"
+        );
+        std::fs::create_dir_all(root.join(".kndo/cache")).unwrap();
+        std::fs::write(root.join(".kndo/cache/x"), "x").unwrap();
+        assert!(
+            worktree_is_the_index(root).unwrap(),
+            "kndo's own directory never counts"
+        );
+        std::fs::remove_file(root.join("a.txt")).unwrap();
+        assert!(
+            !worktree_is_the_index(root).unwrap(),
+            "an unstaged deletion"
+        );
     }
 }

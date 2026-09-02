@@ -2721,3 +2721,44 @@ render around them. Two gates hold the contract — the engine's (a pinned side
 composes the byte-identical comparison, is found only under its own identity,
 never through a cache that is off) and the CLI's (a second `--staged` reads
 the pin back and writes no second one; the bytes match with the cache off).
+
+## 2026-09-02 — A fully staged worktree stands in for the index; in-memory trees declined
+
+**What.** `--staged` materialized the index tree on every run, whatever the
+worktree held. When the worktree already is the index as discovery sees it —
+no tracked file differs from the index in content or presence (`git diff
+--quiet`), and no untracked file is visible under the tree's own `.gitignore`
+files (`git ls-files --others --exclude-per-directory=.gitignore`) — the CLI
+judges the worktree in place, with its own cache, and materializes nothing.
+The check is conservative by construction: `.git/info/exclude` and the global
+excludes are machine state discovery never consults, so a file only they hide
+still counts; a file only `.ignore` hides, or a hidden entry the walk would
+skip, counts too — each costs a materialization, never a wrong tree; `.kndo/`
+is kndo's own and never analyzed. Everything else takes the road it always
+took.
+
+**Measurement.** 50k fixture in RAM, everything staged, base side pinned,
+the two binaries alternated for three rounds: materialized index 3.1 s (a
+first round at 7.0 s, warming), in place 2.1–2.2 s — against a plain warm run
+of 1.8 s, the difference being the base pin's read and the composition.
+Byte-identical: in place against materialized, and the fallback road (an
+untracked file in sight) against both. The git edge's unit test walks the
+decision — clean, unstaged edit, staged, untracked, gitignored untracked,
+`.kndo/`, unstaged deletion — and the CLI test holds the bytes across the two
+roads. The day's arc for `--staged` at 50k in RAM: 14.6 s → 8.9 (the shared
+cache) → 3.3 (the pinned base, on a hit) → 2.1 (in place).
+
+**In-memory trees, declined with the number.** After the shared cache, the
+pinned base and this shortcut, materialization survives on two roads only —
+the base side once per HEAD (a miss) and the index side under partial staging
+or an untracked file in sight — at 0.8 s per side in RAM. Reading `git
+archive` into memory instead would need a second door into a session (a
+pre-discovered tree) and a second implementation of the ignore semantics the
+filesystem walk owns — `.gitignore`, `.ignore`, the hidden opt-in — held
+equivalent by a gate over every fixture and this repository. A second
+implementation of the one algorithm the determinism law wants once, for
+0.8 s on the uncommon roads: dead. The measurement that reopens it is a
+`--staged` run on a disk slow enough that the fallback road's `tar -x`
+dominates again — the container's disk did that once today (19 s for one
+materialization), which is why the shortcut removes the common road's
+materialization entirely rather than making it cheaper.
