@@ -32,8 +32,8 @@ pub use kndo_contract::extension::{
 };
 pub use report::{ExtensionRun, Mode, REPORT_SCHEMA, Report, ReportDiagnostic, RunInfo};
 pub use session::{
-    CacheLocation, Categories, Config, GatePolicy, PhaseTimings, Refusal, RunMode, RunOutcome,
-    Session, Snapshot, Threads,
+    CacheLocation, Categories, Config, GatePolicy, PhaseTimings, PinnedSide, Refusal, RunMode,
+    RunOutcome, Session, Snapshot, Threads,
 };
 pub use suppress::SuppressedSummary;
 

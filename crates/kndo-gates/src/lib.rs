@@ -47,6 +47,10 @@ pub const GATES: &[Gate] = &[
         invariant: "a second tree over another tree's cache hits it, adds nothing for identical content, and reports the uncached bytes",
     },
     Gate {
+        name: "a_pinned_base_side_reports_the_bytes_of_a_fresh_one",
+        invariant: "a persisted base side composes the byte-identical comparison, under its own identity only",
+    },
+    Gate {
         name: "adapter_conformance_fixtures_are_byte_identical",
         invariant: "the harvested fixture corpus replays to its pinned reports",
     },

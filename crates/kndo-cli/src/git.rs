@@ -36,6 +36,12 @@ fn git(root: &Path, args: &[&str]) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
+/// The tree a revision names — the identity a pinned side is keyed by. Two
+/// commits with one tree (an amend that only rewords) share it.
+pub fn tree_id(root: &Path, rev: &str) -> Result<String, String> {
+    git(root, &["rev-parse", &format!("{rev}^{{tree}}")])
+}
+
 /// Materialize one tree-ish into a scratch directory via `git archive | tar -x`.
 pub fn materialize(root: &Path, tree_ish: &str) -> Result<MaterializedTree, String> {
     let dir = tempfile::tempdir().map_err(|e| format!("could not create a scratch dir: {e}"))?;

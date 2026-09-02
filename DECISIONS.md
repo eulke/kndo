@@ -2682,3 +2682,42 @@ persisted graph to the worktree's own runs would drop two stores per staged
 run; the ceiling of that saving is the assemble phase of a zero-change warm
 run — load, verify, store, nothing to re-extract — 0.33–0.38 s per side in
 RAM, the smallest of the three.
+
+## 2026-09-02 — The diff modes' base side is pinned by its tree
+
+**What.** The base side of `--staged` (HEAD) and `--diff` (the merge-base) is a
+pure function of a git tree and of the analysis identity, so its result is
+persisted under `.kndo/cache/pinned/<key>.json` and read back by the next run
+against the same tree — no materialization, no analysis. What is persisted is
+exactly what the comparison consumes (`Snapshot::against`): the side's
+findings and its measured health, never a graph. The engine never resolves a
+tree; the CLI hands it git's tree id (`rev-parse <base>^{tree}`, so an amend
+that only rewords shares the pin), and `Session::pinned`/`Session::pin` are
+the two doors, closed when the cache is off.
+
+**The identity.** Findings are a function of the analysis code as much as of
+the tree, and no knob names that code — the contract fingerprint names the
+contract's shape, the semantics version the assembly, and neither moves when a
+judgment changes. Rather than a third knob that a forgotten bump would leave
+stale in every developer's cache, the key folds in the executing binary
+itself: blake3 over `current_exe()`, once per process (32 MB, a few
+milliseconds with rayon), unreadable ⇒ nothing pinned or read. The rest of
+the key is the graph cache key (fingerprint, semantics, every adapter spec),
+the judged categories and the `crap` line, and the tree id. The file is JSON
+under a schema string, not bincode: `Health` skips an empty partition when
+serializing, which bincode cannot round-trip. The directory is capped at 32
+entries, the oldest by modification time evicted — housekeeping that touches
+nothing any run reports.
+
+**Measurement.** 50k fixture in RAM, the pin removed before every miss, three
+rounds: miss 7.7–8.6 s, hit 3.3–3.5 s; the staged report byte-identical
+across miss, hit and `--no-cache`. The pin for that fixture is 24 MB: it holds
+94,998 findings (45,000 dead files and 49,998 structural clones — the
+generator's shape, not a project's) at about 280 bytes each; vite's 831
+findings would pin under a quarter of a megabyte. What a hit still pays is the
+index side alone: its materialization (0.8 s in RAM), its warm analysis
+(discover 0.32, assemble 0.47, analyze 0.50) and the process, composition and
+render around them. Two gates hold the contract — the engine's (a pinned side
+composes the byte-identical comparison, is found only under its own identity,
+never through a cache that is off) and the CLI's (a second `--staged` reads
+the pin back and writes no second one; the bytes match with the cache off).

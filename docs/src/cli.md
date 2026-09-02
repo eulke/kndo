@@ -55,8 +55,10 @@ per-package split to the terminal render; the JSON envelope always carries it.
 the report lists the findings the change introduces, the ones it fixes
 (`fixed`), and both trees' health (`health` and `base_health`). Both trees read
 and warm the project's cache — entries are content-addressed, so a pinned tree's
-unchanged files hit exactly where the worktree's do — and neither mode touches
-your worktree; `--no-cache` turns the cache off for both sides.
+unchanged files hit exactly where the worktree's do — and the base side's result
+is kept under its git tree id, so the next run against the same `HEAD` (or the
+same merge-base) reads it back instead of analyzing it again. Neither mode
+touches your worktree; `--no-cache` turns all of it off for both sides.
 
 ## Formats
 

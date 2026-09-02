@@ -18,6 +18,7 @@ use kndo_contract::extension::Extension;
 use kndo_contract::finding::{Finding, LineSpan, Severity};
 use kndo_contract::subject::Subject;
 use kndo_contract::vocab::ProjectPath;
+use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -262,16 +263,78 @@ impl Snapshot {
     /// reintroduces is new debt), and the base's health rides along so the report
     /// can say which way the change moves it — a pure function of the two trees
     /// the invocation pinned, never cross-run state.
-    pub fn against(&mut self, base: &Snapshot, mode: crate::report::Mode) {
+    pub fn against(&mut self, base: &PinnedSide, mode: crate::report::Mode) {
         self.baseline = Some(base.findings.clone());
-        let universe = base.universe();
-        self.base_health = crate::health::Health::measure(&base.findings, &universe, &base.judged)
-            .map(|mut h| {
-                h.partition(&base.graph, &base.findings, &universe);
-                h
-            });
+        self.base_health = base.health.clone();
         self.mode = mode;
     }
+
+    /// This analysis as the base side of a comparison: what [`Snapshot::against`]
+    /// consumes, computed once here while the graph is in hand.
+    pub fn pinned_side(&self) -> PinnedSide {
+        let universe = self.universe();
+        let health =
+            crate::health::Health::measure(&self.findings, &universe, &self.judged).map(|mut h| {
+                h.partition(&self.graph, &self.findings, &universe);
+                h
+            });
+        PinnedSide {
+            findings: self.findings.clone(),
+            health,
+        }
+    }
+}
+
+/// The half of a pinned tree's analysis a comparison consumes — its findings
+/// and its measured health — and nothing of the graph behind them. A pure
+/// function of the tree and of the session's analysis identity, and small,
+/// which is why a diff-mode run persists it: the base side of the next run
+/// against the same tree costs a read instead of a materialization and an
+/// analysis. The tree's spelling is the caller's (git's tree id); the engine
+/// never resolves one.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PinnedSide {
+    findings: Vec<Finding>,
+    health: Option<crate::health::Health>,
+}
+
+const PINNED_SCHEMA: &str = "kndo-pinned/1";
+
+#[derive(Serialize, Deserialize)]
+struct PinnedFile {
+    schema: String,
+    side: PinnedSide,
+}
+
+impl PinnedSide {
+    pub(crate) fn to_json(&self) -> Option<Vec<u8>> {
+        serde_json::to_vec(&PinnedFile {
+            schema: PINNED_SCHEMA.to_string(),
+            side: self.clone(),
+        })
+        .ok()
+    }
+
+    pub(crate) fn from_json(bytes: &[u8]) -> Option<PinnedSide> {
+        let file: PinnedFile = serde_json::from_slice(bytes).ok()?;
+        (file.schema == PINNED_SCHEMA).then_some(file.side)
+    }
+}
+
+/// The executing binary, hashed once per process. Findings are a function of
+/// the analysis code as much as of the tree, and no version knob names that
+/// code — the fingerprint names the contract's shape, the semantics version the
+/// assembly — so the bytes of the binary are the one identity that cannot go
+/// stale. Unreadable ⇒ `None`, and nothing is pinned or read back.
+fn executable_identity() -> Option<[u8; 32]> {
+    static IDENTITY: std::sync::OnceLock<Option<[u8; 32]>> = std::sync::OnceLock::new();
+    *IDENTITY.get_or_init(|| {
+        let exe = std::env::current_exe().ok()?;
+        let bytes = std::fs::read(exe).ok()?;
+        let mut h = blake3::Hasher::new();
+        h.update_rayon(&bytes);
+        Some(*h.finalize().as_bytes())
+    })
 }
 
 impl Snapshot {
@@ -369,6 +432,41 @@ impl Session {
             h.update(spec.as_bytes());
         }
         *h.finalize().as_bytes()
+    }
+
+    /// The pinned side persisted for `tree` under this session's analysis
+    /// identity — everything that names the graph cache, the judged categories
+    /// and the `crap` line, and the executing binary, because the judgments are
+    /// its code. Nothing through a cache that is off.
+    pub fn pinned(&self, tree: &str) -> Option<PinnedSide> {
+        self.pinned_cache()?.load(&self.pinned_key(tree)?)
+    }
+
+    /// Persist `side` as the analysis of `tree` under this session's identity.
+    pub fn pin(&self, tree: &str, side: &PinnedSide) {
+        if let (Some(cache), Some(key)) = (self.pinned_cache(), self.pinned_key(tree)) {
+            cache.store(&key, side);
+        }
+    }
+
+    fn pinned_cache(&self) -> Option<crate::cache::PinnedCache> {
+        Some(crate::cache::PinnedCache::new(
+            self.config.cache.dir(&self.root)?.join("pinned"),
+        ))
+    }
+
+    fn pinned_key(&self, tree: &str) -> Option<[u8; 32]> {
+        let mut h = blake3::Hasher::new();
+        h.update(&self.graph_cache_key());
+        h.update(
+            serde_json::to_string(&self.config.categories)
+                .unwrap_or_default()
+                .as_bytes(),
+        );
+        h.update(&self.config.crap_threshold.to_le_bytes());
+        h.update(&executable_identity()?);
+        h.update(tree.as_bytes());
+        Some(*h.finalize().as_bytes())
     }
 
     pub fn analyze(&self, _mode: RunMode) -> Result<Snapshot, Refusal> {

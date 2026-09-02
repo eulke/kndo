@@ -41,7 +41,8 @@ fn generated_ci_is_current() {
 }
 
 use kndo_core::{
-    CacheLocation, Config, GatePolicy, RunMode, RunOutcome, Session, Snapshot, Threads,
+    CacheLocation, Categories, Config, GatePolicy, Mode, RunMode, RunOutcome, Session, Snapshot,
+    Threads,
 };
 use kndo_testkit::{MockAdapter, TempProject};
 
@@ -304,6 +305,92 @@ fn a_shared_cache_is_read_and_warmed_across_trees() {
         serialized(&changed),
         serialized(&run(copy.root(), CacheLocation::Off, Threads::Auto)),
     );
+}
+
+/// A pinned side is a persisted analysis. The comparison a run composes from
+/// one must be byte-identical to the comparison composed from a fresh analysis
+/// of the same tree; a side is found only under the identity that produced it
+/// — the same judgment scope, the same tree — and never through a cache that
+/// is off.
+#[test]
+fn a_pinned_base_side_reports_the_bytes_of_a_fresh_one() {
+    let base = fixture();
+    let current = fixture();
+    // The change heals one finding: the private dead function leaves lib.kmock.
+    current.file("lib.kmock", "pub fn helper\npub fn unused_export\n");
+    let session = |root: &std::path::Path, cache: CacheLocation, categories: Categories| {
+        Session::open(
+            root,
+            Config {
+                cache,
+                categories,
+                ..Config::default()
+            },
+            vec![Box::new(MockAdapter::new())],
+        )
+        .expect("open session")
+    };
+    let fresh = session(base.root(), CacheLocation::Off, Categories::All)
+        .analyze(RunMode::Full)
+        .expect("analyze")
+        .pinned_side();
+    let mut composed_fresh = session(current.root(), CacheLocation::Off, Categories::All)
+        .analyze(RunMode::Full)
+        .expect("analyze");
+    composed_fresh.against(&fresh, Mode::Diff);
+
+    let store = TempProject::new();
+    let shared = store.root().join("cache");
+    let pinning = session(
+        base.root(),
+        CacheLocation::At(shared.clone()),
+        Categories::All,
+    );
+    assert!(pinning.pinned("tree-a").is_none(), "nothing pinned yet");
+    pinning.pin("tree-a", &fresh);
+    let reader = session(
+        current.root(),
+        CacheLocation::At(shared.clone()),
+        Categories::All,
+    );
+    let found = reader
+        .pinned("tree-a")
+        .expect("found under the same identity");
+    let mut composed_pinned = reader.analyze(RunMode::Full).expect("analyze");
+    composed_pinned.against(&found, Mode::Diff);
+    assert_eq!(
+        serialized(&composed_fresh),
+        serialized(&composed_pinned),
+        "a pinned side may only change the work, never a byte of the report"
+    );
+    let report = composed_pinned.report();
+    assert_eq!(
+        report.fixed.len(),
+        1,
+        "the comparison saw the healed finding: {}",
+        report.to_json()
+    );
+
+    let narrowed = session(
+        current.root(),
+        CacheLocation::At(shared.clone()),
+        Categories::Only(vec![kndo_contract::vocab::Category::UNUSED]),
+    );
+    assert!(
+        narrowed.pinned("tree-a").is_none(),
+        "another judgment scope is another identity"
+    );
+    assert!(
+        reader.pinned("tree-b").is_none(),
+        "another tree is another side"
+    );
+    let off = session(base.root(), CacheLocation::Off, Categories::All);
+    off.pin("tree-a", &fresh);
+    assert!(
+        off.pinned("tree-a").is_none(),
+        "a cache that is off pins nothing and reads nothing"
+    );
+    assert!(!base.root().join(".kndo").exists());
 }
 
 #[test]

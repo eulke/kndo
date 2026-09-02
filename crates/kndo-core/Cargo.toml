@@ -9,7 +9,7 @@ publish.workspace = true
 [dependencies]
 kndo-contract = { path = "../kndo-contract" }
 bincode = "1"
-blake3 = "1"
+blake3 = { version = "1", features = ["rayon"] }
 globset = "0.4"
 ignore = "0.4"
 rayon = "1"

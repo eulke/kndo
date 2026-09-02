@@ -286,6 +286,35 @@ fn staged_mode_reports_what_the_change_moves() {
     assert!(report["base_health"].is_object(), "{}", envelope.stdout);
 }
 
+/// The base side of a diff-mode run is pinned by its tree: the second run
+/// against the same HEAD reads it back and materializes nothing, and the
+/// report is byte-identical whether the base side was analyzed, read back, or
+/// run with the cache off.
+#[test]
+fn a_pinned_base_side_changes_nothing_but_the_work() {
+    let p = committed_project();
+    p.file(
+        "src/leftover.js",
+        "export function leftover() { return 9; }\n",
+    );
+    sh_git(p.root(), &["add", "-A"]);
+    let pinned = p.root().join(".kndo/cache/pinned");
+    let entries = || std::fs::read_dir(&pinned).map(|d| d.count()).unwrap_or(0);
+
+    let first = check(&p, &["--staged", "--format", "json"], piped());
+    assert_eq!(entries(), 1, "the base side is pinned under its tree");
+    let second = check(&p, &["--staged", "--format", "json"], piped());
+    assert_eq!(
+        entries(),
+        1,
+        "the second run read the pin back, it did not write another"
+    );
+    let uncached = check(&p, &["--staged", "--no-cache", "--format", "json"], piped());
+    assert_eq!(first.stdout, second.stdout, "read back: not a byte moves");
+    assert_eq!(first.stdout, uncached.stdout, "cache off: not a byte moves");
+    assert_eq!(first.code, 1, "{}{}", first.stdout, first.stderr);
+}
+
 #[test]
 fn diff_mode_compares_the_worktree_against_a_ref() {
     let p = committed_project();

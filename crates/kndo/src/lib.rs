@@ -18,9 +18,9 @@ pub use kndo_core::{
     Abstention, AbstentionReason, AbstentionScope, Activation, ActivationRule, CONTENT_MAX_BYTES,
     CONTENT_MAX_FILES, CacheLocation, Categories, CategoryCount, ConductSeverity, ConductSink,
     ConductTarget, Config, ContentView, Contribution, ExtensionRun, GatePolicy, Graph, GraphView,
-    Health, Mode, PhaseTimings, REPORT_SCHEMA, Refusal, Report, ReportDiagnostic, RuleDescriptor,
-    RunInfo, RunMode, RunOutcome, Session, Snapshot, SuppressedSummary, Threads, Universe,
-    is_reserved_coordinate,
+    Health, Mode, PhaseTimings, PinnedSide, REPORT_SCHEMA, Refusal, Report, ReportDiagnostic,
+    RuleDescriptor, RunInfo, RunMode, RunOutcome, Session, Snapshot, SuppressedSummary, Threads,
+    Universe, is_reserved_coordinate,
 };
 
 use kndo_adapter_css::CssAdapter;

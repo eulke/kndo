@@ -18,7 +18,7 @@
 use kndo_contract::finding::{Finding, Severity};
 use kndo_contract::subject::Subject;
 use kndo_contract::vocab::{Category, ProjectPath};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
@@ -75,7 +75,7 @@ impl Universe {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Health {
     /// Distinct universe subjects carrying at least one counting finding.
@@ -93,7 +93,7 @@ pub struct Health {
     pub by_package: Vec<PackageHealth>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct PackageHealth {
     /// The package's declared name; empty for subjects outside every package.
@@ -106,7 +106,7 @@ pub struct PackageHealth {
     pub subjects: u32,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct CategoryCount {
     pub category: Category,

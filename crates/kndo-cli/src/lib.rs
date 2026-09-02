@@ -817,13 +817,8 @@ fn cache_of(no_cache: bool) -> CacheLocation {
     }
 }
 
-fn analyze_at(
-    root: &std::path::Path,
-    args: &RunArgs,
-    cache: CacheLocation,
-    tuning: &Tuning,
-) -> Result<kndo::Snapshot, kndo::Refusal> {
-    let config = Config {
+fn config_for(args: &RunArgs, cache: CacheLocation, tuning: &Tuning) -> Config {
+    Config {
         threads: match args.threads {
             Some(n) if n > 0 => Threads::Count(n),
             _ => Threads::Auto,
@@ -831,17 +826,27 @@ fn analyze_at(
         cache,
         categories: tuning.categories.clone(),
         crap_threshold: tuning.crap_threshold,
-    };
-    kndo::open(root.to_path_buf(), config)?.analyze(RunMode::Full)
+    }
+}
+
+fn analyze_at(
+    root: &std::path::Path,
+    args: &RunArgs,
+    cache: CacheLocation,
+    tuning: &Tuning,
+) -> Result<kndo::Snapshot, kndo::Refusal> {
+    kndo::open(root.to_path_buf(), config_for(args, cache, tuning))?.analyze(RunMode::Full)
 }
 
 /// A diff-mode run: two full analyses over two pinned trees, composed. The base
 /// (and, for `--staged`, the index) is materialized by the git edge. Both sides
 /// read and warm the PROJECT's cache — content-addressed, so a pinned tree's
 /// unchanged files hit exactly where the worktree's do — and write nothing into
-/// the scratch trees themselves. The comparison then rides the baseline mechanism
-/// — `Snapshot::against` documents why the baseline file never participates in a
-/// tree-vs-tree split.
+/// the scratch trees themselves. The base side is a pure function of its tree,
+/// so its result is pinned by tree id: the next run against the same base reads
+/// it back and materializes nothing. The comparison then rides the baseline
+/// mechanism — `Snapshot::against` documents why the baseline file never
+/// participates in a tree-vs-tree split.
 fn diff_snapshot(
     args: &RunArgs,
     comparison: git::Comparison,
@@ -852,24 +857,38 @@ fn diff_snapshot(
         git::Comparison::Staged => Mode::Staged,
         git::Comparison::Against(_) => Mode::Diff,
     };
-    let base_tree = comparison.base_tree(&root).map_err(git_failed)?;
-    let base = git::materialize(&root, &base_tree).map_err(git_failed)?;
     let shared = if args.no_cache {
         CacheLocation::Off
     } else {
         CacheLocation::At(root.join(".kndo/cache"))
     };
-    // Both sides judge the same categories, or the diff would report the
-    // narrowing, not the change.
-    let base_snapshot = analyze_at(&base.root, args, shared.clone(), tuning).map_err(refused)?;
+    // The project's own session: the composition every side runs under, the
+    // door to the pinned sides, and — for a ref diff — the worktree's analysis.
+    let project =
+        kndo::open(root.clone(), config_for(args, shared.clone(), tuning)).map_err(refused)?;
+    let base_rev = comparison.base_tree(&root).map_err(git_failed)?;
+    let base_tree = git::tree_id(&root, &base_rev).map_err(git_failed)?;
+    let base_side = match project.pinned(&base_tree) {
+        Some(side) => side,
+        None => {
+            let base = git::materialize(&root, &base_rev).map_err(git_failed)?;
+            // Both sides judge the same categories, or the diff would report the
+            // narrowing, not the change.
+            let side = analyze_at(&base.root, args, shared.clone(), tuning)
+                .map_err(refused)?
+                .pinned_side();
+            project.pin(&base_tree, &side);
+            side
+        }
+    };
     let mut snapshot = match comparison.current_tree(&root).map_err(git_failed)? {
         Some(index_tree) => {
             let current = git::materialize(&root, &index_tree).map_err(git_failed)?;
             analyze_at(&current.root, args, shared, tuning).map_err(refused)?
         }
-        None => analyze_at(&root, args, cache_of(args.no_cache), tuning).map_err(refused)?,
+        None => project.analyze(RunMode::Full).map_err(refused)?,
     };
-    snapshot.against(&base_snapshot, mode);
+    snapshot.against(&base_side, mode);
     Ok(snapshot)
 }
 

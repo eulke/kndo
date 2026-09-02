@@ -170,3 +170,62 @@ fn write_atomically(path: &std::path::Path, bytes: &[u8]) {
         let _ = std::fs::remove_file(&tmp);
     }
 }
+
+/// Pinned sides ([`crate::session::PinnedSide`]): one small JSON file per
+/// (analysis identity, tree) under `pinned/`, named by the key. Entries are
+/// kilobytes — findings and a health block, never a graph — and the directory
+/// is capped so a long-lived project does not grow it without bound: beyond the
+/// cap the oldest by modification time go, a housekeeping order that never
+/// touches what any run reports.
+pub struct PinnedCache {
+    dir: PathBuf,
+}
+
+const PINNED_CAP: usize = 32;
+
+impl PinnedCache {
+    pub fn new(dir: PathBuf) -> Self {
+        let _ = std::fs::create_dir_all(&dir);
+        PinnedCache { dir }
+    }
+
+    fn path(&self, key: &[u8; 32]) -> PathBuf {
+        let hex: String = key.iter().map(|b| format!("{b:02x}")).collect();
+        self.dir.join(format!("{hex}.json"))
+    }
+
+    pub fn load(&self, key: &[u8; 32]) -> Option<crate::session::PinnedSide> {
+        let bytes = std::fs::read(self.path(key)).ok()?;
+        crate::session::PinnedSide::from_json(&bytes)
+    }
+
+    pub fn store(&self, key: &[u8; 32], side: &crate::session::PinnedSide) {
+        let Some(bytes) = side.to_json() else {
+            return;
+        };
+        write_atomically(&self.path(key), &bytes);
+        self.evict();
+    }
+
+    fn evict(&self) {
+        let Ok(entries) = std::fs::read_dir(&self.dir) else {
+            return;
+        };
+        let mut files: Vec<(std::time::SystemTime, PathBuf)> = entries
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .filter(|p| p.extension().is_some_and(|x| x == "json"))
+            .filter_map(|p| {
+                let modified = std::fs::metadata(&p).ok()?.modified().ok()?;
+                Some((modified, p))
+            })
+            .collect();
+        if files.len() <= PINNED_CAP {
+            return;
+        }
+        files.sort();
+        for (_, path) in files.iter().take(files.len() - PINNED_CAP) {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
