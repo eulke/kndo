@@ -8,5 +8,6 @@ publish.workspace = true
 
 [dependencies]
 kndo-contract = { path = "../kndo-contract" }
+kndo-toolkit = { path = "../kndo-toolkit" }
 roxmltree = "0.20"
 smol_str = { version = "0.3", features = ["serde"] }

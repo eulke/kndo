@@ -20,7 +20,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Bump when the SAME evidence assembles into a DIFFERENT graph — resolution
 /// candidate changes, reachability semantics, new assembled fields. Folded into the
 /// graph cache key beside the contract fingerprint and the adapter set.
-pub const GRAPH_SEMANTICS_VERSION: u32 = 9;
+pub const GRAPH_SEMANTICS_VERSION: u32 = 10;
 
 #[derive(Serialize, Deserialize)]
 pub struct GraphFile {
@@ -141,8 +141,9 @@ pub struct ManifestDeclarations {
     pub scoping: kndo_contract::extension::DependencyScoping,
     /// The claiming adapter's declared
     /// [`kndo_contract::extension::ExtensionSpec::dependency_importers`]:
-    /// suffixes of unclaimed files that could import this manifest's
-    /// dependencies, and so cast doubt on any usage judgment.
+    /// suffixes of files outside its claims that carry this manifest's
+    /// ecosystem's imports — read when another extension claims them, doubt on
+    /// any usage judgment when nothing does.
     pub importers: Vec<SmolStr>,
     /// The claiming adapter's declared
     /// [`kndo_contract::extension::DependencyBuiltins`] — the platform's own
@@ -222,11 +223,23 @@ impl Graph {
             .iter()
             .map(|f| self.package_of(f.path.as_str()))
             .collect();
-        // Per claiming adapter, every distinct package-shaped specifier and the
-        // files importing it: a declaration is matched against specifiers, never
-        // against files, so the cost is declarations × distinct specifiers.
+        // Per claiming adapter, and per file suffix, every distinct package-shaped
+        // specifier and the files importing it: a declaration is matched against
+        // specifiers, never against files, so the cost is declarations × distinct
+        // specifiers. The suffix index is how a manifest reads imports written in
+        // files another extension claims: a `.css` sheet carries npm's packages
+        // (`@import "tailwindcss"`), and the js-ts adapter names that suffix among
+        // its `dependency_importers`.
         let mut specifiers: BTreeMap<&str, BTreeMap<&str, Vec<u32>>> = BTreeMap::new();
+        let mut by_suffix: BTreeMap<String, BTreeMap<&str, Vec<u32>>> = BTreeMap::new();
         for (i, f) in self.files.iter().enumerate() {
+            let suffix = f
+                .path
+                .as_str()
+                .rsplit('/')
+                .next()
+                .and_then(|name| name.rsplit_once('.'))
+                .map(|(_, s)| s.to_ascii_lowercase());
             for import in &f.evidence.imports {
                 if let ImportTarget::Package(spec) = &import.target {
                     let importers = specifiers
@@ -236,6 +249,16 @@ impl Graph {
                         .or_default();
                     if importers.last() != Some(&(i as u32)) {
                         importers.push(i as u32);
+                    }
+                    if let Some(suffix) = &suffix {
+                        let importers = by_suffix
+                            .entry(suffix.clone())
+                            .or_default()
+                            .entry(spec.as_str())
+                            .or_default();
+                        if importers.last() != Some(&(i as u32)) {
+                            importers.push(i as u32);
+                        }
                     }
                 }
             }
@@ -287,17 +310,31 @@ impl Graph {
                 .filter(|&i| ownership.owns(self.files[i].path.as_str(), owners[i]))
                 .map(|i| i as u32)
                 .collect();
-            let claimed = specifiers.get(coordinate.as_str());
+            // This adapter's own files, then every claimed file whose suffix it
+            // declares as an importer of its ecosystem.
+            let read_from: Vec<&BTreeMap<&str, Vec<u32>>> = specifiers
+                .get(coordinate.as_str())
+                .into_iter()
+                .chain(
+                    adapter
+                        .spec()
+                        .dependency_importers()
+                        .iter()
+                        .filter_map(|s| by_suffix.get(&s.to_ascii_lowercase())),
+                )
+                .collect();
             let users: Vec<Vec<u32>> = md
                 .declarations
                 .iter()
                 .map(|dd| {
-                    let mut using: Vec<u32> = claimed
-                        .into_iter()
-                        .flatten()
+                    let mut using: Vec<u32> = read_from
+                        .iter()
+                        .flat_map(|m| m.iter())
                         .filter(|(spec, _)| judgeable && identity.names(spec, dd.name.as_str()))
                         .flat_map(|(_, importers)| importers.iter().copied())
                         .collect();
+                    using.sort_unstable();
+                    using.dedup();
                     using.sort_unstable();
                     using.dedup();
                     using

@@ -159,6 +159,14 @@ pub enum DependencyIdentity {
     CrateRoot,
 }
 
+/// A loader's query or fragment (`normalize.css?inline`, `x?raw`) is an
+/// instruction about the import, never part of the name it imports.
+fn without_loader_suffix(specifier: &str) -> &str {
+    specifier
+        .find(['?', '#'])
+        .map_or(specifier, |i| &specifier[..i])
+}
+
 impl DependencyIdentity {
     /// Does `specifier` name `dependency` under this spelling? Never asked under
     /// `Underivable` — the engine abstains first — and `false` there.
@@ -172,6 +180,7 @@ impl DependencyIdentity {
         match self {
             DependencyIdentity::Underivable => false,
             DependencyIdentity::PackageName => {
+                let specifier = without_loader_suffix(specifier);
                 under(specifier, dependency, "/")
                     || dependency
                         .strip_prefix("@types/")
@@ -187,6 +196,10 @@ impl DependencyIdentity {
     /// package under this spelling: an empty one, a scheme-qualified one, a
     /// subpath import or alias (`#x`, `~x`, `@/x`), a scope without a name.
     pub fn package_of(self, specifier: &str) -> Option<&str> {
+        if specifier.is_empty() || specifier.starts_with('#') {
+            return None;
+        }
+        let specifier = without_loader_suffix(specifier);
         if specifier.is_empty() {
             return None;
         }
@@ -385,11 +398,14 @@ impl ExtensionSpec {
         self.dependency_identity
     }
 
-    /// Suffixes of files that can carry this ecosystem's imports without being
+    /// Suffixes of files that carry this ecosystem's imports without being
     /// claimed by this extension — a `.vue` component, an `.html` page, a `.css`
-    /// sheet for npm. The dependency-usage judgment abstains on a manifest whose
-    /// package holds an unclaimed file with one of these: an import of the
-    /// dependency may sit where nothing can see it. Empty ⇒ only claimed files
+    /// sheet for npm. Two consequences, decided by whether another extension
+    /// claims such a file: claimed, its package-shaped specifiers are read by
+    /// this ecosystem's dependency-usage judgment (a stylesheet's `@import
+    /// "tailwindcss"` is npm's package); unclaimed, the judgment abstains on a
+    /// manifest whose package holds it — an import of the dependency may sit
+    /// where nothing can see it. Empty ⇒ only this extension's own files
     /// import, and nothing unclaimed casts doubt.
     pub fn dependency_importers(&self) -> &[SmolStr] {
         &self.dependency_importers
@@ -592,10 +608,10 @@ impl ExtensionSpecBuilder {
         self
     }
 
-    /// Declare the suffixes of unclaimed files that can carry this ecosystem's
-    /// imports (see [`ExtensionSpec::dependency_importers`]). Omitted ⇒ none:
-    /// only the files this extension claims import, and an unclaimed file
-    /// never makes the dependency-usage judgment abstain.
+    /// Declare the suffixes of files outside this extension's claims that carry
+    /// its ecosystem's imports (see [`ExtensionSpec::dependency_importers`]).
+    /// Omitted ⇒ none: only the files this extension claims import, and an
+    /// unclaimed file never makes the dependency-usage judgment abstain.
     pub fn dependency_importers(mut self, suffixes: &'static [&'static str]) -> Self {
         self.spec.dependency_importers = suffixes.iter().map(|s| SmolStr::new_static(s)).collect();
         self
@@ -1131,6 +1147,24 @@ mod tests {
             ingester.reads_reports(),
             ["coverage/lcov.info", "lcov.info"]
         );
+    }
+
+    #[test]
+    fn a_loader_query_is_not_part_of_a_package_name() {
+        let npm = DependencyIdentity::PackageName;
+        assert_eq!(
+            npm.package_of("normalize.css?inline"),
+            Some("normalize.css")
+        );
+        assert_eq!(npm.package_of("@scope/pkg/sub?raw"), Some("@scope/pkg"));
+        assert_eq!(npm.package_of("pkg#section"), Some("pkg"));
+        assert_eq!(
+            npm.package_of("#internal/x"),
+            None,
+            "a subpath import, as before"
+        );
+        assert_eq!(npm.package_of("?raw"), None);
+        assert!(npm.names("normalize.css?inline", "normalize.css"));
     }
 
     #[test]

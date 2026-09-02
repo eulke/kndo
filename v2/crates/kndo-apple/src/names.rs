@@ -57,7 +57,7 @@ impl<'a> TypeIndex<'a> {
         let Some(candidates) = self.types.get(name) else {
             return Vec::new();
         };
-        let mut dir = parent_dir(artifact.as_str());
+        let mut dir = kndo_toolkit::parent_dir(artifact.as_str());
         loop {
             let near: Vec<&'a ProjectPath> = candidates
                 .iter()
@@ -70,7 +70,7 @@ impl<'a> TypeIndex<'a> {
             if dir.is_empty() {
                 return candidates.clone();
             }
-            dir = parent_dir(dir);
+            dir = kndo_toolkit::parent_dir(dir);
         }
     }
 
@@ -82,13 +82,6 @@ impl<'a> TypeIndex<'a> {
             .get(file)
             .and_then(|owners| owners.get(owner))
             .is_some_and(|names| names.contains(member))
-    }
-}
-
-fn parent_dir(path: &str) -> &str {
-    match path.rfind('/') {
-        Some(i) => &path[..i],
-        None => "",
     }
 }
 

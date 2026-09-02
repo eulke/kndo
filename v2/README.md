@@ -549,9 +549,16 @@ entry, never a builder's shortcut.
   zero demand; thymeleaf and libsass wait for M7.d's html and css adapters.
   Conduct gained `GraphAccess::declarations()` — the one door from a name read in
   an artifact to a `ConductTarget` — natively and across the ABI.
-- **M7.d — the web adapters** (swap-blocking): html and css rebuilt on the extension
-  contract (vite's playground gap is the measured demand); json only after its own
-  demand check.
+- **M7.d — the web adapters** — **shipped 2026-09-02**: `kndo:html` (a document
+  roots itself; `script[src]`, code-loading `link[href]` and the import statements
+  of inline module scripts are its edges; resolution is the js-ts adapter's, plus
+  the nearest-ancestor rule for root-relative paths) and `kndo:css` (css and scss
+  claimed, the `@import`/`@use`/`@forward` graph, no symbols — v1's oracle had none
+  worth a finding). vite 999 → 834: 336 files an `index.html` reaches stop being
+  dead; lodash's vendor scripts and Alamofire's and Exposed's doc scripts likewise.
+  A manifest now reads the package imports of files another adapter claims
+  (`dependency_importers`, two-sided). json is dead with its vice named: a config's
+  consumer is a tool, never an import.
 - **M7.e — coverage ingesters**: jacoco, go-cover, cobertura — each from a captured
   real-producer fixture, never a hand-written one.
 - **M7.f — the product cortex** (swap-blocking): the docs site rebuilt against v2's

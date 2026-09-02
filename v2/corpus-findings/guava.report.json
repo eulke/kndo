@@ -3,8 +3,16 @@
     "schema": "kndo-v2/m6",
     "mode": "full",
     "files_discovered": 3352,
-    "files_claimed": 3277,
+    "files_claimed": 3278,
     "extensions": [
+      {
+        "id": "kndo:html",
+        "files": 1,
+        "export_narrowing": "none",
+        "import_cycles": "tolerated",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "underivable"
+      },
       {
         "id": "kndo:java",
         "files": 3275,
@@ -28,7 +36,7 @@
   },
   "health": {
     "implicated": 1017,
-    "subjects": 70175,
+    "subjects": 70176,
     "by_category": [
       {
         "category": "unused",
@@ -36,6 +44,12 @@
       }
     ],
     "by_package": [
+      {
+        "name": "com.google.guava:guava-parent",
+        "manifest": "pom.xml",
+        "implicated": 0,
+        "subjects": 1
+      },
       {
         "name": "failureaccess",
         "manifest": "futures/failureaccess/pom.xml",
@@ -227206,6 +227220,21 @@
       "scope": {
         "manifests": {
           "unjudged": 16
+        }
+      }
+    },
+    {
+      "category": "duplicate",
+      "reason": {
+        "streams-not-declared": {
+          "missing": [
+            "metrics"
+          ]
+        }
+      },
+      "scope": {
+        "files": {
+          "unmeasured": 1
         }
       }
     },

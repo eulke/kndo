@@ -1,0 +1,5 @@
+{
+  "name": "orphaned-css-file-is-unused",
+  "private": false,
+  "main": "main.ts"
+}

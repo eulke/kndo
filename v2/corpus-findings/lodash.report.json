@@ -3,8 +3,24 @@
     "schema": "kndo-v2/m6",
     "mode": "full",
     "files_discovered": 146,
-    "files_claimed": 54,
+    "files_claimed": 65,
     "extensions": [
+      {
+        "id": "kndo:css",
+        "files": 5,
+        "export_narrowing": "none",
+        "import_cycles": "tolerated",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "underivable"
+      },
+      {
+        "id": "kndo:html",
+        "files": 6,
+        "export_narrowing": "none",
+        "import_cycles": "tolerated",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "underivable"
+      },
       {
         "id": "kndo:js-ts",
         "files": 54,
@@ -16,24 +32,36 @@
     ]
   },
   "health": {
-    "implicated": 15,
-    "subjects": 187,
+    "implicated": 14,
+    "subjects": 198,
     "by_category": [
       {
         "category": "unused",
-        "findings": 15
+        "findings": 14
       }
     ],
     "by_package": [
       {
         "name": "lodash",
         "manifest": "package.json",
-        "implicated": 15,
-        "subjects": 187
+        "implicated": 14,
+        "subjects": 198
       }
     ]
   },
   "findings": [
+    {
+      "id": "kndo-9e532988fa21",
+      "category": "undeclared",
+      "severity": "warning",
+      "confidence": "probable",
+      "subject": {
+        "kind": "dependency",
+        "owner_manifest": "package.json",
+        "name": "@playwright/test"
+      },
+      "message": "imported by 2 reached files but declared by no manifest from here up: it resolves only through hoisting or a transitive dependency"
+    },
     {
       "id": "kndo-d9adcd2b2e01",
       "category": "unused",
@@ -53,17 +81,6 @@
       "subject": {
         "kind": "file",
         "path": "dist/lodash.core.min.js"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-cd25d49c281c",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "dist/lodash.fp.js"
       },
       "message": "no root anchors this file and no reachable file imports it"
     },
@@ -101,17 +118,6 @@
       "message": "no root anchors this file and no reachable file imports it"
     },
     {
-      "id": "kndo-69958a6330e1",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "dist/mapping.fp.js"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
       "id": "kndo-33737de376d9",
       "category": "unused",
       "severity": "warning",
@@ -119,28 +125,6 @@
       "subject": {
         "kind": "file",
         "path": "fp/_convertBrowser.js"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-092aec366c1b",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "perf/asset/perf-ui.js"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-edb35c99f96e",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "perf/perf.js"
       },
       "message": "no root anchors this file and no reachable file imports it"
     },
@@ -156,24 +140,57 @@
       "message": "no root anchors this file and no reachable file imports it"
     },
     {
-      "id": "kndo-a83b447b7462",
+      "id": "kndo-9c1ccad67d0c",
       "category": "unused",
       "severity": "warning",
       "confidence": "certain",
       "subject": {
         "kind": "file",
-        "path": "vendor/firebug-lite/src/firebug-lite-debug.js"
+        "path": "vendor/firebug-lite/skin/xp/debugger.css"
       },
       "message": "no root anchors this file and no reachable file imports it"
     },
     {
-      "id": "kndo-cede20ccfd67",
+      "id": "kndo-b582647531c0",
       "category": "unused",
       "severity": "warning",
       "confidence": "certain",
       "subject": {
         "kind": "file",
-        "path": "vendor/json-js/json2.js"
+        "path": "vendor/firebug-lite/skin/xp/firebug-1.3a2.css"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-76cab43a41d5",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "vendor/firebug-lite/skin/xp/firebug.IE6.css"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-5ad65d51273e",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "vendor/firebug-lite/skin/xp/firebug.css"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-900b0216ff87",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "vendor/firebug-lite/skin/xp/html.css"
       },
       "message": "no root anchors this file and no reachable file imports it"
     },
@@ -209,56 +226,56 @@
         "path": "lodash.js"
       },
       "message": "byte-identical to dist/lodash.js"
+    },
+    {
+      "id": "kndo-1aaf5b3061e9",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "dist/lodash.fp.js"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-0d72f8311343",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "dist/mapping.fp.js"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-73e8c16febaf",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "vendor/json-js/json2.js"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
     }
   ],
   "fixed": [],
   "baselined": 0,
   "abstained": [
     {
-      "category": "unused",
+      "category": "duplicate",
       "reason": {
-        "unclaimed-importers": {
-          "suffixes": [
-            "css",
-            "html"
+        "streams-not-declared": {
+          "missing": [
+            "metrics"
           ]
         }
       },
       "scope": {
-        "manifests": {
-          "unjudged": 1
-        }
-      }
-    },
-    {
-      "category": "test-only",
-      "reason": {
-        "unclaimed-importers": {
-          "suffixes": [
-            "css",
-            "html"
-          ]
-        }
-      },
-      "scope": {
-        "manifests": {
-          "unjudged": 1
-        }
-      }
-    },
-    {
-      "category": "undeclared",
-      "reason": {
-        "unclaimed-importers": {
-          "suffixes": [
-            "css",
-            "html"
-          ]
-        }
-      },
-      "scope": {
-        "manifests": {
-          "unjudged": 1
+        "files": {
+          "unmeasured": 11
         }
       }
     },

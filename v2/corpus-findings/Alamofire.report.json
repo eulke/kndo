@@ -3,8 +3,24 @@
     "schema": "kndo-v2/m6",
     "mode": "full",
     "files_discovered": 555,
-    "files_claimed": 108,
+    "files_claimed": 444,
     "extensions": [
+      {
+        "id": "kndo:css",
+        "files": 4,
+        "export_narrowing": "none",
+        "import_cycles": "tolerated",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "underivable"
+      },
+      {
+        "id": "kndo:html",
+        "files": 332,
+        "export_narrowing": "none",
+        "import_cycles": "tolerated",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "underivable"
+      },
       {
         "id": "kndo:js-ts",
         "files": 10,
@@ -27,20 +43,20 @@
     ]
   },
   "health": {
-    "implicated": 151,
-    "subjects": 3380,
+    "implicated": 141,
+    "subjects": 3716,
     "by_category": [
       {
         "category": "unused",
-        "findings": 151
+        "findings": 141
       }
     ],
     "by_package": [
       {
         "name": "",
         "manifest": "",
-        "implicated": 151,
-        "subjects": 3380
+        "implicated": 141,
+        "subjects": 3716
       }
     ]
   },
@@ -3141,116 +3157,6 @@
         "end": 689
       },
       "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-21948b2f9e67",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "docs/docsets/Alamofire.docset/Contents/Resources/Documents/js/jazzy.js"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-26bd752f0901",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "docs/docsets/Alamofire.docset/Contents/Resources/Documents/js/jazzy.search.js"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-dac5c6094822",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "docs/docsets/Alamofire.docset/Contents/Resources/Documents/js/jquery.min.js"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-99e69f8e3d13",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "docs/docsets/Alamofire.docset/Contents/Resources/Documents/js/lunr.min.js"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-7561ed30401e",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "docs/docsets/Alamofire.docset/Contents/Resources/Documents/js/typeahead.jquery.js"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-ac0a7d2549fe",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "docs/js/jazzy.js"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-b86c888884df",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "docs/js/jazzy.search.js"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-d7f840c40a52",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "docs/js/jquery.min.js"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-a8f63f261a2f",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "docs/js/lunr.min.js"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-4a13b200333f",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "docs/js/typeahead.jquery.js"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
     },
     {
       "id": "kndo-abd2948907a5",
@@ -13552,6 +13458,28 @@
       "message": "production-reachable, but no test reaches this file"
     },
     {
+      "id": "kndo-e5e7898814c3",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "docs/docsets/Alamofire.docset/Contents/Resources/Documents/js/jazzy.js"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-b13ff0d15db8",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "docs/js/jazzy.js"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
       "id": "kndo-1b819c523a84",
       "category": "untested",
       "severity": "info",
@@ -13581,6 +13509,21 @@
       "scope": {
         "manifests": {
           "unjudged": 1
+        }
+      }
+    },
+    {
+      "category": "duplicate",
+      "reason": {
+        "streams-not-declared": {
+          "missing": [
+            "metrics"
+          ]
+        }
+      },
+      "scope": {
+        "files": {
+          "unmeasured": 336
         }
       }
     },
@@ -13669,6 +13612,16 @@
     },
     {
       "path": "Tests/ValidationTests.swift",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "docs/css/jazzy.css",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "docs/docsets/Alamofire.docset/Contents/Resources/Documents/css/jazzy.css",
       "level": "info",
       "message": "syntax errors in file — evidence may be partial"
     }

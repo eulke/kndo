@@ -203,13 +203,7 @@ fn convention_roots(file: &SourceFile<'_>, out: &mut EvidenceSink) {
     }
     let path = file.path.as_str();
     let name = path.rsplit('/').next().unwrap_or(path);
-    let in_dir = |d: &str| path.contains(&format!("/{d}/")) || path.starts_with(&format!("{d}/"));
-    let is_test = in_dir("__tests__")
-        || in_dir("test")
-        || in_dir("tests")
-        || name.contains(".test.")
-        || name.contains(".spec.");
-    if is_test {
+    if kndo_toolkit::web_test_path(path) {
         out.root(RootTarget::WholeFile, RootKind::Test, Confidence::Probable);
     } else if name.contains(".config.") || (name.starts_with('.') && name.contains("rc.")) {
         out.root(

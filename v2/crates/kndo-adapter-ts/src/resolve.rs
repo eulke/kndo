@@ -32,7 +32,7 @@ pub fn resolve(
     if !specifier.starts_with('.') {
         return resolve_bare(specifier, cx, exts);
     }
-    let dir = parent_dir(from);
+    let dir = kndo_toolkit::parent_dir(from.as_str());
     match resolve_in_dir(dir, specifier, cx, exts) {
         Some(path) => Resolution::File(path),
         None => Resolution::Unresolved,
@@ -81,13 +81,6 @@ fn split_bare(specifier: &str) -> (&str, Option<&str>) {
     }
 }
 
-pub(crate) fn parent_dir(path: &ProjectPath) -> &str {
-    match path.as_str().rfind('/') {
-        Some(i) => &path.as_str()[..i],
-        None => "",
-    }
-}
-
 /// The shared candidate machinery, without the leading-dot requirement — manifest
 /// entries (`"main": "index.js"`) are dir-relative but rarely spelled `./`.
 pub(crate) fn resolve_in_dir(
@@ -96,31 +89,11 @@ pub(crate) fn resolve_in_dir(
     cx: &ResolveContext<'_>,
     exts: &[String],
 ) -> Option<ProjectPath> {
-    let joined = normalize(dir, specifier)?;
+    let joined = kndo_toolkit::join_relative(dir, specifier)?;
     candidates(&joined, exts)
         .into_iter()
         .map(ProjectPath::new)
         .find(|p| cx.contains(p))
-}
-
-/// Joins and collapses `.`/`..` segments. `None` when the specifier escapes the
-/// project root — nothing inside the project can be meant.
-fn normalize(dir: &str, spec: &str) -> Option<String> {
-    let mut parts: Vec<&str> = if dir.is_empty() {
-        Vec::new()
-    } else {
-        dir.split('/').collect()
-    };
-    for seg in spec.split('/') {
-        match seg {
-            "" | "." => {}
-            ".." => {
-                parts.pop()?;
-            }
-            s => parts.push(s),
-        }
-    }
-    Some(parts.join("/"))
 }
 
 fn candidates(joined: &str, exts: &[String]) -> Vec<String> {

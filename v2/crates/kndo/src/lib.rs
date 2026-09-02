@@ -23,7 +23,9 @@ pub use kndo_core::{
     is_reserved_coordinate,
 };
 
+use kndo_adapter_css::CssAdapter;
 use kndo_adapter_go::GoAdapter;
+use kndo_adapter_html::HtmlAdapter;
 use kndo_adapter_java::JavaAdapter;
 use kndo_adapter_kotlin::KotlinAdapter;
 use kndo_adapter_python::PythonAdapter;
@@ -47,6 +49,8 @@ pub fn default_extensions() -> Vec<Box<dyn Extension>> {
         Box::new(KotlinAdapter::new()),
         Box::new(PythonAdapter::new()),
         Box::new(SwiftAdapter::new()),
+        Box::new(HtmlAdapter::new()),
+        Box::new(CssAdapter::new()),
         Box::new(LcovPlugin),
         Box::new(InterfaceBuilderPlugin),
         Box::new(InfoPlistPlugin),

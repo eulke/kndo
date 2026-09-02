@@ -3,8 +3,16 @@
     "schema": "kndo-v2/m6",
     "mode": "full",
     "files_discovered": 273,
-    "files_claimed": 251,
+    "files_claimed": 254,
     "extensions": [
+      {
+        "id": "kndo:html",
+        "files": 3,
+        "export_narrowing": "none",
+        "import_cycles": "tolerated",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "underivable"
+      },
       {
         "id": "kndo:swift",
         "files": 251,
@@ -20,7 +28,7 @@
   },
   "health": {
     "implicated": 77,
-    "subjects": 3149,
+    "subjects": 3152,
     "by_category": [
       {
         "category": "unused",
@@ -32,7 +40,7 @@
         "name": "",
         "manifest": "",
         "implicated": 77,
-        "subjects": 3149
+        "subjects": 3152
       }
     ]
   },
@@ -5123,6 +5131,21 @@
       "scope": {
         "manifests": {
           "unjudged": 2
+        }
+      }
+    },
+    {
+      "category": "duplicate",
+      "reason": {
+        "streams-not-declared": {
+          "missing": [
+            "metrics"
+          ]
+        }
+      },
+      "scope": {
+        "files": {
+          "unmeasured": 3
         }
       }
     },

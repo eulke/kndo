@@ -3,8 +3,24 @@
     "schema": "kndo-v2/m6",
     "mode": "full",
     "files_discovered": 5476,
-    "files_claimed": 809,
+    "files_claimed": 5150,
     "extensions": [
+      {
+        "id": "kndo:css",
+        "files": 5,
+        "export_narrowing": "none",
+        "import_cycles": "tolerated",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "underivable"
+      },
+      {
+        "id": "kndo:html",
+        "files": 4336,
+        "export_narrowing": "none",
+        "import_cycles": "tolerated",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "underivable"
+      },
       {
         "id": "kndo:js-ts",
         "files": 7,
@@ -27,20 +43,20 @@
     ]
   },
   "health": {
-    "implicated": 38,
-    "subjects": 12482,
+    "implicated": 35,
+    "subjects": 16823,
     "by_category": [
       {
         "category": "unused",
-        "findings": 38
+        "findings": 35
       }
     ],
     "by_package": [
       {
         "name": "",
         "manifest": "",
-        "implicated": 24,
-        "subjects": 474
+        "implicated": 21,
+        "subjects": 4815
       },
       {
         "name": "com.example:exposed-modules-maven",
@@ -286,81 +302,92 @@
   },
   "findings": [
     {
-      "id": "kndo-18fa9cfd1c73",
+      "id": "kndo-eb6135709ceb",
       "category": "unused",
       "severity": "warning",
       "confidence": "certain",
       "subject": {
-        "kind": "file",
-        "path": "docs/api/scripts/main.js"
+        "kind": "symbol",
+        "path": "docs/api/scripts/navigation-loader.js",
+        "selector": {
+          "Free": "handleTocButtonClick"
+        },
+        "span": {
+          "start": 6060,
+          "end": 6526
+        }
       },
-      "message": "no root anchors this file and no reachable file imports it"
+      "lines": {
+        "start": 185,
+        "end": 195
+      },
+      "message": "nothing references, roots, or imports this declaration"
     },
     {
-      "id": "kndo-cf15671d9e84",
+      "id": "kndo-62546f381a93",
       "category": "unused",
       "severity": "warning",
       "confidence": "certain",
       "subject": {
-        "kind": "file",
-        "path": "docs/api/scripts/navigation-loader.js"
+        "kind": "symbol",
+        "path": "docs/api/scripts/platform-content-handler.js",
+        "selector": {
+          "Free": "refreshSourcesetsCache"
+        },
+        "span": {
+          "start": 7056,
+          "end": 7261
+        }
       },
-      "message": "no root anchors this file and no reachable file imports it"
+      "lines": {
+        "start": 200,
+        "end": 202
+      },
+      "message": "nothing references, roots, or imports this declaration"
     },
     {
-      "id": "kndo-ca24706b1ef5",
+      "id": "kndo-97790bbcf58f",
       "category": "unused",
       "severity": "warning",
       "confidence": "certain",
       "subject": {
-        "kind": "file",
-        "path": "docs/api/scripts/platform-content-handler.js"
+        "kind": "symbol",
+        "path": "docs/api/scripts/safe-local-storage_blocking.js",
+        "selector": {
+          "Free": "safeLocalStorage"
+        },
+        "span": {
+          "start": 319,
+          "end": 1199
+        }
       },
-      "message": "no root anchors this file and no reachable file imports it"
+      "lines": {
+        "start": 7,
+        "end": 44
+      },
+      "message": "nothing references, roots, or imports this declaration"
     },
     {
-      "id": "kndo-8b36832dbed5",
+      "id": "kndo-9daccf8a5769",
       "category": "unused",
       "severity": "warning",
       "confidence": "certain",
       "subject": {
-        "kind": "file",
-        "path": "docs/api/scripts/prism.js"
+        "kind": "symbol",
+        "path": "docs/api/scripts/safe-local-storage_blocking.js",
+        "selector": {
+          "Free": "safeSessionStorage"
+        },
+        "span": {
+          "start": 1415,
+          "end": 2325
+        }
       },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-b6ee14e8f30d",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "docs/api/scripts/safe-local-storage_blocking.js"
+      "lines": {
+        "start": 49,
+        "end": 86
       },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-8f6f4d5c8ef9",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "docs/api/scripts/sourceset_dependencies.js"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-6ca08687f624",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "docs/api/ui-kit/ui-kit.min.js"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
+      "message": "nothing references, roots, or imports this declaration"
     },
     {
       "id": "kndo-edcc341a56da",
@@ -21849,6 +21876,28 @@
       "message": "production-reachable, but no test reaches this file"
     },
     {
+      "id": "kndo-064e2bac6b5d",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "docs/api/scripts/navigation-loader.js"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-7c47d7e0fd67",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "docs/api/scripts/platform-content-handler.js"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
       "id": "kndo-a041aea2a889",
       "category": "untested",
       "severity": "info",
@@ -23004,6 +23053,21 @@
       }
     },
     {
+      "category": "duplicate",
+      "reason": {
+        "streams-not-declared": {
+          "missing": [
+            "metrics"
+          ]
+        }
+      },
+      "scope": {
+        "files": {
+          "unmeasured": 4341
+        }
+      }
+    },
+    {
       "category": "undeclared",
       "reason": "specifier-identity-underivable",
       "scope": {
@@ -23032,6 +23096,21 @@
     }
   ],
   "diagnostics": [
+    {
+      "path": "docs/api/styles/main.css",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "docs/api/styles/style.css",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "docs/api/ui-kit/ui-kit.min.css",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
     {
       "path": "documentation-website/Writerside/snippets/get-started-with-exposed/src/main/kotlin/org/example/App.kt",
       "level": "info",

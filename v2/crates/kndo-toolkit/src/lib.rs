@@ -701,3 +701,78 @@ pub fn source_adapter_builder(
         .narrowable(narrowable)
         .import_cycles(import_cycles)
 }
+
+/// The directory holding `path` (`""` at the project root).
+pub fn parent_dir(path: &str) -> &str {
+    match path.rfind('/') {
+        Some(i) => &path[..i],
+        None => "",
+    }
+}
+
+/// Joins a `/`-separated directory and a relative specifier, collapsing `.`
+/// and `..`; `None` when the specifier climbs out of the project root —
+/// nothing inside the project can be meant.
+pub fn join_relative(dir: &str, spec: &str) -> Option<String> {
+    let mut parts: Vec<&str> = if dir.is_empty() {
+        Vec::new()
+    } else {
+        dir.split('/').collect()
+    };
+    for seg in spec.split('/') {
+        match seg {
+            "" | "." => {}
+            ".." => {
+                parts.pop()?;
+            }
+            s => parts.push(s),
+        }
+    }
+    Some(parts.join("/"))
+}
+
+/// A root-relative reference (`/src/main.ts`) resolved against the nearest
+/// ancestor directory of `from` under which it names a known file. The server's
+/// document root is unknown to the analysis, but it contains the document, so
+/// the closest ancestor holding the path is the best-evidenced root — vite
+/// serves each playground app from its own directory, and that is exactly what
+/// `/src/main.ts` in its `index.html` means.
+pub fn nearest_rooted_match(
+    from: &kndo_contract::vocab::ProjectPath,
+    rooted: &str,
+    cx: &kndo_contract::adapter::ResolveContext<'_>,
+) -> Option<kndo_contract::vocab::ProjectPath> {
+    let rel = rooted.trim_start_matches('/');
+    if rel.is_empty() {
+        return None;
+    }
+    let mut dir = parent_dir(from.as_str());
+    loop {
+        let candidate = if dir.is_empty() {
+            rel.to_string()
+        } else {
+            format!("{dir}/{rel}")
+        };
+        let path = kndo_contract::vocab::ProjectPath::new(candidate);
+        if cx.contains(&path) {
+            return Some(path);
+        }
+        if dir.is_empty() {
+            return None;
+        }
+        dir = parent_dir(dir);
+    }
+}
+
+/// The web ecosystem's test-file convention, the one list every adapter of the
+/// web tree (js-ts, html) roots by: a `__tests__`, `test` or `tests` directory
+/// anywhere on the path, or a `.test.`/`.spec.` name.
+pub fn web_test_path(path: &str) -> bool {
+    let name = path.rsplit('/').next().unwrap_or(path);
+    let in_dir = |d: &str| path.contains(&format!("/{d}/")) || path.starts_with(&format!("{d}/"));
+    in_dir("__tests__")
+        || in_dir("test")
+        || in_dir("tests")
+        || name.contains(".test.")
+        || name.contains(".spec.")
+}

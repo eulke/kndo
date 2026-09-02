@@ -2354,3 +2354,58 @@ manifest's entry). vite 1,011 → 1,000: eleven `unused` files handed to a runti
 by a script. Every other report byte-identical; every conformance fixture
 unmoved; the proof fixture pinned at eight findings without the plugins and two
 with. Contributions: interface-builder 4 roots, info-plist 1, nothing dropped.
+
+## 2026-09-02 — The web adapters: `kndo:html`, `kndo:css`; json declined
+
+**Decision.** Two non-source adapters land, each narrow by measurement.
+`kndo:html`: a document roots itself (Production, Certain; Test under the web
+tree's test paths, Probable), and its edges are a `script[src]`, a `link[href]`
+whose `rel` loads a stylesheet or preloads a module or script, and the import
+statements of an inline `<script type="module">` — read by their statement forms
+alone, comments blanked, string literals skipped, script and style bodies raw
+text. Nothing in a page names what an inline import took, so its shape is `Glob`
+(the whole imported surface stays alive; symbol-level refinement waits for its
+own measurement) and a dynamic `import()` is `Probable`. An attribute URL is
+document-relative by definition, so a bare `main.js` is spelled `./main.js`.
+Resolution is JavaScript's — a bundler serves the page — and is delegated to the
+js-ts adapter, except the root-relative shape, answered by the nearest ancestor
+directory holding the path (vite serves each app from its own directory).
+`kndo:css`: css and scss claimed, the `@import`/`@use`/`@forward` graph, comments
+for suppression, a generated sheet rooted as tooling output, and no symbols —
+every one of v1's 137 stylesheet findings on vite was file-level. A bare
+specifier is a package by declaration and a sibling by resolution: vite's sheets
+name packages sixteen times over, and resolution tries Sass's sibling spellings
+(suffix, partial, index) before leaving a name external. The scss grammar wraps
+Sass's `as`/`with`/`show` clauses in error nodes; the specifier is read from the
+statement's subtree with the `with (…)` map pruned.
+
+**Engine.** `dependency_importers` is two-sided: a file with a declared suffix
+that another extension claims has its package-shaped specifiers read by the
+declaring ecosystem's usage judgment (a stylesheet's `@import "tailwindcss"`, an
+inline script's `import "vue"`); unclaimed, it makes the judgment abstain as
+before. Without this, claiming css would have turned every abstaining manifest
+into false `unused` dependencies. `GRAPH_SEMANTICS_VERSION` 10. A loader's query
+or fragment is never part of a package name — `package_of` and `names` strip it;
+vite's `import 'normalize.css?inline'` had produced an `undeclared`/`unused`
+pair on one manifest. Four path helpers move to the toolkit (`parent_dir`,
+`join_relative`, `nearest_rooted_match`, `web_test_path`), the js-ts and Apple
+crates their first copies.
+
+**Measurement.** vite 999 → 834: 336 `unused` files a page reaches leave; 68
+`unused` stylesheets, 60 `untested` page-reached app files, 13 symbol
+refinements, 21 dependency verdicts and 7 page `unresolved` arrive — COMPARISON
+decomposes every group. lodash 16 → 19, Alamofire 599 → 591, Exposed 987 → 986,
+flask 26 → 28 (two sheets Jinja names through `url_for`: a `kndo:flask` plugin's
+fact), guava and vapor unchanged. Claimed files grow with every doc site's pages
+(Exposed 809 → 5,150; 2.3 s). No pinned fixture moved; the html fixture pins 5
+findings, the four css fixtures are v1's harvested ones renamed by what v2
+judges. Proved before shipping: nine `unresolved` from `<script src>` text
+inside lodash's `document.write` strings, a mid-character panic on a non-ASCII
+page, the `?inline` pair.
+
+**json, declined.** 386 json files on vite, 22 imported from JS; v1's json
+findings there were 15 `unused` tsconfigs and 20 unreferenced data files — a
+config file's consumer is a tool, never an import, and the accusation is the
+vice. v1's whole-file `duplicate` on html and css (28 on vite, identical
+playground scaffolds) is not inherited: a document declares nothing to
+fingerprint.

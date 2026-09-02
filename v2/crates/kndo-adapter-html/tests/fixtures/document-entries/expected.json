@@ -1,0 +1,156 @@
+{
+  "run": {
+    "schema": "kndo-v2/m6",
+    "mode": "full",
+    "files_discovered": 14,
+    "files_claimed": 12,
+    "extensions": [
+      {
+        "id": "kndo:css",
+        "files": 3,
+        "export_narrowing": "none",
+        "import_cycles": "tolerated",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "underivable"
+      },
+      {
+        "id": "kndo:html",
+        "files": 3,
+        "export_narrowing": "none",
+        "import_cycles": "tolerated",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "underivable"
+      },
+      {
+        "id": "kndo:js-ts",
+        "files": 6,
+        "export_narrowing": "expressible",
+        "import_cycles": "hazard",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "package-name"
+      }
+    ]
+  },
+  "health": {
+    "implicated": 2,
+    "subjects": 14,
+    "by_category": [
+      {
+        "category": "unused",
+        "findings": 2
+      }
+    ],
+    "by_package": [
+      {
+        "name": "",
+        "manifest": "",
+        "implicated": 2,
+        "subjects": 14
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "kndo-e4bbc6f5c838",
+      "category": "unresolved",
+      "severity": "error",
+      "confidence": "certain",
+      "subject": {
+        "kind": "import",
+        "path": "pages/about.html",
+        "specifier": "./gone.js",
+        "span": {
+          "start": 86,
+          "end": 95
+        }
+      },
+      "lines": {
+        "start": 5,
+        "end": 5
+      },
+      "message": "import of './gone.js' resolves to no file — a broken path or a rename that missed this call site"
+    },
+    {
+      "id": "kndo-c6f77b4eb1d2",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "orphan.css"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-774c5efd1967",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "src/dead.ts"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-30f9eb76a585",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "vendor/lib.js"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-21fc1433cc85",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "src/util.ts"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    }
+  ],
+  "fixed": [],
+  "baselined": 0,
+  "abstained": [
+    {
+      "category": "duplicate",
+      "reason": {
+        "streams-not-declared": {
+          "missing": [
+            "metrics"
+          ]
+        }
+      },
+      "scope": {
+        "files": {
+          "unmeasured": 6
+        }
+      }
+    },
+    {
+      "category": "crap",
+      "reason": "no-coverage-ingested",
+      "scope": "whole-run"
+    }
+  ],
+  "suppressed": {
+    "total": 0,
+    "by_category": []
+  },
+  "plugins": [
+    {
+      "coordinate": "kndo:coverage-lcov",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    }
+  ],
+  "diagnostics": []
+}

@@ -1,0 +1,8 @@
+:root {
+  --used: blue;
+  --dead: red;
+}
+
+.tinted {
+  color: var(--used);
+}

@@ -5,7 +5,7 @@
 //! unparseable JSON, an entry naming a file that is not in the project (a built
 //! `dist/`) — degrades to absence: a root that anchors nothing accuses nothing.
 
-use crate::resolve::{parent_dir, resolve_in_dir};
+use crate::resolve::resolve_in_dir;
 use kndo_contract::adapter::{
     DependencyDeclaration, DependencyScope, PackageEntry, ProjectRoot, ResolveContext, SourceFile,
 };
@@ -25,7 +25,7 @@ pub fn roots(
     let Ok(json) = serde_json::from_slice::<serde_json::Value>(manifest.content) else {
         return Vec::new();
     };
-    let dir = parent_dir(manifest.path);
+    let dir = kndo_toolkit::parent_dir(manifest.path.as_str());
 
     let mut anchored: BTreeSet<ProjectPath> = BTreeSet::new();
     for entry in &entry_fields(&json) {
@@ -182,7 +182,7 @@ pub fn packages(
     let Some(name) = json.get("name").and_then(|v| v.as_str()) else {
         return Vec::new();
     };
-    let dir = parent_dir(manifest.path);
+    let dir = kndo_toolkit::parent_dir(manifest.path.as_str());
     let entry = entry_fields(&json)
         .iter()
         .find_map(|e| resolve_entry(dir, e, cx, exts));

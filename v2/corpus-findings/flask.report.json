@@ -3,8 +3,24 @@
     "schema": "kndo-v2/m6",
     "mode": "full",
     "files_discovered": 217,
-    "files_claimed": 83,
+    "files_claimed": 105,
     "extensions": [
+      {
+        "id": "kndo:css",
+        "files": 2,
+        "export_narrowing": "none",
+        "import_cycles": "tolerated",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "underivable"
+      },
+      {
+        "id": "kndo:html",
+        "files": 20,
+        "export_narrowing": "none",
+        "import_cycles": "tolerated",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "underivable"
+      },
       {
         "id": "kndo:python",
         "files": 83,
@@ -16,8 +32,8 @@
     ]
   },
   "health": {
-    "implicated": 6,
-    "subjects": 1187,
+    "implicated": 8,
+    "subjects": 1209,
     "by_category": [
       {
         "category": "cyclic",
@@ -25,15 +41,15 @@
       },
       {
         "category": "unused",
-        "findings": 3
+        "findings": 5
       }
     ],
     "by_package": [
       {
         "name": "",
         "manifest": "",
-        "implicated": 6,
-        "subjects": 1187
+        "implicated": 8,
+        "subjects": 1209
       }
     ]
   },
@@ -70,6 +86,17 @@
         "path": "src/flask/__init__.py"
       },
       "message": "20 files form an import cycle: src/flask/__init__.py → src/flask/app.py → src/flask/__init__.py"
+    },
+    {
+      "id": "kndo-b48bc44863cd",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "examples/tutorial/flaskr/static/style.css"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
     },
     {
       "id": "kndo-4fb60e18262d",
@@ -114,6 +141,17 @@
         "end": 695
       },
       "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-d1c2f7dc0d2f",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "tests/test_apps/blueprintapp/apps/admin/static/css/test.css"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
     },
     {
       "id": "kndo-9ecdece7f844",
@@ -490,6 +528,21 @@
       "scope": {
         "manifests": {
           "unjudged": 5
+        }
+      }
+    },
+    {
+      "category": "duplicate",
+      "reason": {
+        "streams-not-declared": {
+          "missing": [
+            "metrics"
+          ]
+        }
+      },
+      "scope": {
+        "files": {
+          "unmeasured": 22
         }
       }
     },

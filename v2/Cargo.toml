@@ -4,7 +4,9 @@
 resolver = "2"
 members = [
     "crates/kndo",
+    "crates/kndo-adapter-css",
     "crates/kndo-adapter-go",
+    "crates/kndo-adapter-html",
     "crates/kndo-adapter-java",
     "crates/kndo-adapter-kotlin",
     "crates/kndo-adapter-python",

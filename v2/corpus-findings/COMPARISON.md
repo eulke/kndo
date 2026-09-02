@@ -929,3 +929,66 @@ on the host and SDK sources) moves nothing there. The proof fixture carries
 `Info.plist` files verbatim from the pinned Alamofire clone beside sources in
 its shape: eight findings without the plugins, two with, and every one that
 leaves is a name one of the artifacts spells.
+
+## M7.d — the web adapters: a page is an entry, a sheet is a file (2026-09-02)
+
+The instrument before anything was built, on vite: 155 html pages (134 in
+`playground/`), 205 css and 27 scss files, none claimed; 79 of the 676 files v2
+reported `unused` were entries an `index.html` names in a `script[src]`; 29
+pages carry their imports in inline `<script type="module">` bodies — 243
+statements, 134 of them bare package names; 122 stylesheet imports in JS and 61
+`@import`/`@use`/`@forward` statements resolved to nothing. v1's oracle on vite
+carried 137 findings on stylesheets, every one file-level: 103 `unused`, 5
+`test-only`, 28 whole-file `duplicate`, 1 `unresolved`. Its custom-property,
+variable and mixin declarations produced none — so `kndo:css` extracts no
+symbol, and `kndo:html` extracts no declaration at all.
+
+| repo | before | after | claimed | what moved |
+|---|---|---|---|---|
+| vite | 999 | 834 | 1,558 → 1,946 | −338: 336 `unused` files a page reaches (243 js, 71 ts, 10 tsx, 8 jsx, 4 others) and 2 symbols; +173 below |
+| lodash | 16 | 19 | 54 → 65 | −6 `unused` (`dist/*.fp.js`, `perf/*.js`, vendor scripts — the HTML edge this file predicted); +3 `test-only` (vendor scripts only `test/*.html` loads), +5 `unused` css (firebug-lite's skin, loaded by its own JS through strings), +1 `undeclared` (`@playwright/test`, imported by the runner and its config, declared by no manifest) |
+| Alamofire | 599 | 591 | 108 → 444 | jazzy's 336 doc pages reach their scripts: −10 `unused`, +2 `untested` |
+| Exposed | 987 | 986 | 809 → 5,150 | Dokka's 4,341 pages reach `docs/api/scripts/*.js`: −7 `unused` files, +4 `unused` symbols inside them, +2 `untested`; 1.25 s → 2.3 s |
+| flask | 26 | 28 | 83 → 105 | +2 `unused` css: sheets Jinja names through `url_for('static', filename=…)` — framework knowledge, a `kndo:flask` plugin's to read |
+| guava, vapor | — | — | +1, +3 | findings unchanged |
+
+**vite's +173.** 68 `unused` stylesheets (47 css, 21 scss): the same class as
+the playground's e2e fixture files this file already explains — reached only
+through a bundler alias (`=/nested`, `@/x`), a `new URL()`, a test's string, or
+a file that is itself dead; v1 accused 103. 60 `untested` files (42 js, 12 ts, 3
+tsx, 3 jsx): app files a page now reaches that no test imports — the playwright
+specs drive a browser, and the graph cannot see that. 13 `unused` symbols:
+exports of files now reached, judged one by one where the whole file was dead
+before. 21 dependency verdicts from manifests judged now that their html and
+css importers are claimed: 11 `undeclared` (5 are `resolve.alias` names imported
+bare in `playground/alias`, by design; `virtual-with-scheme`, a test's
+`__F_ABSOLUTE_PACKAGE_PATH__` placeholder, a deliberate `missing-modules`, 2
+declared only in a sibling package), 3 `unused` (`@tailwindcss/postcss` and
+`autoprefixer` are postcss config keys, never imports; `@vitejs/test-package-f`),
+7 `test-only` in `__tests__` packages. 7 `unresolved` in pages: 3 in
+`playground/lib/index.dist.html` name built bundles the tree does not carry; the
+rest are `resolve.extensions` and `resolve.alias` cases a config resolves. 4
+`test-only` stylesheets only test pages reach.
+
+**What the corpus corrected before shipping.** A `<script src>` spelled inside a
+`document.write` string in lodash's test pages produced nine `unresolved`
+findings: a script's body is raw text, never markup, and the scanner now skips
+it. A non-ASCII page panicked the byte-walking inline scan on vite (a `str`
+slice mid-character). An inline `import 'normalize.css?inline'` reached the
+dependency judgment with its query and produced an `undeclared`/`unused` pair
+on one manifest: a loader's query is never part of a package name, now in the
+contract's `package_of` and `names`.
+
+**Not inherited.** v1's 28 whole-file `duplicate` findings on vite's html and
+css: identical playground scaffolds, and a document declares nothing to
+fingerprint — `duplicate` stays a structural clone over declarations with
+metrics, and the html/css files abstain under it by declared absence
+(`streams-not-declared`, files scope), the one new abstention row every
+web-carrying report gains.
+
+**json, measured and declined.** 386 json files on vite, 22 imported from JS in
+18 files; v1's own json findings on vite were 15 `unused` tsconfigs and 20
+unreferenced data files (its 500-odd `package.json` rows are dependency
+subjects, which v2 already judges). A config file's consumer is a tool, never an
+import, so claiming it manufactures the accusation. The 22 edges keep alive
+files nothing accuses today.
