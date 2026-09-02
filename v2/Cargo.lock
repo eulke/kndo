@@ -2867,8 +2867,10 @@ dependencies = [
  "kndo-contract",
  "kndo-core",
  "kndo-gates",
+ "serde_json",
  "sha2",
  "tar",
+ "tempfile",
  "wit-component 0.219.2",
 ]
 

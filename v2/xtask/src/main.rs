@@ -1,8 +1,11 @@
 //! v2's task runner. `gen-ci` renders the workflow from kndo-gates' registry;
+//! `bench` measures the release binary against the recorded baseline;
 //! `package` builds and archives the release binary with a checksum; `verify-artifact`
 //! checksum-verifies, extracts and runs it — the install half of the release loop,
 //! written in Rust so all three CI platforms run the identical check instead of three
 //! shell dialects.
+
+mod bench;
 
 use sha2::{Digest, Sha256};
 use std::fs;
@@ -23,9 +26,10 @@ fn main() {
         Some("verify-artifact") => verify_artifact(&args[1..]),
         Some("corpus") => corpus(&args[1..]),
         Some("pin-abi") => pin_abi(),
+        Some("bench") => bench::run(&args[1..]),
         _ => {
             eprintln!(
-                "usage: cargo xtask <gen-ci | gen-fingerprint | gen-schema | package --tag T --out-dir D | verify-artifact --dir D | corpus --corpus-dir D [--out-dir D] | pin-abi>"
+                "usage: cargo xtask <gen-ci | gen-fingerprint | gen-schema | package --tag T --out-dir D | verify-artifact --dir D | corpus --corpus-dir D [--out-dir D] | pin-abi | bench [--sizes 1k,5k] [--update-baseline] [--gate]>"
             );
             exit(2);
         }

@@ -2535,3 +2535,35 @@ package (musl) → verify-artifact → `ldd` answering "statically linked" →
 installed binary. Six channel tests; `generated_ci_is_current` holds both
 workflows. Windows itself is unmeasured from this container — CI's return is
 its measurement.
+
+## 2026-09-02 — `xtask bench` on a recorded baseline; gen-stdlib is dead
+
+**Bench.** The harness rebuilt for v2: generated, deterministic fixtures at 1k,
+5k and 50k files (import chains from the manifest's entry, one dead file per
+decade, branchy exports, a clone pair per 500), five scenarios — cold full,
+warm no-op, warm 1-file, warm 100-file, `--staged` — measured end to end on the
+release binary, minimum of N. The baseline recorded on this container
+(`xtask/perf-baseline.json`): 1k 71.5 / 21.6 / 22.6 / 36.3 / 177.8 ms; 5k
+365 / 106 / 96 / 120 / 821 ms; 50k 4,431 / 1,116 / 1,184 / 1,150 / 9,832 ms.
+The gate is both >10% and >10 ms over baseline, and it is not a CI job: the
+baseline is one machine's, and v1's reasoning is adopted as v2's own judgment
+— a gate that compares numbers never comparable fails for reasons no change
+explains (CONTRIBUTING). What the table already says: a warm run at 50k is
+discovery, hashing and the cache read (1.1 s); `--staged` is two full analyses
+over two `git archive` trees and costs more than a cold run at every size
+(9.8 s against 4.4 s at 50k) — recorded as the first perf candidate, the base
+tree being a pure function of a commit and so a natural cache key of its own.
+
+**gen-stdlib.** v1 generated stdlib datasets for bare-specifier
+classification — node's `builtinModules` (68 entries at v22.22.2) and Go's
+258 packages — with a task to regenerate them. v2 classifies by rule and
+carries no dataset. js-ts: `NODE_BUILTINS` is 42 names and 9 scheme prefixes
+under `names()`'s prefix rule; of the 26 entries v1's list has beyond it, 12
+are subpaths the rule already names (`fs/promises` is `fs`) and 14 are the
+underscore internals (`_http_*`, `_stream_*`, `_tls_*`), imported nowhere in
+the corpus (0 occurrences across eight repositories). Go:
+`DependencyBuiltins::UndottedFirstSegment` is the language's own definition of
+its standard library, and gin reports 0 `undeclared`. No corpus finding traces
+to a builtin misclassification: dead, no port. Its vice: a dataset that must
+be regenerated against a moving runtime to stay true, standing in for a rule
+that does not move.
