@@ -836,3 +836,51 @@ lodash loses three `unused` build scripts and two `test-only` files they reach
 declarations now hold an entry, so the JVM/Swift/Python abstentions count every
 manifest (guava 12 → 16, Exposed 49 → 62) and vite's unclaimed-importer doubt
 names 117 manifests with the full suffix family the js-ts adapter declares.
+
+## `crap` with real coverage: the instrument the corpus never had (2026-09-02)
+
+The corpus runs carry no coverage, so v1's `crap` never fired on it and the
+oracle's demand read zero — an instrument gap. The experiment captured
+coverage from the real producers on two corpus repositories, in scratch copies:
+
+- flask (pinned commit) with `pytest --cov=flask --cov=src
+  --cov-report=lcov:coverage/lcov.info tests` — 482 tests pass, one async view
+  fails in this container; 24 files, 356 function records.
+- vite (pinned commit) with the workspace installed, `packages/vite` built, and
+  `vitest run --coverage.enabled=true --coverage.reporter=lcov
+  --coverage.reportOnFailure=true` over the unit suite (932 tests pass; the
+  IPv6 listen and `create-vite` CLI specs fail in this container and are
+  excluded) — 137 files, 3,624 function records. Two producer facts worth the
+  record: vitest writes no report at all when any test fails unless
+  `reportOnFailure` is set, and `vite` must be built first or vitest cannot
+  load the workspace package it resolves to.
+
+`CRAP = cc² × (1 − cov)³ + cc`, `cov` the covered fraction of the function's
+instrumented body lines, over every declaration carrying metrics outside test
+files. "cov = 0" is `untested`'s subject already; the last column is what only
+`crap` can say.
+
+| repo | scored | CRAP ≥ 30 | of which cov = 0 (`untested`) | partially covered |
+|---|---|---|---|---|
+| flask | 305 | 3 | 2 | 1 — `cli.py#load_dotenv`, cc 13 at 32% |
+| vite | 1,004 | 129 | 59 | 70 — `transformMiddleware` cc 45 at 4%, `importAnalysisPlugin` cc 121 at 61%, … |
+
+vite at other lines: 82 at ≥ 50 (47 partial), 51 at ≥ 100 (33 partial); 158
+functions have cc ≥ 10, 52 of them under half covered. flask, a small and
+well-tested tree, puts eleven functions at cc ≥ 10 and all but one above 75%
+coverage. The metric's own line — 30 — is where its authors put "crappy", and
+both trees read sensibly at it: a handful on the well-tested one, a real risk
+list on the large one. It ships as the default, `[analysis.crap] threshold`
+overrides it per project.
+
+Two defects the real reports surfaced before any finding could: the engine
+panicked on ingestion (a one-line function inverted the coverage line range —
+`BTreeMap::range` refuses it; flask has hundreds of such functions), and
+coverage.py's lcov 2.x `FN:<line>,<end>,<name>` records paired with no `FNDA`,
+silently dropping every function record. Both fixed, both pinned by tests; the
+python fixture `crap-partial-coverage` carries a report captured from
+pytest-cov itself.
+
+With `crap` registered, every corpus report gains one whole-run abstention —
+`no-coverage-ingested` — and nothing else moves: findings are identical on all
+nine repositories.

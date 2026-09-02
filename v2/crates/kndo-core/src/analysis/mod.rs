@@ -7,6 +7,7 @@
 //! Reachability is computed once, per root color, and shared: every analysis reads
 //! the same [`Reachability`] instead of building its own.
 
+mod crap;
 mod cyclic;
 mod dependency;
 mod duplicate;
@@ -19,6 +20,7 @@ mod untested;
 mod unused;
 mod version_skew;
 
+pub use crap::{CRAP_THRESHOLD, Crap};
 pub use cyclic::Cyclic;
 pub use duplicate::Duplicate;
 pub use internal_only::InternalOnly;
@@ -225,6 +227,12 @@ pub enum AbstentionReason {
     /// Every file the package owns is a test: a fixture package, whose
     /// dependencies serve the tests by construction.
     OwnedFilesAreTests,
+    /// No coverage report was ingested this run: a verdict with a measured
+    /// coverage factor cannot be reached for any function at once.
+    NoCoverageIngested,
+    /// The ingested report never instrumented these files: their functions'
+    /// coverage is unknown, not zero.
+    NoCoverageRecord,
 }
 
 impl fmt::Display for AbstentionReason {
@@ -260,6 +268,12 @@ impl fmt::Display for AbstentionReason {
             }
             AbstentionReason::OwnedFilesAreTests => {
                 write!(f, "every file the package owns is a test")
+            }
+            AbstentionReason::NoCoverageIngested => {
+                write!(f, "no coverage report ingested this run")
+            }
+            AbstentionReason::NoCoverageRecord => {
+                write!(f, "the coverage report never instrumented these files")
             }
         }
     }

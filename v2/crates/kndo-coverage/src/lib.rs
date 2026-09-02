@@ -48,9 +48,16 @@ pub fn parse_lcov_records(text: &str) -> Option<CoverageRecords> {
                     *fc.lines.entry(l).or_insert(0) += c;
                 }
             } else if let Some(rest) = line.strip_prefix("FN:") {
-                if let Some((l, name)) = rest.split_once(',')
+                // `FN:<line>,<name>` in lcov 1.x; `FN:<line>,<end line>,<name>` in
+                // lcov 2.x, which coverage.py writes — the name is what follows
+                // the numeric fields, whatever their count.
+                if let Some((l, tail)) = rest.split_once(',')
                     && let Ok(l) = l.parse::<u32>()
                 {
+                    let name = match tail.split_once(',') {
+                        Some((end, name)) if end.parse::<u32>().is_ok() => name,
+                        _ => tail,
+                    };
                     fn_lines.insert(name.to_string(), l);
                 }
             } else if let Some(rest) = line.strip_prefix("FNDA:") {
@@ -140,5 +147,17 @@ mod tests {
     fn an_empty_or_foreign_stream_is_absence() {
         assert!(parse_lcov_records("").is_none());
         assert!(parse_lcov_records("not lcov at all\n").is_none());
+    }
+
+    /// coverage.py's lcov 2.x function record carries an end line between the
+    /// start line and the name; the name still pairs with its `FNDA`.
+    #[test]
+    fn three_field_function_records_pair_by_name() {
+        let records = parse_lcov_records(
+            "SF:src/p.py\nFN:1,4,f\nFNDA:3,f\nFN:6,g\nFNDA:0,g\nend_of_record\n",
+        )
+        .expect("parses");
+        let file = &records.files[&ProjectPath::new("src/p.py")];
+        assert_eq!(file.functions, vec![(1, 3), (6, 0)]);
     }
 }

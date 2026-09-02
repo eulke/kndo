@@ -116,12 +116,19 @@ cross-package consumers, which the corpus lacks. Cost it would need anyway:
 `declares_surface` package knowledge, package-pair subjects, consumer-role
 gating. Build only when a corpus repo shows a production-role deep-import.
 
-### crap (complexity × uncoverage) — REOPENED 2026-09-01
+### crap (complexity × uncoverage) — REOPENED 2026-09-01, SHIPPED 2026-09-02
 Oracle demand 0 — corpus runs carry no coverage, so v1's own analysis never
-fired there: an instrument gap, not a value verdict (DECISIONS 2026-09-01). v2
-has both inputs (metrics winnowing, lcov ingestion); the experiment CAPTURES
-coverage from a real producer for a corpus repo (flask via pytest-cov, vite via
-vitest) and counts complex-and-untested candidates. Plan: README M7.b.
+fired there: an instrument gap, not a value verdict (DECISIONS 2026-09-01). The
+experiment captured coverage from the real producers (flask via pytest-cov,
+vite via vitest) and counted: flask 305 scored functions, 3 at the metric's
+line of 30, one of them partially covered; vite 1,004 scored, 129 at 30, 70
+partially covered (COMPARISON has the table). Shipped as `crap`, `Info`,
+`Probable`, partially-covered functions only (cov = 0 is `untested`'s), whole-run
+abstention without a report, per-file abstention where the report is silent;
+`[analysis.crap] threshold` overrides 30. Residue: branch coverage would
+sharpen the fraction where producers emit `BRDA` (the parser reads lines only);
+a function record says whether, never how much, so a one-line function is
+never scored.
 
 ### JVM package (directory) cycles
 File-level JVM cycles were retired as vice (multi-pass compilation makes them

@@ -2,7 +2,7 @@
   "run": {
     "schema": "kndo-v2/m6",
     "mode": "full",
-    "files_discovered": 3,
+    "files_discovered": 4,
     "files_claimed": 3,
     "extensions": [
       {
@@ -16,56 +16,67 @@
     ]
   },
   "health": {
-    "implicated": 1,
+    "implicated": 0,
     "subjects": 8,
-    "by_category": [
-      {
-        "category": "unused",
-        "findings": 1
-      }
-    ],
+    "by_category": [],
     "by_package": [
       {
         "name": "",
         "manifest": "",
-        "implicated": 1,
+        "implicated": 0,
         "subjects": 8
       }
     ]
   },
   "findings": [
     {
-      "id": "kndo-e25896936916",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
+      "id": "kndo-a5d012befb86",
+      "category": "crap",
+      "severity": "info",
+      "confidence": "probable",
       "subject": {
         "kind": "symbol",
-        "path": "src/logic.py",
+        "path": "src/classify.py",
         "selector": {
-          "Free": "_stale"
+          "Free": "classify"
         },
         "span": {
-          "start": 63,
-          "end": 89
+          "start": 0,
+          "end": 399
         }
       },
       "lines": {
-        "start": 9,
-        "end": 10
+        "start": 1,
+        "end": 16
       },
-      "message": "nothing references, roots, or imports this declaration"
+      "message": "complexity 10 with 13% of its lines executed by tests scores 75 on the CRAP scale, at or above 30"
+    },
+    {
+      "id": "kndo-e45bd8de813e",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "src/dark.py",
+        "selector": {
+          "Free": "never_run"
+        },
+        "span": {
+          "start": 0,
+          "end": 63
+        }
+      },
+      "lines": {
+        "start": 1,
+        "end": 4
+      },
+      "message": "no test executes this function"
     }
   ],
   "fixed": [],
   "baselined": 0,
-  "abstained": [
-    {
-      "category": "crap",
-      "reason": "no-coverage-ingested",
-      "scope": "whole-run"
-    }
-  ],
+  "abstained": [],
   "suppressed": {
     "total": 0,
     "by_category": []

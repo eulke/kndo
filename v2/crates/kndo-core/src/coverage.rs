@@ -41,8 +41,27 @@ impl FileCoverage {
             return Some(*count == 0);
         }
         // Line fallback: the body's lines, excluding the declaration line itself
-        // (module load executes it). A function that fits on its declaration
-        // line has no body line to read, and no record to answer with.
+        // (module load executes it).
+        let body = self.body_hits(span)?;
+        Some(body.iter().all(|&c| c == 0))
+    }
+
+    /// The fraction of the body's instrumented lines that executed — the
+    /// declaration line excluded, as above; `None` when no body line is
+    /// instrumented. Line records only: a function record says whether the
+    /// function ran, never how much of it.
+    pub fn function_coverage(&self, span: Span) -> Option<f64> {
+        let body = self.body_hits(span)?;
+        let hit = body.iter().filter(|&&c| c > 0).count();
+        Some(hit as f64 / body.len() as f64)
+    }
+
+    /// Hit counts of the instrumented lines below the declaration line. A
+    /// function that fits on its declaration line has no body line to read,
+    /// and no record to answer with.
+    fn body_hits(&self, span: Span) -> Option<Vec<u64>> {
+        let first = self.line_of(span.start);
+        let last = self.line_of(span.end.saturating_sub(1).max(span.start));
         if last <= first {
             return None;
         }
@@ -51,10 +70,7 @@ impl FileCoverage {
             .range(first + 1..=last)
             .map(|(_, c)| *c)
             .collect();
-        if body.is_empty() {
-            return None;
-        }
-        Some(body.iter().all(|&c| c == 0))
+        (!body.is_empty()).then_some(body)
     }
 
     fn line_of(&self, byte: u32) -> u32 {
@@ -177,6 +193,22 @@ mod tests {
         let fc = &cov.files[&ProjectPath::new("src/o.py")];
         assert_eq!(fc.function_untested(Span::new(0, 17)), None);
         assert_eq!(fc.function_untested(Span::new(18, 35)), Some(true));
+    }
+
+    #[test]
+    fn the_covered_fraction_counts_body_lines_only() {
+        let src = "def f(x):\n    if x:\n        return 1\n    return 2\n";
+        let map = contents(&[("src/p.py", src)]);
+        let cov = assemble(
+            records(&[("src/p.py", &[(1, 1), (2, 5), (3, 0), (4, 5)], &[(1, 5)])]),
+            &map,
+        )
+        .expect("assembles");
+        let fc = &cov.files[&ProjectPath::new("src/p.py")];
+        let whole = Span::new(0, src.len() as u32);
+        assert_eq!(fc.function_coverage(whole), Some(2.0 / 3.0));
+        assert_eq!(fc.function_untested(whole), Some(false));
+        assert_eq!(fc.function_coverage(Span::new(0, 9)), None);
     }
 
     #[test]

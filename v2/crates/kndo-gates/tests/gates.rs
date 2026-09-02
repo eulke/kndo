@@ -149,11 +149,13 @@ fn dogfood_zero_means_measured() {
     // (cheapening the zero) fails, and so does one that silently starts judging
     // (the accepted entry must be retired deliberately).
     //
-    // No accepted abstentions: the Rust adapter's Cargo.toml roots anchor this
-    // repository's own crates, so every analysis judges the dogfood run. The zero
-    // above is fully measured — an entry returning here is an analysis that quietly
-    // stopped judging.
-    const ACCEPTED: &[(&str, &str)] = &[];
+    // One accepted abstention: `crap` needs a coverage report, which is run
+    // input, never part of the tree — this repository ships none, so the
+    // analysis cannot judge the dogfood run and says so. Every other analysis
+    // judges it (the Rust adapter's Cargo.toml roots anchor this repository's
+    // own crates), so the zero above is fully measured — any OTHER entry
+    // returning here is an analysis that quietly stopped judging.
+    const ACCEPTED: &[(&str, &str)] = &[("crap", "no coverage report ingested this run")];
 
     let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let session = kndo::open(
@@ -248,7 +250,7 @@ fn adapter_conformance_fixtures_are_byte_identical() {
         (manifest.join("../kndo-adapter-java/tests/fixtures"), 6),
         (manifest.join("../kndo-adapter-kotlin/tests/fixtures"), 5),
         (manifest.join("../kndo-adapter-swift/tests/fixtures"), 4),
-        (manifest.join("../kndo-adapter-python/tests/fixtures"), 6),
+        (manifest.join("../kndo-adapter-python/tests/fixtures"), 7),
     ];
     let overwrite = std::env::var_os("KNDO_CONFORMANCE").is_some_and(|v| v == "overwrite");
     let mut failures = Vec::new();

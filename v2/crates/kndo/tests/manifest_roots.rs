@@ -34,8 +34,8 @@ fn package_json_turns_judgment_on() {
     );
     assert_eq!(
         snap.abstained.len(),
-        2,
-        "test-only and untested abstain without test roots: {:#?}",
+        3,
+        "test-only and untested abstain without test roots, crap without coverage: {:#?}",
         snap.abstained
     );
     let subjects: Vec<String> = snap

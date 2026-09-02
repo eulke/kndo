@@ -534,9 +534,11 @@ entry, never a builder's shortcut.
   path proven by ablation and four harvested fixtures) — every skip a typed
   `manifests`-scoped abstention. COMPARISON has the tables; DECISIONS the contract
   changes.
-- **M7.b — `crap` with real coverage**: capture coverage from a real producer for a
-  corpus repo (flask/pytest-cov, vite/vitest), count complex-and-untested
-  candidates, decide the threshold semantics from the number.
+- **M7.b — `crap` with real coverage** — **shipped 2026-09-02**: coverage captured
+  from pytest-cov (flask) and vitest (vite); 3 and 129 functions at the metric's own
+  line of 30, 1 and 70 of them partially covered — the signal `untested` cannot give.
+  `Info`, whole-run abstention without a report, `[analysis.crap] threshold`
+  configurable; two ingestion defects found by the real reports fixed on the way.
 - **M7.c — framework conduct plugins** (swap-blocking): v1's nine, each through the
   reflection-dispatch rule — a plugin lands only when its roots land on real
   findings, proven baseline-then-plugin like the coverage plugin; v1's harvested

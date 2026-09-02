@@ -54,9 +54,12 @@ fn test_color_separates_test_only_from_unused_and_untested() {
     let session = kndo::open(p.root(), Config::default()).expect("open");
     let snap = session.analyze(RunMode::Full).expect("analyze");
 
+    // Test evidence exists, so nothing test-shaped abstains; `crap` alone does,
+    // for the one input this tree never carries — a coverage report.
     assert!(
-        snap.abstained.is_empty(),
-        "test evidence exists — nothing abstains: {:#?}",
+        snap.abstained.iter().all(|a| a.category == Category::CRAP
+            && a.reason == kndo::AbstentionReason::NoCoverageIngested),
+        "test evidence exists — only crap abstains, on coverage: {:#?}",
         snap.abstained
     );
 

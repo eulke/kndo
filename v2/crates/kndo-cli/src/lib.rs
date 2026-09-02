@@ -345,7 +345,7 @@ fn query_verb(verb: kndo::query::Verb, args: QueryArgs, host: &Host) -> CliOutpu
         threads: None,
         fail_on: None,
     };
-    let snapshot = match analyze_at(&root, &run, true, &Categories::All) {
+    let snapshot = match analyze_at(&root, &run, true, &Tuning::default()) {
         Ok(snapshot) => snapshot,
         Err(refusal) => return refused(refusal),
     };
@@ -603,7 +603,7 @@ fn init(args: InitArgs) -> CliOutput {
 /// exit 0: health is measurement, not a gate.
 fn health(args: HealthArgs, host: &Host) -> CliOutput {
     let root = args.run.path.clone().unwrap_or_else(|| PathBuf::from("."));
-    let snapshot = match analyze_at(&root, &args.run, !args.run.no_cache, &Categories::All) {
+    let snapshot = match analyze_at(&root, &args.run, !args.run.no_cache, &Tuning::default()) {
         Ok(snapshot) => snapshot,
         Err(refusal) => return refused(refusal),
     };
@@ -663,6 +663,7 @@ struct Effective {
     format: Format,
     fail_on: FailOn,
     categories: Categories,
+    crap_threshold: f64,
 }
 
 /// The ONE merge site — no second place ranks these sources: flag >
@@ -717,12 +718,18 @@ fn effective(
         Some(ColorChoice::Never) => false,
         Some(ColorChoice::Auto) | None => host.tty && !host.no_color,
     };
+    let crap_threshold = file
+        .analysis
+        .crap
+        .threshold
+        .unwrap_or(Config::default().crap_threshold);
     Ok((
         Effective {
             color,
             format,
             fail_on,
             categories,
+            crap_threshold,
         },
         warning,
     ))
@@ -761,7 +768,7 @@ fn selection_of(only: &[String], skip: &[String]) -> Result<Categories, CliOutpu
 
 fn open_and_analyze(args: &RunArgs) -> Result<(kndo::Session, kndo::Snapshot), kndo::Refusal> {
     let root = args.path.clone().unwrap_or_else(|| PathBuf::from("."));
-    let snapshot = analyze_at(&root, args, !args.no_cache, &Categories::All)?;
+    let snapshot = analyze_at(&root, args, !args.no_cache, &Tuning::default())?;
     let config = Config {
         threads: match args.threads {
             Some(n) if n > 0 => Threads::Count(n),
@@ -769,16 +776,35 @@ fn open_and_analyze(args: &RunArgs) -> Result<(kndo::Session, kndo::Snapshot), k
         },
         use_cache: !args.no_cache,
         categories: Categories::All,
+        ..Config::default()
     };
     let session = kndo::open(root, config)?;
     Ok((session, snapshot))
+}
+
+/// The engine's view of one invocation: `kndo check` resolves it from the
+/// flags and `kndo.toml` through `effective`; the query verbs analyze under
+/// the built-in defaults.
+#[derive(Clone)]
+struct Tuning {
+    categories: Categories,
+    crap_threshold: f64,
+}
+
+impl Default for Tuning {
+    fn default() -> Self {
+        Tuning {
+            categories: Categories::All,
+            crap_threshold: Config::default().crap_threshold,
+        }
+    }
 }
 
 fn analyze_at(
     root: &std::path::Path,
     args: &RunArgs,
     use_cache: bool,
-    categories: &Categories,
+    tuning: &Tuning,
 ) -> Result<kndo::Snapshot, kndo::Refusal> {
     let config = Config {
         threads: match args.threads {
@@ -786,7 +812,8 @@ fn analyze_at(
             _ => Threads::Auto,
         },
         use_cache,
-        categories: categories.clone(),
+        categories: tuning.categories.clone(),
+        crap_threshold: tuning.crap_threshold,
     };
     kndo::open(root.to_path_buf(), config)?.analyze(RunMode::Full)
 }
@@ -799,7 +826,7 @@ fn analyze_at(
 fn diff_snapshot(
     args: &RunArgs,
     comparison: git::Comparison,
-    categories: &Categories,
+    tuning: &Tuning,
 ) -> Result<kndo::Snapshot, CliOutput> {
     let root = args.path.clone().unwrap_or_else(|| PathBuf::from("."));
     let mode = match comparison {
@@ -810,13 +837,13 @@ fn diff_snapshot(
     let base = git::materialize(&root, &base_tree).map_err(git_failed)?;
     // Both sides judge the same categories, or the diff would report the
     // narrowing, not the change.
-    let base_snapshot = analyze_at(&base.root, args, false, categories).map_err(refused)?;
+    let base_snapshot = analyze_at(&base.root, args, false, tuning).map_err(refused)?;
     let mut snapshot = match comparison.current_tree(&root).map_err(git_failed)? {
         Some(index_tree) => {
             let current = git::materialize(&root, &index_tree).map_err(git_failed)?;
-            analyze_at(&current.root, args, false, categories).map_err(refused)?
+            analyze_at(&current.root, args, false, tuning).map_err(refused)?
         }
-        None => analyze_at(&root, args, !args.no_cache, categories).map_err(refused)?,
+        None => analyze_at(&root, args, !args.no_cache, tuning).map_err(refused)?,
     };
     snapshot.against(&base_snapshot, mode);
     Ok(snapshot)
@@ -864,18 +891,22 @@ fn check(args: CheckArgs, host: &Host) -> CliOutput {
         Ok(resolved) => resolved,
         Err(failure) => return failure,
     };
-    let (format, fail_on, categories) = (effective.format, effective.fail_on, effective.categories);
+    let (format, fail_on) = (effective.format, effective.fail_on);
+    let tuning = Tuning {
+        categories: effective.categories,
+        crap_threshold: effective.crap_threshold,
+    };
     let comparison = if args.staged {
         Some(git::Comparison::Staged)
     } else {
         args.diff.clone().map(git::Comparison::Against)
     };
     let snapshot = match comparison {
-        Some(comparison) => match diff_snapshot(&args.run, comparison, &categories) {
+        Some(comparison) => match diff_snapshot(&args.run, comparison, &tuning) {
             Ok(snapshot) => snapshot,
             Err(failure) => return failure,
         },
-        None => match analyze_at(&root, &args.run, !args.run.no_cache, &categories) {
+        None => match analyze_at(&root, &args.run, !args.run.no_cache, &tuning) {
             Ok(snapshot) => snapshot,
             Err(refusal) => return refused(refusal),
         },

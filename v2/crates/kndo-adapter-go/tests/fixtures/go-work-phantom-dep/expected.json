@@ -60,6 +60,11 @@
       "category": "untested",
       "reason": "no-test-roots-anywhere",
       "scope": "whole-run"
+    },
+    {
+      "category": "crap",
+      "reason": "no-coverage-ingested",
+      "scope": "whole-run"
     }
   ],
   "suppressed": {

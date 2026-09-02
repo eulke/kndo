@@ -5,8 +5,8 @@
 //! refusal reappears inside [`RunOutcome`] so `exit_code` covers that path too.
 
 use crate::analysis::{
-    Abstention, Cyclic, Duplicate, InternalOnly, PrivateTypeLeak, TestOnly, Undeclared, Unresolved,
-    Untested, Unused, VersionSkew, run_all,
+    Abstention, Crap, Cyclic, Duplicate, InternalOnly, PrivateTypeLeak, TestOnly, Undeclared,
+    Unresolved, Untested, Unused, VersionSkew, run_all,
 };
 use crate::cache::EvidenceCache;
 use crate::conduct::Contribution;
@@ -34,6 +34,9 @@ pub struct Config {
     pub threads: Threads,
     pub use_cache: bool,
     pub categories: Categories,
+    /// `crap`'s line: a function scoring at or above it is a finding. The
+    /// metric's own 30 by default (`CRAP_THRESHOLD`).
+    pub crap_threshold: f64,
 }
 
 impl Default for Config {
@@ -42,6 +45,7 @@ impl Default for Config {
             threads: Threads::Auto,
             use_cache: true,
             categories: Categories::All,
+            crap_threshold: crate::analysis::CRAP_THRESHOLD,
         }
     }
 }
@@ -477,7 +481,10 @@ impl Session {
             })
             .map(|e| SmolStr::new(e.spec().coordinate()))
             .collect();
-        let all: [&dyn crate::analysis::Analysis; 10] = [
+        let crap = Crap {
+            threshold: self.config.crap_threshold,
+        };
+        let all: [&dyn crate::analysis::Analysis; 11] = [
             &Cyclic,
             &PrivateTypeLeak,
             &Unused,
@@ -488,6 +495,7 @@ impl Session {
             &Unresolved,
             &VersionSkew,
             &Undeclared,
+            &crap,
         ];
         let selected: Vec<&dyn crate::analysis::Analysis> = all
             .into_iter()

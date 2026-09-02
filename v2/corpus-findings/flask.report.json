@@ -501,6 +501,11 @@
           "unjudged": 5
         }
       }
+    },
+    {
+      "category": "crap",
+      "reason": "no-coverage-ingested",
+      "scope": "whole-run"
     }
   ],
   "suppressed": {

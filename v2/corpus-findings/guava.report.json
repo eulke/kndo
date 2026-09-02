@@ -227217,6 +227217,11 @@
           "unjudged": 16
         }
       }
+    },
+    {
+      "category": "crap",
+      "reason": "no-coverage-ingested",
+      "scope": "whole-run"
     }
   ],
   "suppressed": {

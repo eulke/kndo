@@ -59,6 +59,15 @@
       "category": "test-only",
       "reason": "no-test-roots-anywhere",
       "scope": "whole-run"
+    },
+    {
+      "category": "crap",
+      "reason": "no-coverage-record",
+      "scope": {
+        "files": {
+          "unmeasured": 1
+        }
+      }
     }
   ],
   "suppressed": {

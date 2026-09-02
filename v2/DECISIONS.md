@@ -2270,3 +2270,37 @@ abstains `nothing-reaches-owned-files` (no sources); sixteen JVM/Swift/Python
 fixtures whose manifest declares nothing now abstain as underivable under
 `unused` and `undeclared`. Fingerprint re-pinned (`used_by_manifest` gone,
 `DependencyBuiltins` in the spec).
+
+## 2026-09-02 — `crap` ships on real coverage; the threshold is the metric's own
+
+**Decision.** `crap` judges every declaration carrying metrics outside test files,
+`CRAP = cc² × (1 − cov)³ + cc` with `cov` the covered fraction of the function's
+instrumented body lines from ingested coverage; a function at or above the
+threshold is an `Info`/`Probable` finding on the symbol. The threshold defaults to
+30 — the metric's own definition — and `[analysis.crap] threshold` in `kndo.toml`
+overrides it (`Config::crap_threshold`, resolved in the CLI's one precedence site).
+A function no test executed is `untested`'s subject and never `crap`'s: one verdict
+per fact. Without a coverage report the analysis abstains for the whole run
+(`no-coverage-ingested`); files a report never instrumented are unmeasured
+(`no-coverage-record`, `files` scope). The dogfood gate accepts exactly that
+whole-run abstention, with its reason: a coverage report is run input, and this
+repository ships none.
+
+**Measurement.** Real producers on scratch copies of two corpus repositories:
+pytest-cov on flask (482 tests) and vitest with `@vitest/coverage-v8` on vite's
+unit suite (932 tests). flask: 305 scored, 3 at 30, 1 partially covered. vite:
+1,004 scored, 129 at 30 (70 partially covered), 82 at 50, 51 at 100. Every corpus
+report otherwise byte-identical, plus the one abstention.
+
+**Why `Info`.** The score ranks change risk; it names no defect. Health measures the
+tree, and a coverage report is not the tree — a `Warning` here would move health
+between runs with and without a report, which the health law forbids.
+
+**What reality caught.** The engine panicked on the first real report (a one-line
+function inverts the coverage line range) and dropped every function record from
+coverage.py's lcov 2.x `FN:<line>,<end>,<name>` shape. Both fixed with tests; the
+python fixture `crap-partial-coverage` carries a report captured from pytest-cov,
+never hand-written. 81 conformance reports regenerated: 80 differ only by the
+`crap` whole-run abstention; ts/crap (v1's harvested fixture) also reports one
+uninstrumented file, and the new fixture pins a `crap` finding beside an
+`untested` one.

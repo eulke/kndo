@@ -18,6 +18,22 @@ use std::path::Path;
 pub struct FileConfig {
     #[serde(default)]
     pub check: CheckTable,
+    #[serde(default)]
+    pub analysis: AnalysisTable,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub struct AnalysisTable {
+    #[serde(default)]
+    pub crap: CrapTable,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub struct CrapTable {
+    /// CRAP score at or above which a function is a finding.
+    pub threshold: Option<f64>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -53,6 +69,11 @@ pub const TEMPLATE: &str = "\
 # Judge only these categories (or use `skip` for the complement).
 #only = [\"unused\"]
 #skip = [\"duplicate\"]
+
+[analysis.crap]
+# CRAP score (complexity² × (1 − coverage)³ + complexity) at or above which a
+# function is a finding; the metric's own line is 30.
+#threshold = 30
 ";
 
 /// Read `<root>/kndo.toml` if present. A file that exists but does not parse —
@@ -88,10 +109,11 @@ mod tests {
         assert!(full.check.format.is_some());
         assert!(!full.check.only.is_empty());
         assert!(!full.check.skip.is_empty());
+        assert_eq!(full.analysis.crap.threshold, Some(30.0));
 
         // …and every struct key appears in the template, so a new key cannot
         // ship without its line (the one-list rule, held by this test).
-        for key in ["fail-on", "format", "only", "skip"] {
+        for key in ["fail-on", "format", "only", "skip", "threshold"] {
             assert!(
                 TEMPLATE.contains(key),
                 "template is missing the `{key}` line"
