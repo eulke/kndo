@@ -41,7 +41,11 @@ impl FileCoverage {
             return Some(*count == 0);
         }
         // Line fallback: the body's lines, excluding the declaration line itself
-        // (module load executes it).
+        // (module load executes it). A function that fits on its declaration
+        // line has no body line to read, and no record to answer with.
+        if last <= first {
+            return None;
+        }
         let body: Vec<u64> = self
             .lines
             .range(first + 1..=last)
@@ -156,6 +160,23 @@ mod tests {
             assemble(records(&[("src/y.js", &[(1, 1), (2, 0)], &[])]), &map).expect("assembles");
         let fc = &cov.files[&ProjectPath::new("src/y.js")];
         assert_eq!(fc.function_untested(Span::new(0, 28)), Some(true));
+    }
+
+    /// A one-line function has no body line below its declaration: the range
+    /// is empty, never inverted — the first real producer's report (pytest-cov
+    /// on flask) carried hundreds of these.
+    #[test]
+    fn a_one_line_function_without_a_function_record_is_unknown() {
+        let src = "def f(): return 1\ndef g():\n    return 2\n";
+        let map = contents(&[("src/o.py", src)]);
+        let cov = assemble(
+            records(&[("src/o.py", &[(1, 1), (2, 1), (3, 0)], &[])]),
+            &map,
+        )
+        .expect("assembles");
+        let fc = &cov.files[&ProjectPath::new("src/o.py")];
+        assert_eq!(fc.function_untested(Span::new(0, 17)), None);
+        assert_eq!(fc.function_untested(Span::new(18, 35)), Some(true));
     }
 
     #[test]
