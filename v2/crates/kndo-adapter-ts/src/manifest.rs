@@ -14,6 +14,9 @@ use kndo_contract::vocab::{Confidence, ProjectPath};
 use smol_str::SmolStr;
 use std::collections::BTreeSet;
 
+/// Commands whose first non-flag argument is a source file they run.
+const RUNTIMES: &[&str] = &["node", "tsx", "ts-node", "bun", "deno"];
+
 pub fn roots(
     manifest: &SourceFile<'_>,
     cx: &ResolveContext<'_>,
@@ -80,15 +83,31 @@ pub fn roots(
             let Some(command) = value.as_str() else {
                 continue;
             };
+            // The word a runtime is handed is an entry however it is spelled
+            // (`node server`, `node --inspect-brk server`); anywhere else only a
+            // path-shaped token or a source suffix names a file — a bare word
+            // (`eslint src`) does not.
+            let mut launched = false;
             for token in command.split(|c: char| c.is_whitespace() || c == ';' || c == '&') {
                 let token = token.trim_matches(|c| c == '"' || c == '\'');
-                // A path-shaped token (`node lib/main/build-site`) or a source
-                // suffix; a bare word (`eslint src`) names no file to root.
-                if (token.contains('/') || exts.iter().any(|e| token.ends_with(e.as_str())))
+                if token.is_empty() {
+                    continue;
+                }
+                if RUNTIMES.contains(&token) {
+                    launched = true;
+                    continue;
+                }
+                if token.starts_with('-') {
+                    continue;
+                }
+                let file_shaped =
+                    token.contains('/') || exts.iter().any(|e| token.ends_with(e.as_str()));
+                if (launched || file_shaped)
                     && let Some(path) = resolve_in_dir(dir, token, cx, exts)
                 {
                     script_files.insert(path);
                 }
+                launched = false;
             }
         }
     }

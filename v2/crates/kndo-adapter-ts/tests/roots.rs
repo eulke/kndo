@@ -302,3 +302,25 @@ fn manifest_mentions_are_what_it_spells_outside_declarations_and_prose() {
         "sorted, deduplicated"
     );
 }
+
+#[test]
+fn a_script_hands_a_runtime_an_entry_however_it_is_spelled() {
+    let roots = manifest_roots(
+        "package.json",
+        r#"{
+            "name": "app",
+            "scripts": {
+                "dev": "node server",
+                "debug": "node --inspect-brk server",
+                "worker": "tsx src/worker.ts",
+                "lint": "eslint src"
+            }
+        }"#,
+        &["server.js", "src/worker.ts", "src/index.js"],
+    );
+    let paths: Vec<&str> = roots.iter().map(|(p, _)| p.as_str()).collect();
+    assert!(paths.contains(&"server.js"), "{paths:?}");
+    assert!(paths.contains(&"src/worker.ts"), "{paths:?}");
+    // `eslint src` runs no file: a directory handed to a linter roots nothing.
+    assert!(!paths.contains(&"src/index.js"), "{paths:?}");
+}

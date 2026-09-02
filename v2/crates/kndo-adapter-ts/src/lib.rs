@@ -93,8 +93,8 @@ impl TypeScriptAdapter {
     pub fn new() -> Self {
         let spec = kndo_toolkit::source_adapter_builder(
             "kndo:js-ts",
-            // 6: a `require`/`import()` that runs conditionally is `Probable`.
-            6,
+            // 7: the file a runtime is handed in a script (`node server`) is a root.
+            7,
             &["ts", "tsx", "js", "jsx", "mjs", "cjs", "mts", "cts"],
             &["**/package.json"],
             &[],
