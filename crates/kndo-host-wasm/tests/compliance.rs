@@ -5,7 +5,7 @@
 //! question is yesterday's bytes against today's host; this suite's question is
 //! that the ABI's whole surface WORKS.
 
-use kndo_core::{Config, RunMode, Session, Snapshot, Threads};
+use kndo_core::{CacheLocation, Config, RunMode, Session, Snapshot, Threads};
 use kndo_host_wasm::WasmExtension;
 use kndo_testkit::TempProject;
 use std::path::{Path, PathBuf};
@@ -62,7 +62,7 @@ fn component(name: &str) -> PathBuf {
 
 fn kmini_session(
     p: &TempProject,
-    use_cache: bool,
+    cache: CacheLocation,
     conduct: Vec<Box<dyn kndo_core::Extension>>,
 ) -> Session {
     let adapter = WasmExtension::load(&component("kmini_adapter")).expect("kmini adapter loads");
@@ -72,7 +72,7 @@ fn kmini_session(
         p.root(),
         Config {
             threads: Threads::Auto,
-            use_cache,
+            cache,
             ..Config::default()
         },
         extensions,
@@ -106,7 +106,7 @@ fn the_wasm_adapter_world_is_a_first_class_language() {
     p.file("app_part.kmini", "fn from_part\n");
     p.file("orphan.kmini", "fn floats\n");
 
-    let snap = kmini_session(&p, false, Vec::new())
+    let snap = kmini_session(&p, CacheLocation::Off, Vec::new())
         .analyze(RunMode::Full)
         .expect("analyze");
     assert_eq!(snap.graph.files.len(), 4, "every .kmini file claimed");
@@ -155,7 +155,7 @@ fn the_wasm_adapter_world_is_a_first_class_language() {
             )
             .build(),
     );
-    let snap = kmini_session(&p, false, vec![Box::new(witness)])
+    let snap = kmini_session(&p, CacheLocation::Off, vec![Box::new(witness)])
         .analyze(RunMode::Full)
         .expect("analyze with witness");
     assert_eq!(
@@ -173,15 +173,15 @@ fn wasm_extraction_is_deterministic_and_cache_transparent() {
     p.file("lib.kmini", "pub fn shared\nfn dead\n# note\n");
     p.file("app.kmini", "entry\nuse ./lib shared\ncall shared\n");
 
-    let report = |use_cache: bool| {
-        let snap = kmini_session(&p, use_cache, Vec::new())
+    let report = |cache: CacheLocation| {
+        let snap = kmini_session(&p, cache, Vec::new())
             .analyze(RunMode::Full)
             .expect("analyze");
         (snap.graph.to_json(), snap.report().to_json())
     };
-    let cold = report(true);
-    let warm = report(true);
-    let uncached = report(false);
+    let cold = report(CacheLocation::InTree);
+    let warm = report(CacheLocation::InTree);
+    let uncached = report(CacheLocation::Off);
     assert_eq!(cold, warm, "wasm evidence rides the cache byte-identically");
     assert_eq!(cold, uncached, "the cache changes speed, never output");
 }
@@ -195,7 +195,7 @@ fn the_wasm_plugin_world_carries_the_containment_model() {
     p.file("config.probe", "sixteen bytes!!\n");
 
     let plugin = WasmExtension::load(&component("probe_plugin")).expect("probe plugin loads");
-    let session = kmini_session(&p, true, vec![Box::new(plugin)]);
+    let session = kmini_session(&p, CacheLocation::InTree, vec![Box::new(plugin)]);
     let snap = session.analyze(RunMode::Full).expect("analyze");
 
     let contribution = &snap.contributions[0];
@@ -264,10 +264,10 @@ fn the_wasm_ingester_world_feeds_untested_like_the_builtin() {
     );
 
     let ingester = WasmExtension::load(&component("records_ingester")).expect("ingester loads");
-    let with = kmini_session(&p, false, vec![Box::new(ingester)])
+    let with = kmini_session(&p, CacheLocation::Off, vec![Box::new(ingester)])
         .analyze(RunMode::Full)
         .expect("analyze with ingester");
-    let without = kmini_session(&p, false, Vec::new())
+    let without = kmini_session(&p, CacheLocation::Off, Vec::new())
         .analyze(RunMode::Full)
         .expect("analyze without");
 
@@ -306,9 +306,13 @@ fn a_two_cluster_extension_speaks_a_language_and_conducts() {
 
     let acme = WasmExtension::load(&component("acme_framework")).expect("acme loads");
     let probe = WasmExtension::load(&component("probe_plugin")).expect("probe loads");
-    let snap = kmini_session(&p, false, vec![Box::new(acme), Box::new(probe)])
-        .analyze(RunMode::Full)
-        .expect("analyze");
+    let snap = kmini_session(
+        &p,
+        CacheLocation::Off,
+        vec![Box::new(acme), Box::new(probe)],
+    )
+    .analyze(RunMode::Full)
+    .expect("analyze");
 
     // Cluster one, extraction: the .acme file is claimed, its handlers rooted.
     assert!(
@@ -355,7 +359,7 @@ fn assert_extraction_violation(file_content: &str, violated_import: &str) {
         p.root(),
         Config {
             threads: Threads::Auto,
-            use_cache: false,
+            cache: CacheLocation::Off,
             ..Config::default()
         },
         vec![Box::new(rude)],

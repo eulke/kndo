@@ -156,7 +156,7 @@ fn corpus(args: &[String]) -> Result<()> {
             repo,
             kndo::Config {
                 threads: kndo::Threads::Auto,
-                use_cache: false,
+                cache: kndo::CacheLocation::Off,
                 ..kndo::Config::default()
             },
         )

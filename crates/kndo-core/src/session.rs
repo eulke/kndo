@@ -29,10 +29,36 @@ pub enum Threads {
     Count(usize),
 }
 
+/// Where a run's caches live. Every entry is content-addressed and keyed by
+/// everything that could change it (contract fingerprint, adapter specs, graph
+/// semantics), so a cache is safe to share between trees of one project — which
+/// is what a diff-mode run does: its two pinned trees read and warm the
+/// project's cache instead of paying two cold analyses, and write nothing into
+/// themselves.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CacheLocation {
+    /// Nothing read, nothing written.
+    Off,
+    /// `.kndo/cache` under the tree being analyzed.
+    InTree,
+    /// An explicit directory — another tree's cache, shared.
+    At(PathBuf),
+}
+
+impl CacheLocation {
+    fn dir(&self, tree: &Path) -> Option<PathBuf> {
+        match self {
+            CacheLocation::Off => None,
+            CacheLocation::InTree => Some(tree.join(".kndo/cache")),
+            CacheLocation::At(dir) => Some(dir.clone()),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Config {
     pub threads: Threads,
-    pub use_cache: bool,
+    pub cache: CacheLocation,
     pub categories: Categories,
     /// `crap`'s line: a function scoring at or above it is a finding. The
     /// metric's own 30 by default (`CRAP_THRESHOLD`).
@@ -43,7 +69,7 @@ impl Default for Config {
     fn default() -> Self {
         Config {
             threads: Threads::Auto,
-            use_cache: true,
+            cache: CacheLocation::InTree,
             categories: Categories::All,
             crap_threshold: crate::analysis::CRAP_THRESHOLD,
         }
@@ -407,7 +433,7 @@ impl Session {
             .any(|(ix, _)| self.extensions[*ix].spec().mutates_graph());
 
         let fingerprint = kndo_contract::contract_fingerprint();
-        let cache_root = self.config.use_cache.then(|| self.root.join(".kndo/cache"));
+        let cache_root = self.config.cache.dir(&self.root);
         let cache =
             EvidenceCache::new(cache_root.as_ref().map(|r| r.join("evidence")), fingerprint);
         let graph_cache = (!plugins_mutate)

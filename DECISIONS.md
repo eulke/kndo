@@ -2630,3 +2630,55 @@ replaced in place (paths v1 and v2 both had — `crates/kndo-core/src/lib.rs`,
 the full suite, clippy and fmt green; the dogfood zero over the root tree with
 the rewritten `.ignore`; the book built; both workflows regenerated from the
 registry and byte-identical to the committed files.
+
+## 2026-09-02 — The diff modes share the project's cache; where the rest of `--staged` goes
+
+**Measured first.** The bench baseline said `--staged` costs more than a cold
+run at every size (9.8 s against 4.4 s at 50k files). Decomposed on the 50k
+fixture with the engine's own phase timings — the container's disk was
+unusable for wall-clock work that day (the same `git archive | tar -x` took
+1.9 s, then 19 s; a staged run 16 s, then 58 s), so every wall-clock number
+below comes from the fixture copied to tmpfs and the two binaries alternated
+round for round. A staged run was two materializations (`git archive | tar
+-x`, 0.8 s each in RAM) and two COLD analyses, each ≈ 3.9 s: discover 0.42,
+extract 2.4 (tree-sitter over 50k files), assemble 0.55, analyze 0.55. The
+scratch trees ran cache-off by design — "nothing is written into them" — and
+so paid extraction twice for content the project's cache already held.
+
+**Change.** `Config::use_cache` became `Config::cache: CacheLocation` — `Off`,
+`InTree`, `At(dir)` — and the diff modes hand both pinned trees
+`At(<project>/.kndo/cache)`. Sound by construction: every entry is
+content-addressed and keyed by everything that could change it (fingerprint,
+adapter specs, graph semantics), so a pinned tree's unchanged files hit
+exactly where the worktree's do, and still nothing is written into the
+scratch trees. `--no-cache` turns it off for both sides. The gate
+`a_shared_cache_is_read_and_warmed_across_trees` pins the contract: a copy of
+a tree over the original's cache adds no evidence entry, patches the graph
+(extract folds to zero), writes nothing into itself, and reports the bytes an
+uncached run reports; a changed file adds exactly its own entry.
+
+**Result.** Staged at 50k in RAM, minimum of four alternated rounds: 14.6 s →
+8.9 s; the staged report byte-identical between the two binaries. Per side,
+warm: discover 0.36–0.44, extract 0 (folded into the patch), assemble
+0.36–0.42, analyze 0.54 — about 1.4 s against 3.9 s cold, and a ten- or
+hundred-file patch costs the same assemble as none (0.38–0.40 s against 0.37).
+What the phases do not time — process start, the 47 MB persisted graph's
+store, the two scratch directories' creation and deletion, git plumbing, the
+composition and the render — is the remainder. The committed bench baseline
+predates this change and is re-recorded only on a quiet reference machine.
+
+**What the remaining 8.9 s is, with its projections — the owner's call.**
+(a) The base side is a pure function of a commit: persisting its snapshot
+keyed by tree id and cache key would skip a whole side (≈ 2.9 s) on every
+staged run that follows a previous one against the same HEAD — the
+pre-commit loop's common case. (b) Materialization writes 50k files per side
+(0.8 s each in RAM, the whole disk-bound term elsewhere); reading `git
+archive` into memory instead needs a second door into a session (a
+pre-discovered tree) and an equivalence gate for the ignore semantics the
+filesystem walk owns. (c) Each side loads and stores the 47 MB persisted graph
+(`graph.bin`; the evidence cache is 50,011 entries, 196 MB, untouched on a
+patched run); a borrowed cache that reads and warms evidence but leaves the
+persisted graph to the worktree's own runs would drop two stores per staged
+run; the ceiling of that saving is the assemble phase of a zero-change warm
+run — load, verify, store, nothing to re-extract — 0.33–0.38 s per side in
+RAM, the smallest of the three.

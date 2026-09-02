@@ -43,6 +43,10 @@ pub const GATES: &[Gate] = &[
         invariant: "a change replayed over cached evidence equals a from-scratch build",
     },
     Gate {
+        name: "a_shared_cache_is_read_and_warmed_across_trees",
+        invariant: "a second tree over another tree's cache hits it, adds nothing for identical content, and reports the uncached bytes",
+    },
+    Gate {
         name: "adapter_conformance_fixtures_are_byte_identical",
         invariant: "the harvested fixture corpus replays to its pinned reports",
     },

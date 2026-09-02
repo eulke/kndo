@@ -53,8 +53,10 @@ per-package split to the terminal render; the JSON envelope always carries it.
 
 `--staged` and `--diff` are two full analyses over two pinned trees, composed:
 the report lists the findings the change introduces, the ones it fixes
-(`fixed`), and both trees' health (`health` and `base_health`). Neither mode
-needs the cache, and neither touches your worktree.
+(`fixed`), and both trees' health (`health` and `base_health`). Both trees read
+and warm the project's cache — entries are content-addressed, so a pinned tree's
+unchanged files hit exactly where the worktree's do — and neither mode touches
+your worktree; `--no-cache` turns the cache off for both sides.
 
 ## Formats
 

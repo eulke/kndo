@@ -40,15 +40,17 @@ fn generated_ci_is_current() {
     );
 }
 
-use kndo_core::{Config, GatePolicy, RunMode, RunOutcome, Session, Snapshot, Threads};
+use kndo_core::{
+    CacheLocation, Config, GatePolicy, RunMode, RunOutcome, Session, Snapshot, Threads,
+};
 use kndo_testkit::{MockAdapter, TempProject};
 
-fn run(root: &std::path::Path, use_cache: bool, threads: Threads) -> Snapshot {
+fn run(root: &std::path::Path, cache: CacheLocation, threads: Threads) -> Snapshot {
     let session = Session::open(
         root,
         Config {
             threads,
-            use_cache,
+            cache,
             ..Config::default()
         },
         vec![Box::new(MockAdapter::new())],
@@ -90,7 +92,7 @@ fn dogfood_kndo_reports_nothing_on_itself() {
         // the same repo root race each other's .kndo/cache in the parallel
         // test harness.
         Config {
-            use_cache: false,
+            cache: CacheLocation::Off,
             ..Config::default()
         },
     )
@@ -128,9 +130,12 @@ fn report_schema_is_generated_and_valid() {
     let validator = jsonschema::validator_for(&schema).expect("schema compiles");
 
     let p = fixture();
-    let live: serde_json::Value =
-        serde_json::from_str(&run(p.root(), false, Threads::Auto).report().to_json())
-            .expect("report is JSON");
+    let live: serde_json::Value = serde_json::from_str(
+        &run(p.root(), CacheLocation::Off, Threads::Auto)
+            .report()
+            .to_json(),
+    )
+    .expect("report is JSON");
     let errors: Vec<String> = validator
         .iter_errors(&live)
         .map(|e| e.to_string())
@@ -174,7 +179,7 @@ fn dogfood_zero_means_measured() {
         // the same repo root race each other's .kndo/cache in the parallel
         // test harness.
         Config {
-            use_cache: false,
+            cache: CacheLocation::Off,
             ..Config::default()
         },
     )
@@ -209,9 +214,9 @@ fn dogfood_zero_means_measured() {
 #[test]
 fn warm_and_cold_runs_are_byte_identical() {
     let p = fixture();
-    let cold = serialized(&run(p.root(), true, Threads::Auto));
-    let warm = serialized(&run(p.root(), true, Threads::Auto));
-    let uncached = serialized(&run(p.root(), false, Threads::Auto));
+    let cold = serialized(&run(p.root(), CacheLocation::InTree, Threads::Auto));
+    let warm = serialized(&run(p.root(), CacheLocation::InTree, Threads::Auto));
+    let uncached = serialized(&run(p.root(), CacheLocation::Off, Threads::Auto));
     assert_eq!(cold, warm, "second (warm) run must not change a byte");
     assert_eq!(
         cold, uncached,
@@ -226,7 +231,7 @@ fn warm_and_cold_runs_are_byte_identical() {
         "the cache actually engaged (one entry per file)"
     );
 
-    let snap = run(p.root(), true, Threads::Auto);
+    let snap = run(p.root(), CacheLocation::InTree, Threads::Auto);
     assert_eq!(
         snap.gate(&GatePolicy {
             fail_on: Some(kndo_contract::finding::Severity::Warning)
@@ -236,11 +241,76 @@ fn warm_and_cold_runs_are_byte_identical() {
     );
 }
 
+/// The diff modes' contract: two pinned trees of one project share the
+/// project's cache. Entries are content-addressed and keyed by everything that
+/// could change them, so a copy of a tree analyzed against the original's cache
+/// reads it — no new evidence entry for identical content, the graph patched
+/// rather than rebuilt — and reports the very bytes an uncached run reports;
+/// a changed file adds exactly its own entries.
+#[test]
+fn a_shared_cache_is_read_and_warmed_across_trees() {
+    let original = fixture();
+    run(original.root(), CacheLocation::InTree, Threads::Auto);
+    let shared = original.root().join(".kndo/cache");
+    let entries = || {
+        std::fs::read_dir(shared.join("evidence"))
+            .expect("evidence cache dir exists")
+            .count()
+    };
+    let warmed = entries();
+    assert!(warmed >= 3, "the original's run wrote one entry per file");
+
+    let copy = fixture();
+    let over_shared = run(
+        copy.root(),
+        CacheLocation::At(shared.clone()),
+        Threads::Auto,
+    );
+    assert_eq!(
+        entries(),
+        warmed,
+        "identical content over the shared cache adds no evidence entry"
+    );
+    assert_eq!(
+        over_shared.timings.extract,
+        std::time::Duration::ZERO,
+        "the copy's run patched the persisted graph: nothing left to extract"
+    );
+    assert_eq!(
+        serialized(&over_shared),
+        serialized(&run(copy.root(), CacheLocation::Off, Threads::Auto)),
+        "a shared cache may only change speed, never output"
+    );
+    assert!(
+        !copy.root().join(".kndo").exists(),
+        "nothing is written into the tree that borrowed the cache"
+    );
+
+    copy.file(
+        "lib.kmock",
+        "pub fn helper\npub fn unused_export\nfn private_dead\nfn extra\n",
+    );
+    let changed = run(
+        copy.root(),
+        CacheLocation::At(shared.clone()),
+        Threads::Auto,
+    );
+    assert_eq!(
+        entries(),
+        warmed + 1,
+        "a changed file adds exactly its own entry"
+    );
+    assert_eq!(
+        serialized(&changed),
+        serialized(&run(copy.root(), CacheLocation::Off, Threads::Auto)),
+    );
+}
+
 #[test]
 fn threads_one_and_many_are_byte_identical() {
     let p = fixture();
-    let one = serialized(&run(p.root(), false, Threads::Count(1)));
-    let many = serialized(&run(p.root(), false, Threads::Count(4)));
+    let one = serialized(&run(p.root(), CacheLocation::Off, Threads::Count(1)));
+    let many = serialized(&run(p.root(), CacheLocation::Off, Threads::Count(4)));
     assert_eq!(one, many);
 }
 
@@ -282,7 +352,7 @@ fn adapter_conformance_fixtures_are_byte_identical() {
                 dir.join("project"),
                 Config {
                     threads: Threads::Auto,
-                    use_cache: false,
+                    cache: CacheLocation::Off,
                     ..Config::default()
                 },
             )
@@ -319,7 +389,7 @@ fn incremental_and_full_assembly_are_byte_identical() {
     // set moved, so the patch declines and assembly rebuilds from cached evidence).
     // Every cached run must serialize identically to a from-scratch build.
     let p = fixture();
-    run(p.root(), true, Threads::Auto);
+    run(p.root(), CacheLocation::InTree, Threads::Auto);
     assert!(
         p.root().join(".kndo/cache/graph.bin").is_file(),
         "the graph cache engaged"
@@ -329,11 +399,11 @@ fn incremental_and_full_assembly_are_byte_identical() {
         "main.kmock",
         "root-file\nimport ./lib { helper }\ncall helper\nfn local_used\ncall local_used\nfn dead_one\nfn appended_dead\n# a note\n",
     );
-    let patched = serialized(&run(p.root(), true, Threads::Auto));
-    let from_scratch = serialized(&run(p.root(), false, Threads::Auto));
+    let patched = serialized(&run(p.root(), CacheLocation::InTree, Threads::Auto));
+    let from_scratch = serialized(&run(p.root(), CacheLocation::Off, Threads::Auto));
     assert_eq!(patched, from_scratch, "content-only change: patched ≡ full");
 
-    let snap = run(p.root(), true, Threads::Auto);
+    let snap = run(p.root(), CacheLocation::InTree, Threads::Auto);
     assert!(
         snap.findings
             .iter()
@@ -344,8 +414,8 @@ fn incremental_and_full_assembly_are_byte_identical() {
     );
 
     p.file("extra.kmock", "fn lonely\n");
-    let added = serialized(&run(p.root(), true, Threads::Auto));
-    let added_full = serialized(&run(p.root(), false, Threads::Auto));
+    let added = serialized(&run(p.root(), CacheLocation::InTree, Threads::Auto));
+    let added_full = serialized(&run(p.root(), CacheLocation::Off, Threads::Auto));
     assert_eq!(added, added_full, "added file: rebuilt ≡ full");
     assert!(
         added.0.contains("extra.kmock"),
@@ -353,8 +423,8 @@ fn incremental_and_full_assembly_are_byte_identical() {
     );
 
     std::fs::remove_file(p.root().join("orphan.kmock")).expect("delete orphan");
-    let removed = serialized(&run(p.root(), true, Threads::Auto));
-    let removed_full = serialized(&run(p.root(), false, Threads::Auto));
+    let removed = serialized(&run(p.root(), CacheLocation::InTree, Threads::Auto));
+    let removed_full = serialized(&run(p.root(), CacheLocation::Off, Threads::Auto));
     assert_eq!(removed, removed_full, "deleted file: rebuilt ≡ full");
     assert!(
         !removed.0.contains("orphan.kmock"),
@@ -396,7 +466,7 @@ fn builtin_conduct_proofs() {
     let baseline_then_plugins = |fixture: std::path::PathBuf| {
         let config = || Config {
             threads: Threads::Auto,
-            use_cache: false,
+            cache: CacheLocation::Off,
             ..Config::default()
         };
         let extraction_only: Vec<Box<dyn kndo::Extension>> = kndo::default_extensions()
@@ -684,7 +754,7 @@ fn extension_dependency_implication() {
         p.root(),
         Config {
             threads: Threads::Auto,
-            use_cache: false,
+            cache: CacheLocation::Off,
             ..Config::default()
         },
         extensions,
@@ -782,7 +852,7 @@ fn abi_compat_matrix() {
             p.root(),
             Config {
                 threads: Threads::Auto,
-                use_cache: false,
+                cache: CacheLocation::Off,
                 ..Config::default()
             },
             extensions,
@@ -1144,7 +1214,7 @@ fn query_contract_is_generated_and_pinned() {
     }
 
     let p = fixture();
-    let snapshot = run(p.root(), false, Threads::Auto);
+    let snapshot = run(p.root(), CacheLocation::Off, Threads::Auto);
 
     // A live response validates against the committed response schema.
     let live = snapshot.query(&Request {

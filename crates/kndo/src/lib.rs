@@ -16,10 +16,10 @@ pub use kndo_contract::vocab::{Category, Confidence, ProjectPath, Span, SubjectK
 pub use kndo_core::query;
 pub use kndo_core::{
     Abstention, AbstentionReason, AbstentionScope, Activation, ActivationRule, CONTENT_MAX_BYTES,
-    CONTENT_MAX_FILES, Categories, CategoryCount, ConductSeverity, ConductSink, ConductTarget,
-    Config, ContentView, Contribution, ExtensionRun, GatePolicy, Graph, GraphView, Health, Mode,
-    PhaseTimings, REPORT_SCHEMA, Refusal, Report, ReportDiagnostic, RuleDescriptor, RunInfo,
-    RunMode, RunOutcome, Session, Snapshot, SuppressedSummary, Threads, Universe,
+    CONTENT_MAX_FILES, CacheLocation, Categories, CategoryCount, ConductSeverity, ConductSink,
+    ConductTarget, Config, ContentView, Contribution, ExtensionRun, GatePolicy, Graph, GraphView,
+    Health, Mode, PhaseTimings, REPORT_SCHEMA, Refusal, Report, ReportDiagnostic, RuleDescriptor,
+    RunInfo, RunMode, RunOutcome, Session, Snapshot, SuppressedSummary, Threads, Universe,
     is_reserved_coordinate,
 };
 

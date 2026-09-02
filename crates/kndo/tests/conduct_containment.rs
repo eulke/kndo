@@ -5,9 +5,9 @@
 //! same suppression pass as first-party ones.
 
 use kndo::{
-    Activation, Category, ConductSeverity, ConductTarget, Confidence, Config, Extension,
-    ExtensionSpec, MutatesGraph, ProjectPath, RootKind, RunMode, Session, Snapshot, Subject,
-    Threads,
+    Activation, CacheLocation, Category, ConductSeverity, ConductTarget, Confidence, Config,
+    Extension, ExtensionSpec, MutatesGraph, ProjectPath, RootKind, RunMode, Session, Snapshot,
+    Subject, Threads,
 };
 use kndo_testkit::{MockAdapter, MockExtension, TempProject};
 
@@ -29,7 +29,7 @@ fn analyze(p: &TempProject, conduct: Vec<Box<dyn Extension>>) -> Snapshot {
         p.root(),
         Config {
             threads: Threads::Auto,
-            use_cache: false,
+            cache: CacheLocation::Off,
             ..Config::default()
         },
         extensions,
