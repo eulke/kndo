@@ -2,27 +2,27 @@
 
 [Introduction](introduction.md)
 
-- [Installation](install.md)
+# Using kndo
+
+- [Install](install.md)
 - [Getting started](getting-started.md)
-- [CLI reference](cli.md)
-- [Findings reference](rules.md)
-- [Health & coverage](health.md)
+- [The command line](cli.md)
+- [Findings](findings.md)
+- [Health and coverage](health.md)
 - [Configuration](configuration.md)
-- [Suppressions & baseline](suppressions.md)
-- [CI: the GitHub Action](ci.md)
-- [Graph navigation](navigation.md)
-- [For agents](agents.md)
-- [Plugins](plugins.md)
-  - [Writing a plugin](plugins/authoring.md)
-  - [kndo:coverage-*](plugins/coverage.md)
-  - [kndo:express](plugins/express.md)
-  - [kndo:info-plist](plugins/info-plist.md)
-  - [kndo:libsass-maven-plugin](plugins/libsass-maven-plugin.md)
-  - [kndo:nextjs](plugins/nextjs.md)
-  - [kndo:rkyv](plugins/rkyv.md)
-  - [kndo:serde](plugins/serde.md)
-  - [kndo:thymeleaf](plugins/thymeleaf.md)
-  - [kndo:uikit](plugins/uikit.md)
-  - [kndo:wasmtime](plugins/wasmtime.md)
+- [Suppressions and the baseline](suppressions.md)
+- [Continuous integration](ci.md)
+
+# Reading the graph
+
+- [Navigation](navigation.md)
+- [Agents](agents.md)
+
+# Extending kndo
+
 - [Languages](languages.md)
-- [FAQ](faq.md)
+- [Extensions](extensions.md)
+
+---
+
+[FAQ](faq.md)

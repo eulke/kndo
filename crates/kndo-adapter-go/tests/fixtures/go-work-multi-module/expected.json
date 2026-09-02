@@ -1,5 +1,120 @@
 {
+  "run": {
+    "schema": "kndo-v2/m6",
+    "mode": "full",
+    "files_discovered": 5,
+    "files_claimed": 2,
+    "extensions": [
+      {
+        "id": "kndo:go",
+        "files": 2,
+        "export_narrowing": "none",
+        "import_cycles": "tolerated",
+        "dependency_scoping": "unscoped",
+        "dependency_identity": "module-path"
+      }
+    ]
+  },
+  "health": {
+    "implicated": 1,
+    "subjects": 7,
+    "by_category": [
+      {
+        "category": "unused",
+        "findings": 1
+      }
+    ],
+    "by_package": [
+      {
+        "name": "example.com/a",
+        "manifest": "moda/go.mod",
+        "implicated": 1,
+        "subjects": 4
+      },
+      {
+        "name": "example.com/b",
+        "manifest": "modb/go.mod",
+        "implicated": 0,
+        "subjects": 3
+      }
+    ]
+  },
   "findings": [
-    { "category": "unused", "subject_kind": "function", "path": "moda/api.go", "symbol": "deadHelper" }
-  ]
+    {
+      "id": "kndo-e9e1113bff06",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "moda/api.go",
+        "selector": {
+          "Free": "deadHelper"
+        },
+        "span": {
+          "start": 397,
+          "end": 417
+        }
+      },
+      "lines": {
+        "start": 15,
+        "end": 15
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    }
+  ],
+  "fixed": [],
+  "baselined": 0,
+  "abstained": [
+    {
+      "category": "test-only",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    },
+    {
+      "category": "untested",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    },
+    {
+      "category": "crap",
+      "reason": "no-coverage-ingested",
+      "scope": "whole-run"
+    }
+  ],
+  "suppressed": {
+    "total": 0,
+    "by_category": []
+  },
+  "plugins": [
+    {
+      "coordinate": "kndo:coverage-lcov",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-cobertura",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-jacoco",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-go",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    }
+  ],
+  "diagnostics": []
 }

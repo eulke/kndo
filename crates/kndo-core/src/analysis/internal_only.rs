@@ -1,1059 +1,263 @@
-//! `internal-only` — declared visibility wider than any real usage requires (group
-//! `waste`): the "declared > required" half of the visibility-mismatch pair (`private-type-leak`
-//! is the other direction). "The analysis computes the **tightest sufficient visibility** — the
-//! lowest ladder level that still covers the origin of every incoming reference. Declared above
-//! it ⇒ finding."
+//! Declared wider than it is used: a declaration whose every use sits inside
+//! its OWN file could take the language's narrower visibility. Two rungs, one
+//! claim, each gated by what the claiming adapter declared:
 //!
-//! Generalized over the adapter-declared visibility ladder: each incoming
-//! reference's origin is classified into the narrowest [`VisibilityScope`] relating it to the
-//! declaring file (same file → `File`, same `FileNode::unit` → `Unit`, same package →
-//! `Package`, else `Public`); the **required** scope is the widest of those over the strong
-//! (≥ `Probable`) references. The tightest sufficient rung is then the lowest ladder index
-//! whose scope covers it — if that rung's scope is strictly narrower than the declared rung's,
-//! the finding fires and the remediation names the lower rung's *label* (the language's own
-//! word). Two rungs sharing a scope never accuse each other (Java
-//! `protected`/`public` both map to `Public` by the conservative-mapping rule — no evidence
-//! could distinguish them). A language with no ladder, an empty ladder (CSS/JSON), or a
-//! declared level the ladder doesn't cover is skipped outright — degrade toward silence.
+//! - a `Scoped` declaration, for scope tokens listed as narrowable — Java can
+//!   demote "package" to private, Go has nothing below "package", so identical
+//!   evidence is advice in one language and noise in the other. Disqualified by
+//!   any use across its ENUMERATED region (the only files that can legally
+//!   resolve the name), pooling reachable files.
+//! - an `Exported` declaration, where the adapter declared narrowing
+//!   expressible ([`kndo_contract::extension::ExportNarrowing`]) — TypeScript
+//!   can drop `export` and tsc turns any missed use into a compile error. An
+//!   Exported name is nameable from ANYWHERE, so the disqualifier is total: a
+//!   binding import, or a same-named reference in any other claimed file —
+//!   reachable or not, because an unreachable file still compiles against the
+//!   export it spells (vite's `__tests_dts__` type-tests proved that vice).
+//!   A whole-file-rooted file is exempt: an entry's exports are the outside
+//!   world's surface, and a test's are its runner's.
 //!
-//! Exemptions: a symbol that is itself a root target (library-mode public API, a test
-//! file's exported fixtures, a tooling config's exports — the promotion, already
-//! wired in `graph::assemble`'s phase 3a) is externally consumed by definition, regardless of
-//! whether any in-graph reference reaches it — never a candidate. Same for a symbol a plugin's
-//! `annotate_symbols` marked externally consumed (`ProjectGraph::
-//! is_externally_consumed`) — FFI, serialization, a public SDK surface the graph itself has no
-//! edge for. A symbol with *zero* incoming
-//! references at all, or one that's [`Reachability::Unreachable`] outright (dead code can have a
-//! same-file self-reference and nothing else — a same-file `console.log(helper())` in a file
-//! nothing imports), is `unused`'s verdict, not this one: suggesting "narrow the visibility" on
-//! code already flagged for deletion is redundant noise (same rollup-taxonomy reasoning
-//! `unused.rs` itself documents for skipping symbols in an already-unreachable file).
-//!
-//! Confidence: `Certain` when the strong references alone define the verdict; if a
-//! `Possible`-confidence reference (the wildcard/dynamic tier — unreliable either
-//! way) originates *wider* than the strong-evidence requirement, the verdict still fires but
-//! demoted to `Possible`, mirroring "confidence demotes through wildcard edges like every
-//! reachability verdict."
+//! `Probable`/`Info`, derived from this analysis's own evidence: the residuals
+//! below `Certain` are reflection and dynamic access (out of static scope
+//! everywhere in kndo), name-pool collisions, and — for the Exported rung —
+//! importers in files no adapter claims. `unused` outranks it: a declaration
+//! nothing uses at all is dead, not demotable.
 
-use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
+use super::{Analysis, AnalysisContext, RunContext};
+use kndo_contract::evidence::{ImportShape, Reach, RootTarget, SymbolKind};
+use kndo_contract::finding::{Finding, Severity};
+use kndo_contract::subject::{Subject, SymbolSelector};
+use kndo_contract::vocab::{Category, Confidence};
+use std::collections::{BTreeMap, BTreeSet};
 
-use crate::adapter::VisibilityScope;
-use crate::analysis::reachability::{Reachability, ReachabilityMap};
-use crate::analysis::{finding_id, FindingIdParts};
-use crate::engine::{Finding, Location, Severity};
-use crate::graph::ProjectGraph;
-use crate::vocab::{
-    Category, Confidence, EdgeKind, FileId, FileOrigin, Group, NodeRef, SubjectKind, SymbolId,
-};
-use smol_str::SmolStr;
+pub struct InternalOnly;
 
-fn origin_file(graph: &ProjectGraph, node: NodeRef) -> FileId {
-    match node {
-        NodeRef::File(f) => f,
-        NodeRef::Symbol(s) => graph.symbols[s.0 as usize].file,
-    }
-}
-
-/// The narrowest scope that relates `origin` to the declaring file `decl` — what a reference
-/// from `origin` *requires* the declaration's visibility to at least be. Scopes nest
-/// (File ⊂ Unit ⊂ Module ⊂ Package ⊂ Public), so this is a straight first-match walk.
-fn required_scope(
-    graph: &ProjectGraph,
-    decl: FileId,
-    origin: FileId,
-    unit_parents: &HashMap<SmolStr, SmolStr>,
-) -> VisibilityScope {
-    if decl == origin {
-        return VisibilityScope::File;
-    }
-    let decl_file = &graph.files[decl.0 as usize];
-    let origin_file = &graph.files[origin.0 as usize];
-    if let (Some(a), Some(b)) = (&decl_file.unit, &origin_file.unit) {
-        if a == b {
-            return VisibilityScope::Unit;
-        }
-        // A use from somewhere BELOW the declaring unit needs the subtree, not the whole
-        // package — otherwise a `pub(super)` item used only where `pub(super)` reaches would
-        // read as needing `pub(crate)` and its available narrowing would go unsaid.
-        if crate::graph::unit_ancestry_contains(b, a, unit_parents) {
-            return VisibilityScope::Module;
-        }
-    }
-    if decl_file.package == origin_file.package {
-        return VisibilityScope::Package;
-    }
-    VisibilityScope::Public
-}
-
-pub fn find_internal_only(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Finding> {
-    let root_targets: HashSet<NodeRef> = graph
-        .edges
-        .iter()
-        .filter_map(|e| match e.kind {
-            EdgeKind::Root { target, .. } => Some(target),
-            _ => None,
-        })
-        .collect();
-
-    // A reference attributed to a macro symbol executes at the macro's *expansion sites*,
-    // not where the template is written — origins the graph cannot enumerate (a
-    // `macro_rules!` body calling a `pub(crate)` fn expands wherever the macro is invoked).
-    // Such a use requires the widest scope: degrade toward silence, never toward accusation
-    //.
-    let from_macro = |from: NodeRef| match from {
-        NodeRef::Symbol(s) => graph.symbols[s.0 as usize].kind == crate::vocab::SymbolKind::Macro,
-        NodeRef::File(_) => false,
-    };
-    let mut refs_by_target: HashMap<SymbolId, Vec<(FileId, Confidence, bool)>> = HashMap::default();
-    for edge in &graph.edges {
-        if let EdgeKind::References { from, to, .. } = edge.kind {
-            refs_by_target.entry(to).or_default().push((
-                origin_file(graph, from),
-                edge.confidence,
-                from_macro(from),
-            ));
-        }
+impl Analysis for InternalOnly {
+    fn id(&self) -> &'static str {
+        "internal-only"
     }
 
-    let unit_parents = crate::graph::unit_parent_index(&graph.files);
-    let mut findings = Vec::new();
-    for (index, symbol) in graph.symbols.iter().enumerate() {
-        let file = &graph.files[symbol.file.0 as usize];
-        let Some(class) = file.class else {
-            continue; // unclaimed — out of scope, not a verdict
-        };
-        if matches!(class.origin, FileOrigin::Generated | FileOrigin::Vendored) {
-            continue;
-        }
-        let Some(ladder) = file
-            .language
-            .as_deref()
-            .and_then(|lang| graph.ladder_for(lang))
-        else {
-            continue; // no ladder declared — visibility semantics unknown, stay silent
-        };
-        let declared_index = symbol.visibility.0 as usize;
-        let Some(declared) = ladder.get(declared_index) else {
-            continue; // level the ladder doesn't cover (empty ladder included) — stay silent
-        };
-        if declared_index == 0 {
-            continue; // already the tightest rung there is — nothing to narrow
-        }
+    fn category(&self) -> Category {
+        Category::INTERNAL_ONLY
+    }
 
-        if symbol.kind == crate::vocab::SymbolKind::Constructor {
-            continue; // a constructor's only in-graph reference is the synthetic
-                      // container→constructor liveness edge (graph.rs) — same-file by
-                      // construction, so any verdict here would accuse kndo's own modeling,
-                      // not the code; real call sites reference the type, which is measured
-        }
-        if symbol.kind == crate::vocab::SymbolKind::Macro {
-            continue; // an expansion symbol's invocations resolve textually (SymbolKind::Macro
-                      // contract), not through the module ladder the graph measures — the
-                      // observed use scope is structurally underestimated, so any narrowing
-                      // advice would be a guess
-        }
-        if symbol.visibility_inherited {
-            continue; // no visibility of its own (an enum's variants) — the level belongs to
-                      // the container, which is measured separately; advice here would name a
-                      // keyword the language cannot even put on this declaration
-        }
+    fn abstains(&self, run: &RunContext<'_>) -> Option<super::AbstentionReason> {
+        // Same posture as unused: a rootless graph judges nothing.
+        let any_root = run.graph.files.iter().any(|f| f.is_rooted());
+        (!run.graph.files.is_empty() && !any_root)
+            .then_some(super::AbstentionReason::NoRootsAnywhere)
+    }
 
-        let symbol_id = SymbolId(index as u32);
-        if root_targets.contains(&NodeRef::Symbol(symbol_id)) {
-            continue; // roots are externally consumed by definition (the exemption)
-        }
-        if graph.is_externally_consumed(symbol_id) {
-            continue; // a plugin marked it externally consumed (the annotate_symbols
-                      // exemption) — a narrower visibility is real advice for the
-                      // language, but not for whatever the plugin says reaches this from outside
-                      // the graph (serialization, FFI, a public SDK surface)
-        }
-        if reach.get(NodeRef::Symbol(symbol_id)).0 == Reachability::Unreachable {
-            continue; // dead code — `unused`'s verdict, not this one
-        }
+    fn run(&self, cx: &AnalysisContext<'_>) -> Vec<Finding> {
+        let g = cx.graph();
+        let reachable = |i: usize| cx.run.reach.any(i);
 
-        let Some(refs) = refs_by_target.get(&symbol_id) else {
-            continue; // zero incoming references at all — `unused`'s verdict, not this one
-        };
-        // Strong (≥ Probable) references define what the declaration *must* cover; a weak
-        // (Possible) reference from wider than that doesn't widen the requirement — it
-        // demotes the verdict's confidence instead.
-        let origin_scope = |f: FileId, via_macro: bool| {
-            if via_macro {
-                VisibilityScope::Public
-            } else {
-                required_scope(graph, symbol.file, f, &unit_parents)
+        // Names bound out of each file, and names referenced OUTSIDE each file —
+        // one pass; a name in either set is used beyond its declaration site.
+        // Two sets: the Scoped rung pools reachable importers (its region is
+        // enumerated); the Exported rung pools EVERY importer, because even an
+        // unreachable file compiles against what it imports.
+        let mut bound_names: BTreeSet<(u32, &str)> = BTreeSet::new();
+        let mut bound_all: BTreeSet<(u32, &str)> = BTreeSet::new();
+        let mut per_file_refs: Vec<BTreeSet<&str>> = Vec::with_capacity(g.files.len());
+        for f in &g.files {
+            per_file_refs.push(
+                f.evidence
+                    .references
+                    .iter()
+                    .map(|r| r.name.as_str())
+                    .collect(),
+            );
+        }
+        // How many claimed files spell each name at all — the Exported rung's
+        // total-absence check: given a use in its own file, a count of two or
+        // more means someone else names it too.
+        let mut name_files: BTreeMap<&str, u32> = BTreeMap::new();
+        for refs in &per_file_refs {
+            for name in refs {
+                *name_files.entry(name).or_insert(0) += 1;
             }
-        };
-        let required = refs
-            .iter()
-            .filter(|&&(_, c, _)| c >= Confidence::Probable)
-            .map(|&(f, _, m)| origin_scope(f, m))
-            .max()
-            .unwrap_or(VisibilityScope::File);
-        let weak_wider = refs
-            .iter()
-            .filter(|&&(_, c, _)| c < Confidence::Probable)
-            .any(|&(f, _, m)| origin_scope(f, m) > required);
+        }
+        for (i, f) in g.files.iter().enumerate() {
+            let from_reachable = reachable(i);
+            for (import, targets) in f.evidence.imports.iter().zip(&f.import_targets) {
+                for &t in targets {
+                    match &import.shape {
+                        ImportShape::Bindings(bs)
+                        | ImportShape::Reexport(bs)
+                        | ImportShape::TypeOnly(bs) => {
+                            for b in bs {
+                                bound_all.insert((t, b.imported.as_str()));
+                                if from_reachable {
+                                    bound_names.insert((t, b.imported.as_str()));
+                                }
+                            }
+                        }
+                        // A namespace/glob importer may use anything: treat the
+                        // whole target as used from outside.
+                        _ => {
+                            bound_all.insert((t, ""));
+                            if from_reachable {
+                                bound_names.insert((t, ""));
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
-        // A nested-scope declaration lives in a scope unit INSIDE its file, and the core
-        // cannot see where that unit's subtree ends — `required_scope` reasons about files.
-        // Every scope up to and including `Module` is derived from file/unit co-location, so
-        // for such a declaration none of them is evidence: two references in one file can sit
-        // in different inner units, and a reference the file-level walk calls "inside the
-        // declaring module's subtree" may be outside the inner one. Only `Package` and wider
-        // survive, because nesting inside a file cannot change which package a declaration is
-        // in. So the floor moves to the first rung strictly wider than `Module`.
-        //
-        // Concretely, the false positive this prevents: an item inside `mod activation { … }`
-        // used from the enclosing file's top level and from a sibling module. File-derived
-        // evidence read that as "its own module subtree" and recommended making it private —
-        // which does not compile, because a parent module cannot see a child's private items.
-        // Scopes, not indices: whatever the ladder's rung layout, the rule is the same.
-        let floor = if symbol.nested_scope && required <= VisibilityScope::Module {
-            let Some(wider) = ladder
+        let mut out = Vec::new();
+        for (i, f) in g.files.iter().enumerate() {
+            if !cx.measured[i] || !reachable(i) {
+                continue;
+            }
+            let narrowable: &[smol_str::SmolStr] = cx
+                .run
+                .narrowables
                 .iter()
-                .map(|rung| rung.scope)
-                .find(|&s| s > VisibilityScope::Module)
-            else {
-                continue; // no rung wider than the file's own module — nothing certifiable
+                .find(|(coord, _)| *coord == f.adapter)
+                .map(|(_, tokens)| tokens.as_slice())
+                .unwrap_or(&[]);
+            let export_narrowable = cx.run.export_narrowables.contains(&f.adapter);
+            if narrowable.is_empty() && !export_narrowable {
+                continue;
+            }
+            // The whole file was namespace-imported: anything here may be used.
+            // The Exported rung honors even an unreachable such importer.
+            let scoped_open = !bound_names.contains(&(i as u32, ""));
+            let exported_open = !bound_all.contains(&(i as u32, ""));
+            // An entry, test, or tooling file: its exports ARE an outside
+            // surface (a manifest's consumers, a runner), so the Exported rung
+            // stays silent for the whole file.
+            let whole_file_rooted = f
+                .evidence
+                .roots
+                .iter()
+                .chain(&f.anchored)
+                .any(|r| matches!(r.target, RootTarget::WholeFile));
+            let rooted: BTreeSet<usize> = f
+                .evidence
+                .roots
+                .iter()
+                .chain(&f.anchored)
+                .filter_map(|r| match &r.target {
+                    RootTarget::Declaration(id) => Some(id.index()),
+                    _ => None,
+                })
+                .collect();
+            let region_ids = |scope: &str| -> Option<&[u32]> {
+                f.scoped_regions
+                    .binary_search_by(|(t, _)| t.as_str().cmp(scope))
+                    .ok()
+                    .map(|ix| f.scoped_regions[ix].1.as_slice())
             };
-            wider
-        } else {
-            required
-        };
-        // The tightest sufficient rung: lowest index whose scope covers every strong origin.
-        let Some((tightest_index, tightest)) = ladder
-            .iter()
-            .enumerate()
-            .find(|(_, rung)| rung.scope >= floor)
-        else {
-            continue; // no rung covers the usage — nothing narrower to suggest
-        };
-        if tightest_index >= declared_index || tightest.scope >= declared.scope {
-            continue; // declared is already tightest, or only same-scope rungs below it
-        }
-
-        let confidence = if weak_wider {
-            Confidence::Possible
-        } else {
-            Confidence::Certain
-        };
-        let usage = match required {
-            VisibilityScope::File => "its own file",
-            VisibilityScope::Unit => "its own unit",
-            VisibilityScope::Module => "its own module subtree",
-            VisibilityScope::Package => "its own package",
-            VisibilityScope::Public => "the project", // unreachable: Public rungs cover it
-        };
-        let path = file.path.0.as_str();
-        let facet = symbol.kind.facet();
-        let qualified = symbol.qualified_name();
-        findings.push(Finding {
-            advisory: false,
-            id: finding_id(FindingIdParts {
-                category: &Category::INTERNAL_ONLY,
-                subject_kind: &SubjectKind::new(facet),
-                path,
-                symbol_path: &qualified,
-                discriminator: "",
-            }),
-            category: Category::INTERNAL_ONLY,
-            group: Group::Waste,
-            subject_kind: SubjectKind::new(facet),
-            severity: Severity::Info, // info by default
-            confidence,
-            // Two sentences, because the two evidence states make different true claims: with
-            // `weak_wider` the graph HOLDS matches pointing outside `usage`, just not confident
-            // ones, so "only used within its own file" would be a claim this analysis knows to
-            // be contradicted — the message says so instead.
-            message: if weak_wider {
-                format!(
-                    "{path}#{qualified} is declared {} and every confidently resolved use is within {usage}, but weaker matches point outside it — {} would suffice for this {facet} only if those are not real uses",
-                    declared.label, tightest.label
-                )
-            } else {
-                format!(
-                    "{path}#{qualified} is declared {} but only used within {usage} — {} would suffice for this {facet}",
-                    declared.label, tightest.label
-                )
-            },
-            location: Location {
-                path: Some(file.path.clone()),
-                range: Some(symbol.span),
-                symbol: Some(qualified.clone()),
-                package: graph.package_name(file.package).map(str::to_string),
-            },
-            related: Vec::new(),
-            rolled_up: None,
-            sources: Vec::new(),
-            delta: None,
-            delta_origin: None,
-        });
-    }
-    findings
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::adapter::{ProjectPath, VisibilityLevel};
-    use crate::graph::{FileNode, ProjectGraph, SymbolNode};
-    use crate::vocab::{
-        Edge, FileClass, FileOrigin, FileRole, Provenance, RefKind, RootKind, SymbolKind,
-    };
-    use smol_str::SmolStr;
-
-    fn file(path: &str) -> FileNode {
-        FileNode {
-            path: ProjectPath(SmolStr::new(path)),
-            content_hash: [0; 32],
-            language: Some(SmolStr::new("mock")),
-            class: Some(FileClass {
-                role: FileRole::Production,
-                origin: FileOrigin::Authored,
-            }),
-            package: crate::vocab::PackageId(0),
-            unit: None,
-            unit_parent: None,
-            test_spans: Vec::new(),
-            string_call_sites: Vec::new(),
-            string_attr_args: Vec::new(),
-        }
-    }
-
-    fn symbol(file: FileId, name: &str, visibility: u8) -> SymbolNode {
-        SymbolNode {
-            file,
-            name: SmolStr::new(name),
-            kind: SymbolKind::Function,
-            span: Default::default(),
-            exported: visibility > 0,
-            visibility: VisibilityLevel(visibility),
-            member_of: None,
-            signature_span: None,
-            implicitly_invoked: false,
-            nested_scope: false,
-            visibility_inherited: false,
-            visible_in_unit: None,
-            implements: None,
-            markers: Vec::new(),
-        }
-    }
-
-    fn edge(kind: EdgeKind, confidence: Confidence) -> Edge {
-        Edge {
-            owner: crate::vocab::FileId(0),
-            kind,
-            confidence,
-            source: Provenance::Adapter(SmolStr::new("mock")),
-            span: None,
-        }
-    }
-
-    #[test]
-    fn exported_symbol_used_only_in_its_own_file_is_internal_only() {
-        let files = vec![file("src/a.ts")];
-        let symbols = vec![symbol(FileId(0), "helper", 1)];
-        let edges = vec![
-            edge(
-                EdgeKind::Root {
-                    kind: RootKind::Production,
-                    target: NodeRef::File(FileId(0)),
-                },
-                Confidence::Certain,
-            ),
-            edge(
-                EdgeKind::References {
-                    from: NodeRef::File(FileId(0)),
-                    to: SymbolId(0),
-                    kind: RefKind::Call,
-                },
-                Confidence::Certain,
-            ),
-        ];
-        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
-        let reach = crate::analysis::reachability::compute(&graph);
-        let findings = find_internal_only(&graph, &reach);
-        assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].category, "internal-only");
-        assert_eq!(findings[0].group, crate::vocab::Group::Waste);
-        assert_eq!(findings[0].confidence, Confidence::Certain);
-        assert!(findings[0].message.contains("src/a.ts#helper"));
-    }
-
-    #[test]
-    fn exported_symbol_referenced_cross_file_is_not_internal_only() {
-        let files = vec![file("src/a.ts"), file("src/b.ts")];
-        let symbols = vec![symbol(FileId(0), "helper", 1)];
-        let edges = vec![edge(
-            EdgeKind::References {
-                from: NodeRef::File(FileId(1)),
-                to: SymbolId(0),
-                kind: RefKind::Call,
-            },
-            Confidence::Certain,
-        )];
-        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
-        let reach = crate::analysis::reachability::compute(&graph);
-        assert!(find_internal_only(&graph, &reach).is_empty());
-    }
-
-    #[test]
-    fn dead_code_with_a_same_file_self_reference_is_exempt_not_double_flagged() {
-        // No root anywhere — the whole graph is unreachable. `helper` still has an incoming
-        // same-file reference (e.g. `console.log(helper())` in a file nothing imports), which
-        // without the reachability gate would read as internal-only — redundant with `unused`
-        // already covering the same dead code.
-        let files = vec![file("src/a.ts")];
-        let symbols = vec![symbol(FileId(0), "helper", 1)];
-        let edges = vec![edge(
-            EdgeKind::References {
-                from: NodeRef::File(FileId(0)),
-                to: SymbolId(0),
-                kind: RefKind::Call,
-            },
-            Confidence::Certain,
-        )];
-        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
-        let reach = crate::analysis::reachability::compute(&graph);
-        assert!(find_internal_only(&graph, &reach).is_empty());
-    }
-
-    #[test]
-    fn unexported_symbol_is_already_tightest_and_never_a_candidate() {
-        let files = vec![file("src/a.ts")];
-        let symbols = vec![symbol(FileId(0), "helper", 0)];
-        let edges = vec![edge(
-            EdgeKind::References {
-                from: NodeRef::File(FileId(0)),
-                to: SymbolId(0),
-                kind: RefKind::Call,
-            },
-            Confidence::Certain,
-        )];
-        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
-        let reach = crate::analysis::reachability::compute(&graph);
-        assert!(find_internal_only(&graph, &reach).is_empty());
-    }
-
-    #[test]
-    fn zero_references_is_unused_s_verdict_not_this_one() {
-        let files = vec![file("src/a.ts")];
-        let symbols = vec![symbol(FileId(0), "helper", 1)];
-        let graph = ProjectGraph::for_test(files, symbols, vec![], vec![]);
-        let reach = crate::analysis::reachability::compute(&graph);
-        assert!(find_internal_only(&graph, &reach).is_empty());
-    }
-
-    #[test]
-    fn a_root_symbol_is_exempt_even_if_only_self_file_referenced() {
-        let files = vec![file("src/a.ts")];
-        let symbols = vec![symbol(FileId(0), "publicApi", 1)];
-        let edges = vec![
-            edge(
-                EdgeKind::Root {
-                    kind: RootKind::Production,
-                    target: NodeRef::Symbol(SymbolId(0)),
-                },
-                Confidence::Certain,
-            ),
-            edge(
-                EdgeKind::References {
-                    from: NodeRef::File(FileId(0)),
-                    to: SymbolId(0),
-                    kind: RefKind::Call,
-                },
-                Confidence::Certain,
-            ),
-        ];
-        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
-        let reach = crate::analysis::reachability::compute(&graph);
-        assert!(find_internal_only(&graph, &reach).is_empty());
-    }
-
-    #[test]
-    fn a_root_symbol_with_no_references_at_all_is_still_exempt() {
-        // Library-mode promotion: nothing in the graph calls it, but it's the package's public
-        // API surface — externally consumed by definition, never a candidate for either verdict.
-        let files = vec![file("src/a.ts")];
-        let symbols = vec![symbol(FileId(0), "publicApi", 1)];
-        let edges = vec![edge(
-            EdgeKind::Root {
-                kind: RootKind::Production,
-                target: NodeRef::Symbol(SymbolId(0)),
-            },
-            Confidence::Certain,
-        )];
-        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
-        let reach = crate::analysis::reachability::compute(&graph);
-        assert!(find_internal_only(&graph, &reach).is_empty());
-    }
-
-    #[test]
-    fn only_possible_confidence_cross_file_reference_demotes_not_exempts() {
-        let files = vec![file("src/a.ts"), file("src/b.ts")];
-        let symbols = vec![symbol(FileId(0), "helper", 1)];
-        let edges = vec![
-            edge(
-                EdgeKind::Root {
-                    kind: RootKind::Production,
-                    target: NodeRef::File(FileId(1)),
-                },
-                Confidence::Certain,
-            ),
-            edge(
-                EdgeKind::References {
-                    from: NodeRef::File(FileId(1)),
-                    to: SymbolId(0),
-                    kind: RefKind::Call,
-                },
-                Confidence::Possible,
-            ),
-        ];
-        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
-        let reach = crate::analysis::reachability::compute(&graph);
-        let findings = find_internal_only(&graph, &reach);
-        assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].confidence, Confidence::Possible);
-        // The tier and the prose have to agree: a cross-file match EXISTS in the graph, so
-        // the message must not claim the symbol is used only in its own file.
-        assert!(
-            !findings[0].message.contains("only used within"),
-            "weak-evidence verdict still borrowed the certain tier's words: {}",
-            findings[0].message
-        );
-        assert!(
-            findings[0]
-                .message
-                .contains("weaker matches point outside it"),
-            "{}",
-            findings[0].message
-        );
-    }
-
-    #[test]
-    fn plugin_annotated_externally_consumed_symbol_is_exempt() {
-        // The file (not the symbol itself) is the root, and the only reference is a same-file,
-        // Certain-confidence call — real enough evidence to fire "should be private" on its own
-        // (asserted first, below). A plugin's `annotate_symbols` marking the
-        // symbol externally consumed must suppress it exactly like a root target would.
-        let files = vec![file("src/a.ts")];
-        let symbols = vec![symbol(FileId(0), "helper", 1)];
-        let edges = vec![
-            edge(
-                EdgeKind::Root {
-                    kind: RootKind::Production,
-                    target: NodeRef::File(FileId(0)),
-                },
-                Confidence::Certain,
-            ),
-            edge(
-                EdgeKind::References {
-                    from: NodeRef::File(FileId(0)),
-                    to: SymbolId(0),
-                    kind: RefKind::Call,
-                },
-                Confidence::Certain,
-            ),
-        ];
-        let graph = ProjectGraph::for_test(files.clone(), symbols.clone(), vec![], edges.clone());
-        let reach = crate::analysis::reachability::compute(&graph);
-        assert_eq!(find_internal_only(&graph, &reach).len(), 1);
-
-        let annotated = ProjectGraph::for_test(files, symbols, vec![], edges)
-            .with_externally_consumed(vec![SymbolId(0)]);
-        let reach = crate::analysis::reachability::compute(&annotated);
-        assert!(find_internal_only(&annotated, &reach).is_empty());
-    }
-
-    #[test]
-    fn reference_from_within_another_symbol_resolves_to_that_symbol_s_file() {
-        // The referencing edge's `from` is a Symbol, not a File — origin_file must resolve it
-        // through the symbol's own `file` field, same cross-file logic either way.
-        let files = vec![file("src/a.ts"), file("src/b.ts")];
-        let symbols = vec![
-            symbol(FileId(0), "helper", 1),
-            symbol(FileId(1), "caller", 0),
-        ];
-        let edges = vec![edge(
-            EdgeKind::References {
-                from: NodeRef::Symbol(SymbolId(1)),
-                to: SymbolId(0),
-                kind: RefKind::Call,
-            },
-            Confidence::Certain,
-        )];
-        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
-        let reach = crate::analysis::reachability::compute(&graph);
-        assert!(find_internal_only(&graph, &reach).is_empty());
-    }
-
-    #[test]
-    fn generated_origin_is_exempt() {
-        let files = vec![FileNode {
-            path: ProjectPath(SmolStr::new("dist/a.ts")),
-            content_hash: [0; 32],
-            language: Some(SmolStr::new("mock")),
-            class: Some(FileClass {
-                role: FileRole::Production,
-                origin: FileOrigin::Generated,
-            }),
-            package: crate::vocab::PackageId(0),
-            unit: None,
-            unit_parent: None,
-            test_spans: Vec::new(),
-            string_call_sites: Vec::new(),
-            string_attr_args: Vec::new(),
-        }];
-        let symbols = vec![symbol(FileId(0), "helper", 1)];
-        let edges = vec![edge(
-            EdgeKind::References {
-                from: NodeRef::File(FileId(0)),
-                to: SymbolId(0),
-                kind: RefKind::Call,
-            },
-            Confidence::Certain,
-        )];
-        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
-        let reach = crate::analysis::reachability::compute(&graph);
-        assert!(find_internal_only(&graph, &reach).is_empty());
-    }
-
-    #[test]
-    fn finding_id_is_stable_across_runs() {
-        let files = vec![file("src/a.ts")];
-        let symbols = vec![symbol(FileId(0), "helper", 1)];
-        let edges = vec![
-            edge(
-                EdgeKind::Root {
-                    kind: RootKind::Production,
-                    target: NodeRef::File(FileId(0)),
-                },
-                Confidence::Certain,
-            ),
-            edge(
-                EdgeKind::References {
-                    from: NodeRef::File(FileId(0)),
-                    to: SymbolId(0),
-                    kind: RefKind::Call,
-                },
-                Confidence::Certain,
-            ),
-        ];
-        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
-        let reach = crate::analysis::reachability::compute(&graph);
-        let a = find_internal_only(&graph, &reach);
-        let b = find_internal_only(&graph, &reach);
-        assert_eq!(a[0].id, b[0].id);
-    }
-
-    // ------------------------------------------ ladder generalization
-
-    fn file_in_unit(path: &str, unit: &str) -> FileNode {
-        let mut f = file(path);
-        f.unit = Some(SmolStr::new(unit));
-        f
-    }
-
-    fn root_and_ref(root_file: FileId, from: FileId, to: SymbolId) -> Vec<Edge> {
-        vec![
-            edge(
-                EdgeKind::Root {
-                    kind: RootKind::Production,
-                    target: NodeRef::File(root_file),
-                },
-                Confidence::Certain,
-            ),
-            edge(
-                EdgeKind::References {
-                    from: NodeRef::File(from),
-                    to,
-                    kind: RefKind::Call,
-                },
-                Confidence::Certain,
-            ),
-        ]
-    }
-
-    #[test]
-    fn exported_symbol_used_only_by_same_unit_siblings_is_internal_only() {
-        // The Go under-reporting the ladder prevents: without it, cross-file evidence would
-        // justify any exported level; with the ladder, a same-unit-only use narrows to the
-        // Unit rung ("could be unexported").
-        let files = vec![
-            file_in_unit("pkg/a.go2", "pkg#p"),
-            file_in_unit("pkg/b.go2", "pkg#p"),
-        ];
-        let symbols = vec![symbol(FileId(0), "Helper", 1)];
-        let edges = root_and_ref(FileId(1), FileId(1), SymbolId(0));
-        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
-        let reach = crate::analysis::reachability::compute(&graph);
-        let findings = find_internal_only(&graph, &reach);
-        assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].confidence, Confidence::Certain);
-        assert!(
-            findings[0].message.contains("private would suffice"),
-            "remediation must name the lower rung's label: {}",
-            findings[0].message
-        );
-    }
-
-    #[test]
-    fn cross_package_use_needs_the_widest_rung_and_is_not_flagged() {
-        // Mock ladder is [Unit, Public]: a strong reference from another package requires
-        // Package scope, and the lowest covering rung is Public — exactly the declared level.
-        let mut f0 = file("a/x.ts");
-        f0.package = crate::vocab::PackageId(0);
-        let mut f1 = file("b/y.ts");
-        f1.package = crate::vocab::PackageId(1);
-        let symbols = vec![symbol(FileId(0), "helper", 1)];
-        let edges = root_and_ref(FileId(1), FileId(1), SymbolId(0));
-        let graph =
-            ProjectGraph::for_test(vec![f0, f1], symbols, vec![], edges).with_packages(vec![
-                crate::graph::PackageNode {
-                    workspace_entry: None,
-                    targets: Vec::new(),
-                    executables: Vec::new(),
-                    manifest: None,
-                    name: None,
-                    private: false,
-                    declares_surface: false,
-                    surface: Vec::new(),
-                    resolves_dependency_usage: true,
-                    manifest_claim_languages: Vec::new(),
-                },
-                crate::graph::PackageNode {
-                    workspace_entry: None,
-                    targets: Vec::new(),
-                    executables: Vec::new(),
-                    manifest: None,
-                    name: None,
-                    private: false,
-                    declares_surface: false,
-                    surface: Vec::new(),
-                    resolves_dependency_usage: true,
-                    manifest_claim_languages: Vec::new(),
-                },
-            ]);
-        let reach = crate::analysis::reachability::compute(&graph);
-        assert!(find_internal_only(&graph, &reach).is_empty());
-    }
-
-    #[test]
-    fn a_language_with_no_declared_ladder_is_skipped() {
-        let files = vec![file("src/a.ts")];
-        let symbols = vec![symbol(FileId(0), "helper", 1)];
-        let edges = root_and_ref(FileId(0), FileId(0), SymbolId(0));
-        let graph =
-            ProjectGraph::for_test(files, symbols, vec![], edges).with_visibility_ladders(vec![]);
-        let reach = crate::analysis::reachability::compute(&graph);
-        assert!(find_internal_only(&graph, &reach).is_empty());
-    }
-
-    #[test]
-    fn a_declared_level_beyond_the_ladder_is_skipped_not_accused() {
-        // Conservative degradation: an adapter emitting a level its ladder doesn't name is a
-        // contract wobble — stay silent rather than guess a scope.
-        let files = vec![file("src/a.ts")];
-        let symbols = vec![symbol(FileId(0), "helper", 7)];
-        let edges = root_and_ref(FileId(0), FileId(0), SymbolId(0));
-        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
-        let reach = crate::analysis::reachability::compute(&graph);
-        assert!(find_internal_only(&graph, &reach).is_empty());
-    }
-
-    fn rung(scope: crate::adapter::VisibilityScope, label: &str) -> crate::adapter::VisibilityRung {
-        crate::adapter::VisibilityRung {
-            scope,
-            label: SmolStr::new(label),
-            surface_transitive: matches!(scope, crate::adapter::VisibilityScope::Public),
-        }
-    }
-
-    #[test]
-    fn multi_rung_ladder_names_the_tightest_sufficient_label() {
-        // JS-shaped ladder [File, Package, Public]: declared at the middle rung, used
-        // same-file only — the remediation names rung 0's label, not just "not exported".
-        use crate::adapter::VisibilityScope::*;
-        let files = vec![file("src/a.ts")];
-        let symbols = vec![symbol(FileId(0), "helper", 1)];
-        let edges = root_and_ref(FileId(0), FileId(0), SymbolId(0));
-        let graph =
-            ProjectGraph::for_test(files, symbols, vec![], edges).with_visibility_ladders(vec![(
-                SmolStr::new("mock"),
-                vec![
-                    rung(File, "module-local"),
-                    rung(Package, "exported"),
-                    rung(Public, "package surface"),
-                ],
-            )]);
-        let reach = crate::analysis::reachability::compute(&graph);
-        let findings = find_internal_only(&graph, &reach);
-        assert_eq!(findings.len(), 1);
-        assert!(
-            findings[0]
-                .message
-                .contains("declared exported but only used within its own file"),
-            "{}",
-            findings[0].message
-        );
-        assert!(
-            findings[0].message.contains("module-local would suffice"),
-            "{}",
-            findings[0].message
-        );
-    }
-
-    #[test]
-    fn a_macro_subject_is_never_accused() {
-        // Macro invocations resolve textually, not through the module ladder — the graph
-        // structurally underestimates a macro's use scope, so no narrowing advice is safe.
-        let files = vec![file("src/a.ts")];
-        let mut m = symbol(FileId(0), "shout", 2);
-        m.kind = SymbolKind::Macro;
-        let edges = root_and_ref(FileId(0), FileId(0), SymbolId(0));
-        let graph = ProjectGraph::for_test(files, vec![m], vec![], edges);
-        let reach = crate::analysis::reachability::compute(&graph);
-        assert!(find_internal_only(&graph, &reach).is_empty());
-    }
-
-    #[test]
-    fn a_use_from_inside_a_macro_counts_as_expansion_site_wide() {
-        // `helper` is exported and its only strong reference comes from a same-file macro's
-        // template — but that template executes wherever the macro expands, so the use does
-        // not justify narrowing (a `log_error! → set_errored` shape). The identical
-        // graph with a function as the referrer must still accuse (asserted second).
-        let files = vec![file("src/a.ts")];
-        let referrer_kinds = [SymbolKind::Macro, SymbolKind::Function];
-        let verdicts: Vec<usize> = referrer_kinds
-            .map(|kind| {
-                let mut referrer = symbol(FileId(0), "emit", 0);
-                referrer.kind = kind;
-                let symbols = vec![symbol(FileId(0), "helper", 1), referrer];
-                let edges = vec![
-                    edge(
-                        EdgeKind::Root {
-                            kind: RootKind::Production,
-                            target: NodeRef::File(FileId(0)),
-                        },
-                        Confidence::Certain,
+            for (d_ix, d) in f.evidence.declarations.iter().enumerate() {
+                let scope = match &d.reach {
+                    Reach::Scoped { scope } => {
+                        if !scoped_open || !narrowable.iter().any(|t| t == scope) {
+                            continue;
+                        }
+                        // Unbounded token ⇒ not judgeable here either.
+                        if region_ids(scope).is_none() {
+                            continue;
+                        }
+                        Some(scope)
+                    }
+                    Reach::Exported => {
+                        // Owned members wait for their own demand; the floor is
+                        // the file's own top-level surface.
+                        if !export_narrowable
+                            || !exported_open
+                            || whole_file_rooted
+                            || d.owner.is_some()
+                        {
+                            continue;
+                        }
+                        None
+                    }
+                    _ => continue,
+                };
+                // A rooted declaration is used from outside the graph's sight.
+                if rooted.contains(&d_ix) || d.owner.is_some_and(|o| rooted.contains(&o.index())) {
+                    continue;
+                }
+                // Used INSIDE its own file at all? If not, `unused` owns it.
+                let own_use = per_file_refs[i].contains(d.name.as_str());
+                if !own_use {
+                    continue;
+                }
+                let used_beyond = match scope {
+                    // Any use beyond the file disqualifies: a binding importer,
+                    // or a reference in another file of the REGION — the only
+                    // files that can legally resolve the name. Same-named
+                    // references OUTSIDE the region cannot be this symbol, so
+                    // they neither keep nor disqualify. (A scoped method
+                    // reached through a public supertype stays exported by its
+                    // own modifiers, so it never sits here.)
+                    Some(scope) => {
+                        bound_names.contains(&(i as u32, d.name.as_str()))
+                            || d.exported_as
+                                .as_ref()
+                                .is_some_and(|a| bound_names.contains(&(i as u32, a.as_str())))
+                            || region_ids(scope).is_some_and(|r| {
+                                r.iter().any(|&j| {
+                                    j as usize != i
+                                        && reachable(j as usize)
+                                        && per_file_refs[j as usize].contains(d.name.as_str())
+                                })
+                            })
+                    }
+                    // Total absence for the Exported rung: any binding importer
+                    // (reachable or not), or the name spelled in ANY other
+                    // claimed file.
+                    None => {
+                        bound_all.contains(&(i as u32, d.name.as_str()))
+                            || d.exported_as
+                                .as_ref()
+                                .is_some_and(|a| bound_all.contains(&(i as u32, a.as_str())))
+                            || name_files.get(d.name.as_str()).copied().unwrap_or(0) >= 2
+                    }
+                };
+                if used_beyond {
+                    continue;
+                }
+                let selector = match d.owner {
+                    Some(owner) => SymbolSelector::Member {
+                        owner: f.evidence.declarations[owner.index()].name.clone(),
+                        name: d.name.clone(),
+                    },
+                    None => SymbolSelector::Free(d.name.clone()),
+                };
+                let noun = match d.kind {
+                    SymbolKind::Function | SymbolKind::Method => "function",
+                    SymbolKind::Type => "type",
+                    _ => "declaration",
+                };
+                let message = match scope {
+                    Some(scope) => format!(
+                        "declared `{scope}`-scoped, but every use is within its own file — \
+                         the narrower rung would suffice for this {noun}"
                     ),
-                    edge(
-                        EdgeKind::References {
-                            from: NodeRef::File(FileId(0)),
-                            to: SymbolId(1),
-                            kind: RefKind::Call,
-                        },
-                        Confidence::Certain,
+                    None => format!(
+                        "declared exported, but every use is within its own file — nothing \
+                         else in the tree imports or names it; the narrower visibility \
+                         would suffice for this {noun}"
                     ),
-                    edge(
-                        EdgeKind::References {
-                            from: NodeRef::Symbol(SymbolId(1)),
-                            to: SymbolId(0),
-                            kind: RefKind::Call,
-                        },
-                        Confidence::Certain,
-                    ),
-                ];
-                let graph = ProjectGraph::for_test(files.clone(), symbols, vec![], edges);
-                let reach = crate::analysis::reachability::compute(&graph);
-                find_internal_only(&graph, &reach).len()
-            })
-            .to_vec();
-        assert_eq!(verdicts, vec![0, 1]);
-    }
-
-    #[test]
-    fn an_inherited_visibility_symbol_is_never_accused_but_its_plain_twin_is() {
-        // An enum's variant (visibility_inherited): the level belongs to the container, no
-        // keyword can sit on the variant itself. The identical graph with the flag off must
-        // still accuse — the flag, not the shape, is what exempts.
-        let verdicts: Vec<usize> = [true, false]
-            .map(|inherited| {
-                let files = vec![file("src/a.ts")];
-                let mut s = symbol(FileId(0), "Variant", 1);
-                s.visibility_inherited = inherited;
-                let edges = root_and_ref(FileId(0), FileId(0), SymbolId(0));
-                let graph = ProjectGraph::for_test(files, vec![s], vec![], edges);
-                let reach = crate::analysis::reachability::compute(&graph);
-                find_internal_only(&graph, &reach).len()
-            })
-            .to_vec();
-        assert_eq!(verdicts, vec![0, 1]);
-    }
-
-    #[test]
-    fn a_nested_scope_symbol_narrows_to_the_first_rung_wider_than_file() {
-        // Rust-shaped ladder [File, Package, Public], declared at the top, used same-file.
-        // Top-level: the file rung suffices. Nested (an inline-mod item): the language's
-        // tightest level there means "this module", narrower than "this file" — the floor
-        // moves to the Package rung, never to the file rung the evidence can't certify.
-        use crate::adapter::VisibilityScope::*;
-        let ladder = vec![
-            rung(File, "private"),
-            rung(Package, "pub(crate)"),
-            rung(Public, "pub"),
-        ];
-        let suggestion = |nested: bool| {
-            let files = vec![file("src/a.ts")];
-            let mut s = symbol(FileId(0), "helper", 2);
-            s.nested_scope = nested;
-            let edges = root_and_ref(FileId(0), FileId(0), SymbolId(0));
-            let graph = ProjectGraph::for_test(files, vec![s], vec![], edges)
-                .with_visibility_ladders(vec![(SmolStr::new("mock"), ladder.clone())]);
-            let reach = crate::analysis::reachability::compute(&graph);
-            let findings = find_internal_only(&graph, &reach);
-            assert_eq!(findings.len(), 1);
-            findings[0].message.clone()
-        };
-        assert!(
-            suggestion(false).contains("private would suffice"),
-            "top-level: the file rung is certifiable"
-        );
-        assert!(
-            suggestion(true).contains("pub(crate) would suffice"),
-            "nested: the floor moves past the file rung"
-        );
-    }
-
-    /// Rust's own ladder, verbatim: `private` is a **Module** rung (a private item is visible
-    /// to its declaring module *and its descendants*), not a File one.
-    fn rust_ladder() -> Vec<crate::adapter::VisibilityRung> {
-        use crate::adapter::VisibilityScope::*;
-        vec![
-            rung(Module, "private"),
-            rung(Module, "pub(super)"),
-            rung(Package, "pub(crate)"),
-            rung(Public, "pub"),
-        ]
-    }
-
-    #[test]
-    fn a_nested_scope_symbol_is_never_narrowed_to_a_module_rung() {
-        // The regression kndo found on its own source: a `pub(crate) fn` inside an inline
-        // `mod activation { … }`, used from the enclosing file, is a case where file-local
-        // evidence alone would look like it certifies the Module rung ("private would
-        // suffice"). It does not: the declaration's module is `activation`, strictly inside
-        // the file, and the use is in the file's own (parent) module, which cannot see a
-        // child module's private items. That advice would not compile.
-        //
-        // Everything up to and including Module is derived from file/unit co-location, so for
-        // a declaration nested inside its file none of it is evidence. Package survives:
-        // nesting inside a file cannot change which package something is in.
-        let suggestion = |nested: bool| {
-            let files = vec![file("src/lib.rs")];
-            let mut s = symbol(FileId(0), "global_plugin_dir", 3);
-            s.nested_scope = nested;
-            let edges = root_and_ref(FileId(0), FileId(0), SymbolId(0));
-            let graph = ProjectGraph::for_test(files, vec![s], vec![], edges)
-                .with_visibility_ladders(vec![(SmolStr::new("mock"), rust_ladder())]);
-            let reach = crate::analysis::reachability::compute(&graph);
-            find_internal_only(&graph, &reach)
-                .first()
-                .map(|f| f.message.clone())
-        };
-        assert!(
-            suggestion(false)
-                .expect("a top-level pub item used only in its own file can go private")
-                .contains("private would suffice"),
-            "top-level: the Module rung is certifiable from file-local evidence"
-        );
-        assert!(
-            suggestion(true)
-                .expect("nested: pub is still narrowable, just not that far")
-                .contains("pub(crate) would suffice"),
-            "nested: the floor clears every Module rung, not just the File one"
-        );
-    }
-
-    #[test]
-    fn a_nested_scope_symbol_declared_at_the_package_rung_is_left_alone() {
-        // The exact shape of the false positive: already `pub(crate)`, nested, used only
-        // within its own file. The raised floor IS the declared rung, so there is nothing
-        // honest left to suggest — and kndo says nothing rather than something that would
-        // not compile.
-        let files = vec![file("src/lib.rs")];
-        let mut s = symbol(FileId(0), "global_plugin_dir", 2);
-        s.nested_scope = true;
-        let edges = root_and_ref(FileId(0), FileId(0), SymbolId(0));
-        let graph = ProjectGraph::for_test(files, vec![s], vec![], edges)
-            .with_visibility_ladders(vec![(SmolStr::new("mock"), rust_ladder())]);
-        let reach = crate::analysis::reachability::compute(&graph);
-        assert!(find_internal_only(&graph, &reach).is_empty());
-    }
-
-    #[test]
-    fn a_nested_scope_symbol_already_at_the_floor_is_not_accused() {
-        // Declared pub(crate) (the first rung wider than File), used same-file, nested:
-        // the raised floor IS the declared scope — nothing certifiable to suggest.
-        use crate::adapter::VisibilityScope::*;
-        let files = vec![file("src/a.ts")];
-        let mut s = symbol(FileId(0), "helper", 1);
-        s.nested_scope = true;
-        let edges = root_and_ref(FileId(0), FileId(0), SymbolId(0));
-        let graph =
-            ProjectGraph::for_test(files, vec![s], vec![], edges).with_visibility_ladders(vec![(
-                SmolStr::new("mock"),
-                vec![
-                    rung(File, "private"),
-                    rung(Package, "pub(crate)"),
-                    rung(Public, "pub"),
-                ],
-            )]);
-        let reach = crate::analysis::reachability::compute(&graph);
-        assert!(find_internal_only(&graph, &reach).is_empty());
-    }
-
-    #[test]
-    fn same_scope_rungs_never_accuse_each_other() {
-        // Java-shaped tail [.., Public "protected", Public "public"]: a symbol declared at
-        // the top rung whose uses require Public must NOT be told to become "protected" —
-        // no static evidence can distinguish two rungs sharing a scope.
-        use crate::adapter::VisibilityScope::*;
-        let mut f0 = file("A.java2");
-        f0.package = crate::vocab::PackageId(0);
-        let mut f1 = file("B.java2");
-        f1.package = crate::vocab::PackageId(1);
-        let symbols = vec![symbol(FileId(0), "helper", 3)];
-        let edges = root_and_ref(FileId(1), FileId(1), SymbolId(0));
-        let graph = ProjectGraph::for_test(vec![f0, f1], symbols, vec![], edges)
-            .with_packages(vec![
-                crate::graph::PackageNode {
-                    workspace_entry: None,
-                    targets: Vec::new(),
-                    executables: Vec::new(),
-                    manifest: None,
-                    name: None,
-                    private: false,
-                    declares_surface: false,
-                    surface: Vec::new(),
-                    resolves_dependency_usage: true,
-                    manifest_claim_languages: Vec::new(),
-                },
-                crate::graph::PackageNode {
-                    workspace_entry: None,
-                    targets: Vec::new(),
-                    executables: Vec::new(),
-                    manifest: None,
-                    name: None,
-                    private: false,
-                    declares_surface: false,
-                    surface: Vec::new(),
-                    resolves_dependency_usage: true,
-                    manifest_claim_languages: Vec::new(),
-                },
-            ])
-            .with_visibility_ladders(vec![(
-                SmolStr::new("mock"),
-                vec![
-                    rung(File, "private"),
-                    rung(Unit, "package-private"),
-                    rung(Public, "protected"),
-                    rung(Public, "public"),
-                ],
-            )]);
-        let reach = crate::analysis::reachability::compute(&graph);
-        assert!(find_internal_only(&graph, &reach).is_empty());
+                };
+                out.push(Finding::new(
+                    Category::INTERNAL_ONLY,
+                    Severity::Info,
+                    Confidence::Probable,
+                    Subject::Symbol {
+                        path: f.path.clone(),
+                        selector,
+                        span: d.span,
+                    },
+                    "",
+                    message,
+                ));
+            }
+        }
+        out
     }
 }

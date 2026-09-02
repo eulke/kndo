@@ -1,8 +1,0 @@
-{
-  "findings": [
-    { "category": "test-only", "subject_kind": "function", "path": "src/core.ts", "symbol": "helper" },
-    { "category": "test-only", "subject_kind": "file", "path": "src/fixtures.ts" },
-    { "category": "untested", "subject_kind": "file", "path": "src/index.ts" },
-    { "category": "untested", "subject_kind": "function", "path": "src/core.ts", "symbol": "core" }
-  ]
-}

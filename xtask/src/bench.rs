@@ -1,70 +1,64 @@
-//! `cargo xtask bench` — the benchmark suite: fixture repos at 1k / 5k / 50k files,
-//! the five scenarios (cold full, warm no-op, warm 1-file change, warm 100-file change,
-//! `--staged`), a recorded baseline, and the >10% regression gate.
+//! `cargo xtask bench` — the benchmark suite: generated fixture repositories at 1k /
+//! 5k / 50k files, five scenarios each (cold full, warm no-op, warm 1-file change,
+//! warm 100-file change, `--staged`), a recorded baseline, and the regression gate.
 //!
-//! Fixtures are **generated, deterministic, and disposable** (`target/bench-fixtures/`):
-//! pure-arithmetic synthetic TypeScript — import chains reachable from `index.ts`, one dead
-//! file per decade, exported functions with real branchy bodies (so extraction, metrics, and
-//! every analysis do real work), one clone pair per 500 files. Nothing random: same
-//! generator version ⇒ byte-identical fixture. Each fixture is a git repo (one initial
-//! commit) so the `--staged` scenario runs the real diff path; the suite resets the tree
-//! (`git checkout -- .`) before measuring, so mutation scenarios never accumulate across
-//! invocations.
+//! Fixtures are generated, deterministic and disposable (`target/bench-fixtures/`):
+//! synthetic TypeScript — import chains reachable from the manifest's entry, one dead
+//! file per decade, exported functions with real branchy bodies (so extraction,
+//! metrics and every analysis do real work), one clone pair per 500 files. Nothing
+//! random: the same generator version yields the byte-identical fixture. Each
+//! fixture is a git repository with one commit, so `--staged` runs the real index
+//! path; the suite resets the tree before measuring, so mutation scenarios never
+//! accumulate across invocations.
 //!
-//! Measurement is **end-to-end wall time** of the real release binary (`kndo check --format
-//! json > /dev/null`) — process start, discovery, analysis, render, print; the user's
-//! latency, not a flattering subset. Warm scenarios take the **minimum of N runs** (noise on
-//! a shared machine only ever adds time; the minimum is the closest observable to the true
-//! cost), cold takes the min of 2.
+//! The measurement is end-to-end wall time of the real release binary (`kndo check
+//! --format json`, output discarded): process start, discovery, analysis, render —
+//! the user's latency, never a flattering subset. Warm scenarios take the minimum of
+//! N runs (noise on a shared machine only ever adds time; the minimum is the closest
+//! observable to the true cost), cold the minimum of two.
 //!
-//! The baseline (`xtask/perf-baseline.json`) is machine-specific by nature — it records where
-//! it was measured and is re-recorded with `--update-baseline` when hardware changes. A
-//! scenario counts as regressed when it is BOTH >10% and >10 ms over baseline (the absolute
-//! floor keeps micro-scenario jitter from tripping the relative gate). `--gate` turns
-//! regressions into a failing exit — the CI-blocking mode; without it
-//! the suite reports and exits clean (exploration mode).
+//! The baseline (`xtask/perf-baseline.json`) is machine-specific by nature and
+//! re-recorded with `--update-baseline` when the measuring machine changes. A scenario
+//! regresses when it is BOTH >10% and >10 ms over its baseline — the absolute floor
+//! keeps a 3 ms scenario from failing over 0.4 ms of jitter. `--gate` turns a
+//! regression into a failing exit; without it the suite reports and exits clean.
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Instant;
 
+use crate::Result;
+
 /// Bump when the generator's output changes — a mismatch regenerates the fixture.
 const GENERATOR_VERSION: u32 = 1;
 const WARM_REPS: usize = 5;
 const COLD_REPS: usize = 2;
-/// Regression gate: both thresholds must trip (the 10% relative bound, plus an absolute floor
-/// so a 3 ms scenario can't fail the build over 0.4 ms of jitter).
 const GATE_RELATIVE: f64 = 0.10;
 const GATE_ABSOLUTE_MS: f64 = 10.0;
 
 const SIZES: &[(&str, usize)] = &[("1k", 1_000), ("5k", 5_000), ("50k", 50_000)];
 
-pub fn run(args: &[String]) -> Result<(), String> {
+pub fn run(args: &[String]) -> Result<()> {
     let update_baseline = args.iter().any(|a| a == "--update-baseline");
     let gate = args.iter().any(|a| a == "--gate");
-    let sizes: Vec<&(&str, usize)> = match args.iter().position(|a| a == "--sizes") {
-        Some(i) => {
-            let list = args
-                .get(i + 1)
-                .ok_or_else(|| "--sizes needs a value (e.g. 1k,5k)".to_string())?;
-            SIZES
-                .iter()
-                .filter(|(name, _)| list.split(',').any(|s| s == *name))
-                .collect()
-        }
+    let sizes: Vec<&(&str, usize)> = match crate::flag(args, "--sizes") {
+        Some(list) => SIZES
+            .iter()
+            .filter(|(name, _)| list.split(',').any(|s| s == *name))
+            .collect(),
         None => SIZES.iter().collect(),
     };
     if sizes.is_empty() {
         return Err("no known sizes selected (known: 1k, 5k, 50k)".to_string());
     }
 
-    let root = super::workspace_root()?;
+    let root = crate::workspace_root();
     let kndo = build_release_kndo(&root)?;
 
     let mut results: Vec<(String, f64)> = Vec::new();
     for &&(name, files) in &sizes {
-        let dir = fixture_dir(&root, name);
+        let dir = root.join("target/bench-fixtures").join(name);
         ensure_fixture(&dir, files)?;
         reset_fixture(&dir);
         eprintln!("xtask bench: {name} ({files} files) at {}", dir.display());
@@ -76,29 +70,28 @@ pub fn run(args: &[String]) -> Result<(), String> {
         })?;
         results.push((format!("{name}/cold-full"), cold));
 
-        // Warm no-op: settle once (writes the snapshot), then measure pure hits.
+        // Warm no-op: settle once (writes the cache), then measure pure hits.
         time_check(&kndo, &dir, &[])?;
         let noop = min_of(WARM_REPS, || time_check(&kndo, &dir, &[]))?;
         results.push((format!("{name}/warm-noop"), noop));
 
-        // Warm 1-file change: each rep appends to one file — every run is a genuine
-        // 1-file-changed-since-last-run invocation.
+        // Warm 1-file change: each rep appends to one file, so every run is a
+        // genuine one-file-changed-since-last-run invocation.
         let one = min_of(WARM_REPS, || {
             touch_files(&dir, 1)?;
             time_check(&kndo, &dir, &[])
         })?;
         results.push((format!("{name}/warm-1-file"), one));
 
-        // Warm 100-file change.
         let hundred = min_of(3, || {
             touch_files(&dir, 100)?;
             time_check(&kndo, &dir, &[])
         })?;
         results.push((format!("{name}/warm-100-file"), hundred));
 
-        // --staged on a realistic staged diff (10 files).
+        // `--staged` on a realistic staged diff of ten files.
         reset_fixture(&dir);
-        time_check(&kndo, &dir, &[])?; // re-warm after reset
+        time_check(&kndo, &dir, &[])?;
         touch_files(&dir, 10)?;
         git(&dir, &["add", "-A"])?;
         let staged = min_of(3, || time_check(&kndo, &dir, &["--staged"]))?;
@@ -124,7 +117,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 } else {
                     0.0
                 };
-                let regressed = delta > GATE_ABSOLUTE_MS && delta / base > GATE_RELATIVE;
+                let regressed = regressed(*ms, base);
                 if regressed {
                     regressions.push(format!(
                         "{scenario}: {ms:.1} ms vs baseline {base:.1} ms (+{pct:.0}%)"
@@ -144,7 +137,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 let _ = writeln!(
                     report,
                     "{:<22} {:>8.1}ms {:>10} {:>8}",
-                    scenario, ms, "—", "—"
+                    scenario, ms, "-", "-"
                 );
             }
         }
@@ -178,7 +171,14 @@ pub fn run(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-fn build_release_kndo(root: &Path) -> Result<PathBuf, String> {
+/// Both thresholds must trip: the relative bound, and the absolute floor that
+/// keeps a millisecond-scale scenario from failing over jitter.
+fn regressed(now_ms: f64, baseline_ms: f64) -> bool {
+    let delta = now_ms - baseline_ms;
+    delta > GATE_ABSOLUTE_MS && delta / baseline_ms > GATE_RELATIVE
+}
+
+fn build_release_kndo(root: &Path) -> Result<PathBuf> {
     eprintln!("xtask bench: building release kndo…");
     let status = Command::new("cargo")
         .args(["build", "--release", "-p", "kndo-cli"])
@@ -188,14 +188,10 @@ fn build_release_kndo(root: &Path) -> Result<PathBuf, String> {
     if !status.success() {
         return Err("cargo build --release -p kndo-cli failed".to_string());
     }
-    Ok(root.join("target/release/kndo"))
+    Ok(root.join("target/release").join(crate::BIN))
 }
 
-fn fixture_dir(root: &Path, name: &str) -> PathBuf {
-    root.join("target/bench-fixtures").join(name)
-}
-
-fn min_of(reps: usize, mut f: impl FnMut() -> Result<f64, String>) -> Result<f64, String> {
+fn min_of(reps: usize, mut f: impl FnMut() -> Result<f64>) -> Result<f64> {
     let mut best = f64::INFINITY;
     for _ in 0..reps {
         best = best.min(f()?);
@@ -203,7 +199,7 @@ fn min_of(reps: usize, mut f: impl FnMut() -> Result<f64, String>) -> Result<f64
     Ok(best)
 }
 
-fn time_check(kndo: &Path, dir: &Path, extra: &[&str]) -> Result<f64, String> {
+fn time_check(kndo: &Path, dir: &Path, extra: &[&str]) -> Result<f64> {
     let start = Instant::now();
     let output = Command::new(kndo)
         .arg("check")
@@ -213,8 +209,8 @@ fn time_check(kndo: &Path, dir: &Path, extra: &[&str]) -> Result<f64, String> {
         .output()
         .map_err(|e| format!("failed to run kndo: {e}"))?;
     let elapsed = start.elapsed().as_secs_f64() * 1000.0;
-    // Exit 0 (clean) and 1 (findings) are both successful analyses; anything else is a
-    // broken run whose timing would be a lie.
+    // Exit 0 (clean) and 1 (findings at the gate) are both completed analyses;
+    // anything else is a broken run whose timing would be a lie.
     match output.status.code() {
         Some(0 | 1) => Ok(elapsed),
         code => Err(format!(
@@ -225,11 +221,11 @@ fn time_check(kndo: &Path, dir: &Path, extra: &[&str]) -> Result<f64, String> {
     }
 }
 
-fn touch_files(dir: &Path, count: usize) -> Result<(), String> {
+fn touch_files(dir: &Path, count: usize) -> Result<()> {
     use std::io::Write as _;
     for i in 0..count {
-        // Deterministic spread across shards; appending a comment is a real content change
-        // (new hash) with no semantic effect on the fixture's finding profile.
+        // A deterministic spread across shards; an appended comment is a real
+        // content change (new hash) with no effect on the finding profile.
         let shard = (i * 37) % 10;
         let file = dir.join(format!("src/d{shard}/mod{}.ts", shard * 100 + (i % 100)));
         let mut f = std::fs::OpenOptions::new()
@@ -246,7 +242,7 @@ fn reset_fixture(dir: &Path) {
     let _ = git(dir, &["reset", "-q"]);
 }
 
-fn git(dir: &Path, args: &[&str]) -> Result<(), String> {
+fn git(dir: &Path, args: &[&str]) -> Result<()> {
     let status = Command::new("git")
         .args(args)
         .current_dir(dir)
@@ -258,19 +254,19 @@ fn git(dir: &Path, args: &[&str]) -> Result<(), String> {
     Ok(())
 }
 
-/// Deterministic synthetic repo: `files` TypeScript modules in 100-file shards. Per decade of
-/// ten modules: nine chain into each other (importable work for resolution + reachability),
-/// the tenth is dead (real `unused` findings); decade heads are imported by `index.ts` (the
-/// manifest root), so most of the tree is production-reachable. Every module exports one
-/// branchy function (cyclomatic 4) so metrics/winnowing/crap do real work; every 500th pair
-/// of modules shares a function body shape (structural-duplicate work). Pure arithmetic —
-/// no randomness, no timestamps in content.
-fn ensure_fixture(dir: &Path, files: usize) -> Result<(), String> {
+/// The synthetic repository: `files` TypeScript modules in 100-file shards. Per
+/// decade of ten modules, nine chain into each other (resolution and reachability
+/// work) and the tenth is dead (real `unused` findings); decade heads are imported
+/// by `src/index.ts`, the manifest's entry, so most of the tree is
+/// production-reachable. Every module exports one branchy function (metrics and
+/// `crap` work); every 500th pair shares a body shape (structural-duplicate work).
+fn ensure_fixture(dir: &Path, files: usize) -> Result<()> {
     let marker = dir.join(".bench-fixture-version");
-    if let Ok(v) = std::fs::read_to_string(&marker) {
-        if v.trim() == GENERATOR_VERSION.to_string() && dir.join(".git").exists() {
-            return Ok(());
-        }
+    if let Ok(v) = std::fs::read_to_string(&marker)
+        && v.trim() == GENERATOR_VERSION.to_string()
+        && dir.join(".git").exists()
+    {
+        return Ok(());
     }
     eprintln!("xtask bench: generating {files}-file fixture…");
     let _ = std::fs::remove_dir_all(dir);
@@ -294,8 +290,8 @@ fn ensure_fixture(dir: &Path, files: usize) -> Result<(), String> {
             std::fs::create_dir_all(&shard_dir).map_err(|e| e.to_string())?;
         }
         let mut content = String::new();
-        // Chain within the decade: mod i imports mod i-1 unless it's a decade head; the
-        // ninth of each decade (i % 10 == 9) is imported by nobody — deterministic dead code.
+        // Chain within the decade: module i imports module i-1 unless i heads a
+        // decade; the ninth of each decade is imported by nobody — dead by design.
         if i % 10 != 0 && (i - 1) % 10 != 9 {
             let j = i - 1;
             let _ = writeln!(content, "import {{ fn{j} }} from '../d{}/mod{j}';", j / 100);
@@ -304,8 +300,8 @@ fn ensure_fixture(dir: &Path, files: usize) -> Result<(), String> {
                 "export function chained{i}(x: number): number {{ return fn{j}(x) + {i}; }}"
             );
         }
-        // The clone family: every 500th module repeats the same body shape (different
-        // identifiers — a Type-2 clone).
+        // The clone family: every 500th module repeats one body shape under
+        // different identifiers.
         let body = if i % 500 == 250 {
             format!(
                 "export function fn{i}(a: number, b: number): number {{\n  let acc = 0;\n  for (let k = 0; k < a; k += 1) {{\n    if (k % 2 === 0 && k > b) {{\n      acc += k * 2;\n    }} else if (k % 3 === 0) {{\n      acc -= k;\n    }}\n  }}\n  if (acc < 0) {{\n    return -acc;\n  }}\n  return acc + a + b;\n}}\n"
@@ -363,7 +359,7 @@ fn load_baseline(path: &Path) -> Option<std::collections::BTreeMap<String, f64>>
     )
 }
 
-fn write_baseline(path: &Path, results: &[(String, f64)]) -> Result<(), String> {
+fn write_baseline(path: &Path, results: &[(String, f64)]) -> Result<()> {
     let scenarios: serde_json::Map<String, serde_json::Value> = results
         .iter()
         .map(|(k, ms)| {
@@ -383,4 +379,32 @@ fn write_baseline(path: &Path, results: &[(String, f64)]) -> Result<(), String> 
         serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())? + "\n",
     )
     .map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_regression_needs_both_the_relative_and_the_absolute_bound() {
+        assert!(regressed(120.0, 100.0));
+        assert!(!regressed(109.0, 100.0), "under 10%");
+        assert!(!regressed(8.0, 3.0), "over 100% but under 10 ms");
+        assert!(!regressed(2000.0, 1990.0), "over 10 ms but under 10%");
+    }
+
+    #[test]
+    fn the_baseline_round_trips_to_a_tenth_of_a_millisecond() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("perf-baseline.json");
+        let results = vec![
+            ("1k/cold-full".to_string(), 71.54),
+            ("1k/warm-noop".to_string(), 21.55),
+        ];
+        write_baseline(&path, &results).expect("written");
+        let loaded = load_baseline(&path).expect("parses");
+        assert_eq!(loaded["1k/cold-full"], 71.5);
+        assert_eq!(loaded["1k/warm-noop"], 21.6);
+        assert!(load_baseline(&dir.path().join("missing.json")).is_none());
+    }
 }

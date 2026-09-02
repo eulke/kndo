@@ -1,5 +1,0 @@
-{
-  "findings": [
-    { "category": "unused", "subject_kind": "dependency", "path": "package.json", "symbol": "unused-tool" }
-  ]
-}

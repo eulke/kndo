@@ -1,6 +1,0 @@
-[package]
-name = "outoftree"
-
-[[bin]]
-name = "ot"
-path = "crates/core/main.rs"

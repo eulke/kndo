@@ -1,227 +1,106 @@
-//! Swift language adapter. The one `LanguageAdapter`
-//! whose manifest (`Package.swift`) is Swift source code rather than a data format —
-//! `manifest.rs` reuses the same tree-sitter-swift parse `extraction` does. Like Java/Kotlin's,
-//! precision rests on the conformance fixtures.
+//! `kndo:swift` — the sixth built-in, on the shared playbook with Swift's own
+//! rules:
+//!
+//! - The DEFAULT visibility is `internal` — module scope: `Scoped("module")`,
+//!   the region mechanism's home rung (`private`/`fileprivate` fold to Private,
+//!   both file-bounded facts; `public`/`open` are Exported). The module can
+//!   narrow to `fileprivate`/`private`, so `narrowable(["module"])`.
+//! - The unit is the SwiftPM TARGET, and it is flat: subdirectories inside a
+//!   target are organizational, every file of the target shares one namespace,
+//!   and TESTS ARE A DIFFERENT MODULE — they reach the code under test through
+//!   an explicit `@testable import`, so [`Extension::sees`] needs no test
+//!   mirror at all (the import is the edge). Files outside the
+//!   `Sources|Tests/<Target>` layout take their first path segment as the
+//!   target (a repository like Alamofire compiles `Source/**` as one module
+//!   via a `path:` override; the segment is the content-free spelling of that
+//!   fact).
+//! - `import Foo` names a whole module and puts its top-level names in bare
+//!   scope — a namespace-shaped import resolving to every file of the local
+//!   target `Foo`, or nothing for SDK/external modules (keep-alive).
+//! - Dispatch the source never names: `override` methods (Probable) and the
+//!   non-private methods of types that declare conformances — an external
+//!   protocol's requirements are not statically enumerable, and its witnesses
+//!   are invoked by machinery outside the repo (Codable synthesis, delegate
+//!   protocols), so they root at `Possible`: degrade toward silence on exactly
+//!   the fact we cannot enumerate.
+//! - Never declared: initializers and deinitializers (construction follows the
+//!   type — the constructor posture every adapter shares) and enum cases
+//!   (`.case` dot-shorthand references are the pervasive use form and resolve
+//!   against types, not names — accusing cases on name evidence would be
+//!   noise; their uses still land in the reference pool).
 
-mod extraction;
+mod extract;
 mod manifest;
-mod parsing;
-mod resolution;
+mod resolve;
 
-use kndo_core::adapter::{
-    AdapterDescriptor, CyclePolicy, CycleTolerance, FileClaim, ImportSpec, LanguageAdapter,
-    ManifestFacts, ProjectPath, Resolution, ResolveCtx, SourceFile, VisibilityRung,
-    VisibilityScope,
-};
-use smol_str::SmolStr;
+use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
+use kndo_contract::evidence::EvidenceSink;
+use kndo_contract::extension::{Extension, ExtensionSpec};
+use kndo_contract::vocab::ProjectPath;
 
-pub struct SwiftAdapter;
+pub struct SwiftAdapter {
+    spec: ExtensionSpec,
+}
 
-/// `Tests/**` (SwiftPM Standard Directory Layout) is the
-/// authoritative test-role signal; XCTest's own `*Tests.swift` naming convention is a
-/// belt-and-suspenders fallback for non-standard layouts. No tooling-role convention exists
-/// (same stance as every prior adapter).
-const PATH_PATTERNS: kndo_adapter_toolkit::classify::PathPatterns =
-    kndo_adapter_toolkit::classify::PathPatterns {
-        test_name_markers: &["Tests.swift"],
-        test_dirs: &["Tests"],
-        tooling_name_markers: &[],
-        tooling_dirs: &[],
-    };
-
-impl LanguageAdapter for SwiftAdapter {
-    fn descriptor(&self) -> AdapterDescriptor {
-        AdapterDescriptor {
-            activation: Vec::new(),
-            dependencies: Vec::new(),
-            id: SmolStr::new("swift"),
-            facts_schema_version: 9, // bump whenever the serialized facts shape or the emission semantics change
-            file_globs: vec![SmolStr::new("**/*.swift")],
-            manifest_globs: vec![SmolStr::new("**/Package.swift")],
-            grammar_version: SmolStr::new("tree-sitter-swift 0.7.3"),
-            // Every level applies at both top-level and member
-            // position (no restricted subset the way Java/Kotlin's ladders have). `internal`
-            // — the default when no modifier is written at all — maps to `Package` (kndo's
-            // "same manifest" granularity, here an SPM target), a real structural difference
-            // from Java (default ≈ Unit) and Kotlin (default = Public). `private` is real-
-            // Swift narrower than `File` (scoped to the enclosing declaration) but widens up,
-            // same conservative direction as every adapter's tightest-unavailable-scope case;
-            // `fileprivate` is an exact match. `open` widens to `Public` alongside `public` —
-            // kndo's scope model can't distinguish "subclassable outside the module" from
-            // ordinary public visibility, same collapse Java's `protected`→`Public` already
-            // establishes.
-            visibility_ladder: vec![
-                VisibilityRung {
-                    scope: VisibilityScope::File,
-                    label: SmolStr::new("private"),
-                    surface_transitive: false,
-                },
-                VisibilityRung {
-                    scope: VisibilityScope::File,
-                    label: SmolStr::new("fileprivate"),
-                    surface_transitive: false,
-                },
-                VisibilityRung {
-                    scope: VisibilityScope::Package,
-                    label: SmolStr::new("internal"),
-                    surface_transitive: false,
-                },
-                VisibilityRung {
-                    scope: VisibilityScope::Public,
-                    label: SmolStr::new("public"),
-                    surface_transitive: true,
-                },
-                VisibilityRung {
-                    scope: VisibilityScope::Public,
-                    label: SmolStr::new("open"),
-                    surface_transitive: true,
-                },
-            ],
-            // File cycles (two `.swift` files in the same target referencing each other) are
-            // routine and idiomatic, same stance as Rust's within-crate module cycles.
-            // Package/target cycles are compiler-enforced acyclic by SwiftPM itself (a real
-            // target dependency cycle is a resolution failure, not buildable code) — same
-            // "cannot exist in building code" reasoning as Go's own Impossible stance.
-            cycle_policy: CyclePolicy {
-                file_cycles: CycleTolerance::Idiomatic,
-                package_cycles: CycleTolerance::Impossible,
-            },
-            // `Package.swift` states a dependency's repository
-            // URL, never the module/product name(s) it exports — those live in that
-            // repository's own manifest, which kndo structurally never reads. Local target-to-
-            // target imports resolve precisely via the ordinary same-unit fallback instead.
-            resolves_dependency_usage: false,
-            declares_units_of_testing: true,
-            package_test_dirs: Vec::new(),
-            // This adapter declares no builtin type facts: an empty table simply means the
-            // chain resolver has no second tier to consult for it.
-            builtin_member_types: Vec::new(),
+impl SwiftAdapter {
+    pub fn new() -> Self {
+        SwiftAdapter {
+            spec: kndo_toolkit::source_adapter_spec(
+                "kndo:swift",
+                1,
+                &["swift"],
+                &["**/Package.swift"],
+                &["module"],
+                // Files in a module compile as one unit; cross-references are
+                // routine, and the compiler rejects target-level cycles.
+                kndo_contract::extension::CycleTolerance::Tolerated,
+            ),
         }
-    }
-
-    fn claim(&self, path: &ProjectPath) -> Option<FileClaim> {
-        // `Package.swift` is real Swift source too — the one adapter in this codebase
-        // where a manifest file also matches the source glob. "Manifests are not claimed"
-        // is a load-bearing principle elsewhere in the engine (a manifest never
-        // gets a `FileClaim` alongside its `ManifestFacts`), so it's excluded here explicitly
-        // rather than accidentally satisfied the way every non-Swift manifest format is.
-        if self.claim_manifest(path) {
-            return None;
-        }
-        kndo_adapter_toolkit::classify::claim_by_extension(
-            path,
-            &["swift"],
-            "swift",
-            &PATH_PATTERNS,
-        )
-    }
-
-    fn claim_manifest(&self, path: &ProjectPath) -> bool {
-        path.0.rsplit('/').next() == Some("Package.swift")
-    }
-
-    fn extract(&self, file: &SourceFile<'_>) -> kndo_core::adapter::FileFacts {
-        extraction::extract(file.path.0.as_str(), file.content)
-    }
-
-    fn extract_manifest(&self, file: &SourceFile<'_>, ctx: &ResolveCtx<'_>) -> ManifestFacts {
-        manifest::extract(file.path.0.as_str(), file.content, ctx)
-    }
-
-    fn resolve(&self, spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
-        resolution::resolve(spec, ctx)
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use kndo_core::vocab::FileRole;
+impl Default for SwiftAdapter {
+    fn default() -> Self {
+        SwiftAdapter::new()
+    }
+}
 
-    fn path(p: &str) -> ProjectPath {
-        ProjectPath(SmolStr::new(p))
+impl Extension for SwiftAdapter {
+    fn spec(&self) -> &ExtensionSpec {
+        &self.spec
     }
 
-    #[test]
-    fn claims_swift_files_and_rejects_others() {
-        let a = SwiftAdapter;
-        assert!(a.claim(&path("Sources/MyLib/Widget.swift")).is_some());
-        assert!(a.claim(&path("Sources/MyLib/Widget.kt")).is_none());
-        assert!(a.claim(&path("Package.swift")).is_none());
+    fn extract(&self, file: &SourceFile<'_>, out: &mut EvidenceSink) {
+        let language = tree_sitter_swift::LANGUAGE.into();
+        if let Some(tree) = kndo_toolkit::parse_reporting(&language, file.content, out) {
+            extract::extract(file.path, file.content, &tree, out);
+        }
     }
 
-    #[test]
-    fn roles_follow_the_standard_directory_layout_and_xctest_fallback() {
-        let a = SwiftAdapter;
-        assert_eq!(
-            a.claim(&path("Tests/MyLibTests/WidgetTests.swift"))
-                .unwrap()
-                .class
-                .role,
-            FileRole::Test
-        );
-        assert_eq!(
-            a.claim(&path("scripts/AdHocTests.swift"))
-                .unwrap()
-                .class
-                .role,
-            FileRole::Test
-        );
-        assert_eq!(
-            a.claim(&path("Sources/MyLib/Widget.swift"))
-                .unwrap()
-                .class
-                .role,
-            FileRole::Production
-        );
+    fn resolve(&self, from: &ProjectPath, specifier: &str, cx: &ResolveContext<'_>) -> Resolution {
+        resolve::resolve(from, specifier, cx)
     }
 
-    #[test]
-    fn claim_manifest_matches_only_package_swift() {
-        let a = SwiftAdapter;
-        assert!(a.claim_manifest(&path("Package.swift")));
-        assert!(!a.claim_manifest(&path("Sources/MyLib/Package.swift.txt")));
-        assert!(!a.claim_manifest(&path("Package.resolved")));
+    fn sees(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
+        resolve::sees(path, cx)
     }
 
-    #[test]
-    fn the_trait_surface_delegates_end_to_end() {
-        let a = SwiftAdapter;
-        let d = a.descriptor();
-        assert_eq!(d.id, "swift");
-        assert_eq!(d.visibility_ladder.len(), 5);
-        assert!(!d.resolves_dependency_usage);
+    fn seen_from(
+        &self,
+        path: &ProjectPath,
+        scope: &str,
+        cx: &ResolveContext<'_>,
+    ) -> Option<Vec<ProjectPath>> {
+        (scope == "module").then(|| resolve::module_region(path, cx))
+    }
 
-        let src_path = path("Sources/MyLib/Widget.swift");
-        let facts = a.extract(&SourceFile {
-            path: &src_path,
-            content: b"class Widget {}\n",
-        });
-        assert_eq!(facts.unit.as_deref(), Some("MyLib"));
-        assert!(facts.declarations.iter().any(|d| d.name == "Widget"));
-
-        let known: rustc_hash::FxHashSet<ProjectPath> =
-            [path("Sources/MyLib/Widget.swift"), path("Package.swift")]
-                .into_iter()
-                .collect();
-        let ctx = ResolveCtx::new(&known);
-        let manifest_path = path("Package.swift");
-        let mf = a.extract_manifest(
-            &SourceFile {
-                path: &manifest_path,
-                content: b"let package = Package(name: \"MyLib\")",
-            },
-            &ctx,
-        );
-        assert_eq!(mf.package_name.as_deref(), Some("MyLib"));
-
-        let resolved = a.resolve(
-            &ImportSpec {
-                specifier: SmolStr::new("Foundation"),
-                from: path("Sources/MyLib/Widget.swift"),
-            },
-            &ctx,
-        );
-        assert_eq!(resolved, Resolution::Stdlib);
+    fn manifest_dependencies(
+        &self,
+        manifest: &SourceFile<'_>,
+    ) -> Vec<kndo_contract::adapter::DependencyDeclaration> {
+        manifest::dependencies(manifest.content)
+            .into_iter()
+            .map(kndo_contract::adapter::DependencyDeclaration::name_only)
+            .collect()
     }
 }

@@ -1,5 +1,0 @@
-{
-  "name": "test-only-fixture",
-  "private": false,
-  "main": "src/index.ts"
-}

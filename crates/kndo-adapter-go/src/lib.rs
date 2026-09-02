@@ -1,149 +1,98 @@
-//! Go language adapter. Deliberately structurally different from JS/TS (the adapter
-//! contract's claims only mean something across genuinely different languages):
-//! no relative imports, visibility is capitalization
-//! rather than a keyword, and a package is a directory of files (`FileFacts::unit`).
+//! Go, through the tree-sitter-go grammar. The unit Go imports is the package — a
+//! directory of files sharing one namespace with no imports between siblings — so
+//! this adapter leans on the contract's unit features: imports resolve to
+//! [`Resolution::Files`] (every non-test `.go` in the package dir), and
+//! [`Extension::sees`] declares what each file sees without an import
+//! (a production file sees its non-test siblings; a test file sees the whole
+//! package), which the engine turns into reachability edges and pooled
+//! references. Capitalization IS the visibility: an upper-case initial is
+//! exported, anything else package-private.
+//!
+//! The adapter id is `go`, the same id v1 used for this territory, so oracle
+//! comparisons line up file-for-file.
 
-mod extraction;
+mod extract;
 mod manifest;
-mod parsing;
-mod resolution;
+mod resolve;
 
-use kndo_core::adapter::{
-    AdapterDescriptor, CyclePolicy, CycleTolerance, FileClaim, ImportSpec, LanguageAdapter,
-    ManifestFacts, ProjectPath, Resolution, ResolveCtx, SourceFile, VisibilityRung,
-    VisibilityScope,
-};
-use smol_str::SmolStr;
+use kndo_contract::adapter::{PackageEntry, Resolution, ResolveContext, SourceFile};
+use kndo_contract::evidence::EvidenceSink;
+use kndo_contract::extension::{Extension, ExtensionSpec};
+use kndo_contract::vocab::ProjectPath;
 
-pub struct GoAdapter;
+pub struct GoAdapter {
+    spec: ExtensionSpec,
+}
 
-/// `_test.go` is Go's sole, compiler-recognized test convention — a suffix, but `classify`'s
-/// name-marker matcher is a substring check, and a marker that ends a file name is exactly a
-/// suffix match (nothing can follow `.go`), so no toolkit change is needed to express it. No
-/// tooling-role convention worth pattern-matching — `vendor/` is already in the toolkit's
-/// universal list, so nothing Go-specific there either.
-const PATH_PATTERNS: kndo_adapter_toolkit::classify::PathPatterns =
-    kndo_adapter_toolkit::classify::PathPatterns {
-        test_name_markers: &["_test.go"],
-        test_dirs: &[],
-        tooling_name_markers: &[],
-        tooling_dirs: &[],
-    };
-
-impl LanguageAdapter for GoAdapter {
-    fn descriptor(&self) -> AdapterDescriptor {
-        AdapterDescriptor {
-            activation: Vec::new(),
-            dependencies: Vec::new(),
-            id: SmolStr::new("go"),
-            facts_schema_version: 15, // bump whenever the serialized facts shape or the emission semantics change
-            file_globs: vec![SmolStr::new("**/*.go")],
-            manifest_globs: vec![SmolStr::new("**/go.mod"), SmolStr::new("**/go.work")],
-            grammar_version: SmolStr::new("tree-sitter-go 0.25"),
-            // The Go ladder: capitalization is the language's entire visibility
-            // system — unexported is package-scoped (`Unit` = the dir#package key), exported
-            // is public. `internal/` is NOT a rung: it caps root *promotion* (a separate
-            // mechanism), not who can name a symbol.
-            visibility_ladder: vec![
-                VisibilityRung {
-                    scope: VisibilityScope::Unit,
-                    label: SmolStr::new("unexported"),
-                    surface_transitive: false,
-                },
-                // Exported under an `internal/` path element: the compiler itself walls these
-                // off from external modules (Go internal-package rule), so their true scope is
-                // the module, never Public — which keeps them out of the library-surface
-                // exemptions while staying accusable by `internal-only`.
-                VisibilityRung {
-                    scope: VisibilityScope::Package,
-                    label: SmolStr::new("exported (internal)"),
-                    surface_transitive: false,
-                },
-                VisibilityRung {
-                    scope: VisibilityScope::Public,
-                    label: SmolStr::new("exported"),
-                    surface_transitive: true,
-                },
-            ],
-            // The canonical example of Impossible: the Go compiler forbids import cycles
-            // outright, at every level — a cycle in kndo's Go graph can only be a resolution
-            // artifact, so the analysis skips the language rather than accusing.
-            cycle_policy: CyclePolicy {
-                file_cycles: CycleTolerance::Impossible,
-                package_cycles: CycleTolerance::Impossible,
-            },
-            // The module path IS the import specifier's prefix — resolve() structurally
-            // identifies the declared dependency every time.
-            resolves_dependency_usage: true,
-            declares_units_of_testing: true,
-            package_test_dirs: Vec::new(),
-            // This adapter declares no builtin type facts: an empty table simply means the
-            // chain resolver has no second tier to consult for it.
-            builtin_member_types: Vec::new(),
+impl GoAdapter {
+    pub fn new() -> Self {
+        GoAdapter {
+            // 4: go.mod `// indirect` requirements declare `Transitive`.
+            spec: kndo_toolkit::source_adapter_builder(
+                "kndo:go",
+                4,
+                &["go"],
+                &["**/go.mod"],
+                &[],
+                // The compiler forbids import cycles: one could only be a
+                // resolution artifact here.
+                kndo_contract::extension::CycleTolerance::Tolerated,
+            )
+            // go.mod has no sections: every direct requirement is a build
+            // requirement, and "only tests import it" has nowhere to move.
+            .dependency_scoping(kndo_contract::extension::DependencyScoping::Unscoped)
+            // An import path names the module whose path prefixes it; a path
+            // whose first segment carries no `.` is the standard library.
+            .dependency_identity(kndo_contract::extension::DependencyIdentity::ModulePath)
+            .dependency_builtins(kndo_contract::extension::DependencyBuiltins::UndottedFirstSegment)
+            .build(),
         }
-    }
-
-    fn claim(&self, path: &ProjectPath) -> Option<FileClaim> {
-        kndo_adapter_toolkit::classify::claim_by_extension(path, &["go"], "go", &PATH_PATTERNS)
-    }
-
-    fn claim_manifest(&self, path: &ProjectPath) -> bool {
-        matches!(path.0.rsplit('/').next(), Some("go.mod") | Some("go.work"))
-    }
-
-    fn extract(&self, file: &SourceFile<'_>) -> kndo_core::adapter::FileFacts {
-        extraction::extract(file.path.0.as_str(), file.content)
-    }
-
-    fn extract_manifest(&self, file: &SourceFile<'_>, ctx: &ResolveCtx<'_>) -> ManifestFacts {
-        manifest::extract(file.path.0.as_str(), file.content, ctx)
-    }
-
-    fn resolve(&self, spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
-        resolution::resolve(spec, ctx)
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use kndo_core::vocab::{FileOrigin, FileRole};
+impl Default for GoAdapter {
+    fn default() -> Self {
+        GoAdapter::new()
+    }
+}
 
-    fn path(p: &str) -> ProjectPath {
-        ProjectPath(SmolStr::new(p))
+impl Extension for GoAdapter {
+    fn spec(&self) -> &ExtensionSpec {
+        &self.spec
     }
 
-    #[test]
-    fn claims_go_files_and_rejects_others() {
-        let a = GoAdapter;
-        assert!(a.claim(&path("main.go")).is_some());
-        assert!(a.claim(&path("main.py")).is_none());
-        assert!(a.claim(&path("go.mod")).is_none()); // manifest, not source
+    fn extract(&self, file: &SourceFile<'_>, out: &mut EvidenceSink) {
+        let language = tree_sitter_go::LANGUAGE.into();
+        if let Some(tree) = kndo_toolkit::parse_reporting(&language, file.content, out) {
+            extract::extract(file.path, file.content, &tree, out);
+        }
     }
 
-    #[test]
-    fn test_suffix_is_the_sole_test_role_signal() {
-        let a = GoAdapter;
-        let claim = a.claim(&path("pkg/foo_test.go")).unwrap();
-        assert_eq!(claim.class.role, FileRole::Test);
-        let claim = a.claim(&path("pkg/foo.go")).unwrap();
-        assert_eq!(claim.class.role, FileRole::Production);
+    fn resolve(&self, from: &ProjectPath, specifier: &str, cx: &ResolveContext<'_>) -> Resolution {
+        resolve::resolve(from, specifier, cx)
     }
 
-    #[test]
-    fn vendor_directory_is_vendored_origin() {
-        let a = GoAdapter;
-        let claim = a.claim(&path("vendor/github.com/foo/bar/baz.go")).unwrap();
-        assert_eq!(claim.class.origin, FileOrigin::Vendored);
+    fn packages(&self, manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<PackageEntry> {
+        manifest::packages(manifest, cx)
     }
 
-    #[test]
-    fn claim_manifest_matches_go_mod_and_go_work() {
-        let a = GoAdapter;
-        assert!(a.claim_manifest(&path("go.mod")));
-        assert!(a.claim_manifest(&path("pkg/go.mod")));
-        assert!(a.claim_manifest(&path("go.work")));
-        assert!(!a.claim_manifest(&path("go.sum")));
-        assert!(!a.claim_manifest(&path("go.work.sum")));
+    fn manifest_dependencies(
+        &self,
+        manifest: &SourceFile<'_>,
+    ) -> Vec<kndo_contract::adapter::DependencyDeclaration> {
+        manifest::dependencies(manifest)
+    }
+
+    fn sees(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
+        resolve::sees(path, cx)
+    }
+
+    fn seen_from(
+        &self,
+        path: &ProjectPath,
+        scope: &str,
+        cx: &ResolveContext<'_>,
+    ) -> Option<Vec<ProjectPath>> {
+        (scope == "package").then(|| resolve::package_region(path, cx))
     }
 }

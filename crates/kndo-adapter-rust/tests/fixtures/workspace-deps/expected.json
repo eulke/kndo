@@ -1,16 +1,125 @@
 {
+  "run": {
+    "schema": "kndo-v2/m6",
+    "mode": "full",
+    "files_discovered": 5,
+    "files_claimed": 2,
+    "extensions": [
+      {
+        "id": "kndo:rust",
+        "files": 2,
+        "narrowable_scopes": [
+          "crate"
+        ],
+        "export_narrowing": "none",
+        "import_cycles": "tolerated",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "crate-root"
+      }
+    ]
+  },
+  "health": {
+    "implicated": 1,
+    "subjects": 6,
+    "by_category": [
+      {
+        "category": "unused",
+        "findings": 1
+      }
+    ],
+    "by_package": [
+      {
+        "name": "app",
+        "manifest": "app/Cargo.toml",
+        "implicated": 1,
+        "subjects": 4
+      },
+      {
+        "name": "base",
+        "manifest": "base/Cargo.toml",
+        "implicated": 0,
+        "subjects": 2
+      }
+    ]
+  },
   "findings": [
     {
-      "category": "unused",
-      "subject_kind": "dependency",
-      "path": "app/Cargo.toml",
-      "symbol": "serde"
+      "id": "kndo-681b0a1c50a5",
+      "category": "undeclared",
+      "severity": "warning",
+      "confidence": "probable",
+      "subject": {
+        "kind": "dependency",
+        "owner_manifest": "app/Cargo.toml",
+        "name": "rand_chacha"
+      },
+      "message": "imported by 1 reached file but declared by no manifest from here up: it resolves only through hoisting or a transitive dependency"
     },
     {
-      "category": "undeclared",
-      "subject_kind": "dependency",
-      "path": "app/Cargo.toml",
-      "symbol": "rand_chacha"
+      "id": "kndo-3809f4130e91",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "probable",
+      "subject": {
+        "kind": "dependency",
+        "owner_manifest": "app/Cargo.toml",
+        "name": "serde"
+      },
+      "message": "declared as a production dependency, but no file imports it and the manifest never names it"
     }
-  ]
+  ],
+  "fixed": [],
+  "baselined": 0,
+  "abstained": [
+    {
+      "category": "test-only",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    },
+    {
+      "category": "untested",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    },
+    {
+      "category": "crap",
+      "reason": "no-coverage-ingested",
+      "scope": "whole-run"
+    }
+  ],
+  "suppressed": {
+    "total": 0,
+    "by_category": []
+  },
+  "plugins": [
+    {
+      "coordinate": "kndo:coverage-lcov",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-cobertura",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-jacoco",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-go",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    }
+  ],
+  "diagnostics": []
 }

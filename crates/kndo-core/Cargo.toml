@@ -1,48 +1,26 @@
 [package]
 name = "kndo-core"
-description = "The system: graph model, analysis engine, cache, orchestration, plugin host. Language-blind by contract."
 version.workspace = true
 edition.workspace = true
-rust-version.workspace = true
 license.workspace = true
-repository.workspace = true
+rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
-smol_str = { workspace = true }
-blake3 = { workspace = true }
-ignore = { workspace = true }
-# Content-channel glob matching: a component's `requested_file_access` entries
-# are glob patterns matched in-memory against discovered paths — no disk walk, source-blind
-# (works identically for a directory or a git-tree source).
-glob = "0.3"
-rayon = { workspace = true }
-rustc-hash = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-toml = { workspace = true }
-bincode = { workspace = true }
-rkyv = { workspace = true }
-memmap2 = { workspace = true }
-chrono = { workspace = true }
-num_cpus = { workspace = true }
-thiserror = { workspace = true }
+kndo-contract = { path = "../kndo-contract" }
+bincode = "1"
+blake3 = "1"
+globset = "0.4"
+ignore = "0.4"
+rayon = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+smol_str = { version = "0.3", features = ["serde"] }
+thiserror = "2"
 schemars = { version = "1", features = ["smol_str03"], optional = true }
-# `testkit` only — see the feature's comment below.
-tempfile = { workspace = true, optional = true }
 
 [features]
-# Dev-time only (`cargo xtask gen-schema`, schema-validation tests) — never needed at analysis
-# time, so it's not in any shipped binary's default feature set.
-schema = ["dep:schemars"]
-# Exposes `testkit` (the in-memory `MockAdapter` + graph-building helpers this crate's own
-# tests use) to other crates' dev-dependencies, so a downstream test suite driving a real
-# `LanguageAdapter` end-to-end (kndo-plugin-api's WASM compliance tests) can reuse the
-# canonical mock instead of reimplementing its grammar because the canonical one was private.
-# `dep:tempfile`: the shared fixture helpers `testkit` exposes hand out `TempDir`s, so a
-# downstream test suite gets the same unique-by-construction, deleted-on-drop directory this
-# crate's own tests use instead of re-deriving a name under the system temp dir.
-testkit = ["dep:tempfile"]
+schema = ["dep:schemars", "kndo-contract/schema"]
 
 [dev-dependencies]
-tempfile = { workspace = true }
+tempfile = "3"

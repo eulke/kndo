@@ -1,695 +1,89 @@
-//! `test-only` — non-productive code: "you built it, tests enshrined it,
-//! production never came." Fires on nodes colored [`Reachability::TestOnly`] *and* not reachable
-//! from a tooling root — reachable, just never from a production or tooling one — **excluding
-//! test-role files themselves**: a test
-//! being test-only is trivially true (that's what a test is), not a finding. "Declared test
-//! utilities (`testkit`/`fixtures` conventions, configurable)" is the other stated
-//! exemption; there's no config system yet to make it configurable, so it's not attempted here
-//! rather than hand-picking a convention no config can override.
+//! Production-looking code that only tests keep alive. A file that IS a test (it
+//! carries its own Test root) is doing its job; a file that is not, and that no
+//! production or tooling color reaches while the test color does, exists only to be
+//! tested — the waste signal this category names.
 //!
-//! Unlike `unused` ("dead is always certain"), `test-only` findings inherit whatever confidence
-//! their evidence carries (a node reachable only through a `probable` edge from a
-//! test root is test-only-*probable*) — the symbol/file loops below report the reachability
-//! map's own confidence verbatim, and directory rollup takes the *weakest* confidence among a
-//! group's files (a group's claim can never be stronger than its least-certain member).
-//!
-//! The tooling check is not redundant with the color. Colors resolve by precedence
-//! (Production > TestOnly > ToolingOnly), so a node reached from a test root *and* a tooling
-//! root wins `TestOnly`; without consulting [`ReachabilityMap::reachable_from`] for the kind
-//! that lost, this analysis would accuse code an xtask, a build script or a codegen binary
-//! genuinely uses. That is the query the map keeps `reached_possible` for, and `untested`
-//! already asks it the same way.
-//!
-//! Directory rollup reuses [`crate::analysis::rollup`] — same mechanism `unused` uses, not a
-//! reimplementation: what's "eligible" differs (`TestOnly` color vs. `Unreachable`), how
-//! eligible files fold into directories does not.
+//! Dependency subjects are the same verdict on a manifest's production-scope
+//! declarations, over the floor [`super::dependency`] shares with `unused`:
+//! every importing file is a test, so a test-scope declaration would suffice.
+//! Never under an `Unscoped` ecosystem — with no section to move to, the
+//! verdict has no action.
 
-use rustc_hash::FxHashMap as HashMap;
-
-use crate::analysis::reachability::{Reachability, ReachabilityMap};
-use crate::analysis::rollup;
-use crate::analysis::{finding_id, FindingIdParts};
-use crate::engine::{Finding, Location, Severity};
-use crate::graph::ProjectGraph;
-use crate::vocab::{
-    Category, Confidence, FileId, FileOrigin, FileRole, Group, NodeRef, PackageId, RootKind,
-    SubjectKind, SymbolId,
+use super::{
+    AbstentionReason, Analysis, AnalysisContext, RunContext, dependency, has_root_of, is_test_file,
 };
+use kndo_contract::evidence::RootKind;
+use kndo_contract::extension::DependencyScoping;
+use kndo_contract::finding::{Finding, Severity};
+use kndo_contract::subject::Subject;
+use kndo_contract::vocab::{Category, Confidence};
 
-pub fn find_test_only_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Finding> {
-    let mut findings = Vec::new();
-    let mut test_only: HashMap<&str, (FileId, PackageId, Confidence)> = HashMap::default();
-    for (index, file) in graph.files.iter().enumerate() {
-        let Some(class) = file.class else {
-            continue; // unclaimed — out of scope, not a verdict
-        };
-        if matches!(class.origin, FileOrigin::Generated | FileOrigin::Vendored) {
-            continue;
-        }
-        if class.role == FileRole::Test {
-            continue; // the explicitly stated exemption
-        }
+pub struct TestOnly;
 
-        let file_id = FileId(index as u32);
-        let (color, confidence) = reach.get(NodeRef::File(file_id));
-        if color != Reachability::TestOnly {
-            continue;
-        }
-        // "Never from a production **or tooling** root" is this analysis's stated rule, and the
-        // winning color alone does not implement it: colors resolve by precedence
-        // (Production > TestOnly > ToolingOnly), so a node reached from a test root *and* a
-        // tooling root wins `TestOnly` and would be accused despite having a non-test consumer.
-        // `reachable_from` is the map's own answer for the kind that lost that race — the same
-        // reason `untested` consults it. A build script, an xtask, a codegen binary is not a
-        // test: code it uses is not code "production never came" for.
-        if reach.reachable_from(RootKind::Tooling, NodeRef::File(file_id)) {
-            continue;
-        }
-        test_only.insert(file.path.0.as_str(), (file_id, file.package, confidence));
+impl Analysis for TestOnly {
+    fn id(&self) -> &'static str {
+        "test-only"
     }
 
-    let eligible: HashMap<&str, (FileId, PackageId)> = test_only
-        .iter()
-        .map(|(&path, &(id, package, _))| (path, (id, package)))
-        .collect();
-    let rolled_up = rollup::directory_rollups(graph, &eligible);
-    for dir in &rolled_up.dirs {
-        let confidence = dir
-            .files
-            .iter()
-            .filter_map(|f| test_only.get(f).map(|&(_, _, c)| c))
-            .min()
-            .unwrap_or(Confidence::Possible);
-        findings.push(rollup::directory_finding(
-            graph,
-            dir,
-            rollup::DirVerdict {
-                category: Category::TEST_ONLY,
-                group: Group::Waste,
-                severity: Severity::Info,
-                confidence,
-            },
-            format!(
-                "{} is reachable only from tests: {} files, production never calls them",
-                dir.display(),
-                dir.files.len()
-            ),
-        ));
-    }
-    for (&path, &(_, package, confidence)) in &test_only {
-        if rolled_up.covered.contains(path) {
-            continue;
-        }
-        findings.push(Finding {
-            advisory: false,
-            id: finding_id(FindingIdParts {
-                category: &Category::TEST_ONLY,
-                subject_kind: &SubjectKind::FILE,
-                path,
-                symbol_path: "",
-                discriminator: "",
-            }),
-            category: Category::TEST_ONLY,
-            group: Group::Waste,
-            subject_kind: SubjectKind::FILE,
-            severity: Severity::Info, // info by default
-            confidence,
-            message: format!("{path} is reachable only from tests: production never calls it"),
-            location: Location {
-                path: Some(crate::adapter::ProjectPath(smol_str::SmolStr::new(path))),
-                range: None,
-                symbol: None,
-                package: graph.package_name(package).map(str::to_string),
-            },
-            related: Vec::new(),
-            rolled_up: None,
-            sources: Vec::new(),
-            delta: None,
-            delta_origin: None,
-        });
-    }
-    findings
-}
-
-pub fn find_test_only_symbols(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Finding> {
-    let mut findings = Vec::new();
-    let test_roots = crate::analysis::test_root_symbols(graph);
-    for (index, symbol) in graph.symbols.iter().enumerate() {
-        let file = &graph.files[symbol.file.0 as usize];
-        let Some(class) = file.class else { continue };
-        if matches!(class.origin, FileOrigin::Generated | FileOrigin::Vendored) {
-            continue;
-        }
-        if class.role == FileRole::Test {
-            continue; // the file itself is exempt — so are its own symbols
-        }
-        if test_roots.contains(&SymbolId(index as u32)) {
-            continue; // inline test infrastructure IS a test, not test-only production code
-        }
-        if reach.get(NodeRef::File(symbol.file)).0 == Reachability::TestOnly {
-            continue; // rollup: the file-level finding already covers every symbol in it
-        }
-
-        let symbol_id = SymbolId(index as u32);
-        let (color, confidence) = reach.get(NodeRef::Symbol(symbol_id));
-        if color != Reachability::TestOnly {
-            continue;
-        }
-        // Same losing-color rule as the file loop above.
-        if reach.reachable_from(RootKind::Tooling, NodeRef::Symbol(symbol_id)) {
-            continue;
-        }
-
-        let path = file.path.0.as_str();
-        let facet = symbol.kind.facet();
-        let qualified = symbol.qualified_name();
-        findings.push(Finding {
-            advisory: false,
-            id: finding_id(FindingIdParts {
-                category: &Category::TEST_ONLY,
-                subject_kind: &SubjectKind::new(facet),
-                path,
-                symbol_path: &qualified,
-                discriminator: "",
-            }),
-            category: Category::TEST_ONLY,
-            group: Group::Waste,
-            subject_kind: SubjectKind::new(facet),
-            severity: Severity::Info,
-            confidence,
-            message: format!(
-                "{path}#{qualified} is reachable only from tests: nothing in production calls this {facet}"
-            ),
-            location: Location {
-                path: Some(file.path.clone()),
-                range: Some(symbol.span),
-                symbol: Some(qualified.clone()),
-                package: graph.package_name(file.package).map(str::to_string),
-            },
-            related: Vec::new(),
-            rolled_up: None,
-            sources: Vec::new(),
-            delta: None,
-            delta_origin: None,
-        });
-    }
-    findings
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::adapter::{ProjectPath, VisibilityLevel};
-    use crate::analysis::reachability;
-    use crate::graph::{FileNode, SymbolNode};
-    use crate::vocab::{Edge, EdgeKind, FileClass, Provenance, RefKind, RootKind, SymbolKind};
-    use smol_str::SmolStr;
-
-    fn file(path: &str, role: FileRole) -> FileNode {
-        FileNode {
-            path: ProjectPath(SmolStr::new(path)),
-            content_hash: [0; 32],
-            language: Some(SmolStr::new("mock")),
-            class: Some(FileClass {
-                role,
-                origin: FileOrigin::Authored,
-            }),
-            package: crate::vocab::PackageId(0),
-            unit: None,
-            unit_parent: None,
-            test_spans: Vec::new(),
-            string_call_sites: Vec::new(),
-            string_attr_args: Vec::new(),
-        }
+    fn category(&self) -> Category {
+        Category::TEST_ONLY
     }
 
-    fn symbol(file: FileId, name: &str) -> SymbolNode {
-        SymbolNode {
-            file,
-            name: SmolStr::new(name),
-            kind: SymbolKind::Function,
-            span: Default::default(),
-            exported: true,
-            visibility: VisibilityLevel(1),
-            member_of: None,
-            signature_span: None,
-            implicitly_invoked: false,
-            nested_scope: false,
-            visibility_inherited: false,
-            visible_in_unit: None,
-            implements: None,
-            markers: Vec::new(),
+    fn abstains(&self, run: &RunContext<'_>) -> Option<AbstentionReason> {
+        let any_test_root =
+            (0..run.graph.files.len()).any(|i| has_root_of(run.graph, i, RootKind::Test));
+        (!run.graph.files.is_empty() && !any_test_root)
+            .then_some(AbstentionReason::NoTestRootsAnywhere)
+    }
+
+    fn run(&self, cx: &AnalysisContext<'_>) -> Vec<Finding> {
+        let g = cx.graph();
+        let reach = &cx.run.reach;
+        let mut out = Vec::new();
+        for (i, f) in g.files.iter().enumerate() {
+            if !cx.measured[i] {
+                continue;
+            }
+            let is_a_test = has_root_of(g, i, RootKind::Test);
+            let test_only = reach.by(RootKind::Test)[i]
+                && !reach.by(RootKind::Production)[i]
+                && !reach.by(RootKind::Tooling)[i]
+                && !is_a_test;
+            if test_only {
+                // Test roots come from conventions (`Probable`), and name-level edges
+                // carry that uncertainty through.
+                out.push(Finding::new(
+                    Category::TEST_ONLY,
+                    Severity::Info,
+                    Confidence::Probable,
+                    Subject::File {
+                        path: f.path.clone(),
+                    },
+                    "",
+                    "only tests reach this file — no production or tooling root does",
+                ));
+            }
         }
-    }
-
-    fn edge(kind: EdgeKind, confidence: Confidence) -> Edge {
-        Edge {
-            owner: crate::vocab::FileId(0),
-            kind,
-            confidence,
-            source: Provenance::Adapter(SmolStr::new("mock")),
-            span: None,
-        }
-    }
-
-    #[test]
-    fn file_reached_only_by_a_test_root_is_test_only() {
-        let files = vec![
-            file("tests/spec.test.mock", FileRole::Test),
-            file("src/helper.mock", FileRole::Production),
-        ];
-        let edges = vec![
-            edge(
-                EdgeKind::Root {
-                    kind: RootKind::Test,
-                    target: NodeRef::File(FileId(0)),
-                },
-                Confidence::Certain,
-            ),
-            edge(
-                EdgeKind::ImportsFile {
-                    from: FileId(0),
-                    to: FileId(1),
-                },
-                Confidence::Certain,
-            ),
-        ];
-        let graph = ProjectGraph::for_test(files, vec![], vec![], edges);
-        let reach = reachability::compute(&graph);
-        let findings = find_test_only_files(&graph, &reach);
-        assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].category, "test-only");
-        assert_eq!(findings[0].group, crate::vocab::Group::Waste);
-        assert_eq!(findings[0].severity, Severity::Info);
-        assert_eq!(findings[0].subject_kind, "file");
-        assert!(findings[0].message.contains("src/helper.mock"));
-    }
-
-    #[test]
-    fn the_test_root_file_itself_is_never_reported() {
-        let files = vec![file("tests/spec.test.mock", FileRole::Test)];
-        let edges = vec![edge(
-            EdgeKind::Root {
-                kind: RootKind::Test,
-                target: NodeRef::File(FileId(0)),
-            },
-            Confidence::Certain,
-        )];
-        let graph = ProjectGraph::for_test(files, vec![], vec![], edges);
-        let reach = reachability::compute(&graph);
-        assert!(find_test_only_files(&graph, &reach).is_empty());
-    }
-
-    #[test]
-    fn production_reachable_file_is_not_test_only() {
-        let files = vec![file("src/lib.mock", FileRole::Production)];
-        let edges = vec![edge(
-            EdgeKind::Root {
-                kind: RootKind::Production,
-                target: NodeRef::File(FileId(0)),
-            },
-            Confidence::Certain,
-        )];
-        let graph = ProjectGraph::for_test(files, vec![], vec![], edges);
-        let reach = reachability::compute(&graph);
-        assert!(find_test_only_files(&graph, &reach).is_empty());
-    }
-
-    #[test]
-    fn unreachable_file_is_not_test_only() {
-        // Unreachable, not test-only — a different verdict entirely (`unused`'s job).
-        let files = vec![file("src/orphan.mock", FileRole::Production)];
-        let graph = ProjectGraph::for_test(files, vec![], vec![], vec![]);
-        let reach = reachability::compute(&graph);
-        assert!(find_test_only_files(&graph, &reach).is_empty());
-    }
-
-    #[test]
-    fn confidence_reflects_the_weakest_reaching_edge() {
-        let files = vec![
-            file("tests/spec.test.mock", FileRole::Test),
-            file("src/helper.mock", FileRole::Production),
-        ];
-        let edges = vec![
-            edge(
-                EdgeKind::Root {
-                    kind: RootKind::Test,
-                    target: NodeRef::File(FileId(0)),
-                },
-                Confidence::Certain,
-            ),
-            edge(
-                EdgeKind::ImportsFile {
-                    from: FileId(0),
-                    to: FileId(1),
-                },
+        dependency::abstain(cx);
+        for dep in dependency::judged(cx) {
+            if dep.manifest.scoping == DependencyScoping::Unscoped
+                || dep.users.is_empty()
+                || !dep.users.iter().all(|&i| is_test_file(g, i as usize))
+            {
+                continue;
+            }
+            out.push(Finding::new(
+                Category::TEST_ONLY,
+                Severity::Info,
                 Confidence::Probable,
-            ),
-        ];
-        let graph = ProjectGraph::for_test(files, vec![], vec![], edges);
-        let reach = reachability::compute(&graph);
-        let findings = find_test_only_files(&graph, &reach);
-        assert_eq!(findings[0].confidence, Confidence::Probable);
-    }
-
-    #[test]
-    fn generated_and_vendored_are_exempt() {
-        let files = vec![
-            file("tests/spec.test.mock", FileRole::Test),
-            FileNode {
-                path: ProjectPath(SmolStr::new("dist/bundle.mock")),
-                content_hash: [0; 32],
-                language: Some(SmolStr::new("mock")),
-                class: Some(FileClass {
-                    role: FileRole::Production,
-                    origin: FileOrigin::Generated,
-                }),
-                package: crate::vocab::PackageId(0),
-                unit: None,
-                unit_parent: None,
-                test_spans: Vec::new(),
-                string_call_sites: Vec::new(),
-                string_attr_args: Vec::new(),
-            },
-        ];
-        let edges = vec![
-            edge(
-                EdgeKind::Root {
-                    kind: RootKind::Test,
-                    target: NodeRef::File(FileId(0)),
+                Subject::Dependency {
+                    owner_manifest: dep.manifest.manifest.clone(),
+                    name: dep.declaration.name.clone(),
                 },
-                Confidence::Certain,
-            ),
-            edge(
-                EdgeKind::ImportsFile {
-                    from: FileId(0),
-                    to: FileId(1),
-                },
-                Confidence::Certain,
-            ),
-        ];
-        let graph = ProjectGraph::for_test(files, vec![], vec![], edges);
-        let reach = reachability::compute(&graph);
-        assert!(find_test_only_files(&graph, &reach).is_empty());
-    }
-
-    #[test]
-    fn finding_id_is_stable_across_runs() {
-        let files = vec![
-            file("tests/spec.test.mock", FileRole::Test),
-            file("src/helper.mock", FileRole::Production),
-        ];
-        let edges = vec![
-            edge(
-                EdgeKind::Root {
-                    kind: RootKind::Test,
-                    target: NodeRef::File(FileId(0)),
-                },
-                Confidence::Certain,
-            ),
-            edge(
-                EdgeKind::ImportsFile {
-                    from: FileId(0),
-                    to: FileId(1),
-                },
-                Confidence::Certain,
-            ),
-        ];
-        let graph = ProjectGraph::for_test(files, vec![], vec![], edges);
-        let reach = reachability::compute(&graph);
-        let a = find_test_only_files(&graph, &reach);
-        let b = find_test_only_files(&graph, &reach);
-        assert_eq!(a[0].id, b[0].id);
-    }
-
-    // ---------------------------------------------------------------- directory rollup
-
-    #[test]
-    fn a_fully_test_only_directory_rolls_up_to_one_finding() {
-        let files = vec![
-            file("tests/spec.test.mock", FileRole::Test),
-            file("src/live.mock", FileRole::Production), // blocks src/ itself from rolling up
-            file("src/legacy/a.mock", FileRole::Production),
-            file("src/legacy/b.mock", FileRole::Production),
-        ];
-        let edges = vec![
-            edge(
-                EdgeKind::Root {
-                    kind: RootKind::Test,
-                    target: NodeRef::File(FileId(0)),
-                },
-                Confidence::Certain,
-            ),
-            edge(
-                EdgeKind::Root {
-                    kind: RootKind::Production,
-                    target: NodeRef::File(FileId(1)),
-                },
-                Confidence::Certain,
-            ),
-            edge(
-                EdgeKind::ImportsFile {
-                    from: FileId(0),
-                    to: FileId(2),
-                },
-                Confidence::Certain,
-            ),
-            edge(
-                EdgeKind::ImportsFile {
-                    from: FileId(0),
-                    to: FileId(3),
-                },
-                Confidence::Certain,
-            ),
-        ];
-        let graph = ProjectGraph::for_test(files, vec![], vec![], edges);
-        let reach = reachability::compute(&graph);
-        let findings = find_test_only_files(&graph, &reach);
-        assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].subject_kind, "directory");
-        assert_eq!(findings[0].location.path.as_ref().unwrap().0, "src/legacy");
-    }
-
-    // ---------------------------------------------------------------- symbols
-
-    #[test]
-    fn symbol_reached_only_from_a_test_is_test_only() {
-        // main.mock is production-reachable overall, but `helper` is called only from the
-        // test — the "enshrined by tests" case at symbol granularity.
-        let files = vec![
-            file("tests/spec.test.mock", FileRole::Test),
-            file("src/main.mock", FileRole::Production),
-        ];
-        let symbols = vec![symbol(FileId(1), "helper")];
-        let edges = vec![
-            edge(
-                EdgeKind::Root {
-                    kind: RootKind::Production,
-                    target: NodeRef::File(FileId(1)),
-                },
-                Confidence::Certain,
-            ),
-            edge(
-                EdgeKind::Root {
-                    kind: RootKind::Test,
-                    target: NodeRef::File(FileId(0)),
-                },
-                Confidence::Certain,
-            ),
-            edge(
-                EdgeKind::References {
-                    from: NodeRef::File(FileId(0)),
-                    to: SymbolId(0),
-                    kind: RefKind::Read,
-                },
-                Confidence::Certain,
-            ),
-        ];
-        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
-        let reach = reachability::compute(&graph);
-        let findings = find_test_only_symbols(&graph, &reach);
-        assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].category, "test-only");
-        assert_eq!(findings[0].subject_kind, "function");
-        assert!(findings[0].message.contains("main.mock#helper"));
-    }
-
-    #[test]
-    fn symbol_in_an_already_test_only_file_is_not_double_reported() {
-        let files = vec![
-            file("tests/spec.test.mock", FileRole::Test),
-            file("src/helper.mock", FileRole::Production),
-        ];
-        let symbols = vec![symbol(FileId(1), "fn")];
-        let edges = vec![
-            edge(
-                EdgeKind::Root {
-                    kind: RootKind::Test,
-                    target: NodeRef::File(FileId(0)),
-                },
-                Confidence::Certain,
-            ),
-            edge(
-                EdgeKind::ImportsFile {
-                    from: FileId(0),
-                    to: FileId(1),
-                },
-                Confidence::Certain,
-            ),
-        ];
-        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
-        let reach = reachability::compute(&graph);
-        assert!(find_test_only_symbols(&graph, &reach).is_empty());
-        assert_eq!(find_test_only_files(&graph, &reach).len(), 1);
-    }
-
-    /// **A file a test and a build tool both use is not test-only.**
-    ///
-    /// Colors resolve by precedence, and `TestOnly` beats `ToolingOnly` — so this node wins the
-    /// `TestOnly` color despite having a perfectly real non-test consumer. Reading the color
-    /// alone accuses it. The shape is not exotic: it is every `xtask`, build script or codegen
-    /// binary that shares a module with its own tests, and it is what this repository's own
-    /// `dogfood` gate caught the moment `xtask` grew a `src/lib.rs`.
-    #[test]
-    fn a_file_a_tool_and_a_test_both_use_is_not_test_only() {
-        let files = vec![
-            file("tests/spec.test.mock", FileRole::Test),
-            file("xtask/src/shared.mock", FileRole::Production),
-            file("xtask/src/main.mock", FileRole::Production),
-        ];
-        let edges = vec![
-            edge(
-                EdgeKind::Root {
-                    kind: RootKind::Test,
-                    target: NodeRef::File(FileId(0)),
-                },
-                Confidence::Certain,
-            ),
-            edge(
-                EdgeKind::Root {
-                    kind: RootKind::Tooling,
-                    target: NodeRef::File(FileId(2)),
-                },
-                Confidence::Certain,
-            ),
-            edge(
-                EdgeKind::ImportsFile {
-                    from: FileId(0),
-                    to: FileId(1),
-                },
-                Confidence::Certain,
-            ),
-            edge(
-                EdgeKind::ImportsFile {
-                    from: FileId(2),
-                    to: FileId(1),
-                },
-                Confidence::Certain,
-            ),
-        ];
-        let graph = ProjectGraph::for_test(files, vec![], vec![], edges);
-        let reach = reachability::compute(&graph);
-
-        // The premise: the color really does say TestOnly. Without it this test would pass for
-        // the wrong reason — a node the precedence never mis-colored proves nothing.
-        assert_eq!(
-            reach.get(NodeRef::File(FileId(1))).0,
-            Reachability::TestOnly,
-            "the precedence must actually be putting TestOnly on this node"
-        );
-        assert!(
-            find_test_only_files(&graph, &reach).is_empty(),
-            "a file the tooling root reaches has a non-test consumer"
-        );
-    }
-
-    /// The symbol loop obeys the same rule as the file loop.
-    ///
-    /// The file here is deliberately Production-colored: were it `TestOnly` like the file test's
-    /// fixture, the rollup skip ("the file-level finding already covers every symbol in it")
-    /// would exempt the symbol before the color is ever read, and this test would pass without
-    /// the guard it exists to pin. One helper inside a live file, used by the tests and by an
-    /// xtask and by nothing else, is the shape that actually reaches this code.
-    #[test]
-    fn a_symbol_a_tool_and_a_test_both_use_is_not_test_only() {
-        let files = vec![
-            file("tests/spec.test.mock", FileRole::Test),
-            file("src/shared.mock", FileRole::Production),
-            file("xtask/src/main.mock", FileRole::Production),
-        ];
-        let symbols = vec![symbol(FileId(1), "artifact")];
-        let edges = vec![
-            edge(
-                EdgeKind::Root {
-                    kind: RootKind::Test,
-                    target: NodeRef::File(FileId(0)),
-                },
-                Confidence::Certain,
-            ),
-            edge(
-                EdgeKind::Root {
-                    kind: RootKind::Tooling,
-                    target: NodeRef::File(FileId(2)),
-                },
-                Confidence::Certain,
-            ),
-            // The file itself is live production code; only this one symbol in it is not.
-            edge(
-                EdgeKind::Root {
-                    kind: RootKind::Production,
-                    target: NodeRef::File(FileId(1)),
-                },
-                Confidence::Certain,
-            ),
-            edge(
-                EdgeKind::References {
-                    from: NodeRef::File(FileId(0)),
-                    to: SymbolId(0),
-                    kind: RefKind::Call,
-                },
-                Confidence::Certain,
-            ),
-            edge(
-                EdgeKind::References {
-                    from: NodeRef::File(FileId(2)),
-                    to: SymbolId(0),
-                    kind: RefKind::Call,
-                },
-                Confidence::Certain,
-            ),
-        ];
-        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
-        let reach = reachability::compute(&graph);
-
-        assert_eq!(
-            reach.get(NodeRef::File(FileId(1))).0,
-            Reachability::Production,
-            "the file must stay live, or the rollup skip exempts the symbol for another reason"
-        );
-        assert_eq!(
-            reach.get(NodeRef::Symbol(SymbolId(0))).0,
-            Reachability::TestOnly,
-            "the precedence must actually be putting TestOnly on this symbol"
-        );
-        assert!(
-            find_test_only_symbols(&graph, &reach).is_empty(),
-            "a symbol the tooling root reaches has a non-test consumer"
-        );
-    }
-
-    #[test]
-    fn symbols_declared_in_a_test_file_are_exempt_too() {
-        let files = vec![file("tests/spec.test.mock", FileRole::Test)];
-        let symbols = vec![symbol(FileId(0), "fixtureHelper")];
-        let edges = vec![edge(
-            EdgeKind::Root {
-                kind: RootKind::Test,
-                target: NodeRef::File(FileId(0)),
-            },
-            Confidence::Certain,
-        )];
-        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
-        let reach = reachability::compute(&graph);
-        assert!(find_test_only_symbols(&graph, &reach).is_empty());
+                "",
+                "declared as a production dependency, but only test files import it — a test-scope declaration would suffice",
+            ));
+        }
+        out
     }
 }

@@ -1,11 +1,9 @@
 [package]
 name = "kndo-cli"
-description = "The kndo command-line frontend: terminal UI, exit codes, human rendering. Zero analysis logic."
 version.workspace = true
 edition.workspace = true
-rust-version.workspace = true
 license.workspace = true
-repository.workspace = true
+rust-version.workspace = true
 publish.workspace = true
 
 [[bin]]
@@ -13,63 +11,22 @@ name = "kndo"
 path = "src/main.rs"
 
 [dependencies]
-kndo = { path = "../kndo", default-features = false }
-serde = { workspace = true }
-serde_json = { workspace = true }
-# Every hand-rolled `--flag`/`--flag=value` loop in this crate used to be the same idiom copied
-# five times (`parse_flags`, `parse_nav_args`, and three one-off `args.iter().any(|a| a == ...)`
-# scans) — measured at +321 KiB on the release binary, worth paying once to have it written one
-# way. `derive` for the `#[derive(Parser)]` structs; `std`/`error-context`/`help` because clap
-# will not build without `std`, and error-context/help are what produce the per-flag messages
-# this crate's tests pin.
-clap = { version = "4", features = ["derive", "std", "error-context", "help"], default-features = false }
-# Restoring SIGPIPE's default disposition at startup (see main.rs) — Unix only; Windows has
-# no SIGPIPE and the cfg gate keeps this dependency off that target entirely.
+# The build shell: the shipped frontends carry the WASM component loader.
+kndo = { path = "../kndo", features = ["wasm"] }
+# Trimmed the way v1 measured it: `derive` for the Parser structs, the rest because
+# clap's defaults pull suggestion/color machinery the binary doesn't need.
+clap = { version = "4", features = ["derive", "std", "error-context", "help", "usage"], default-features = false }
+
+tempfile = "3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+# main restores the default SIGPIPE disposition (Unix-filter behavior); the
+# sigpipe suite asserts the signal by name.
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
 [dev-dependencies]
-smol_str = { workspace = true }
-# `shell_configuration_is_buildable` reads this manifest.
-toml = { workspace = true }
-tempfile = { workspace = true }
-
-[target.'cfg(unix)'.dev-dependencies]
-libc = "0.2"
-
-[features]
-# The product's default set lives in `kndo`'s manifest and is read from there:
-# `kndo/default` is one entry that cannot drift from what the library enables. It used to be
-# the twenty names spelled out again, and they did drift — `kndo:uikit` was registered in the
-# library and shipped in no binary at all, which looks exactly like a plugin that does not
-# work. A guard test caught that one and named the missing feature; the guard is gone with
-# this commit, because a list that cannot diverge needs no watching.
-#
-# The named passthroughs below stay: they are the public knob, and the reason `default-features
-# = false` is on the dependency at all. They let CI build the "shell" configuration —
-# `--no-default-features --features external-adapters,plugin-install`: a lean host that loads
-# WASM components and ships zero first-party grammars, real and CI-proven rather than only
-# documented. This crate has no `cfg(feature = ...)` of its own; every feature here forwards
-# and nothing else.
-default = ["kndo/default"]
-js = ["kndo/js"]
-go = ["kndo/go"]
-rust = ["kndo/rust"]
-java = ["kndo/java"]
-kotlin = ["kndo/kotlin"]
-swift = ["kndo/swift"]
-json = ["kndo/json"]
-css = ["kndo/css"]
-html = ["kndo/html"]
-external-adapters = ["kndo/external-adapters"]
-plugin-nextjs = ["kndo/plugin-nextjs"]
-plugin-express = ["kndo/plugin-express"]
-plugin-serde = ["kndo/plugin-serde"]
-plugin-info-plist = ["kndo/plugin-info-plist"]
-plugin-thymeleaf = ["kndo/plugin-thymeleaf"]
-plugin-libsass = ["kndo/plugin-libsass"]
-plugin-uikit = ["kndo/plugin-uikit"]
-plugin-rkyv = ["kndo/plugin-rkyv"]
-plugin-wasmtime = ["kndo/plugin-wasmtime"]
-plugin-coverage = ["kndo/plugin-coverage"]
-plugin-install = ["kndo/plugin-install"]
+kndo-testkit = { path = "../kndo-testkit" }
+serde_json = "1"

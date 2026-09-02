@@ -1,83 +1,46 @@
 # FAQ
 
-## Why is my health score a C?
+**A file is reported `unused`, but a framework loads it.** kndo reaches files
+from roots: manifest entries and scripts, launchers, conventions, and what
+extensions declare. Ask `kndo trace <path>` to see whether anything reaches it
+and `kndo used-by <path>` for what keeps it alive. If the framework's rule is
+statable — a directory it scans, an annotation it dispatches on, a name a
+manifest declares — an [extension](extensions.md) states it once for every
+project. If it is a one-off, a `kndo:allow unused -- reason` in the file is the
+honest record.
 
-`kndo health` folds nine category penalties into 0–100 ([the formula](health.md)). The
-dominant one on most repositories is `crap` — complexity × missing coverage. If you have
-coverage reports, drop the lcov file at `coverage/lcov.info` and kndo ingests it; with none,
-every complex function counts as fully untested. `--by-package` shows where the weight sits.
+**Why is the report identical with `--threads 1` and with 32 threads?** Because
+determinism is a gate: order-dependent logic consumes sorted inputs, analysis
+runs on evidence, and wall-clock time never enters the engine. Two runs that
+differ are a bug to report.
 
-## Does "unused" mean I can delete it?
+**What is in `.kndo/`?** `cache/` — the persisted evidence and graph, safe to
+delete, worth caching in CI; `baseline.json` — the accepted findings, worth
+committing; `plugins/` — WASM components kndo loads as extensions. Ignore the
+cache in git, commit the baseline.
 
-For `certain`-confidence findings, yes — that is the design bar, and the message states the
-evidence. Before a big deletion, `kndo impact <selector> --if-deleted` shows everything that
-becomes unreachable with it (and which dependencies you can drop from the manifest while
-you're there). For a *library* (publishable package), your public surface is treated as
-consumed by definition: exported API reachable through your entry points is never "unused"
-just because nothing in-repo calls it.
+**Why does `untested` say `probable` on a file rather than `certain` on a
+function?** Without a coverage report the graph is the evidence: a file no test
+reaches is probably untested, and everything a test imports — however
+indirectly — counts as exercised. Drop a coverage report from your test run at
+one of the [conventional paths](health.md) and the same analysis judges per
+function, `certain`, from what actually executed.
 
-## How does kndo handle reflection / DI / dynamic dispatch?
+**What is an abstention?** An analysis saying it cannot judge, in the report:
+no coverage ingested, no test roots anywhere, files a manifest's ecosystem
+could import that no adapter claims. Abstaining is the alternative to guessing,
+and an abstention never lowers health.
 
-By degrading toward silence: dynamic constructs make things *live-possible*, never
-*dead-possible*. Known reflective contracts are modeled explicitly per language (test
-discovery, serialization hooks, Swift protocol witnesses, `@Override` dispatch), framework
-conventions come from [plugins](plugins.md), and what a plugin knows to be externally
-consumed (FFI, serialization, an SDK surface) it marks via annotations. Arbitrary computed
-names (`Class.forName(prefix + name)`) are honestly unresolvable — code alive only that way
-needs a [suppression](suppressions.md) or a plugin.
+**Is health a score?** No. It is `implicated / subjects`, rendered as a
+percentage of the judged graph that findings do not touch. No weights, no
+history, no clock; the baseline does not raise it, `kndo:allow` does.
 
-## My tests run the compiled binary — why is everything "untested"?
+**Can I see the raw evidence for a finding?** `kndo explain <id>` prints the
+finding and its subject as the graph sees it, with the next verbs to run.
 
-`untested` is *static* reachability: a test that spawns your binary as a subprocess (or hits
-a server over the network) imports nothing, so no edge exists. That's a
-[documented limit](rules.md#untested). The accurate signal for that testing style is
-ingested coverage — wire lcov output into `coverage/lcov.info` and judge test blind spots
-through [`crap`](rules.md#crap) instead; suppress or baseline the static `untested` findings
-if they're noise for you.
+**Does kndo read my code anywhere else?** No. It runs where you run it, reads
+the tree, and writes `.kndo/`. The GitHub Action publishes the report to the
+pull request through the token you give it.
 
-## Monorepos?
-
-Workspaces are first-class: package topology from the manifests, per-package library/app
-mode, per-package dependency attribution ([`undeclared`](rules.md#undeclared) doesn't excuse
-package A because sibling B declares the dep), `version-skew` across members, package-level
-rollups ("this whole workspace member is dead"), `deep-import` on declared package surfaces,
-and `kndo health --by-package`.
-
-## Why did a finding disappear after I added a test?
-
-`test-only` and `untested` are reachability facts: the moment a test reaches code, its
-test-blind-spot finding resolves; if production code is only reachable from tests, it flips
-to `test-only` — each verdict states exactly one thing, so fixing one can legitimately
-surface the other.
-
-## Why doesn't the exit code change when a plugin reports findings?
-
-Plugin findings are advisory by default — installing a plugin must never break a build. Opt
-the ones you trust into the gate with
-[`[plugins.gate]`](configuration.md#pluginsgate).
-
-## Is my code sent anywhere?
-
-No. kndo is a local static analyzer: no network, no telemetry, and it never executes the
-analyzed project. Plugins run inside a WebAssembly sandbox with no filesystem or network of
-their own; even `kndo plugin install` only talks to the GitHub release you name.
-
-## Can I trust the cache?
-
-Yes — by construction. Cache entries are content-addressed: `--no-cache` (or deleting
-`.kndo/cache/`) can only make a run slower, never change its findings, and reports are
-byte-identical across warm/cold runs and thread counts. If you ever see otherwise, that's a
-bug worth reporting.
-
-## What's the fastest way to see why kndo thinks something is alive?
-
-`kndo trace <selector>` prints a concrete root-to-node path with the weakest edge called out
-— usually the one import you forgot existed. `kndo describe <selector>` shows the full
-picture: color, roots that reach it, degree, metrics, attached findings.
-
-## How do I silence one finding without hiding real problems?
-
-A [`kndo:allow` pragma with a reason](suppressions.md#inline-suppressions), directly above
-the declaration. It's scoped, visible in review, and self-cleaning: when the finding it
-acknowledges goes away, the pragma itself is flagged `stale` so it never outlives its
-purpose.
+**Windows?** Tested in CI on every push; no release archive yet — build from
+source.

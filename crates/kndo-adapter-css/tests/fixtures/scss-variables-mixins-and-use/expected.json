@@ -1,5 +1,0 @@
-{
-  "findings": [
-    { "category": "unused", "subject_kind": "css-variable", "path": "_tokens.scss", "symbol": "$unused-token" }
-  ]
-}

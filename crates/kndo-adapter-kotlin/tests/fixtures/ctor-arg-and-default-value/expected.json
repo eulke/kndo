@@ -1,16 +1,152 @@
 {
+  "run": {
+    "schema": "kndo-v2/m6",
+    "mode": "full",
+    "files_discovered": 2,
+    "files_claimed": 1,
+    "extensions": [
+      {
+        "id": "kndo:kotlin",
+        "files": 1,
+        "narrowable_scopes": [
+          "module"
+        ],
+        "export_narrowing": "none",
+        "import_cycles": "tolerated",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "underivable"
+      }
+    ]
+  },
+  "health": {
+    "implicated": 0,
+    "subjects": 10,
+    "by_category": [],
+    "by_package": [
+      {
+        "name": "",
+        "manifest": "",
+        "implicated": 0,
+        "subjects": 10
+      }
+    ]
+  },
   "findings": [
     {
+      "id": "kndo-0e79a122618f",
       "category": "internal-only",
-      "subject_kind": "class",
-      "path": "src/main/kotlin/demo/Demo.kt",
-      "symbol": "MyMeta"
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "src/main/kotlin/demo/Demo.kt",
+        "selector": {
+          "Free": "MyProvider"
+        },
+        "span": {
+          "start": 243,
+          "end": 280
+        }
+      },
+      "lines": {
+        "start": 9,
+        "end": 9
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     },
     {
+      "id": "kndo-564989475f65",
       "category": "internal-only",
-      "subject_kind": "object",
-      "path": "src/main/kotlin/demo/Demo.kt",
-      "symbol": "MyProvider"
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "src/main/kotlin/demo/Demo.kt",
+        "selector": {
+          "Free": "MyMeta"
+        },
+        "span": {
+          "start": 282,
+          "end": 322
+        }
+      },
+      "lines": {
+        "start": 11,
+        "end": 11
+      },
+      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
     }
-  ]
+  ],
+  "fixed": [],
+  "baselined": 0,
+  "abstained": [
+    {
+      "category": "unused",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 1
+        }
+      }
+    },
+    {
+      "category": "test-only",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    },
+    {
+      "category": "untested",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    },
+    {
+      "category": "undeclared",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 1
+        }
+      }
+    },
+    {
+      "category": "crap",
+      "reason": "no-coverage-ingested",
+      "scope": "whole-run"
+    }
+  ],
+  "suppressed": {
+    "total": 0,
+    "by_category": []
+  },
+  "plugins": [
+    {
+      "coordinate": "kndo:coverage-lcov",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-cobertura",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-jacoco",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-go",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    }
+  ],
+  "diagnostics": []
 }

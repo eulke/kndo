@@ -1,18 +1,18 @@
 #!/bin/sh
 # kndo installer. Downloads a precompiled release binary, verifies its checksum,
-# and installs it — no cargo/rustc required. Safe to re-run: it replaces cleanly, never appends.
+# and installs it — no cargo/rustc required. Safe to re-run: it replaces cleanly.
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/eulke/kondo/main/install.sh | sh
 #
 # Env overrides:
-#   KNDO_VERSION      pin a specific release tag (e.g. "v1.2.0"); default: latest
+#   KNDO_VERSION      pin a release tag (e.g. "v1.2.0", verbatim); default: latest
 #   KNDO_INSTALL_DIR  install location; default: "$HOME/.local/bin"
-#   KNDO_BASE_URL     fetch the archive and checksums.txt from here instead of the project's
-#                     GitHub releases — an internal mirror, or a staging directory served over
-#                     HTTP. Requires KNDO_VERSION (there is no releases API to ask). CI uses it
-#                     to install from the artifact it just built: the layout this script assumes
-#                     is a contract, and until something ran it end to end, nothing checked it.
+#   KNDO_BASE_URL     fetch the archive and checksums.txt from here instead of the
+#                     project's GitHub releases — a mirror, or a directory served over
+#                     HTTP. Requires KNDO_VERSION. CI installs from the artifact it just
+#                     built this way: the layout this script assumes is a contract, and
+#                     until something ran it end to end, nothing checked it.
 set -eu
 
 REPO="eulke/kondo"
@@ -58,6 +58,7 @@ resolve_version() {
 VERSION=$(resolve_version)
 [ -n "$VERSION" ] || die "could not resolve a release version (network issue, or no releases published yet)"
 
+# The tag verbatim, leading `v` included: that is the name the release uploads.
 ARCHIVE="kndo-${VERSION}-${TARGET}.tar.gz"
 BASE_URL="${KNDO_BASE_URL:-https://github.com/$REPO/releases/download/$VERSION}"
 

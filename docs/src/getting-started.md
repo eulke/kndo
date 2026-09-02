@@ -1,131 +1,79 @@
 # Getting started
 
-## First run
+Run it at the root of a repository:
 
-From any project root:
-
-```console
+```text
 $ kndo
+warning unused scripts/orphan.ts: no root anchors this file and no reachable file imports it
+1 finding
+health 90.0 · implicated 1 of 10 · unused 1
+abstained: test-only — no test root anchors any file in this graph
+abstained: untested — no test root anchors any file in this graph
+abstained: crap — no coverage report ingested this run
 ```
 
-That is `kndo check` in full-scan mode: every language adapter claims its files, the project
-graph is assembled, and every analysis runs. No configuration is required — manifests
-(`package.json`, `go.mod`, `Cargo.toml`, `pom.xml`, `build.gradle`, `Package.swift`) tell
-kndo what your entry points and dependencies are.
+Each line is one finding: severity, category, subject (with a line where the
+subject has one), and the message that states the evidence. The verdict line
+counts them; the health line is the ratio the findings implicate; the
+abstentions are what kndo could not judge and why — here, a project with no
+tests and no coverage report.
 
-On a terminal you get the human report; when stdout is piped, kndo emits pure JSON instead
-(`kndo | jq .findings` just works). See [CLI reference](cli.md#output-formats) for the full
-format-selection rules.
-
-## Reading the human report
-
-```console
-$ kndo
-✗ undeclared src/api/client.ts:3  lodash is imported but not declared by package web [kndo-4f19c2aa07b3]
-◦ unused (dependency) package.json  date-fns is declared but never imported [kndo-a3f81c92e5d4]
-◦ unused src/billing/tax.ts:41  calcLegacyTax() is unreachable from any production or test root [kndo-77b0e4f2c19d]
-▲ cyclic src/state/store.ts:1  4 files form an import cycle [kndo-9c04d1b2aa7e]
-   └ evidence: src/state/store.ts → src/state/actions.ts → src/state/selectors.ts → src/state/store.ts
-
-health   82.4  B
-  unused-symbols       ▃  −6.2  (47)
-  duplication          ▄  −7.1  (8412 tokens)
-  crap                 ▂  −4.0  (12, load 1912.4, coverage none)
-```
-
-- Findings are grouped in a fixed triage order — **defect** (`✗`), **waste** (`◦`),
-  **risk** (`▲`), **hygiene** (`·`) — worst first. Severity is implied by the group and
-  category; it is never repeated per line.
-- Each line reads `<glyph> <category>[:<subject>] <path:line> <message> [(confidence)] [id]`.
-  Confidence is shown only when it is below `certain`. The bracketed id is stable: it hashes
-  the code object (category, path, symbol), never line numbers, so it survives reformatting.
-- Findings that carry an evidence chain (cycles, for example) render it as indented `└` lines.
-- The health block appears after the findings: score, grade, and the non-zero per-category
-  penalties. `kndo health` shows the full table — see [Health & coverage](health.md).
-- A clean run is one line: file/symbol/edge counts and the run duration.
-- `--quiet` collapses everything to a single summary line; `--verbose` adds per-phase timings
-  and cache state.
-
-Diagnostics — a coverage report that is too old, a file that failed to parse — go to
-**stderr**, in every format. stdout is always the pure report.
-
-## Exit codes at a glance
-
-- `0` — clean (no findings at or above the threshold).
-- `1` — findings at or above `--fail-on`.
-- `2` — kndo itself could not run (bad flag, unresolvable diff base, broken project root).
-  An analysis that did not run can never read as a clean pass.
-
-Full mode defaults to `--fail-on none` (exploratory — a legacy repository's pre-existing
-findings shouldn't fail a plain `kndo`); diff modes default to `--fail-on warning` (a gate
-should gate).
-
-## Adopting kndo on an existing codebase
-
-Acknowledge everything that exists today, then keep new waste out:
-
-```console
-$ kndo baseline
-kndo: baseline written — 412 findings acknowledged (.kndo/baseline.json)
-```
-
-Baselined findings stop appearing in reports and never fail a run; the report header keeps an
-honest count (`baseline: 412 acknowledged`). When an acknowledged issue is actually fixed,
-its entry goes stale and `kndo baseline --update` drops it — the baseline only ever shrinks
-on its own; it never grows without an explicit, reviewable `--update`.
-Details: [Suppressions & baseline](suppressions.md).
-
-## The pre-commit gate
-
-```console
-$ kndo init --hook
-kndo.toml: written
-.gitignore: added .kndo/
-pre-commit hook: installed at .git/hooks/pre-commit
-```
-
-`kndo init` writes a fully-commented `kndo.toml` (every setting optional — see
-[Configuration](configuration.md)) and adds `.kndo/` to `.gitignore`. With `--hook` it also
-installs a pre-commit hook — but only if `.git/hooks/pre-commit` doesn't already exist; kndo
-never clobbers an existing hook. The hook is one line:
+The exit code is the gate: 0 when nothing reached `--fail-on` (default
+`warning`), 1 when something did, 2 when kndo could not run. Pipe it and you
+get the JSON envelope instead of the human render:
 
 ```sh
-exec kndo check --staged --fail-on warning
+kndo check --format json > report.json
 ```
 
-It analyzes exactly what `git commit` would commit (the index) against `HEAD`.
+## Ask why
 
-## Diff modes
+Every finding is a claim about the graph, and the graph answers questions:
 
-```console
-$ kndo check --staged          # index vs HEAD (what the pre-commit hook runs)
-$ kndo check --diff main       # working tree vs merge-base(main, HEAD)
+```text
+$ kndo trace scripts/releaseUtils.ts
+[scripts/releaseUtils.ts] file · tooling-only
+  from tooling root scripts/detect-release.ts
+  → scripts/releaseUtils.ts via import (certain)
+
+$ kndo used-by scripts/orphan.ts
+[scripts/orphan.ts] file · unreachable
+  kept by: nothing
+
+$ kndo explain kndo-ea8c083aa403
+[kndo-ea8c083aa403] warning unused · scripts/orphan.ts · certain
+  no root anchors this file and no reachable file imports it
+[scripts/orphan.ts] file · unreachable
+next: kndo used-by scripts/orphan.ts · kndo trace scripts/orphan.ts
 ```
 
-Both analyze the **before** and **after** trees fully and report the difference:
+`trace` is the liveness proof: a root, then the hops, each with the confidence
+of the edge. `used-by` is the deletion question. `explain` takes a finding id
+from the report. All seven verbs are in [Navigation](navigation.md).
 
-- `NEW (introduced by this change)` — findings whose subject is inside your change: code that
-  is dead on arrival.
-- `NEW (derived, in untouched code)` — findings your change *flipped* elsewhere: you removed
-  the last production reference, and a distant symbol became unreachable.
-- `FIXED` — findings present before and gone after. Deleting dead code shows up as a win.
+## Settle in
 
-The header carries the net (`2 new · 3 fixed · net −1`) and the health movement
-(`health 82.0 ──▶ 84.1  +2.1 ↑`). Pre-existing findings never appear and never gate — diff
-mode judges the change, not the repository.
+```sh
+kndo init            # writes kndo.toml with every default shown
+kndo init --hook     # …and a pre-commit hook running `kndo check --staged`
+kndo baseline        # accept today's findings; from now on, only what is new
+```
 
-## Everyday commands
+Add `.kndo/cache/` to `.gitignore` and commit `.kndo/baseline.json`. The cache
+makes warm runs cheap and never changes the output; the baseline is the team's
+record of accepted debt, and [health](health.md) ignores it on purpose.
 
-| Command | What it does |
-|---|---|
-| `kndo` / `kndo check` | full scan |
-| `kndo check --staged` / `--diff <ref>` | judge a change by its blast radius |
-| `kndo health [--by-package]` | 0–100 score with per-category penalties ([Health & coverage](health.md)) |
-| `kndo baseline [--update]` | acknowledge current findings ([Suppressions & baseline](suppressions.md)) |
-| `kndo doctor` | what kndo sees: adapters, cache, plugins and why each is active |
-| `kndo find` / `describe` / `uses` / `used-by` / `trace` / `impact` | graph navigation ([Graph navigation](navigation.md)) |
-| `kndo query` | batched navigation over stdin ([For agents](agents.md)) |
-| `kndo plugin …` | install, list, remove, author plugins ([Plugins](plugins.md)) |
+## Sharpen it with coverage
 
-Next: the [CLI reference](cli.md) for every flag, or the
-[Findings reference](rules.md) to understand what kndo just told you.
+Leave a coverage report from your test run at one of the paths kndo reads —
+`lcov.info`, `coverage/lcov.info`, `coverage.xml`, `target/site/jacoco/jacoco.xml`,
+`coverage.out` — and the next run judges `untested` per function from what
+executed, and turns on `crap`, the complexity-times-untestedness signal. See
+[Health and coverage](health.md).
+
+## In a pull request
+
+The [GitHub Action](ci.md) runs `kndo check --diff <base>` and publishes the
+change-scoped report — what the pull request introduces and what it fixes — as
+a sticky comment, annotations and the job summary, failing on the same rule as
+the hook.

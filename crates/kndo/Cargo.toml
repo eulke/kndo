@@ -1,147 +1,36 @@
 [package]
 name = "kndo"
-description = "The composed product: core + first-party adapters + built-in plugins. Frontends depend on this crate and nothing below it."
 version.workspace = true
 edition.workspace = true
-rust-version.workspace = true
 license.workspace = true
-repository.workspace = true
+rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+kndo-adapter-css = { path = "../kndo-adapter-css" }
+kndo-adapter-go = { path = "../kndo-adapter-go" }
+kndo-adapter-html = { path = "../kndo-adapter-html" }
+kndo-adapter-java = { path = "../kndo-adapter-java" }
+kndo-adapter-kotlin = { path = "../kndo-adapter-kotlin" }
+kndo-adapter-python = { path = "../kndo-adapter-python" }
+kndo-adapter-swift = { path = "../kndo-adapter-swift" }
+kndo-adapter-rust = { path = "../kndo-adapter-rust" }
+kndo-adapter-ts = { path = "../kndo-adapter-ts" }
+kndo-apple = { path = "../kndo-apple" }
+kndo-contract = { path = "../kndo-contract" }
 kndo-core = { path = "../kndo-core" }
-kndo-adapter-js = { path = "../kndo-adapter-js", optional = true }
-kndo-adapter-go = { path = "../kndo-adapter-go", optional = true }
-kndo-adapter-rust = { path = "../kndo-adapter-rust", optional = true }
-kndo-adapter-java = { path = "../kndo-adapter-java", optional = true }
-kndo-adapter-kotlin = { path = "../kndo-adapter-kotlin", optional = true }
-kndo-adapter-swift = { path = "../kndo-adapter-swift", optional = true }
-kndo-adapter-json = { path = "../kndo-adapter-json", optional = true }
-kndo-adapter-css = { path = "../kndo-adapter-css", optional = true }
-kndo-adapter-html = { path = "../kndo-adapter-html", optional = true }
-kndo-plugin-api = { path = "../kndo-plugin-api", optional = true }
-kndo-plugin-nextjs = { path = "../kndo-plugin-nextjs", optional = true }
-kndo-plugin-express = { path = "../kndo-plugin-express", optional = true }
-kndo-plugin-coverage = { path = "../kndo-plugin-coverage", optional = true }
-kndo-plugin-serde = { path = "../kndo-plugin-serde", optional = true }
-kndo-plugin-info-plist = { path = "../kndo-plugin-info-plist", optional = true }
-kndo-plugin-thymeleaf = { path = "../kndo-plugin-thymeleaf", optional = true }
-kndo-plugin-libsass = { path = "../kndo-plugin-libsass", optional = true }
-kndo-plugin-uikit = { path = "../kndo-plugin-uikit", optional = true }
-kndo-plugin-rkyv = { path = "../kndo-plugin-rkyv", optional = true }
-kndo-plugin-wasmtime = { path = "../kndo-plugin-wasmtime", optional = true }
-# `plugin install` (GitHub release JSON) and `kndo plugin new`/plugins.lock (TOML).
-serde_json = { workspace = true, optional = true }
-# Typed errors for the author kit and verify (CLAUDE.md: no new Result<_, String>).
-thiserror = { workspace = true }
-toml = { workspace = true, optional = true }
-# Plugin activation-rule evaluation: file-glob checks, plus the project paths and known-file
-# set the adapters' own manifest extractors take. No JSON or TOML parser here any more — which
-# ecosystem spells a dependency how is the adapter's knowledge, not the frontend's.
-glob = { version = "0.3", optional = true }
-smol_str = { workspace = true, optional = true }
-rustc-hash = { workspace = true, optional = true }
-# Global XDG plugin directory only (external-adapters).
-dirs = { version = "6", optional = true }
-# `kndo plugin build` (author kit): componentize a core wasm module in-process —
-# the same encoder call xtask and the compliance suites already make.
-wit-component = { version = "0.219", optional = true }
-# `kndo plugin install` (plugin-install): release fetch + checksum verification.
-ureq = { version = "3", optional = true, features = ["platform-verifier"] }
-sha2 = { version = "0.10", optional = true }
-# `plugin install`/`verify` unpack into a scratch directory. A `TempDir`, not a hand-built
-# name: unique by construction (these are plain functions, called concurrently), 0700, and
-# removed on drop — including on the `?` paths, which a bare `PathBuf` leaked into the user's
-# temp dir on every failed install.
-tempfile = { workspace = true, optional = true }
-
-[dev-dependencies]
-# "schema" here is test-only, to detect a stale committed schema — the shipped binary above
-# never enables it.
-kndo-core = { path = "../kndo-core", features = ["schema"] }
-jsonschema = { version = "0.49", default-features = false }
-serde_json = { workspace = true }
-wit-component = "0.219"
-tempfile = { workspace = true }
-smol_str = { workspace = true }
-# plugin_install_probe.rs computes release checksums for its canned source.
-sha2 = "0.10"
+kndo-coverage = { path = "../kndo-coverage" }
+kndo-host-wasm = { path = "../kndo-host-wasm", optional = true }
 
 [features]
-# Every first-party adapter is a feature so embedders can build slimmer binaries;
-# the default is the full product.
-default = [
-    "js",
-    "go",
-    "rust",
-    "java",
-    "kotlin",
-    "swift",
-    "json",
-    "css",
-    "html",
-    "external-adapters",
-    "plugin-nextjs",
-    "plugin-express",
-    "plugin-serde",
-    "plugin-info-plist",
-    "plugin-thymeleaf",
-    "plugin-libsass",
-    "plugin-uikit",
-    "plugin-rkyv",
-    "plugin-wasmtime",
-    "plugin-coverage",
-    "plugin-install",
-]
-js = ["dep:kndo-adapter-js"]
-go = ["dep:kndo-adapter-go"]
-rust = ["dep:kndo-adapter-rust"]
-java = ["dep:kndo-adapter-java"]
-kotlin = ["dep:kndo-adapter-kotlin"]
-swift = ["dep:kndo-adapter-swift"]
-json = ["dep:kndo-adapter-json"]
-css = ["dep:kndo-adapter-css"]
-html = ["dep:kndo-adapter-html"]
-# Third-party adapters as WASM components, auto-discovered
-# from `.kndo/plugins/*.wasm`. Its own feature (not folded into `default`'s language list) because
-# it pulls in a WASM runtime rather than a language grammar — an embedder who wants a minimal,
-# fully-static binary with no third-party extension surface can build with
-# `--no-default-features --features js,go,...` to drop it.
-# `dep:toml` is the author kit's (`kndo plugin new` writes a Cargo.toml); it used to arrive
-# by accident through `plugin-activation`, which no longer parses any manifest itself.
-external-adapters = [
-    "dep:kndo-plugin-api",
-    "dep:dirs",
-    "dep:wit-component",
-    "dep:toml",
-    "dep:tempfile",
-    "plugin-activation",
-]
-# Built-in convention plugins — each pulls in `plugin-activation`
-# because a gated built-in without rule evaluation would be always-on, costing every
-# non-matching project the graph-cache bypass.
-plugin-nextjs = ["dep:kndo-plugin-nextjs", "plugin-activation"]
-plugin-express = ["dep:kndo-plugin-express", "plugin-activation"]
-plugin-serde = ["dep:kndo-plugin-serde", "plugin-activation"]
-plugin-info-plist = ["dep:kndo-plugin-info-plist", "plugin-activation"]
-plugin-thymeleaf = ["dep:kndo-plugin-thymeleaf", "plugin-activation"]
-plugin-libsass = ["dep:kndo-plugin-libsass", "plugin-activation"]
-plugin-uikit = ["dep:kndo-plugin-uikit", "plugin-activation"]
-plugin-rkyv = ["dep:kndo-plugin-rkyv", "plugin-activation"]
-plugin-wasmtime = ["dep:kndo-plugin-wasmtime", "plugin-activation"]
-# Coverage ingesters are the one built-in family that does NOT imply `plugin-activation`:
-# they are always-on by contract (empty activation — a FileExists gate would deactivate
-# them exactly when kndo.toml points `report` at a non-well-known path), and they declare
-# `mutates_graph() == false`, so always-on costs no fast path.
-plugin-coverage = ["dep:kndo-plugin-coverage"]
-# `kndo plugin install/list/remove`: fetch a coordinate's GitHub release, verify
-# checksum + identity binding, close over dependencies, write the global directory +
-# plugins.lock. Implies `external-adapters` — installing targets the WASM tier's global
-# directory and identity binding probes the component with the same loader.
-plugin-install = ["external-adapters", "dep:ureq", "dep:sha2", "dep:serde_json", "dep:toml"]
-# Activation-rule evaluation: shared by the WASM tier's global-install path and
-# by gated built-ins. Not user-facing on its own — enabled through the features above. Without
-# it (a truly minimal build) built-ins are unconditional, which is only safe because every
-# convention plugin's feature implies this one — the only possible built-in there is the
-# coverage ingester, whose always-on registration is documented behavior.
-plugin-activation = ["dep:glob", "dep:smol_str", "dep:rustc-hash"]
+# The build-shell feature: sessions opened through `open()` also load external
+# WASM components from `<root>/.kndo/plugins/`. The shipped `kndo` binary turns
+# it on; embedders that want no wasmtime in their tree simply don't.
+wasm = ["dep:kndo-host-wasm"]
+# Schema generation doors (`query::options_schema` and friends) for frontends
+# that advertise the contract — serve's tool listing derives from the same
+# types the door parses.
+schema = ["kndo-core/schema"]
+
+[dev-dependencies]
+kndo-testkit = { path = "../kndo-testkit" }

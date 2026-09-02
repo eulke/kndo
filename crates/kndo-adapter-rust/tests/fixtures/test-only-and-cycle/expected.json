@@ -1,51 +1,102 @@
 {
+  "run": {
+    "schema": "kndo-v2/m6",
+    "mode": "full",
+    "files_discovered": 7,
+    "files_claimed": 6,
+    "extensions": [
+      {
+        "id": "kndo:rust",
+        "files": 6,
+        "narrowable_scopes": [
+          "crate"
+        ],
+        "export_narrowing": "none",
+        "import_cycles": "tolerated",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "crate-root"
+      }
+    ]
+  },
+  "health": {
+    "implicated": 0,
+    "subjects": 12,
+    "by_category": [],
+    "by_package": [
+      {
+        "name": "cycles",
+        "manifest": "Cargo.toml",
+        "implicated": 0,
+        "subjects": 12
+      }
+    ]
+  },
   "findings": [
     {
-      "category": "internal-only",
-      "subject_kind": "function",
-      "path": "src/fixture_helper.rs",
-      "symbol": "build_fixture"
-    },
-    {
-      "category": "internal-only",
-      "subject_kind": "function",
-      "path": "src/ping.rs",
-      "symbol": "start"
-    },
-    {
-      "category": "internal-only",
-      "subject_kind": "function",
-      "path": "src/pong.rs",
-      "symbol": "reply"
-    },
-    {
-      "category": "test-only",
-      "subject_kind": "function",
-      "path": "src/fixture_helper.rs",
-      "symbol": "build_fixture"
-    },
-    {
+      "id": "kndo-1cc5901f1df0",
       "category": "untested",
-      "subject_kind": "file",
-      "path": "src/main.rs"
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "src/ping.rs"
+      },
+      "message": "production-reachable, but no test reaches this file"
     },
     {
+      "id": "kndo-a86464a07631",
       "category": "untested",
-      "subject_kind": "function",
-      "path": "src/ping.rs",
-      "symbol": "start"
-    },
-    {
-      "category": "untested",
-      "subject_kind": "function",
-      "path": "src/pong.rs",
-      "symbol": "reply"
-    },
-    {
-      "category": "unused",
-      "subject_kind": "function",
-      "path": "src/pong.rs",
-      "symbol": "rally"
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "src/pong.rs"
+      },
+      "message": "production-reachable, but no test reaches this file"
     }
-  ]
+  ],
+  "fixed": [],
+  "baselined": 0,
+  "abstained": [
+    {
+      "category": "crap",
+      "reason": "no-coverage-ingested",
+      "scope": "whole-run"
+    }
+  ],
+  "suppressed": {
+    "total": 0,
+    "by_category": []
+  },
+  "plugins": [
+    {
+      "coordinate": "kndo:coverage-lcov",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-cobertura",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-jacoco",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-go",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    }
+  ],
+  "diagnostics": []
 }

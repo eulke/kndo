@@ -1,7 +1,7 @@
-# git-cliff config — categorizes commits by the type prefix CONTRIBUTING.md's Commits section
-# mandates (feat/fix/docs/refactor/perf/test/build/ci/chore/revert). The catch-all "Other"
-# group at the bottom of `commit_parsers` is load-bearing: an un-prefixed commit subject
-# lands there instead of vanishing from the changelog.
+# git-cliff config — categorizes commits by the conventional type prefix CI lints
+# for (feat/fix/docs/refactor/perf/test/build/ci/chore/revert). The catch-all
+# "Other" group at the bottom of `commit_parsers` is load-bearing: an un-prefixed
+# subject lands there instead of vanishing from the changelog.
 
 [changelog]
 header = """
@@ -41,7 +41,7 @@ commit_parsers = [
     { message = "^chore\\(release\\)", skip = true },
     { message = "^chore", group = "Miscellaneous" },
     { message = "^revert", group = "Reverts" },
-    # Catch-all: every commit subject that doesn't match a type prefix above lands here
+    # Catch-all: every commit subject that matches no prefix above lands here
     # rather than being silently dropped.
     { message = ".*", group = "Other" },
 ]

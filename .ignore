@@ -1,33 +1,20 @@
 # Read by the `ignore` crate (and by ripgrep/fd), NOT by git — which is exactly the point.
 #
-# Conformance fixture corpora are deliberately-flawed test data: checked into
-# git and exercised by the conformance harness's own `cargo test` run, but excluded from
-# kndo's self-check of its own repo (ROADMAP M1 exit: "kndo check on kndo's own JS-free repo
-# returns cleanly"). Analyzing them would report every flaw they were written to contain.
-#
-# This lived in .gitignore until it silently skipped a newly added fixture — green locally,
-# absent from CI, because .gitignore governs `git add` for untracked files. `.ignore` carries
-# the same globs to every consumer that needs them and none of the version-control side
-# effect, so the exclusion is stated once and means only what it says.
+# Conformance fixture corpora are deliberately-flawed test data: checked into git and
+# exercised by the conformance gate's own `cargo test` run, but excluded from kndo's
+# self-check of its own repository — analyzing them would report every flaw they were
+# written to contain. An entry in .gitignore would also govern `git add` and silently
+# skip a newly added fixture; `.ignore` states the exclusion once and means only that.
 **/tests/fixtures/
 
-# The v1 quarry: source the v2 rewrite mines for fixtures and oracle comparisons,
-# no longer the code under self-analysis. kndo's dogfood judges v2 — the kndo being
-# built — and these directories retire from the repo at the root swap.
-/crates/
-/xtask/
-/action/
-/examples/
+# Frozen experiment records (the M-1 fingerprint spike): evidence for the decision they
+# measured, not product code.
 /spikes/
 
-# Frozen v2 experiment records (M-1 fingerprint spike): kept as evidence for the
-# decision they measured, not product code.
-/v2/spikes/
-
 # Oracle output and corpus measurements: JSON captured from real runs, not code.
-/v2/oracle/
-/v2/corpus-findings/
+/oracle/
+/corpus-findings/
 
 # Third-party source vendored verbatim for one build-flag fix (its README records the
 # one deviation): not the code under judgment, and its manifest is not ours to align.
-/v2/vendor/
+/vendor/

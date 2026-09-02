@@ -1,5 +1,0 @@
-{
-  "findings": [
-    { "category": "unused", "subject_kind": "file", "path": "src/internal.ts" }
-  ]
-}

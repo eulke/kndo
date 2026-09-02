@@ -1,1 +1,0 @@
-export { publicFn } from './lib';

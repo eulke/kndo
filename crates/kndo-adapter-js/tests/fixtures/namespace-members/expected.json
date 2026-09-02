@@ -1,5 +1,0 @@
-{
-  "findings": [
-    { "category": "unused", "subject_kind": "function", "path": "src/helpers.ts", "symbol": "dead" }
-  ]
-}

@@ -1,601 +1,390 @@
-//! Analyses: pure functions over the [`crate::graph::ProjectGraph`]. Each analysis
-//! consumes the graph plus whatever shared engines it needs (reachability, dup-detection, …)
-//! and produces [`crate::engine::Finding`]s — never source text, never I/O.
+//! Analyses weigh evidence and return verdicts; the engine derives abstention before
+//! any analysis runs — from the pairing rule (an analysis NAMES the streams it weighs
+//! in [`Analysis::requires`]; files whose claiming adapter did not declare them form
+//! its unmeasured set) and from each analysis's own whole-run precondition
+//! ([`Analysis::abstains`]). Never an `if adapter == …`, never a per-analysis flag.
+//!
+//! Reachability is computed once, per root color, and shared: every analysis reads
+//! the same [`Reachability`] instead of building its own.
 
-pub mod crap;
-pub mod cyclic;
-pub mod deep_import;
-pub mod dependency_hygiene;
-pub mod duplicate;
-pub mod health;
-pub mod internal_only;
-pub mod private_type_leak;
-pub mod reachability;
-mod rollup;
-pub mod test_only;
-pub mod undeclared;
-pub mod unresolved;
-pub mod untested;
-pub mod unused;
-pub mod version_skew;
+mod crap;
+mod cyclic;
+mod dependency;
+mod duplicate;
+mod internal_only;
+mod private_type_leak;
+mod test_only;
+mod undeclared;
+mod unresolved;
+mod untested;
+mod unused;
+mod version_skew;
 
-use rustc_hash::FxHashSet as HashSet;
+pub use crap::{CRAP_THRESHOLD, Crap};
+pub use cyclic::Cyclic;
+pub use duplicate::Duplicate;
+pub use internal_only::InternalOnly;
+pub use private_type_leak::PrivateTypeLeak;
+pub use test_only::TestOnly;
+pub use undeclared::Undeclared;
+pub use unresolved::Unresolved;
+pub use untested::Untested;
+pub use unused::Unused;
+pub use version_skew::VersionSkew;
 
-use rayon::prelude::*;
+use crate::graph::Graph;
+use kndo_contract::evidence::{EvidenceStream, RootKind, RootTarget};
+use kndo_contract::finding::{Finding, sort_findings};
+use kndo_contract::vocab::Category;
+use kndo_contract::vocab::ProjectPath;
+use serde::Serialize;
+use smol_str::SmolStr;
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
 
-use crate::adapter::Diagnostic;
-use crate::analysis::reachability::ReachabilityMap;
-use crate::coverage::CoverageMap;
-use crate::engine::Finding;
-use crate::graph::{PackageNode, ProjectGraph};
-use crate::vocab::{Category, FileId, PackageId, SymbolId};
-
-/// The five hash inputs of [`finding_id`], named so they can't be silently transposed at a
-/// call site the way five adjacent `&str` positional parameters could — finding identity
-/// (baseline matching, suppression stability) depends on getting this exactly right.
-pub struct FindingIdParts<'a> {
-    pub category: &'a crate::vocab::Category,
-    pub subject_kind: &'a crate::vocab::SubjectKind,
-    pub path: &'a str,
-    pub symbol_path: &'a str,
-    pub discriminator: &'a str,
+/// Which root colors reach each file: seeded by the file's own roots of that kind
+/// (extraction evidence and manifest anchors alike), propagated over resolved import
+/// edges. Computed once per run; every analysis reads the same answer.
+pub struct Reachability {
+    production: Vec<bool>,
+    test: Vec<bool>,
+    tooling: Vec<bool>,
 }
 
-/// The stable finding id: `"kndo-" + blake3(category,
-/// subject_kind, path, symbol path, discriminator)[..12 hex]`. Line/column never participate,
-/// so reformatting never changes an id; a rename or move does, because it changes `path`/
-/// `symbol_path`. `Category`/`SubjectKind`'s `Display` supplies the hash input bytes directly
-/// — changing either `Display` impl changes every finding id downstream.
-pub fn finding_id(parts: FindingIdParts<'_>) -> String {
-    let mut hasher = blake3::Hasher::new();
-    for part in [
-        parts.category.as_str(),
-        parts.subject_kind.as_str(),
-        parts.path,
-        parts.symbol_path,
-        parts.discriminator,
-    ] {
-        hasher.update(part.as_bytes());
-        hasher.update(b"\0");
+impl Reachability {
+    pub fn compute(graph: &Graph) -> Self {
+        Reachability {
+            production: flood(graph, RootKind::Production),
+            test: flood(graph, RootKind::Test),
+            tooling: flood(graph, RootKind::Tooling),
+        }
     }
-    let digest = hasher.finalize();
-    format!("kndo-{}", &digest.to_hex()[..12])
+
+    pub fn by(&self, kind: RootKind) -> &[bool] {
+        match kind {
+            RootKind::Production => &self.production,
+            RootKind::Test => &self.test,
+            RootKind::Tooling => &self.tooling,
+        }
+    }
+
+    /// Reached by any color at all.
+    pub fn any(&self, file: usize) -> bool {
+        self.production[file] || self.test[file] || self.tooling[file]
+    }
 }
 
-/// Symbols that are themselves `Test` roots — inline test infrastructure (`#[test]`
-/// functions and everything an adapter roots inside a `#[cfg(test)]` module; Rust is the
-/// first language whose tests live inside production files). `test-only` and `untested`
-/// exempt them: a test being reachable only from tests is the definition of a test, not a
-/// finding.
-fn test_root_symbols(graph: &ProjectGraph) -> std::collections::HashSet<crate::vocab::SymbolId> {
-    use crate::vocab::{EdgeKind, NodeRef, RootKind};
-    graph
-        .edges
+/// Does this file itself carry a root of `kind` (its own evidence or an anchor)?
+pub fn has_root_of(graph: &Graph, file: usize, kind: RootKind) -> bool {
+    let f = &graph.files[file];
+    f.evidence
+        .roots
         .iter()
-        .filter_map(|e| match e.kind {
-            EdgeKind::Root {
-                kind: RootKind::Test,
-                target: NodeRef::Symbol(s),
-            } => Some(s),
-            _ => None,
-        })
-        .collect()
+        .chain(&f.anchored)
+        .any(|r| r.kind == kind)
 }
 
-/// The stable, empty-for-the-implicit-package identity used in finding ids — deliberately
-/// *not* the human-readable label (which can be absent or a display name), so ids stay stable
-/// across packages that share a name but not a manifest path. Shared by every per-package
-/// dependency analysis (`undeclared`, `dependency_hygiene`).
-fn package_discriminator(graph: &ProjectGraph, package: PackageId) -> String {
-    match graph.packages[package.0 as usize].manifest.as_ref() {
-        Some(path) => path.0.to_string(),
-        None => String::new(),
-    }
+/// Is this file a test as a whole — a whole-file Test root, its own or anchored?
+/// A production file with an inline test module carries a declaration-targeted
+/// Test root and is NOT one: its imports serve production.
+pub fn is_test_file(graph: &Graph, file: usize) -> bool {
+    let f = &graph.files[file];
+    f.evidence
+        .roots
+        .iter()
+        .chain(&f.anchored)
+        .any(|r| r.kind == RootKind::Test && matches!(r.target, RootTarget::WholeFile))
 }
 
-fn package_label(graph: &ProjectGraph, package: PackageId) -> String {
-    match &graph.packages[package.0 as usize] {
-        PackageNode {
-            name: Some(name), ..
-        } => name.to_string(),
-        PackageNode {
-            manifest: Some(path),
-            ..
-        } => path.0.to_string(),
-        PackageNode { .. } => "the project (no manifest)".to_string(),
+fn flood(graph: &Graph, kind: RootKind) -> Vec<bool> {
+    let n = graph.files.len();
+    let mut reached = vec![false; n];
+    let mut queue: Vec<usize> = (0..n).filter(|&i| has_root_of(graph, i, kind)).collect();
+    for &i in &queue {
+        reached[i] = true;
     }
-}
-
-/// Analysis-level tuning, resolved by the engine from `kndo.toml` (built-in defaults
-/// otherwise). A separate input for the same reason `coverage` is: every knob acts strictly
-/// post-assembly, so none of this belongs in the graph or its cache key.
-#[derive(Debug, Clone)]
-pub struct AnalysisTuning {
-    /// `[analysis.crap] threshold` — scores above it are findings; also health's axis unit.
-    pub crap_threshold: f64,
-    /// `[[externally-invoked]]` — the project's own declaration of which markers mean "an
-    /// entry point reached from outside the analyzed source". Belongs here, not in the graph,
-    /// for the reason the struct doc gives: it is interpretation, applied post-assembly, so a
-    /// change to it must never invalidate a cached graph. See
-    /// [`reachability::externally_invoked_symbols`].
-    pub externally_invoked: Vec<crate::config::ExternallyInvokedRule>,
-    /// `[analysis.duplicate] min-tokens` — smaller functions are not clone-matched. Never
-    /// below the extraction floor ([`crate::config::DUPLICATE_MIN_TOKENS_FLOOR`]): under it
-    /// the facts carry no fingerprints to match.
-    pub duplicate_min_tokens: u32,
-    /// `--strict`: an analysis with a promotable verdict raises its severity under it.
-    ///
-    /// Deliberately read by the analyses that own a promotable verdict rather than applied as
-    /// a blanket post-pass: severity is part of what a verdict *means*, and a central table
-    /// mapping every category to a strict severity would be a second place to keep in sync
-    /// with the analysis that decides the ordinary one. Exactly one reads it today
-    /// (`undeclared`), and adding a second is one line in that analysis.
-    pub strict: bool,
-}
-
-impl Default for AnalysisTuning {
-    fn default() -> Self {
-        AnalysisTuning {
-            crap_threshold: crap::CRAP_THRESHOLD,
-            duplicate_min_tokens: crate::config::DUPLICATE_MIN_TOKENS_FLOOR,
-            externally_invoked: Vec::new(),
-            strict: false,
-        }
-    }
-}
-
-/// Everything one analysis needs to read — the graph, its precomputed reachability, the run's
-/// ingested coverage, and the resolved tuning knobs. Shared, read-only, borrowed once per run.
-struct AnalysisCtx<'a> {
-    pub(crate) graph: &'a ProjectGraph,
-    pub(crate) reach: &'a ReachabilityMap,
-    pub(crate) coverage: &'a CoverageMap,
-    pub(crate) tuning: &'a AnalysisTuning,
-}
-
-/// Whether an analysis's findings are the whole truth about its categories this run.
-///
-/// The distinction the finding list cannot carry: "no `crap` findings" means *clean* when the
-/// analysis judged and *unknown* when it didn't, and every consumer that reads absence as
-/// cleanliness is wrong in the second case — `stale` accusing a live pragma of acknowledging a
-/// gone issue, `health` penalizing zero for an axis nobody measured, an agent reading the JSON.
-#[derive(Debug, Default)]
-pub enum Verdict {
-    /// Judged. An absent finding means the code is clean.
-    #[default]
-    Judged,
-    /// Did not judge — the input the verdict needs is absent this run (no coverage report, no
-    /// test roots). Carries the ONE diagnostic that explains it, which is precisely why the
-    /// text a user reads and the flag `suppression`/`health` consult cannot disagree: they are
-    /// the same value, not two spellings of it.
-    Abstained(Diagnostic),
-}
-
-/// One category nobody judged this run, and why — [`Verdict::Abstained`] crossed with the
-/// abstaining analysis's [`Analysis::categories`]. Reaches `RunResult` and the JSON envelope
-/// because a consumer seeing zero findings in a category otherwise cannot tell "clean" from
-/// "not measured", nor what would make it measurable.
-#[derive(Debug, Clone, serde::Serialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-pub struct Abstention {
-    pub category: crate::vocab::Category,
-    /// The abstaining diagnostic's message, verbatim.
-    pub reason: String,
-}
-
-/// One analysis's contribution — findings plus whatever aux data `health` needs from it.
-/// `cycle_files`/`duplicated` are populated by exactly one analysis each (`cyclic`,
-/// `duplicate-functions`); every other analysis leaves them empty, which is why `Default`
-/// merges cleanly regardless of which analysis produced a given output.
-#[derive(Default)]
-struct AnalysisOutput {
-    pub(crate) findings: Vec<Finding>,
-    /// Diagnostics the analysis emits *while judging*. An abstention's own diagnostic does
-    /// NOT belong here — it lives in `verdict`, and `run_all` folds it into the stream, so
-    /// there is exactly one place that text exists.
-    pub(crate) diagnostics: Vec<Diagnostic>,
-    pub(crate) verdict: Verdict,
-    pub(crate) cycle_files: HashSet<FileId>,
-    pub(crate) duplicated: Vec<(SymbolId, u32)>,
-}
-
-impl AnalysisOutput {
-    fn findings(findings: Vec<Finding>) -> Self {
-        AnalysisOutput {
-            findings,
-            ..Default::default()
-        }
-    }
-}
-
-/// One analysis, over a shared [`AnalysisCtx`]. Private to this crate and free to change shape
-/// release to release — the uniform [`AnalysisOutput`] return type is what replaces the six
-/// divergent shapes (`Vec<Finding>`, `(Vec<Finding>, Option<Diagnostic>)`, …) the underlying
-/// `find_*` functions still return; this trait is the seam between them and [`run_all`]'s
-/// registry, not a rewrite of the analyses themselves.
-trait Analysis: Send + Sync {
-    /// Also the `--verbose` timings label. Not a category: one analysis may own several
-    /// (`dependencies` emits three).
-    fn id(&self) -> &'static str;
-    /// Every category this analysis can emit — what an abstention makes unknown. **No
-    /// default**, deliberately, for the same reason [`crate::plugin::Plugin::mutates_graph`]
-    /// has none: an empty list silently turns an abstention into a no-op, and a wrong list
-    /// silences pragmas for a category that *was* judged. Decide it, don't inherit it.
-    fn categories(&self) -> &'static [Category];
-    fn run(&self, ctx: &AnalysisCtx<'_>) -> AnalysisOutput;
-}
-
-/// Per-analysis category tables. `static`, not an inline `&[…]`: [`Category`] wraps a
-/// `SmolStr`, so a borrowed array literal is a temporary that cannot be promoted to `'static`.
-static UNUSED_CATEGORIES: [Category; 1] = [Category::UNUSED];
-static TEST_ONLY_CATEGORIES: [Category; 1] = [Category::TEST_ONLY];
-/// `dependencies` owns four: `undeclared` and `version-skew` outright, plus the `unused`/
-/// `test-only` facets its hygiene pass emits about dependencies (which is why a category is
-/// only unknown when *every* owning analysis abstains — see `run_all`).
-static DEPENDENCIES_CATEGORIES: [Category; 4] = [
-    Category::UNDECLARED,
-    Category::VERSION_SKEW,
-    Category::UNUSED,
-    Category::TEST_ONLY,
-];
-static DUPLICATE_CATEGORIES: [Category; 1] = [Category::DUPLICATE];
-static INTERNAL_ONLY_CATEGORIES: [Category; 1] = [Category::INTERNAL_ONLY];
-static PRIVATE_TYPE_LEAK_CATEGORIES: [Category; 1] = [Category::PRIVATE_TYPE_LEAK];
-static DEEP_IMPORT_CATEGORIES: [Category; 1] = [Category::DEEP_IMPORT];
-static CYCLIC_CATEGORIES: [Category; 1] = [Category::CYCLIC];
-static CRAP_CATEGORIES: [Category; 1] = [Category::CRAP];
-static UNTESTED_CATEGORIES: [Category; 1] = [Category::UNTESTED];
-static UNRESOLVED_CATEGORIES: [Category; 1] = [Category::UNRESOLVED];
-
-struct UnusedAnalysis;
-impl Analysis for UnusedAnalysis {
-    fn id(&self) -> &'static str {
-        "unused"
-    }
-    fn categories(&self) -> &'static [Category] {
-        &UNUSED_CATEGORIES
-    }
-    fn run(&self, ctx: &AnalysisCtx<'_>) -> AnalysisOutput {
-        let mut f = unused::find_unused_files(ctx.graph, ctx.reach);
-        f.extend(unused::find_unused_symbols(ctx.graph, ctx.reach));
-        AnalysisOutput::findings(f)
-    }
-}
-
-struct TestOnlyAnalysis;
-impl Analysis for TestOnlyAnalysis {
-    fn id(&self) -> &'static str {
-        "test-only"
-    }
-    fn categories(&self) -> &'static [Category] {
-        &TEST_ONLY_CATEGORIES
-    }
-    fn run(&self, ctx: &AnalysisCtx<'_>) -> AnalysisOutput {
-        let mut f = test_only::find_test_only_files(ctx.graph, ctx.reach);
-        f.extend(test_only::find_test_only_symbols(ctx.graph, ctx.reach));
-        AnalysisOutput::findings(f)
-    }
-}
-
-struct DependenciesAnalysis;
-impl Analysis for DependenciesAnalysis {
-    fn id(&self) -> &'static str {
-        "dependencies"
-    }
-    fn categories(&self) -> &'static [Category] {
-        &DEPENDENCIES_CATEGORIES
-    }
-    fn run(&self, ctx: &AnalysisCtx<'_>) -> AnalysisOutput {
-        let mut f = undeclared::find_undeclared_dependencies(ctx.graph, ctx.tuning.strict);
-        f.extend(version_skew::find_version_skew(ctx.graph));
-        let (hygiene_findings, hygiene_diagnostic) =
-            dependency_hygiene::find_dependency_hygiene(ctx.graph);
-        f.extend(hygiene_findings);
-        AnalysisOutput {
-            findings: f,
-            diagnostics: hygiene_diagnostic.into_iter().collect(),
-            ..Default::default()
-        }
-    }
-}
-
-struct DuplicateFilesAnalysis;
-impl Analysis for DuplicateFilesAnalysis {
-    fn id(&self) -> &'static str {
-        "duplicate-files"
-    }
-    fn categories(&self) -> &'static [Category] {
-        &DUPLICATE_CATEGORIES
-    }
-    fn run(&self, ctx: &AnalysisCtx<'_>) -> AnalysisOutput {
-        AnalysisOutput::findings(duplicate::find_duplicate_files(ctx.graph))
-    }
-}
-
-struct DuplicateFunctionsAnalysis;
-impl Analysis for DuplicateFunctionsAnalysis {
-    fn id(&self) -> &'static str {
-        "duplicate-functions"
-    }
-    fn categories(&self) -> &'static [Category] {
-        &DUPLICATE_CATEGORIES
-    }
-    fn run(&self, ctx: &AnalysisCtx<'_>) -> AnalysisOutput {
-        let (findings, duplicated) =
-            duplicate::find_duplicate_functions(ctx.graph, ctx.tuning.duplicate_min_tokens);
-        AnalysisOutput {
-            findings,
-            duplicated,
-            ..Default::default()
-        }
-    }
-}
-
-struct InternalOnlyAnalysis;
-impl Analysis for InternalOnlyAnalysis {
-    fn id(&self) -> &'static str {
-        "internal-only"
-    }
-    fn categories(&self) -> &'static [Category] {
-        &INTERNAL_ONLY_CATEGORIES
-    }
-    fn run(&self, ctx: &AnalysisCtx<'_>) -> AnalysisOutput {
-        AnalysisOutput::findings(internal_only::find_internal_only(ctx.graph, ctx.reach))
-    }
-}
-
-struct PrivateTypeLeakAnalysis;
-impl Analysis for PrivateTypeLeakAnalysis {
-    fn id(&self) -> &'static str {
-        "private-type-leak"
-    }
-    fn categories(&self) -> &'static [Category] {
-        &PRIVATE_TYPE_LEAK_CATEGORIES
-    }
-    fn run(&self, ctx: &AnalysisCtx<'_>) -> AnalysisOutput {
-        AnalysisOutput::findings(private_type_leak::find_private_type_leaks(ctx.graph))
-    }
-}
-
-struct DeepImportAnalysis;
-impl Analysis for DeepImportAnalysis {
-    fn id(&self) -> &'static str {
-        "deep-import"
-    }
-    fn categories(&self) -> &'static [Category] {
-        &DEEP_IMPORT_CATEGORIES
-    }
-    fn run(&self, ctx: &AnalysisCtx<'_>) -> AnalysisOutput {
-        AnalysisOutput::findings(deep_import::find_deep_imports(ctx.graph))
-    }
-}
-
-struct CyclicAnalysis;
-impl Analysis for CyclicAnalysis {
-    fn id(&self) -> &'static str {
-        "cyclic"
-    }
-    fn categories(&self) -> &'static [Category] {
-        &CYCLIC_CATEGORIES
-    }
-    fn run(&self, ctx: &AnalysisCtx<'_>) -> AnalysisOutput {
-        let (findings, cycle_files) = cyclic::find_cycles(ctx.graph);
-        AnalysisOutput {
-            findings,
-            cycle_files,
-            ..Default::default()
-        }
-    }
-}
-
-struct CrapAnalysis;
-impl Analysis for CrapAnalysis {
-    fn id(&self) -> &'static str {
-        "crap"
-    }
-    fn categories(&self) -> &'static [Category] {
-        &CRAP_CATEGORIES
-    }
-    fn run(&self, ctx: &AnalysisCtx<'_>) -> AnalysisOutput {
-        let (findings, verdict) =
-            crap::find_crap(ctx.graph, ctx.coverage, ctx.tuning.crap_threshold);
-        AnalysisOutput {
-            findings,
-            verdict,
-            ..Default::default()
-        }
-    }
-}
-
-struct UnresolvedAnalysis;
-impl Analysis for UnresolvedAnalysis {
-    fn id(&self) -> &'static str {
-        "unresolved"
-    }
-    fn categories(&self) -> &'static [Category] {
-        &UNRESOLVED_CATEGORIES
-    }
-    fn run(&self, ctx: &AnalysisCtx<'_>) -> AnalysisOutput {
-        AnalysisOutput::findings(unresolved::find_unresolved(ctx.graph))
-    }
-}
-
-struct UntestedAnalysis;
-impl Analysis for UntestedAnalysis {
-    fn id(&self) -> &'static str {
-        "untested"
-    }
-    fn categories(&self) -> &'static [Category] {
-        &UNTESTED_CATEGORIES
-    }
-    fn run(&self, ctx: &AnalysisCtx<'_>) -> AnalysisOutput {
-        let (findings, verdict) = untested::find_untested(ctx.graph, ctx.reach);
-        AnalysisOutput {
-            findings,
-            verdict,
-            ..Default::default()
-        }
-    }
-}
-
-/// Registry order fixes the `--verbose` timings order — reordering this list reorders that
-/// output.
-fn registry() -> Vec<Box<dyn Analysis>> {
-    vec![
-        Box::new(UnusedAnalysis),
-        Box::new(TestOnlyAnalysis),
-        Box::new(DependenciesAnalysis),
-        Box::new(DuplicateFilesAnalysis),
-        Box::new(DuplicateFunctionsAnalysis),
-        Box::new(InternalOnlyAnalysis),
-        Box::new(PrivateTypeLeakAnalysis),
-        Box::new(DeepImportAnalysis),
-        Box::new(CyclicAnalysis),
-        Box::new(CrapAnalysis),
-        Box::new(UntestedAnalysis),
-        Box::new(UnresolvedAnalysis),
-    ]
-}
-
-/// Runs every analysis and returns their findings, sorted by id for deterministic output.
-/// `coverage` is the run's ingested coverage — a separate input rather than part of
-/// the graph, because report freshness varies independently of source content hashes and must
-/// never be cached into a snapshot.
-pub fn run_all(
-    graph: &crate::graph::ProjectGraph,
-    coverage: &crate::coverage::CoverageMap,
-    tuning: &AnalysisTuning,
-) -> AnalysisOutcome {
-    let mut timings = Timings::new();
-    let reach = timings.time("reachability", || {
-        let declared = reachability::externally_invoked_symbols(graph, &tuning.externally_invoked);
-        reachability::compute_with_roots(graph, &declared)
-    });
-    let ctx = AnalysisCtx {
-        graph,
-        reach: &reach,
-        coverage,
-        tuning,
-    };
-
-    // Independent analyses run concurrently: each entry's own elapsed time is real, so they
-    // overlap under parallelism and `--verbose`'s total exceeds the wall clock by design.
-    // `par_iter().map().collect()` preserves registry order regardless of completion order, so
-    // the reduce below stays deterministic without an explicit sort.
-    let registry = registry();
-    let results: Vec<(&dyn Analysis, AnalysisOutput, u64)> = registry
-        .par_iter()
-        .map(|a| {
-            let start = std::time::Instant::now();
-            let out = a.run(&ctx);
-            (a.as_ref(), out, start.elapsed().as_micros() as u64)
-        })
-        .collect();
-
-    let mut findings = Vec::new();
-    let mut cycle_files: HashSet<FileId> = HashSet::default();
-    let mut duplicated: Vec<(SymbolId, u32)> = Vec::new();
-    // Registry order for both, so `--verbose` timings and the diagnostics stream read in the
-    // same order — every analysis's diagnostics stream through regardless of whether it is
-    // named in any separate list.
-    let mut diagnostics: Vec<Diagnostic> = Vec::new();
-    // A category is unknown only when EVERY analysis that can emit it abstained: `unused` and
-    // `test-only` each have two owners (the symbol/file analysis and `dependencies`' hygiene
-    // pass), and one owner's abstention says nothing about what the other judged.
-    let mut abstained: Vec<(Category, String)> = Vec::new();
-    let mut judged: HashSet<&'static str> = HashSet::default();
-    for (analysis, out, us) in results {
-        findings.extend(out.findings);
-        cycle_files.extend(out.cycle_files);
-        duplicated.extend(out.duplicated);
-        diagnostics.extend(out.diagnostics);
-        match out.verdict {
-            Verdict::Judged => judged.extend(analysis.categories().iter().map(Category::as_str)),
-            Verdict::Abstained(diagnostic) => {
-                abstained.extend(
-                    analysis
-                        .categories()
-                        .iter()
-                        .map(|c| (c.clone(), diagnostic.message.clone())),
-                );
-                diagnostics.push(diagnostic);
+    while let Some(i) = queue.pop() {
+        // Unit mates are edges like imports: reaching one file of a shared-scope
+        // unit reaches what its names can see.
+        let f = &graph.files[i];
+        for &t in f.imports.iter().chain(&f.sees) {
+            let t = t as usize;
+            if !reached[t] {
+                reached[t] = true;
+                queue.push(t);
             }
         }
-        timings.entries.push((analysis.id(), us));
     }
-    let mut seen: HashSet<String> = HashSet::default();
-    let abstained: Vec<Abstention> = abstained
-        .into_iter()
-        .filter(|(category, _)| {
-            !judged.contains(category.as_str()) && seen.insert(category.as_str().to_string())
-        })
-        .map(|(category, reason)| Abstention { category, reason })
-        .collect();
+    reached
+}
 
-    timings.time("sort-findings", || {
-        findings.sort_unstable_by(|a, b| a.id.cmp(&b.id))
-    });
+/// Everything one run shares across analyses; each analysis reads what it needs.
+pub struct RunContext<'a> {
+    pub graph: &'a Graph,
+    pub reach: Reachability,
+    /// The navigation index — the keep rules' one home, shared between the
+    /// `unused` judgment and the query verbs.
+    pub index: crate::navigate::Index,
+    pub coverage: Option<crate::coverage::Coverage>,
+    /// Per adapter coordinate: the scope tokens its language can demote to a
+    /// strictly narrower rung (`ExtensionSpec::narrowable_scopes`) — the fact
+    /// `internal-only` reads before advising anything.
+    pub narrowables: &'a [(smol_str::SmolStr, Vec<smol_str::SmolStr>)],
+    /// Adapter coordinates whose language can stop exporting a declaration by
+    /// editing only it (`ExtensionSpec::export_narrowing`) — the fact
+    /// `internal-only`'s Exported branch reads before advising anything.
+    pub export_narrowables: &'a [smol_str::SmolStr],
+    /// Adapter coordinates whose language declared import cycles a hazard
+    /// (`ExtensionSpec::import_cycles`) — the fact `cyclic` reads before
+    /// accusing anything.
+    pub cycle_hazards: &'a [smol_str::SmolStr],
+    /// Parallel to `Graph::manifest_declarations`: why each manifest's
+    /// dependency usage goes unjudged this run, `None` where it is judged —
+    /// derived once, read by every dependency-subject verdict.
+    pub manifests: Vec<Option<AbstentionReason>>,
+}
 
-    // Health is computed over the pre-suppression findings (the score measures the codebase,
-    // not what's been acknowledged away) and the aux stats the analyses just produced.
-    let health = timings.time("health", || {
-        health::compute(
-            graph,
-            &reach,
-            &findings,
-            &health::HealthInputs {
-                coverage,
-                cycle_files: &cycle_files,
-                duplicated: &duplicated,
-                crap_threshold: tuning.crap_threshold,
-                abstained: &abstained,
-            },
-        )
-    });
+pub struct AnalysisContext<'a> {
+    pub run: &'a RunContext<'a>,
+    /// Per-file, for THIS analysis: did the claiming adapter declare every stream it
+    /// requires? Unmeasured files must produce no findings.
+    pub measured: &'a [bool],
+    /// Where an analysis records the parts of the run it declined to judge —
+    /// drained by the engine into the run's abstentions under this analysis's
+    /// category, so a partial silence is as legible as a whole-run one.
+    abstentions: std::cell::RefCell<Vec<(AbstentionReason, AbstentionScope)>>,
+}
 
-    AnalysisOutcome {
-        findings,
-        diagnostics,
-        abstained,
-        health,
-        timings: timings.entries,
+impl<'a> AnalysisContext<'a> {
+    pub fn graph(&self) -> &'a Graph {
+        self.run.graph
+    }
+
+    pub fn abstain(&self, reason: AbstentionReason, scope: AbstentionScope) {
+        self.abstentions.borrow_mut().push((reason, scope));
     }
 }
 
-/// Everything one analysis pass produces: findings (id-sorted), analysis-side diagnostics,
-/// the health score computed from the same primitives, and per-phase wall
-/// times (the `--verbose` timings; the profiling discipline needs the
-/// numbers to be one flag away, not a rebuild away).
-pub struct AnalysisOutcome {
-    pub findings: Vec<Finding>,
-    pub diagnostics: Vec<Diagnostic>,
-    /// Categories no analysis judged this run, each with the reason — registry order, one entry
-    /// per category. Empty is the normal case and means every category was judged.
-    pub abstained: Vec<Abstention>,
-    pub health: health::Health,
-    /// `(phase, duration in µs)` in execution order. Never serialized into the JSON envelope —
-    /// wall times are run metadata, not analysis output, and the determinism matrix compares
-    /// envelopes byte-for-byte.
-    pub timings: Vec<(&'static str, u64)>,
+pub trait Analysis: Sync {
+    fn id(&self) -> &'static str;
+    fn category(&self) -> Category;
+    fn requires(&self) -> &'static [EvidenceStream] {
+        &[]
+    }
+    /// A precondition on the run as a whole. `Some` means this run cannot be judged
+    /// at all — the engine records the abstention and never calls [`Analysis::run`].
+    /// Degrade-toward-keep-alive at analysis scale: silence over accusation.
+    fn abstains(&self, _run: &RunContext<'_>) -> Option<AbstentionReason> {
+        None
+    }
+    fn run(&self, cx: &AnalysisContext<'_>) -> Vec<Finding>;
 }
 
-/// Tiny collector for the per-phase wall times above.
-struct Timings {
-    entries: Vec<(&'static str, u64)>,
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub enum AbstentionScope {
+    WholeRun,
+    Files {
+        unmeasured: u32,
+    },
+    /// Dependency subjects only: this many declaring manifests went unjudged,
+    /// every file still judged as usual.
+    Manifests {
+        unjudged: u32,
+    },
 }
 
-impl Timings {
-    fn new() -> Timings {
-        Timings {
-            entries: Vec::new(),
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub enum AbstentionReason {
+    StreamsNotDeclared {
+        missing: Vec<EvidenceStream>,
+    },
+    /// No root anchors anything in the whole graph. Reachability judged from zero
+    /// roots would accuse every file at once; that is a missing-evidence condition,
+    /// not a verdict.
+    NoRootsAnywhere,
+    /// No test root anchors anything: with zero test evidence, "tests never reach
+    /// this" describes every declaration equally and accuses none.
+    NoTestRootsAnywhere,
+    /// The manifest's claiming extension declares no spelling that derives a
+    /// package from an import specifier (`DependencyIdentity::Underivable`), so
+    /// "nothing imports this dependency" cannot be told from "the imports spell
+    /// it differently" — JVM coordinates, Swift products, Python distributions.
+    SpecifierIdentityUnderivable,
+    /// Files no extension claims sit inside the package with a suffix the
+    /// claiming extension declares can import
+    /// (`ExtensionSpec::dependency_importers`) — a `.vue` component, an `.html`
+    /// page — so an import of the dependency may exist where nothing can see it.
+    UnclaimedImporters {
+        suffixes: Vec<SmolStr>,
+    },
+    /// No root reaches any file the package owns: dead or apparatus, its
+    /// dependencies are moot and the file findings already say so.
+    NothingReachesOwnedFiles,
+    /// Every file the package owns is a test: a fixture package, whose
+    /// dependencies serve the tests by construction.
+    OwnedFilesAreTests,
+    /// No coverage report was ingested this run: a verdict with a measured
+    /// coverage factor cannot be reached for any function at once.
+    NoCoverageIngested,
+    /// The ingested report never instrumented these files: their functions'
+    /// coverage is unknown, not zero.
+    NoCoverageRecord,
+}
+
+impl fmt::Display for AbstentionReason {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AbstentionReason::StreamsNotDeclared { missing } => {
+                write!(f, "required evidence streams not declared: {missing:?}")
+            }
+            AbstentionReason::NoRootsAnywhere => {
+                write!(f, "no root anchors any file in this graph")
+            }
+            AbstentionReason::NoTestRootsAnywhere => {
+                write!(f, "no test root anchors any file in this graph")
+            }
+            AbstentionReason::SpecifierIdentityUnderivable => {
+                write!(
+                    f,
+                    "the claiming extension derives no package identity from import specifiers"
+                )
+            }
+            AbstentionReason::UnclaimedImporters { suffixes } => {
+                write!(f, "files nothing claims could import: ")?;
+                for (i, suffix) in suffixes.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, ".{suffix}")?;
+                }
+                Ok(())
+            }
+            AbstentionReason::NothingReachesOwnedFiles => {
+                write!(f, "no root reaches any file the package owns")
+            }
+            AbstentionReason::OwnedFilesAreTests => {
+                write!(f, "every file the package owns is a test")
+            }
+            AbstentionReason::NoCoverageIngested => {
+                write!(f, "no coverage report ingested this run")
+            }
+            AbstentionReason::NoCoverageRecord => {
+                write!(f, "the coverage report never instrumented these files")
+            }
         }
     }
+}
 
-    fn time<T>(&mut self, phase: &'static str, f: impl FnOnce() -> T) -> T {
-        let start = std::time::Instant::now();
-        let out = f();
-        self.entries
-            .push((phase, start.elapsed().as_micros() as u64));
-        out
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct Abstention {
+    pub category: Category,
+    pub reason: AbstentionReason,
+    pub scope: AbstentionScope,
+}
+
+/// What one run's analyses produced — and which categories actually JUDGED, so
+/// suppression can tell a stale allow from an allow over an un-judged category.
+pub struct AnalysisOutcome {
+    pub findings: Vec<Finding>,
+    pub abstained: Vec<Abstention>,
+    /// Categories whose analysis ran this run (not whole-run-abstained). A category
+    /// absent here — abstained, or no analysis ships for it yet — is un-judged, and
+    /// nothing about it (a suppression included) may be called stale.
+    pub judged: std::collections::BTreeSet<Category>,
+    /// The dependency declarations the usage judgment counted, by declaring
+    /// manifest — health's dependency universe. Empty when `unused` never ran.
+    pub dependency_universe: BTreeMap<ProjectPath, BTreeSet<SmolStr>>,
+}
+
+pub fn run_all(
+    graph: &Graph,
+    coverage: Option<crate::coverage::Coverage>,
+    narrowables: &[(smol_str::SmolStr, Vec<smol_str::SmolStr>)],
+    export_narrowables: &[smol_str::SmolStr],
+    cycle_hazards: &[smol_str::SmolStr],
+    analyses: &[&dyn Analysis],
+) -> AnalysisOutcome {
+    let reach = Reachability::compute(graph);
+    let index = crate::navigate::Index::build(graph, &reach);
+    let manifests = dependency::eligibility(graph, &reach);
+    let run = RunContext {
+        graph,
+        reach,
+        index,
+        coverage,
+        narrowables,
+        export_narrowables,
+        cycle_hazards,
+        manifests,
+    };
+    let mut findings = Vec::new();
+    let mut abstained = Vec::new();
+    let mut judged = std::collections::BTreeSet::new();
+
+    for analysis in analyses {
+        if let Some(reason) = analysis.abstains(&run) {
+            abstained.push(Abstention {
+                category: analysis.category(),
+                reason,
+                scope: AbstentionScope::WholeRun,
+            });
+            continue;
+        }
+        let requires = analysis.requires();
+        let measured: Vec<bool> = graph
+            .files
+            .iter()
+            .map(|f| requires.iter().all(|s| f.evidence.declared.contains(*s)))
+            .collect();
+        let unmeasured = measured.iter().filter(|m| !**m).count() as u32;
+        if unmeasured > 0 {
+            let missing: Vec<EvidenceStream> = requires.to_vec();
+            let scope = if unmeasured as usize == graph.files.len() {
+                AbstentionScope::WholeRun
+            } else {
+                AbstentionScope::Files { unmeasured }
+            };
+            abstained.push(Abstention {
+                category: analysis.category(),
+                reason: AbstentionReason::StreamsNotDeclared { missing },
+                scope,
+            });
+            if unmeasured as usize == graph.files.len() {
+                // Nothing is measured — the analysis has nothing to run on.
+                continue;
+            }
+        }
+        let cx = AnalysisContext {
+            run: &run,
+            measured: &measured,
+            abstentions: Default::default(),
+        };
+        findings.extend(analysis.run(&cx));
+        for (reason, scope) in cx.abstentions.into_inner() {
+            abstained.push(Abstention {
+                category: analysis.category(),
+                reason,
+                scope,
+            });
+        }
+        judged.insert(analysis.category());
+    }
+
+    let dependency_universe = if judged.contains(&Category::UNUSED) {
+        dependency::universe(&run)
+    } else {
+        BTreeMap::new()
+    };
+    sort_findings(&mut findings);
+    AnalysisOutcome {
+        findings,
+        abstained,
+        judged,
+        dependency_universe,
     }
 }

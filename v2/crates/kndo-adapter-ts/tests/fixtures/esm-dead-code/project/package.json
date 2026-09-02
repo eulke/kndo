@@ -1,8 +1,0 @@
-{
-  "name": "esm-dead-code",
-  "private": false,
-  "main": "src/index.ts",
-  "dependencies": {
-    "left-pad": "^1.3.0"
-  }
-}

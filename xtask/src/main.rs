@@ -1,318 +1,343 @@
-//! `cargo xtask` — development-time tasks. One generic tool; languages are table entries.
-//!
-//! # gen-stdlib
-//!
-//! `cargo xtask gen-stdlib <language>|--all` regenerates an adapter's `kndo-stdlib v1`
-//! dataset from its authoritative source. The pipeline is language-agnostic:
-//! run the source command → filter/sort/dedup → emit v1 format → **validate with the same
-//! `StdlibIndex` loader that consumes it at build time** → write. Adding a language is one
-//! `SOURCES` table entry, never a new script.
-//!
-//! Runs at kndo development time only — the analyzed machine's toolchains are never queried
-//! at analysis time (determinism).
-//!
-//! # gen-schema
-//!
-//! `cargo xtask gen-schema` regenerates `schemas/kndo-output.schema.json` from
-//! `kndo_core::engine::Envelope` via `schemars` — the schema is generated from the Rust
-//! types, never a second hand-written document.
-
-use std::process::{Command, ExitCode};
-
-use xtask::package;
+//! v2's task runner. `gen-ci` renders the workflow from kndo-gates' registry;
+//! `bench` measures the release binary against the recorded baseline;
+//! `package` builds and archives the release binary with a checksum; `verify-artifact`
+//! checksum-verifies, extracts and runs it — the install half of the release loop,
+//! written in Rust so all three CI platforms run the identical check instead of three
+//! shell dialects.
 
 mod bench;
 
-/// Everything language-specific about stdlib generation, as data.
-struct StdlibSource {
-    /// Adapter language id — also the CLI argument and the `language:` header value.
-    language: &'static str,
-    /// Where the dataset lives, relative to the workspace root.
-    output: &'static str,
-    /// Command producing one candidate name per line.
-    list_command: &'static [&'static str],
-    /// Command whose first output line identifies the source toolchain version.
-    version_command: &'static [&'static str],
-    /// Entries starting with any of these prefixes are dropped (e.g. Node's `node:`-only
-    /// builtins are handled structurally by the adapter, not by the list).
-    exclude_prefixes: &'static [&'static str],
-}
+use sha2::{Digest, Sha256};
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::{Command, exit};
 
-const SOURCES: &[StdlibSource] = &[
-    StdlibSource {
-        language: "js-ts",
-        output: "crates/kndo-adapter-js/src/stdlib.txt",
-        list_command: &["node", "-p", "require('module').builtinModules.join('\\n')"],
-        version_command: &["node", "--version"],
-        exclude_prefixes: &["node:"],
-    },
-    StdlibSource {
-        language: "go",
-        output: "crates/kndo-adapter-go/src/stdlib.txt",
-        list_command: &["go", "list", "std"],
-        version_command: &["go", "version"],
-        // `internal/...` stdlib packages (~a quarter of `go list std`'s output) are real
-        // entries but uncompilable outside the standard library itself — Go's `internal/`
-        // boundary is a structural, compiler-enforced signal, not
-        // something the stdlib-classification list needs to carry.
-        exclude_prefixes: &["internal/"],
-    },
-    // Adding a language is one line of data, no new tooling — e.g. for java: list
-    // `java --list-modules`, version `java --version`.
-];
+type Result<T> = std::result::Result<T, String>;
 
-fn main() -> ExitCode {
+const BIN: &str = if cfg!(windows) { "kndo.exe" } else { "kndo" };
+
+fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    match args.first().map(String::as_str) {
-        Some("gen-stdlib") => gen_stdlib(args.get(1).map(String::as_str)),
+    let result = match args.first().map(String::as_str) {
+        Some("gen-ci") => gen_ci(),
+        Some("gen-fingerprint") => gen_fingerprint(),
         Some("gen-schema") => gen_schema(),
-        Some("bench") => match bench::run(&args[1..]) {
-            Ok(()) => ExitCode::SUCCESS,
-            Err(e) => {
-                eprintln!("xtask: bench failed: {e}");
-                ExitCode::FAILURE
-            }
-        },
-        Some("componentize") => componentize(
-            args.get(1).map(String::as_str),
-            args.get(2).map(String::as_str),
-        ),
-        Some("package") => package_cmd(&args[1..]),
+        Some("package") => package(&args[1..]),
+        Some("verify-artifact") => verify_artifact(&args[1..]),
+        Some("corpus") => corpus(&args[1..]),
+        Some("pin-abi") => pin_abi(),
+        Some("bench") => bench::run(&args[1..]),
         _ => {
-            eprintln!("usage: cargo xtask gen-stdlib <language>|--all");
             eprintln!(
-                "  languages: {}",
-                SOURCES
-                    .iter()
-                    .map(|s| s.language)
-                    .collect::<Vec<_>>()
-                    .join(", ")
+                "usage: cargo xtask <gen-ci | gen-fingerprint | gen-schema | package --tag T --out-dir D | verify-artifact --dir D | corpus --corpus-dir D [--out-dir D] | pin-abi | bench [--sizes 1k,5k] [--update-baseline] [--gate]>"
             );
-            eprintln!("usage: cargo xtask gen-schema");
-            eprintln!("usage: cargo xtask bench [--sizes 1k,5k,50k] [--update-baseline] [--gate]");
-            eprintln!("usage: cargo xtask componentize <core.wasm> <out.wasm>");
-            eprintln!(
-                "usage: cargo xtask package --target <triple> [--tag vX.Y.Z] [--bin <path>] \
-                 [--out-dir <dir>]"
-            );
-            eprintln!(
-                "  targets: {}",
-                package::TARGETS
-                    .iter()
-                    .map(|t| t.triple)
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
-            ExitCode::from(2)
-        }
-    }
-}
-
-/// `cargo xtask package --target <triple>` — build the release artifact for one platform.
-///
-/// `release.yml` calls this instead of carrying a `tar` line for Unix and a `Compress-Archive`
-/// line for Windows: the artifact's name and layout are a contract four consumers depend on
-/// (see [`xtask::package`]), and a contract with two producers is not one.
-///
-/// Prints the archive's path on stdout so the caller can capture it without re-deriving the
-/// name it just asked for.
-fn package_cmd(args: &[String]) -> ExitCode {
-    match package::from_args(args, workspace_root()) {
-        Ok(path) => {
-            println!("{}", path.display());
-            ExitCode::SUCCESS
-        }
-        Err(e) => {
-            eprintln!("xtask: package failed: {e}");
-            ExitCode::FAILURE
-        }
-    }
-}
-
-/// Wraps a `wasm32-unknown-unknown` core module into a WASM component — the same
-/// `wit_component::ComponentEncoder` call `crates/kndo/tests/external_adapter.rs` and
-/// kndo-plugin-api's compliance suites already make in-process. Exposed as its own `xtask`
-/// step so CI's shell-build smoke check doesn't need a separate `wasm-tools`
-/// binary install for a one-line operation this workspace already depends on doing correctly.
-fn componentize(core_path: Option<&str>, out_path: Option<&str>) -> ExitCode {
-    let (Some(core_path), Some(out_path)) = (core_path, out_path) else {
-        eprintln!("usage: cargo xtask componentize <core.wasm> <out.wasm>");
-        return ExitCode::from(2);
-    };
-    match encode_component(core_path, out_path) {
-        Ok(()) => {
-            println!("xtask: wrote {out_path}");
-            ExitCode::SUCCESS
-        }
-        Err(e) => {
-            eprintln!("xtask: componentize failed: {e}");
-            ExitCode::FAILURE
-        }
-    }
-}
-
-fn encode_component(core_path: &str, out_path: &str) -> Result<(), String> {
-    let core_wasm = std::fs::read(core_path).map_err(|e| format!("reading {core_path}: {e}"))?;
-    let component = wit_component::ComponentEncoder::default()
-        .module(&core_wasm)
-        .and_then(|mut enc| enc.encode())
-        .map_err(|e| format!("encoding {core_path}: {e:#}"))?;
-    std::fs::write(out_path, &component).map_err(|e| format!("writing {out_path}: {e}"))
-}
-
-fn gen_schema() -> ExitCode {
-    let root = match workspace_root() {
-        Ok(root) => root,
-        Err(e) => {
-            eprintln!("xtask: gen-schema failed: {e}");
-            return ExitCode::FAILURE;
+            exit(2);
         }
     };
-    type SchemaTarget = (&'static str, fn() -> schemars::Schema);
-    let targets: [SchemaTarget; 2] = [
-        (
-            "schemas/kndo-output.schema.json",
-            kndo_core::engine::json_schema,
-        ),
-        (
-            "schemas/kndo-query-output.schema.json",
-            kndo_core::query_envelope::json_schema,
-        ),
-    ];
-    for (rel_path, schema_fn) in targets {
-        if write_schema(&root, rel_path, schema_fn()) == ExitCode::FAILURE {
-            return ExitCode::FAILURE;
-        }
+    if let Err(e) = result {
+        eprintln!("xtask: {e}");
+        exit(1);
     }
-    ExitCode::SUCCESS
 }
 
-fn write_schema(root: &std::path::Path, rel_path: &str, schema: schemars::Schema) -> ExitCode {
-    let text = match serde_json::to_string_pretty(&schema) {
-        Ok(t) => t,
-        Err(e) => {
-            eprintln!("xtask: gen-schema failed to serialize {rel_path}: {e}");
-            return ExitCode::FAILURE;
-        }
-    };
-    let path = root.join(rel_path);
-    if let Some(dir) = path.parent() {
-        if let Err(e) = std::fs::create_dir_all(dir) {
-            eprintln!("xtask: gen-schema failed creating {}: {e}", dir.display());
-            return ExitCode::FAILURE;
-        }
-    }
-    if let Err(e) = std::fs::write(&path, format!("{text}\n")) {
-        eprintln!("xtask: gen-schema failed writing {}: {e}", path.display());
-        return ExitCode::FAILURE;
-    }
-    println!("xtask: wrote {}", path.display());
-    ExitCode::SUCCESS
+fn workspace_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..")
 }
 
-fn gen_stdlib(which: Option<&str>) -> ExitCode {
-    let selected: Vec<&StdlibSource> = match which {
-        Some("--all") => SOURCES.iter().collect(),
-        Some(lang) => match SOURCES.iter().find(|s| s.language == lang) {
-            Some(s) => vec![s],
-            None => {
-                eprintln!(
-                    "xtask: unknown language `{lang}` — known: {}",
-                    SOURCES
-                        .iter()
-                        .map(|s| s.language)
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                );
-                return ExitCode::from(2);
-            }
-        },
-        None => {
-            eprintln!("usage: cargo xtask gen-stdlib <language>|--all");
-            return ExitCode::from(2);
-        }
-    };
-
-    for source in selected {
-        if let Err(msg) = generate(source) {
-            eprintln!("xtask: gen-stdlib {} failed: {msg}", source.language);
-            return ExitCode::FAILURE;
-        }
-    }
-    ExitCode::SUCCESS
+fn flag(args: &[String], name: &str) -> Option<String> {
+    args.iter()
+        .position(|a| a == name)
+        .and_then(|i| args.get(i + 1))
+        .cloned()
 }
 
-fn generate(source: &StdlibSource) -> Result<(), String> {
-    let raw = run(source.list_command)?;
-    let version = run(source.version_command)?
-        .lines()
-        .next()
-        .unwrap_or("unknown")
-        .trim()
-        .to_string();
-
-    let mut entries: Vec<&str> = raw
-        .lines()
-        .map(str::trim)
-        .filter(|l| !l.is_empty())
-        .filter(|l| !source.exclude_prefixes.iter().any(|p| l.starts_with(p)))
-        .collect();
-    entries.sort_unstable();
-    entries.dedup();
-
-    let mut out = String::new();
-    out.push_str("# kndo-stdlib v1\n");
-    out.push_str(&format!("# language: {}\n", source.language));
-    out.push_str(&format!("# source: {}\n", source.list_command.join(" ")));
-    out.push_str(&format!("# source-version: {version}\n"));
-    out.push_str(&format!(
-        "# regenerate: cargo xtask gen-stdlib {}\n",
-        source.language
-    ));
-    for e in &entries {
-        out.push_str(e);
-        out.push('\n');
-    }
-
-    // Validate with the exact loader that consumes this file at build time — the generator
-    // can never emit something the product would reject.
-    kndo_adapter_toolkit::stdlib::StdlibIndex::parse(&out)
-        .map_err(|e| format!("generated data failed loader validation: {e:?}"))?;
-
-    let path = workspace_root()?.join(source.output);
-    std::fs::write(&path, &out).map_err(|e| format!("writing {}: {e}", path.display()))?;
-    println!(
-        "xtask: wrote {} ({} entries, {version})",
-        source.output,
-        entries.len()
-    );
+fn gen_ci() -> Result<()> {
+    let path = kndo_gates::workflow_path();
+    fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
+    fs::write(&path, kndo_gates::render_ci()).map_err(|e| e.to_string())?;
+    println!("wrote {}", kndo_gates::WORKFLOW_REPO_PATH);
+    fs::write(
+        kndo_gates::release_workflow_path(),
+        kndo_gates::render_release(),
+    )
+    .map_err(|e| e.to_string())?;
+    println!("wrote {}", kndo_gates::RELEASE_WORKFLOW_REPO_PATH);
     Ok(())
 }
 
-fn run(cmd: &[&str]) -> Result<String, String> {
-    let output = Command::new(cmd[0]).args(&cmd[1..]).output().map_err(|e| {
-        format!(
-            "`{}` not runnable ({e}) — is the toolchain installed?",
-            cmd[0]
-        )
-    })?;
-    if !output.status.success() {
-        return Err(format!(
-            "`{}` exited with {}: {}",
-            cmd.join(" "),
-            output.status,
-            String::from_utf8_lossy(&output.stderr)
-        ));
+/// Rebuilds the reference guests and rewrites the PINNED components under
+/// `abi/compat/` — the deliberate act the `abi_compat_matrix` gate demands after
+/// a WIT change: the rebuilt binaries landing in the same commit are the explicit,
+/// reviewable record of a compatibility break, which a silent breakage never is.
+fn pin_abi() -> Result<()> {
+    let guests = workspace_root().join("abi/guests");
+    let status = Command::new("cargo")
+        .args(["build", "--release", "--target", "wasm32-unknown-unknown"])
+        .env_remove("RUSTFLAGS")
+        .env_remove("CARGO_ENCODED_RUSTFLAGS")
+        .current_dir(&guests)
+        .status()
+        .map_err(|e| format!("invoking cargo for the guest build: {e}"))?;
+    if !status.success() {
+        return Err("reference guest build failed".into());
     }
-    String::from_utf8(output.stdout).map_err(|e| format!("non-UTF8 output: {e}"))
+    let out_dir = workspace_root().join("abi/compat");
+    fs::create_dir_all(&out_dir).map_err(|e| e.to_string())?;
+    for name in [
+        "acme_framework",
+        "kmini_adapter",
+        "probe_plugin",
+        "records_ingester",
+    ] {
+        let module = guests.join(format!("target/wasm32-unknown-unknown/release/{name}.wasm"));
+        let bytes = fs::read(&module).map_err(|e| format!("{}: {e}", module.display()))?;
+        let component = wit_component::ComponentEncoder::default()
+            .module(&bytes)
+            .map_err(|e| format!("attaching {name}: {e}"))?
+            .encode()
+            .map_err(|e| format!("componentizing {name}: {e}"))?;
+        let out = out_dir.join(format!("{name}.wasm"));
+        fs::write(&out, component).map_err(|e| e.to_string())?;
+        println!("pinned abi/compat/{name}.wasm");
+    }
+    Ok(())
 }
 
-fn workspace_root() -> Result<std::path::PathBuf, String> {
-    // xtask always runs via `cargo xtask` from within the workspace; CARGO_MANIFEST_DIR of
-    // this crate is <root>/xtask.
-    let manifest = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    manifest
-        .parent()
-        .map(|p| p.to_path_buf())
-        .ok_or_else(|| "cannot locate workspace root".into())
+/// Rewrites the committed contract fingerprint — the deliberate act the
+/// `contract_fingerprint_is_intentional` gate demands after a shape change.
+fn gen_fingerprint() -> Result<()> {
+    let path = workspace_root().join("crates/kndo-contract/fingerprint.txt");
+    let hex = kndo_contract::contract_fingerprint_hex();
+    fs::write(&path, format!("{hex}\n")).map_err(|e| e.to_string())?;
+    println!("wrote crates/kndo-contract/fingerprint.txt = {hex}");
+    Ok(())
+}
+
+/// The measurement loop: run the default engine over every clone in `--corpus-dir`
+/// and version the per-repo reports plus one summary table into `--out-dir` (default
+/// `corpus-findings/`). Everything written is deterministic — timings go to stdout
+/// only, never into the versioned files.
+fn corpus(args: &[String]) -> Result<()> {
+    let corpus_dir = PathBuf::from(flag(args, "--corpus-dir").ok_or("--corpus-dir is required")?);
+    let out_dir =
+        workspace_root().join(flag(args, "--out-dir").unwrap_or_else(|| "corpus-findings".into()));
+    fs::create_dir_all(&out_dir).map_err(|e| e.to_string())?;
+
+    let mut repos: Vec<PathBuf> = fs::read_dir(&corpus_dir)
+        .map_err(|e| format!("{}: {e}", corpus_dir.display()))?
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| p.is_dir())
+        .collect();
+    repos.sort();
+    if repos.is_empty() {
+        return Err(format!("no repositories under {}", corpus_dir.display()));
+    }
+
+    let mut summary = String::from(
+        "# v2 corpus measurement\n\n\
+         The default adapter set over the corpus pinned in `corpus/corpus.toml`.\n\
+         Regenerate with `cargo xtask corpus --corpus-dir <clones>`; the oracle to\n\
+         compare against is `oracle/`. A repo with zero claimed files speaks a\n\
+         language no default adapter claims yet; an `unused` abstention means the\n\
+         graph has no roots — nothing in the tree (manifest entries, convention\n\
+         roots, dispatch anchors) said where execution starts, so the analysis\n\
+         declines to judge rather than accuse everything.\n\n\
+         | repo | discovered | claimed | decls | refs | import edges | unresolved | findings | abstentions | diagnostics |\n\
+         |---|---|---|---|---|---|---|---|---|---|\n",
+    );
+
+    for repo in &repos {
+        let name = repo
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or("unnameable repo dir")?;
+        let session = kndo::open(
+            repo,
+            kndo::Config {
+                threads: kndo::Threads::Auto,
+                use_cache: false,
+                ..kndo::Config::default()
+            },
+        )
+        .map_err(|e| format!("{name}: {e}"))?;
+        let snap = session
+            .analyze(kndo::RunMode::Full)
+            .map_err(|e| format!("{name}: {e}"))?;
+        let report = snap.report();
+
+        let (mut decls, mut refs, mut edges, mut unresolved) = (0u64, 0u64, 0u64, 0u64);
+        for f in &snap.graph.files {
+            decls += f.evidence.declarations.len() as u64;
+            refs += f.evidence.references.len() as u64;
+            edges += f.imports.len() as u64;
+            unresolved += u64::from(f.unresolved_imports);
+        }
+        summary.push_str(&format!(
+            "| {name} | {} | {} | {decls} | {refs} | {edges} | {unresolved} | {} | {} | {} |\n",
+            report.run.files_discovered,
+            report.run.files_claimed,
+            report.findings.len(),
+            report.abstained.len(),
+            report.diagnostics.len(),
+        ));
+
+        fs::write(
+            out_dir.join(format!("{name}.report.json")),
+            report.to_json(),
+        )
+        .map_err(|e| e.to_string())?;
+        println!(
+            "{name}: {} claimed, {} findings, {} abstentions ({:.2?} total)",
+            report.run.files_claimed,
+            report.findings.len(),
+            report.abstained.len(),
+            snap.timings.total(),
+        );
+    }
+
+    fs::write(out_dir.join("SUMMARY.md"), summary).map_err(|e| e.to_string())?;
+    println!("wrote {}", out_dir.display());
+    Ok(())
+}
+
+/// Rewrites the committed report schema from the types — the deliberate act the
+/// `report_schema_is_generated_and_valid` gate demands after an envelope change.
+fn gen_schema() -> Result<()> {
+    let dir = workspace_root().join("schemas");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    fs::write(dir.join("report.schema.json"), kndo_core::report_schema())
+        .map_err(|e| e.to_string())?;
+    fs::write(
+        dir.join("query.request.schema.json"),
+        kndo_core::query::request_schema(),
+    )
+    .map_err(|e| e.to_string())?;
+    fs::write(
+        dir.join("query.response.schema.json"),
+        kndo_core::query::response_schema(),
+    )
+    .map_err(|e| e.to_string())?;
+    println!("wrote schemas/report.schema.json + query.request/response.schema.json");
+    Ok(())
+}
+
+fn host_triple() -> Result<String> {
+    let out = Command::new("rustc")
+        .arg("-vV")
+        .output()
+        .map_err(|e| e.to_string())?;
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .find_map(|l| l.strip_prefix("host: "))
+        .map(str::to_owned)
+        .ok_or_else(|| "rustc -vV had no host line".into())
+}
+
+/// The one producer of a release artifact: builds `kndo-cli` for `--target` (the
+/// host by default; through `cross` with `--cross`), and packs the binary under
+/// the archive's staged directory — `<stem>/kndo` — with a `checksums.txt`
+/// beside it. The name and layout are the release table's
+/// (`kndo_gates::release`), which every consumer is checked against.
+fn package(args: &[String]) -> Result<()> {
+    let tag = flag(args, "--tag").ok_or("--tag is required")?;
+    let out_dir = workspace_root().join(flag(args, "--out-dir").ok_or("--out-dir is required")?);
+    let triple = match flag(args, "--target") {
+        Some(t) => t,
+        None => host_triple()?,
+    };
+    let cross = args.iter().any(|a| a == "--cross");
+    let root = workspace_root();
+    let status = Command::new(if cross { "cross" } else { "cargo" })
+        .args([
+            "build",
+            "--release",
+            "--locked",
+            "-p",
+            "kndo-cli",
+            "--target",
+            &triple,
+        ])
+        .current_dir(&root)
+        .status()
+        .map_err(|e| e.to_string())?;
+    if !status.success() {
+        return Err("release build failed".into());
+    }
+    let bin = root.join("target").join(&triple).join("release").join(BIN);
+    fs::create_dir_all(&out_dir).map_err(|e| e.to_string())?;
+    let stem = kndo_gates::release::stem(&tag, &triple);
+    let archive_name = kndo_gates::release::archive_name(&tag, &triple);
+    let archive_path = out_dir.join(&archive_name);
+    let file = fs::File::create(&archive_path).map_err(|e| e.to_string())?;
+    let enc = flate2::write::GzEncoder::new(file, flate2::Compression::default());
+    let mut tar = tar::Builder::new(enc);
+    tar.append_path_with_name(&bin, format!("{stem}/{BIN}"))
+        .map_err(|e| e.to_string())?;
+    tar.into_inner()
+        .map_err(|e| e.to_string())?
+        .finish()
+        .map_err(|e| e.to_string())?;
+    let digest = sha256_hex(&archive_path)?;
+    fs::write(
+        out_dir.join("checksums.txt"),
+        format!("{digest}  {archive_name}\n"),
+    )
+    .map_err(|e| e.to_string())?;
+    println!("packaged {archive_name} ({digest})");
+    Ok(())
+}
+
+fn verify_artifact(args: &[String]) -> Result<()> {
+    let dir = workspace_root().join(flag(args, "--dir").ok_or("--dir is required")?);
+    let checks =
+        fs::read_to_string(dir.join("checksums.txt")).map_err(|e| format!("checksums.txt: {e}"))?;
+    let line = checks.lines().next().ok_or("checksums.txt is empty")?;
+    let (expected, name) = line.split_once("  ").ok_or("malformed checksums.txt")?;
+    let archive = dir.join(name);
+    let actual = sha256_hex(&archive)?;
+    if actual != expected {
+        return Err(format!(
+            "checksum mismatch for {name}: expected {expected}, got {actual}"
+        ));
+    }
+
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_nanos();
+    let dest = std::env::temp_dir().join(format!("kndo-install-{}-{nanos}", std::process::id()));
+    fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
+    let tar_gz = fs::File::open(&archive).map_err(|e| e.to_string())?;
+    let mut ar = tar::Archive::new(flate2::read::GzDecoder::new(tar_gz));
+    ar.unpack(&dest).map_err(|e| e.to_string())?;
+
+    // The archive holds one directory named for itself; the binary is inside it.
+    let stem = name
+        .strip_suffix(".tar.gz")
+        .ok_or("the artifact is not a .tar.gz")?;
+    let bin = dest.join(stem).join(BIN);
+    // The install check is a version handshake — bare `kndo` is a real analysis of
+    // the current directory, which is the product, not the smoke test.
+    let out = Command::new(&bin)
+        .arg("--version")
+        .output()
+        .map_err(|e| format!("running {}: {e}", bin.display()))?;
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    if !out.status.success() || !stdout.starts_with("kndo ") {
+        return Err(format!(
+            "installed binary misbehaved: status {:?}, stdout {stdout:?}",
+            out.status
+        ));
+    }
+    println!("verified, installed and ran: {}", stdout.trim());
+    let _ = fs::remove_dir_all(&dest);
+    Ok(())
+}
+
+fn sha256_hex(path: &Path) -> Result<String> {
+    let bytes = fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let mut h = Sha256::new();
+    h.update(&bytes);
+    Ok(h.finalize().iter().map(|b| format!("{b:02x}")).collect())
 }

@@ -1,7 +1,0 @@
-{
-  "name": "app-root",
-  "version": "1.0.0",
-  "main": "main.ts",
-  "workspaces": ["packages/*"],
-  "dependencies": { "@org/ui": "workspace:*" }
-}

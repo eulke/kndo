@@ -1,9 +1,0 @@
-{
-  "findings": [
-    {
-      "category": "duplicate",
-      "subject_kind": "file",
-      "path": "config/a.config.json"
-    }
-  ]
-}

@@ -1,170 +1,64 @@
 # Languages
 
-Every language lands through the same adapter contract — the core never contains
-`if language == X`. An adapter claims files, extracts declarations/references/imports/roots,
-resolves imports, reads manifests, and declares its language's *facts*: the visibility ladder
-(so `internal-only` speaks the language's own words), the cycle policy (so `cyclic` judges
-cycles the way the ecosystem does), and whether dependency usage is statically resolvable.
-Mixed repositories are the point: one graph, cross-language edges, one report.
+Each adapter claims files by suffix, reads the ecosystem's manifests for roots
+and dependencies, and extracts evidence — declarations, imports, references,
+comments, per-function metrics — into one vocabulary the engine judges without
+knowing which language it came from. The engine never names a language:
+everything a language needs is declared on the adapter's spec, with a named
+consumer in the engine.
 
-| Language | Files | Manifests |
-|---|---|---|
-| JavaScript / TypeScript | `.ts .tsx .js .jsx .mjs .cjs .mts .cts` (incl. `.d.ts`) | `package.json` |
-| Go | `.go` | `go.mod`, `go.work` |
-| Rust | `.rs` | `Cargo.toml` |
-| Java | `.java` | `pom.xml`, `build.gradle`, `build.gradle.kts` |
-| Kotlin | `.kt` | shared Gradle/Maven manifests |
-| Swift | `.swift` | `Package.swift` |
-| JSON | `.json` | — |
-| CSS / SCSS | `.css .scss` | — |
-| HTML | `.html .htm` | — |
+| Adapter | Suffixes | Manifests and launchers | Roots |
+|---|---|---|---|
+| `kndo:js-ts` | `ts` `tsx` `js` `jsx` `mjs` `cjs` `mts` `cts` | `package.json`; `.github/workflows/*.yml`, `action.yml` | manifest entries (`main`, `module`, `browser`, `bin`, `exports`, `imports`), files handed to a runtime by npm scripts and by workflow or action steps (`node`, `tsx`, `ts-node`, `bun`, `deno`), test files, config files, shebangs |
+| `kndo:rust` | `rs` | `Cargo.toml` | crate roots (`main.rs`, `lib.rs`, bins, examples, tests, benches), `#[cfg(test)]` |
+| `kndo:go` | `go` | `go.mod` | `package main`, `_test.go`; a package is one unit |
+| `kndo:java` | `java` | `pom.xml`, `build.gradle`, `build.gradle.kts`, `settings.gradle`, `settings.gradle.kts` | `main` methods, test sources, framework annotations through extensions |
+| `kndo:kotlin` | `kt` | the same JVM manifests | `main` functions, test sources |
+| `kndo:python` | `py` | `pyproject.toml`, `requirements.txt`, `requirements-*.txt` | scripts, `__main__`, test files, entry points |
+| `kndo:swift` | `swift` | `Package.swift` | executable targets, `@main`, test targets |
+| `kndo:html` | `html` `htm` | — | a document is its own root; `<script src>`, `<link href>` and inline module imports are its references |
+| `kndo:css` | `css` `scss` | — | `@import`, `@use`, `@forward`, resolved with Sass partial and index conventions |
 
-Adapters are held to a shared **conformance harness** — fixture projects with
-expected-finding JSON every adapter must reproduce exactly — so "the same verdict means the
-same thing" is tested, not aspirational. New languages can also arrive as
-[WebAssembly adapter components](plugins/authoring.md#writing-an-adapter) without rebuilding
-kndo.
+Two more extensions ship for Apple projects: `kndo:interface-builder` roots
+the classes storyboards and xibs instantiate at run time, and `kndo:info-plist`
+roots the principal class and app delegate an `Info.plist` names. Four
+[coverage ingesters](health.md) read lcov, Cobertura, JaCoCo and Go
+coverprofile reports.
 
-## JavaScript / TypeScript
+## What each language declares
 
-**Modeled:** ES modules and CommonJS; `package.json` `exports`/`main`/`module` entry-point
-roots; workspaces and per-package ownership; barrel re-export chains (resolved to a fixpoint,
-so a symbol reached only through three `index.ts` hops is still reached); test conventions
-(`*.test.*`, `*.spec.*`, `test/`, `tests/`, `__tests__/`); script-invoked CLI dependencies
-(`"test": "xo && ava"` keeps `xo` and `ava` out of `unused`); dependency scopes
-(`dependencies`, `devDependencies`, `peerDependencies`, `optionalDependencies`) with the
-[scope rules](rules.md#unused) applied literally; declared `exports` surfaces gating
-[`deep-import`](rules.md#deep-import); a hazardous cycle policy (import cycles are
-warning-level — initialization-order bugs are real).
+Beyond suffixes and manifests, an adapter declares the facts the engine's
+judgments depend on — with a default that keeps the judgment silent where the
+adapter says nothing:
 
-**Limits:** dynamic `import(expr)` and `require(variable)` with computed specifiers can't be
-resolved to a file — such references keep candidates *live-possible* (lowered confidence),
-never dead. Code invoked only via string lookups in configuration kndo doesn't model needs a
-[plugin](plugins/authoring.md) root (the built-in [Next.js and Express
-plugins](plugins.md#built-in-plugins) cover those frameworks' conventions).
+- **Visibility rungs** for `internal-only`: which scope tokens have a narrower
+  rung to demote to (`crate` in Rust, `package` in Java, `module` in Kotlin
+  and Swift, `export` in TypeScript — where dropping the keyword is checked by
+  the compiler).
+- **Cycle tolerance** for `cyclic`: a hazard in JavaScript, TypeScript and
+  Python (initialization order bites at run time), tolerated in Rust, Go, Java,
+  Kotlin and Swift (the compiler or the package model makes cycles benign).
+- **Dependency identity**: how an import specifier names a declared dependency
+  — the package name (`lodash/fp` is `lodash`), the crate root, the module
+  path — and the platform's own modules that are never a dependency to
+  declare (Node's built-ins; Go's standard library by the rule that its import
+  paths have no dot in their first segment).
+- **Dependency scoping**: whether the ecosystem's manifests separate
+  production from development declarations (npm, Cargo) or not (Go).
+- **Importers outside the claim**: file families that carry the ecosystem's
+  imports without being its source — `.vue`, `.svelte`, `.astro`, `.mdx`,
+  `.html`, `.css`, … for JavaScript — so a dependency judgment abstains when
+  such files exist and no adapter reads them, rather than accuse.
+- **Evidence streams**: comments (for `kndo:allow`) and per-function metrics
+  (for `duplicate` and `crap`), each declared so their absence is typed and an
+  analysis abstains instead of guessing.
 
-## Go
+## Cross-language reach
 
-**Modeled:** package-per-directory units; capitalization-as-visibility (an exported
-identifier is part of the package surface); `go.mod`/`go.work` for module identity and
-declared dependencies (`// indirect` entries excluded); `_test.go` files (including the
-separate `_test` package form) as test roles; `func main`/`init` and test functions as
-roots; the compiler-enforced `internal/` boundary.
+One graph: an HTML page reached from a manifest reaches the script it loads,
+which reaches the stylesheet it imports; a Swift file reached through a
+storyboard is production-reachable; a Go package's files are one unit. Packages
+are owned by the nearest manifest, and health can be split per package.
 
-**Limits:** kndo intentionally *doesn't* re-police what the Go compiler already forbids —
-import cycles are impossible in Go, so `cyclic` never accuses (a cycle in the graph could
-only be a resolution artifact), and `internal/` needs no `deep-import` finding. Build tags
-are not evaluated: files excluded by a tag combination are still parsed and analyzed, so a
-symbol used only under another platform's tag counts as used (safe direction), and files
-only *reachable* under exotic tag sets may be reported through the default lens. Reflection
-(`reflect`) with computed names is invisible; well-known interface machinery (`String()`,
-`Error()`, marshal hooks) is modeled as implicitly invoked.
-
-## Rust
-
-**Modeled:** the module tree *is* the file graph — `mod foo;` is a certain file edge, and a
-file no `mod` chain reaches is dead to the compiler, a verdict reachability reproduces for
-free; the full visibility ladder (`pub`, `pub(crate)`, `pub(super)`, private) for
-[`internal-only`](rules.md#internal-only) remediation in Rust's own words; `#[cfg(test)]`
-regions as in-file test scopes (a dependency imported only there is
-[`test-only`](rules.md#test-only)); `Cargo.toml` workspace topology,
-`dependencies`/`dev-dependencies`/`build-dependencies` scopes; macro token-tree scanning, so
-a symbol named inside a macro invocation still counts as referenced; `main.rs`/`lib.rs`/
-binary targets as roots; library crates treat their public surface as consumed by
-definition.
-
-**Limits:** macro-*generated* items (declarations that only exist after expansion) are not
-materialized — kndo reads source, it doesn't expand macros; token-tree scanning keeps
-macro-referenced symbols alive, but code generated wholesale by proc-macros is invisible.
-Trait impls dispatched only through external machinery (serialization being the classic
-case) are covered by the built-in [`kndo:serde`, `kndo:rkyv` and `kndo:wasmtime`
-plugins](plugins.md#built-in-plugins) — kndo records which trait's `impl` declares each
-member, and each plugin matches its own ecosystem's traits against that. Another such
-framework needs its own plugin, which is that table and nothing more.
-
-## Java
-
-**Modeled:** declared package identity plus the compiler-checked directory convention;
-`src/main/java` vs `src/test/java` role promotion; `pom.xml` and Gradle build files as
-manifests; dispatch roots for the reflective contracts the platform guarantees
-(`@Override` dispatch, `Serializable` hooks); implicitly-public interface members;
-constructors as first-class members; the visibility ladder mapped conservatively —
-`protected` and `public` share a scope no static evidence can distinguish, so they never
-accuse each other.
-
-**Limits:** **dependency usage is not resolvable** — an `import com.foo.bar.Baz` has no
-reliable static mapping to a Maven/Gradle coordinate without resolving the classpath, which
-kndo never does; dependency `unused`/`test-only` findings are skipped for Java (one
-diagnostic, not a false-positive flood), while [`version-skew`](rules.md#version-skew) stays
-fully precise (it's manifest-to-manifest). Reflection with computed class names, classpath
-scanning, and annotation processors that generate code are invisible; DI frameworks that
-instantiate beans reflectively need a plugin to contribute the roots.
-
-## Kotlin
-
-**Modeled:** the `internal` ladder rung (module-scoped visibility) alongside
-`public`/`protected`/`private`; primary and secondary constructors; `.kt` files under
-`src/main/java` trees too (mixed Java/Kotlin source sets are normal); shared Gradle/Maven
-manifest handling with Java.
-
-**Limits:** the same JVM limits as Java — dependency usage unresolvable (skipped, not
-guessed), reflection and codegen invisible. Kotlin-specific compiler plugins (serialization
-et al.) that synthesize members are not expanded.
-
-## Swift
-
-**Modeled:** `Package.swift` parsed as the manifest it is (Swift source), including targets
-with custom `path:`; XCTest targets and files as test roles, with test methods as roots;
-the `open`/`public`/`internal`/`fileprivate`/`private` ladder; protocol-witness rooting — a
-method implementing a protocol requirement is invoked through the protocol, not by name;
-`init`/`deinit` as members.
-
-**Limits:** Objective-C bridging (`@objc` selectors invoked from the runtime) and
-storyboard/Interface Builder references are not modeled — symbols reachable only that way
-need an annotation or plugin. As with every language: dynamic dispatch kndo can see keeps
-things alive; dynamism it can't see never makes things dead.
-
-## JSON
-
-A non-source language, deliberately narrow: claims `.json` files so they exist in the graph
-at all — letting other languages' imports resolve *to* them, `unused` see orphaned config
-files, and byte-identical [`duplicate`](rules.md#duplicate) detection cover them. Extracts
-no symbols and declares no ladder, so symbol-level analyses skip it by construction.
-
-## HTML
-
-**A document is an entry point, not a module.** Nothing imports a page — a browser loads it, a
-server renders it, a bundler is handed it — so every `.html` file is a production root, and the
-modules and stylesheets it names become reachable through it.
-
-That one rule is the whole adapter, and it is what makes a front-end project analyzable at all:
-an app whose entry is `<script type="module" src="./main.js">` in `index.html` has no other
-declaration of where it starts. Without it, `main.js` and everything it imports read as
-unreachable — measured on vite's playground suite, 65 of 83 entry modules were reported
-`unused` for exactly this reason.
-
-Read: `<script src>`, `<link href>`, `<img src>`, `<source src>`, `<iframe src>`. Skipped, and
-deliberately not reported as unresolved: anything that leaves the project — an absolute URL, a
-protocol-relative `//cdn/...`, a `data:` payload, a bare `#anchor`, a `${...}`/`{{...}}`
-template placeholder, and a root-relative `/assets/app.js` (what it names depends on the
-server's document root, which kndo cannot know).
-
-Extracts no symbols and declares no ladder, so symbol-level analyses skip it. It is also
-exempt from [`untested`](rules.md#untested): a document holds nothing a test could call, and
-reporting every page as a test blind spot would bury the report.
-
-## CSS / SCSS
-
-Also deliberately narrow: the `@import`/`@use`/`@forward` file graph, plus custom
-properties, SCSS variables, mixins, and functions as symbols — so an unused `$variable` or
-`--custom-property` falls out of ordinary reachability. Selectors, classes and ids are *not*
-extracted as symbols: nothing in a static graph can prove a selector unused (any HTML,
-template, or runtime class name could match it), and kndo prefers silence to a wrong
-"unused selector" claim.
-
-## Files no adapter claims
-
-Unknown extensions still participate where honesty allows: they are discovered, can be
-referenced (kept-alive) by claimed files, and the byte-identical half of
-[`duplicate`](rules.md#duplicate) covers them — but they are never *accused* of anything on
-their own.
+Files no adapter claims (images, data, unknown suffixes) are discovered but
+never judged; a claimed file that fails to parse degrades to a diagnostic.

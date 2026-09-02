@@ -1,118 +1,65 @@
-# For agents
+# Agents
 
-kndo treats LLM coding agents as a first-class audience: after generating or deleting code,
-an agent runs kndo and gets machine-checkable feedback that its edit is complete — nothing
-new is orphaned, nothing it targeted survives. Set `KNDO_FORMAT=agent` in the agent's
-environment and every command speaks this dialect by default.
+Two doors for a model: the **agent format**, a token-thrifty text render of the
+same report and query answers, and **`kndo-serve`**, an MCP server that holds
+the analysis so a conversation of many lookups pays for one run.
 
 ## The agent format
 
-```console
-$ kndo check --staged --format agent
-kndo 0.1.0 agent-format 1 | mode staged | cache warm | 312ms
-result: 3 new, 2 fixed, net +1 | health 82.4 -> 84.1 (B) | baseline 412 acknowledged
-new:
-1. [kndo-a3f81c92e5d4] unused function src/billing/tax.ts:41 calcLegacyTax
-   cause: last production reference removed by src/billing/index.ts:12 (this change)
-   fix: delete calcLegacyTax() and its export in src/billing/index.ts:12
-2. [kndo-9c04d1b2aa7e] test-only function src/util/csv.ts:8 exportCsv (2 test roots: src/util/csv.test.ts)
-   fix: delete exportCsv() together with its tests
-fixed:
-3. [kndo-77b0e4f2c19d] unused dependency package.json date-fns
-more: none
-next: kndo used-by src/billing/tax.ts#calcLegacyTax --format agent | kndo impact --if-deleted <selector>
+`kndo check --format agent` (the terminal default for the query verbs):
+
+```text
+kndo agent format 2 (kndo-v2/m6)
+result: mode full · findings 1 · carried 0 · fixed 0 · files 6/9 claimed
+health: 90.0 · implicated 1 of 10 · unused 1
+extensions: kndo:js-ts 6
+findings:
+[kndo-ea8c083aa403] warning unused · file scripts/orphan.ts · certain
+  no root anchors this file and no reachable file imports it
+abstained:
+- test-only: no test root anchors any file in this graph
+- untested: no test root anchors any file in this graph
+- crap: no coverage report ingested this run
+plugins:
+- kndo:coverage-lcov: roots 0 · findings 0
 ```
 
-Line-oriented plain text optimized for context windows: maximum information per token,
-deterministic grammar, no decoration. The same engine and guarantees as `--format json` —
-the agent format is a *rendering* of the same result and can never carry information the JSON
-lacks. Its grammar is versioned independently (`agent-format 1` in the header); a grammar
-change bumps the version, and the old version stays available for a release cycle.
+Finding ids are handles: `kndo explain <id>` expands one, `kndo used-by` and
+`kndo trace` answer the questions a model asks next, and every query answer
+ends with a `next:` line naming them. Symbols are spelled as
+`path#name · kind · color · lines`, one per line, nothing repeated. The grammar
+is versioned in its first line and pinned by a golden file in the test suite,
+so a prompt written against it keeps working.
 
-The grammar, normatively:
+## `kndo-serve`
 
-- **Header + `result:` lines always come first**, fixed field order, `|`-separated — an agent
-  reads two lines and knows the outcome.
-- **One finding = one numbered line**: `N. [id] <category> <subject_kind> <path:line> <name>`,
-  with optional indented `cause:` / `fix:` / `evidence:` lines. Numbers are cheap references
-  ("fix 1 and 3"); the bracketed ids are the durable anchors.
-- Findings appear in group order (defect, waste, risk, hygiene) within `new:` / `fixed:` /
-  `findings:` blocks — the same triage order as every renderer.
-- **Elision is always explicit**: a `more:` line closes every listing (`more: none` or a
-  count plus the drill-down command). A model never has to guess whether it saw everything.
-- **`next:` closes every response** with the relevant drill-down commands — affordances
-  travel with the data, so the model needn't memorize the CLI.
-- Confidence below `certain` is appended in parentheses (`(probable)`); severity is implied
-  by category and never repeated.
-- UTF-8, no ANSI, no glyphs; byte-stable across thread counts and cache states.
-
-The navigation verbs render in the same grammar (`kndo used-by <sel> --format agent`):
-numbered `[selector] kind path:line` entries plus the verb's specifics, same `more:`/`next:`
-discipline.
-
-## Stable finding ids
-
-`id = "kndo-" + hash(category, subject_kind, path, symbol path, discriminator)`, 12 hex
-chars — line numbers never participate. The loop this enables: read finding `kndo-3f2a…` →
-fix it → re-run → **assert that id is absent**. Reformatting can't break the assertion; a
-rename honestly produces a new id. The same ids key the [baseline](suppressions.md), so
-"acknowledged" and "fixed" are machine-checkable states, not prose.
-
-## Navigation before editing
-
-The [graph verbs](navigation.md) answer "can I delete this?" *before* the edit:
-
-```console
-$ kndo used-by src/tax.ts#calcTax --format agent      # who depends on it (by_color: production 0 → safe)
-$ kndo trace src/tax.ts#calcTax --format agent        # WHY is it alive — the path to cut
-$ kndo impact src/tax.ts#calcTax --if-deleted --format agent   # everything that dies with it
-```
-
-Exit codes are informative, not failures: `0` found, `1` not found, `2` malformed request.
-
-## Batching: kndo query
-
-`kndo query` reads one JSON request per line from stdin and answers them all over a
-**single** graph load — the cheap way to ask fifty questions:
-
-```console
-$ printf '%s\n' \
-    '{"id":"q1","verb":"used-by","selectors":["src/tax.ts#calcTax"]}' \
-    '{"id":"q2","verb":"impact","selectors":["src/tax.ts#calcTax"],"flags":{"if_deleted":true}}' \
-  | kndo query
-```
-
-Request grammar, one JSON object per line:
+An MCP server over stdio (newline-delimited JSON-RPC 2.0). Point a client at
+the binary with the project root as its working directory:
 
 ```json
-{ "id": "q1",
-  "verb": "find | describe | uses | used-by | trace | impact",
-  "selectors": ["src/tax.ts#calcTax"],
-  "flags": { "kind": null, "color": null, "lang": null,
-             "depth": 1, "transitive": false, "edges": "all",
-             "all": false, "max_paths": 10, "roots": null,
-             "pairs": [["a.ts#f","b.ts#g"]], "limit": 50, "if_deleted": false } }
+{
+  "mcpServers": {
+    "kndo": {
+      "command": "kndo-serve",
+      "cwd": "/path/to/project"
+    }
+  }
+}
 ```
 
-- `id` is optional and echoed back — correlate answers however you like.
-- `flags` mirror the CLI flags; irrelevant flags for a verb are ignored, so one superset
-  request shape works everywhere.
-- Answers come back as one JSON Line per request, **in input order**; the shared `run` block
-  appears only on the first line.
-- Malformed lines and unknown verbs are reported per line on stderr without dropping the
-  rest; empty lines are skipped.
-- A batch is capped at 1000 requests; excess lines are counted and reported, never silently
-  dropped.
-- The process exit code is the worst individual status — single-question scripting semantics
-  survive batching.
+It exposes one tool per verb — `check`, `find`, `describe`, `uses`, `used-by`,
+`trace`, `impact`, `explain` — each answering in the agent format. `check`
+analyzes and refreshes the held session; the query tools read the last
+analysis, so after editing files, call `check` again. Every tool takes an
+optional `path` for the project root; the query tools take the verb's inputs
+and options under the same names the command line uses.
 
-`kndo query` is JSON-only by design (it *is* the machine transport); run it on a terminal
-without piped stdin and it tells you what it wants instead of hanging.
+`kndo-serve` is built from source (`cargo install --git
+https://github.com/eulke/kondo kndo-serve`); it is not in the release archive.
 
-## The check loop
+## What both rely on
 
-1. `kndo check --format agent` → the worklist, with ids.
-2. Navigate (`used-by`, `trace`, `impact --if-deleted`) to plan a safe edit.
-3. Edit.
-4. `kndo check --diff <base> --format agent` → assert: targeted ids in `fixed:`, nothing
-   unexpected in `new:`. `net` on the `result:` line is the one-token summary.
+The same facade: the CLI and the server consume the same session, the same
+query request, and the same renders, so an answer over MCP is byte-for-byte
+the answer the command line prints. Nothing in either door is a second
+implementation of a judgment.

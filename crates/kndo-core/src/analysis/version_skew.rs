@@ -1,237 +1,84 @@
-//! `version-skew` — the same external dependency declared with diverging version requirements
-//! across manifests: three packages pinning three `lodash` versions is an
-//! inconsistency someone will debug eventually. Manifest-only, zero-config, and unaffected by
-//! the monorepo-attribution gap `undeclared` carries: this is a pure manifest-to-manifest
-//! comparison over `graph.declared_dependencies`, needs no import edge and no notion of which
-//! package owns which file, so it doesn't need the `Package` node/ownership to be
-//! correct — only to know *which* declaring manifests exist, which extraction already gives.
+//! The same dependency declared with diverging version requirements across the
+//! project's manifests — an inconsistency someone will reconcile eventually,
+//! and the exact case workspace-level version pools exist to prevent.
+//! Manifest-to-manifest only: no usage edge, no ownership question, just
+//! [`crate::graph::Graph::manifest_declarations`].
+//!
+//! Two exemptions, both measured on the corpus before this shipped:
+//! - **Peer requirements are contracts, not pins.** A wide `peerDependencies`
+//!   range beside a narrow dev pin is CORRECT practice (the range states what
+//!   consumers may bring; the pin states what CI tests against) — comparing
+//!   them manufactured findings on exactly the best-maintained manifests.
+//! - **A declaration with no comparable requirement says nothing.** Workspace
+//!   protocols, path/git specs, BOM-managed coordinates arrive as
+//!   `version_req: None` from the adapter that knows the ecosystem, and a
+//!   comparison the manifest does not enable stays silent.
+//!
+//! Severity `info`: the divergence is a fact (`certain`), but whether it bites
+//! is ecosystem-dependent — cargo unifies compatible ranges at build time, npm
+//! may install duplicates — so this nudges, and deliberately never dents
+//! health.
 
-use std::collections::{BTreeMap, BTreeSet};
+use super::{Analysis, AnalysisContext};
+use kndo_contract::adapter::DependencyScope;
+use kndo_contract::finding::{Finding, Severity};
+use kndo_contract::subject::Subject;
+use kndo_contract::vocab::{Category, Confidence};
+use std::collections::BTreeMap;
 
-use crate::analysis::{finding_id, FindingIdParts};
-use crate::engine::{Finding, Location, Severity};
-use crate::graph::ProjectGraph;
-use crate::vocab::{Category, Confidence, Group, SubjectKind};
+pub struct VersionSkew;
 
-pub fn find_version_skew(graph: &ProjectGraph) -> Vec<Finding> {
-    let mut by_name: BTreeMap<&str, Vec<(&str, &str)>> = BTreeMap::new();
-    for dep in &graph.declared_dependencies {
-        // A manifest that states no comparable requirement — a BOM/platform-managed JVM
-        // coordinate, a Cargo path dependency, a workspace inheritance no pool resolved — is
-        // not evidence of anything here. Encoding it as `"*"` would diverge from every real
-        // version and draw a false skew finding wherever manifests otherwise agree perfectly —
-        // the shape behind spring-petclinic, mockito, Exposed, koin and kotlinx.coroutines.
-        // Silence is the only honest reading: a comparison the code knows it could not perform
-        // must not produce a `certain` finding.
-        let Some(version) = &dep.version_req else {
-            continue;
-        };
-        by_name
-            .entry(dep.name.as_str())
-            .or_default()
-            .push((dep.manifest.0.as_str(), version.as_str()));
+impl Analysis for VersionSkew {
+    fn id(&self) -> &'static str {
+        "version-skew"
     }
 
-    let mut findings = Vec::new();
-    for (name, mut declarations) in by_name {
-        let distinct_versions: BTreeSet<&str> = declarations.iter().map(|&(_, v)| v).collect();
-        if distinct_versions.len() <= 1 {
-            continue; // one manifest, or several agreeing on the same requirement — no skew
+    fn category(&self) -> Category {
+        Category::VERSION_SKEW
+    }
+
+    fn run(&self, cx: &AnalysisContext<'_>) -> Vec<Finding> {
+        let mut by_name: BTreeMap<&str, Vec<(&str, &str)>> = BTreeMap::new();
+        for entry in &cx.graph().manifest_declarations {
+            for d in &entry.declarations {
+                if d.scope == Some(DependencyScope::Peer) {
+                    continue;
+                }
+                let Some(req) = &d.version_req else { continue };
+                by_name
+                    .entry(d.name.as_str())
+                    .or_default()
+                    .push((entry.manifest.as_str(), req.as_str()));
+            }
         }
-        declarations.sort_unstable();
-        declarations.dedup();
-        let evidence = declarations
-            .iter()
-            .map(|(manifest, version)| format!("{manifest} ({version})"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        findings.push(Finding {
-            advisory: false,
-            id: finding_id(FindingIdParts {
-                category: &Category::VERSION_SKEW,
-                subject_kind: &SubjectKind::DEPENDENCY,
-                path: name,
-                symbol_path: "",
-                discriminator: "",
-            }),
-            category: Category::VERSION_SKEW,
-            group: Group::Defect,
-            subject_kind: SubjectKind::DEPENDENCY,
-            severity: Severity::Warning,
-            confidence: Confidence::Certain,
-            message: format!("{name} is declared with diverging version requirements: {evidence}"),
-            location: Location {
-                // Anchored on the lexicographically-first declaring manifest, with every
-                // declaration — that one included — in `related`, each noting the requirement
-                // it states. The dependency's own name is the single real fact about the
-                // subject, so it stays the `symbol`; the anchor makes the finding addressable
-                // without asking a consumer to parse the message for a path.
-                path: Some(crate::adapter::ProjectPath(smol_str::SmolStr::new(
-                    declarations[0].0,
-                ))),
-                symbol: Some(name.to_string()),
-                ..Location::default()
-            },
-            related: declarations
+        let mut out = Vec::new();
+        for (name, mut declarations) in by_name {
+            declarations.sort_unstable();
+            declarations.dedup();
+            let distinct: std::collections::BTreeSet<&str> =
+                declarations.iter().map(|&(_, r)| r).collect();
+            if distinct.len() <= 1 {
+                continue;
+            }
+            let evidence = declarations
                 .iter()
-                .map(|(manifest, version)| crate::engine::RelatedLocation {
-                    role: "declaration".to_string(),
-                    path: crate::adapter::ProjectPath(smol_str::SmolStr::new(*manifest)),
-                    range: None,
-                    note: Some((*version).to_string()),
-                })
-                .collect(),
-            rolled_up: None,
-            sources: Vec::new(),
-            delta: None,
-            delta_origin: None,
-        });
-    }
-    findings
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::adapter::ProjectPath;
-    use crate::graph::DeclaredDependency;
-    use crate::vocab::DependencyScope;
-    use smol_str::SmolStr;
-
-    fn declared(manifest: &str, name: &str, version_req: &str) -> DeclaredDependency {
-        DeclaredDependency {
-            package: crate::vocab::PackageId(0),
-            manifest: ProjectPath(SmolStr::new(manifest)),
-            name: SmolStr::new(name),
-            version_req: Some(SmolStr::new(version_req)),
-            scope: DependencyScope::Prod,
+                .map(|(manifest, req)| format!("{manifest} ({req})"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            out.push(Finding::new(
+                Category::VERSION_SKEW,
+                Severity::Info,
+                Confidence::Certain,
+                Subject::Dependency {
+                    // The lexicographically-first declaring manifest anchors the
+                    // finding; every declaration is in the message.
+                    owner_manifest: kndo_contract::vocab::ProjectPath::new(declarations[0].0),
+                    name: smol_str::SmolStr::new(name),
+                },
+                "",
+                format!("declared with diverging version requirements: {evidence}"),
+            ));
         }
-    }
-
-    fn unknown(manifest: &str, name: &str) -> DeclaredDependency {
-        DeclaredDependency {
-            version_req: None,
-            ..declared(manifest, name, "")
-        }
-    }
-
-    #[test]
-    fn a_manifest_stating_no_requirement_is_not_evidence_of_skew() {
-        // The BOM-managed shape: one module pins the version, the others take it from an
-        // imported BOM. They agree perfectly. Encoding "states nothing" as `"*"` would make
-        // every real version diverge from it — a false finding on every JVM repository with
-        // this shape.
-        let graph = ProjectGraph::for_test(vec![], vec![], vec![], vec![])
-            .with_declared_dependencies(vec![
-                declared(
-                    "app/build.gradle",
-                    "org.springframework.boot:starter",
-                    "3.2.0",
-                ),
-                unknown("web/build.gradle", "org.springframework.boot:starter"),
-                unknown("api/build.gradle", "org.springframework.boot:starter"),
-            ]);
-        assert!(find_version_skew(&graph).is_empty());
-    }
-
-    #[test]
-    fn two_known_versions_still_skew_with_an_unknown_alongside() {
-        // The unknown is dropped, not treated as agreement: a real disagreement between the
-        // two manifests that DID state a requirement is still a finding.
-        let graph = ProjectGraph::for_test(vec![], vec![], vec![], vec![])
-            .with_declared_dependencies(vec![
-                declared("a/build.gradle", "com.other:lib", "1.0"),
-                declared("b/build.gradle", "com.other:lib", "2.0"),
-                unknown("c/build.gradle", "com.other:lib"),
-            ]);
-        let findings = find_version_skew(&graph);
-        assert_eq!(findings.len(), 1);
-        assert!(findings[0].message.contains("1.0"));
-        assert!(findings[0].message.contains("2.0"));
-        assert!(
-            !findings[0].message.contains("c/build.gradle"),
-            "the manifest that states nothing is not cited as evidence: {}",
-            findings[0].message
-        );
-    }
-
-    #[test]
-    fn single_manifest_never_skews() {
-        let graph = ProjectGraph::for_test(vec![], vec![], vec![], vec![])
-            .with_declared_dependencies(vec![declared("package.json", "lodash", "^4.0.0")]);
-        assert!(find_version_skew(&graph).is_empty());
-    }
-
-    #[test]
-    fn agreeing_manifests_do_not_skew() {
-        let graph = ProjectGraph::for_test(vec![], vec![], vec![], vec![])
-            .with_declared_dependencies(vec![
-                declared("packages/a/package.json", "lodash", "^4.0.0"),
-                declared("packages/b/package.json", "lodash", "^4.0.0"),
-            ]);
-        assert!(find_version_skew(&graph).is_empty());
-    }
-
-    #[test]
-    fn diverging_manifests_skew() {
-        let graph = ProjectGraph::for_test(vec![], vec![], vec![], vec![])
-            .with_declared_dependencies(vec![
-                declared("packages/a/package.json", "lodash", "^4.0.0"),
-                declared("packages/b/package.json", "lodash", "^3.10.1"),
-            ]);
-        let findings = find_version_skew(&graph);
-        assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].category, "version-skew");
-        assert_eq!(findings[0].group, crate::vocab::Group::Defect);
-        assert_eq!(findings[0].subject_kind, "dependency");
-        assert!(findings[0]
-            .message
-            .contains("packages/a/package.json (^4.0.0)"));
-        assert!(findings[0]
-            .message
-            .contains("packages/b/package.json (^3.10.1)"));
-
-        // Addressable without parsing the message: anchored on the first declaring manifest,
-        // with every declaration in `related` carrying the requirement it states.
-        assert_eq!(
-            findings[0].location.path.as_ref().map(|p| p.0.as_str()),
-            Some("packages/a/package.json")
-        );
-        assert_eq!(findings[0].location.symbol.as_deref(), Some("lodash"));
-        let related: Vec<(&str, Option<&str>)> = findings[0]
-            .related
-            .iter()
-            .map(|r| (r.path.0.as_str(), r.note.as_deref()))
-            .collect();
-        assert_eq!(
-            related,
-            vec![
-                ("packages/a/package.json", Some("^4.0.0")),
-                ("packages/b/package.json", Some("^3.10.1")),
-            ]
-        );
-        assert!(findings[0].related.iter().all(|r| r.role == "declaration"));
-    }
-
-    #[test]
-    fn unrelated_names_do_not_cross_contaminate() {
-        let graph = ProjectGraph::for_test(vec![], vec![], vec![], vec![])
-            .with_declared_dependencies(vec![
-                declared("packages/a/package.json", "lodash", "^4.0.0"),
-                declared("packages/b/package.json", "react", "^18.0.0"),
-            ]);
-        assert!(find_version_skew(&graph).is_empty());
-    }
-
-    #[test]
-    fn finding_id_is_stable_across_runs() {
-        let graph = ProjectGraph::for_test(vec![], vec![], vec![], vec![])
-            .with_declared_dependencies(vec![
-                declared("packages/a/package.json", "lodash", "^4.0.0"),
-                declared("packages/b/package.json", "lodash", "^3.10.1"),
-            ]);
-        let a = find_version_skew(&graph);
-        let b = find_version_skew(&graph);
-        assert_eq!(a[0].id, b[0].id);
+        out
     }
 }

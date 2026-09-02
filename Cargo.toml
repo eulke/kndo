@@ -1,103 +1,41 @@
+# The v2 workspace. It grows here, beside the v1 it replaces, until the root swap;
+# nothing in it is a member of the v1 workspace and nothing in v1 depends on it.
 [workspace]
 resolver = "2"
 members = [
     "crates/kndo",
-    "crates/kndo-core",
-    "crates/kndo-cli",
-    "crates/kndo-adapter-toolkit",
-    "crates/kndo-adapter-js",
+    "crates/kndo-adapter-css",
     "crates/kndo-adapter-go",
-    "crates/kndo-adapter-rust",
+    "crates/kndo-adapter-html",
     "crates/kndo-adapter-java",
     "crates/kndo-adapter-kotlin",
+    "crates/kndo-adapter-python",
+    "crates/kndo-adapter-rust",
     "crates/kndo-adapter-swift",
-    "crates/kndo-adapter-json",
-    "crates/kndo-adapter-css",
-    "crates/kndo-adapter-html",
-    "crates/kndo-plugin-api",
-    "crates/kndo-plugin-nextjs",
-    "crates/kndo-plugin-express",
-    "crates/kndo-plugin-info-plist",
-    "crates/kndo-plugin-libsass",
-    "crates/kndo-plugin-uikit",
-    "crates/kndo-plugin-serde",
-    "crates/kndo-plugin-thymeleaf",
-    "crates/kndo-plugin-rkyv",
-    "crates/kndo-plugin-wasmtime",
-    "crates/kndo-plugin-coverage",
+    "crates/kndo-adapter-ts",
+    "crates/kndo-apple",
+    "crates/kndo-cli",
+    "crates/kndo-contract",
+    "crates/kndo-contract-fingerprint",
+    "crates/kndo-core",
+    "crates/kndo-coverage",
+    "crates/kndo-gates",
+    "crates/kndo-host-wasm",
+    "crates/kndo-sdk",
+    "crates/kndo-serve",
+    "crates/kndo-testkit",
+    "crates/kndo-toolkit",
     "xtask",
-]
-exclude = [
-    "spikes/perf",
-    "examples/kndo-plugin-demo",
-    "examples/kndo-plugin-hooks-demo",
-    "examples/kndo-plugin-wrapper-demo",
-    "examples/kndo-coverage-demo",
-    "examples/kndo-adapter-wrapper-demo",
 ]
 
 [workspace.package]
-version = "0.1.0"
-edition = "2021"
-# MSRV, measured rather than chosen: `cargo check --workspace --all-features` fails on 1.88 and
-# below, and cargo names the reason itself from the locked graph — `smol_str@0.3.6 requires rustc
-# 1.89` (with `globset`/`ignore` at 1.88 just behind it). 1.89.0 builds and tests the whole
-# workspace clean. Declaring it makes a build on an older toolchain fail with that sentence
-# instead of an unrelated compile error, and CI's `msrv` job builds on exactly this version, so
-# the number stays true rather than becoming decoration.
-rust-version = "1.89"
+version = "0.0.0"
+edition = "2024"
 license = "Apache-2.0"
-# The repository's CURRENT name — `eulke/kondo`, pending a rename to `eulke/kndo` — in the one
-# piece of metadata crates.io publishes as the project's home. Writing the current name is safe
-# either way: GitHub's post-rename redirect makes it resolve forever once the rename happens,
-# while the new name resolves only after. `xtask/tests/release_channels.rs` enforces this rule
-# for every published link.
-repository = "https://github.com/eulke/kondo"
-publish = false # pre-1.0: nothing is published; crate names are reserved regardless
+rust-version = "1.98"
+publish = false
 
-[workspace.dependencies]
-smol_str = { version = "0.3", features = ["serde"] }
-blake3 = { version = "1", features = ["rayon"] }
-ignore = "0.4"
-rayon = "1"
-tree-sitter = "0.25"
-tree-sitter-typescript = "0.23"
-tree-sitter-go = "0.25"
-tree-sitter-rust = "0.24"
-tree-sitter-java = "0.23"
-tree-sitter-kotlin-ng = "1.1"
-tree-sitter-swift = "0.7"
-tree-sitter-css = "0.25"
-tree-sitter-scss = "1.0"
-toml = "0.8"
-roxmltree = "0.20"
-serde_json = "1"
-serde = { version = "1", features = ["derive"] }
-bincode = "1"
-rkyv = "0.8"
-memmap2 = "0.9"
-chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
-num_cpus = "1"
-rustc-hash = "2"
-thiserror = "2"
-tempfile = "3"
-
-[profile.dev]
-# Full DWARF isn't needed for the edit-compile-run loop this profile serves —
-# line-tables-only keeps panic locations/backtraces usable while cutting the debug-info
-# volume the linker processes on every incremental rebuild. wasmtime is a linked dependency
-# of everything depending on kndo-plugin-api, and its debug info is the biggest single
-# contributor to link time in this workspace.
-debug = "line-tables-only"
-
-[profile.dev.package."*"]
-# Standard Cargo-book pattern (cargo book, "Profiles" > "Overrides"): this only ever applies
-# to dependencies, never to workspace members, so your own crates stay at opt-level 0 for
-# fast incremental compiles while wasmtime/cranelift, the eight tree-sitter grammars, rkyv,
-# and regex — all doing real parsing/codegen work `cargo test` exercises at runtime — run
-# fast enough that the test suite itself isn't painfully slow.
-opt-level = 2
-
-[profile.release]
-lto = true
-codegen-units = 1
+# One line of the SCSS grammar's build script keeps it off Windows; the vendored copy
+# under `vendor/` fixes that line and nothing else (vendor/README.md).
+[patch.crates-io]
+tree-sitter-scss = { path = "vendor/tree-sitter-scss" }

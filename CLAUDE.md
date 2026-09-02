@@ -1,218 +1,155 @@
 # Working in this repo
 
-`kndo-core`'s architecture is deliberate: normative contracts, an `Engine` facade, an
-"ignorance rule" for language-agnosticism. The rules below keep code and contracts in sync
-with that architecture.
+The law of this repo is executable: the gates (`kndo-gates` enumerates them, and the CI
+steps are generated from that registry; finding categories live once as
+`Category::FIRST_PARTY`). This file is
+the judgment layer — the decisions no gate can make for you. When it disagrees with a
+gate, the gate wins and this file is stale: fix it in the same PR. The best fate of any
+line here is to be retired by a type or a gate that makes it unnecessary.
 
-## Internal notes
+## The oracle is a quarry, not a target
 
-`internal/` holds design notes for maintainers. The code never depends on it: every public
-contract is legible from the code and its doc comments alone, with no citation to an external
-document required or expected.
+v1's findings exist to be explained against, never matched. No v2 behavior, threshold,
+confidence, or wording is ever justified by "v1 did it" — v1 shipped vices (name-fuzzy
+resolution, untiered confidence, reflection false positives it chose to live with), and
+inheriting one to close a numeric gap poisons the one thing v2 is for. Derive every
+judgment from v2's own evidence and contracts; when the numbers then differ from the
+oracle, the COMPARISON explains the difference by naming v1's defect or v2's decision —
+in either direction, including v2 reporting MORE. A sentence of the form "same as v1"
+is never a rationale; at best it is a coincidence worth noting.
 
-Before finishing substantial work, consider whether the tree needs a durable update — a decision
-made, an architectural fact discovered, a gotcha worth remembering, not a narration of what was
-done (that belongs in the commit, not here). It lands in one of the ten documents the tree's own
-top-level index already lists — never a new file — updating whatever existing section already
-covers the topic rather than appending a restatement beside it.
+The law has a floor as well as a ceiling: v1's shipped surface is inherited value. A
+capability v1 offers — a verb, a format, a flag, an ergonomic default — is either
+present in v2, carried in EXPERIMENTS' v1-surface ledger with a disposition, or dead
+with its vice named in DECISIONS. Quietly shipping less than v1 is as much a failure as
+copying it; and when an item lands, it is rebuilt from v2's contracts, never
+transliterated.
 
-Decide at the same moment whether the fact is relevant to someone outside the team building
-kndo — an end user, a plugin or adapter author — rather than only to a maintainer. If so it
-belongs in `docs/`, written there instead, not in both: a fact lives in exactly one place. The
-tree may point at `docs/` for the public explanation of something it also touches; `docs/` never
-points back, and `internal_boundary` is what makes that direction impossible to get wrong by
-accident.
+## Measure first
 
-The `docs-digest` skill runs this same discipline on demand, for a thorough pass after a long or
-complex session.
+Any work that claims to improve findings — a new analysis, a plugin, an adapter
+capability, a precision fix — starts with the corpus experiment, and the number decides.
+A killed idea's deliverable is a `DECISIONS.md` entry with its number, so nobody
+rediscovers and rebuilds it. A design without a measurement attached is a guess wearing a
+spec's clothes: measure, then design around what you measured.
 
-## Fachada: frontends import only the root re-exports
+## Which knob
 
-`kndo-cli` and any future frontend (`kndo serve`/MCP, LSP, GUI) import only from
-`kndo::<Name>` — the root re-exports `kndo-core`/`kndo` publish, never a frontend-facing
-internal module (`kndo::engine::X`, `kndo::vocab::X`, `kndo_core::...` directly). If a
-frontend needs a piece of data or logic that isn't exported yet, that's a PR to core: add
-the field to `RunResult`, export the helper, add it to the root re-export list — never a
-local re-derivation or a reach into an internal module. `sort_findings_for_display` is the
-precedent to follow: group ordering and grade-boundary logic live once, in core, and every
-frontend calls it rather than keeping its own copy.
+Two deliberate version knobs exist; shape changes use neither.
 
-## Ignorance rule
+- A contract type changed shape → already done: `CONTRACT_FINGERPRINT` moved on its own.
+- This adapter now emits different evidence from the same source → bump its
+  version (the second argument of its `ExtensionSpec::builder`).
+- The same evidence now assembles into a different graph → bump
+  `GRAPH_SEMANTICS_VERSION`.
 
-Core never names a language. If a feature seems to need `if language == "go"` in core, the
-real gap is missing vocabulary — extend `vocab.rs`/the adapter contract instead of
-conditioning on identity.
+About to bump two places for one fact? Wrong knob — stop, and re-derive which of the
+three sentences above describes your change.
 
-## One source per concept
+## Where a fact lives
 
-Group/category display order, confidence labels, grade thresholds, severity ranking — any
-of these is data core exports, never a constant copied into a frontend or another crate. If
-you find yourself copying a constant or table between crates, it belongs in core (frontend
-concerns) or the adapter toolkit (adapter concerns), not duplicated at the call site.
+Walk down and take the first floor that fits:
 
-## Cache invalidation: pick the right knob, not every knob
+1. Two crates would otherwise each carry it → `kndo-contract`.
+2. Every adapter would write it identically → `kndo-toolkit`; test machinery →
+   `kndo-testkit`.
+3. A frontend needs it → export it through the facade: a PR to core, never a local
+   re-derivation.
+4. Only this crate cares → private, right here.
 
-Three constants, three questions, and they are not interchangeable:
+Copying a constant, table, or ordering between crates is the signal you picked the wrong
+floor — move the fact instead of finishing the copy.
 
-- **`cache::ENTRY_FORMAT_VERSION`** — a type in the facts contract changed shape (`FileFacts`
-  and anything reachable from it: `Declaration`, `FunctionMetrics`, …). ONE bump; it is folded
-  into the facts entries *and* the graph key.
-- **`AdapterDescriptor::facts_schema_version`** — one adapter changed what it emits (new roots,
-  corrected spans, a different claim rule). Bump that adapter only.
-- **`GRAPH_SCHEMA_VERSION`** — the persisted graph's own shape (rkyv layouts) or the assembly
-  semantics that derive a graph from the same facts.
+## A rule is born with its gate
 
-Bumping every adapter for a core-contract change is the failure this exists to prevent: the
-same fact spelled six-plus times, silently under-invalidating the moment someone bumps five of
-six. If you are about to edit more than one `facts_schema_version` in a single change, you want
-`ENTRY_FORMAT_VERSION` instead.
+A new norm lands in the same commit as the test that enforces it, or as a doc-comment on
+the code it governs — those are the two homes. This file grows judgment only; a list
+that mirrors code belongs in a registry that generates the copies.
 
-## Errors
+## The second copy promotes
 
-Use `thiserror` enums with `Display` impls. Do not introduce a new `Result<_, String>` —
-error messages that reach JSON envelopes or CLI output should come from a typed error, not
-ad hoc string formatting.
+The second verbatim copy is the promotion moment — not the third. Decide by behavior:
+identical for a grammar it has never seen → toolkit; grammar knowledge → it stays in its
+adapter, next to the grammar.
+
+## Reach for the type
+
+- A second `bool` lands in a struct → make the states an enum.
+- Two fields must agree → merge them into the one type that cannot disagree.
+- A `String` is compared for equality → newtype it.
+- A doc-comment lists invalid combinations → the shape is wrong; make them
+  unrepresentable.
+- Adjacent same-typed parameters → a struct or a builder.
+
+Evidence flows in through sinks and out through exhaustive types. When an API needs
+prose to explain which fields matter, redesign the API, not the prose.
+
+## The ignorance rule
+
+Core never names a language. The moment `if language == X` looks necessary, the
+vocabulary is missing a concept: add an `ExtensionSpec` capability — with a default, a
+named consumer in core, and a conformance case. All three, or it doesn't merge.
+
+## Where language knowledge lives
+
+A language needs something new? Take the first floor that fits:
+
+1. A fact about ONE FILE's content — something extraction sees → an evidence stream:
+   a sink method paired with its `EvidenceStream` declaration; the pair ships
+   together, so absence stays typed and analyses abstain instead of guessing.
+2. A fact about THE LANGUAGE itself — true for every file (visibility rungs, cycle
+   idioms, builtin member types) → `ExtensionSpec` data, with a default that reproduces
+   pre-capability behavior, a named core consumer, and a conformance case.
+3. A fact about THE PROJECT around the file — what exists, what manifests declare →
+   a `ResolveContext` query, engine-provided.
+4. A mechanism a second adapter would copy verbatim → the toolkit.
+
+Wrong-floor signals: an analysis branching on an extension coordinate; an extension parsing what
+a manifest or another adapter already parsed; a capability whose consumer you cannot
+name.
+
+## Determinism
+
+Same tree ⇒ byte-identical output, at any thread count, on any machine. Order-dependent
+logic consumes sorted inputs; analysis runs on fuel and evidence, and wall-clock time
+stays outside the engine. When two runs differ, the run is the bug — the gate stays as
+it is.
+
+## Contract changes are loud
+
+Finding identity, cache keys, the output schema, and conformance fixtures are contracts:
+a fixture diff is either your bug or a deliberate change, called out in the PR and in
+`DECISIONS.md`. Green-by-regeneration is how baselines break in silence.
 
 ## Comments
 
-A comment states what is true now — a non-obvious WHY, an invariant, a constraint — never a
-contrast with an earlier state ("this used to be X", "no longer", "added for Y") and never a
-promise about the future. If deleting "used to"/"previously"/"no longer" leaves a comment
-meaningless, rewrite it as a present invariant or delete it. The same rule applies equally to
-`///`/`//!` rustdoc and inline `//` comments: public API documentation states what callers can
-rely on today, not the history of how it got there.
+A comment records a present invariant or a non-obvious why. The diff's story — what
+changed, what it used to be, why it's correct — lives in the commit message; if deleting
+"used to / no longer" empties a comment, delete the comment.
 
-Write a comment only where the code alone would leave a reader stuck on a non-obvious WHY —
-not to restate what a well-named function or type already says. A codebase with fewer, sharper
-comments is easier to trust than one with a comment on every block: readers stop reading
-comments once enough of them are noise.
+## Verify without destroying
 
-## Config
+Prove a test fails without its fix using a file copy or a second worktree;
+`checkout`/`stash` are navigation, never verification. The toolchain is pinned: local
+and CI run the same compiler by construction, and a toolchain bump is its own PR with
+the full suite.
 
-All defaults and all precedence between config sources live in `config::EffectiveConfig`.
-Never write `unwrap_or(SomeConfig::default().field)` or a second merge site outside it — merge
-logic duplicated across two places drifts silently out of sync.
+## Reality before promises
 
-## Finding identity is a stability contract
+A target, format, or channel earns its row in the docs or the release table by being
+exercised in CI first. Fixtures for ingested formats are captured from real producers. A
+new rule's first run is against the foreign corpus — our own fixtures only prove we
+agree with ourselves.
 
-`Group`, `Category`, `SubjectKind` string values and the field order passed into
-`finding_id`/`FindingIdParts` are contract, not implementation detail — baselines,
-suppressions, and every adapter's `expected.json` depend on them being stable. A
-conformance fixture diff is either a bug in your change or a deliberate, documented
-contract change (call it out in the PR) — it is never something to fix by regenerating the
-fixture.
+## Scope belongs to the owner
 
-## Tests
+Deliver the plan at its stated scope. A milestone, gate, or design piece is cut only by
+the owner's explicit decision, recorded in `DECISIONS.md` — never quietly by whoever
+builds it. Too big? Say so and propose the cut; a half-shipped feature nobody decided to
+halve is worse than either whole or absent.
 
-Mocks and builders come from `kndo-core`'s `testkit` feature (`MockAdapter`, and friends) —
-never a hand-rolled local mock adapter or a duplicate toy DSL. Use `tempfile` for any
-temporary directory a test needs, never a hand-rolled name under `std::env::temp_dir()` —
-parallel test execution can collide on a fixed name.
+## Hygiene
 
-## Adapters and the toolkit
-
-Before writing a helper in an adapter crate, check `kndo-adapter-toolkit` first. A helper
-that's genuinely universal (same behavior regardless of grammar — text extraction, node
-lookup, metrics plumbing, path helpers) belongs in the toolkit, gated by a Cargo feature if
-it pulls in a grammar-specific dependency (see the toolkit's `jvm-xml` feature for the
-pattern). Boilerplate copied into two or more adapters unchanged is a promotion candidate,
-not a pattern to keep copying a third time. The reverse also holds: something that's
-genuinely grammar-specific (parsing/dumping a particular tree-sitter grammar) stays in its
-own adapter — don't force a shared abstraction over unrelated grammars just because two
-adapters happen to need "a parse function."
-
-## Plugins
-
-Implement `Plugin::mutates_graph()` deliberately — it has no default. Returning `true` when
-a plugin doesn't actually mutate the graph silently disables incremental patching for every
-project that plugin runs on; returning `false` when it does mutate causes correctness bugs.
-Decide it, don't default it.
-
-## The release surface: one producer, and nothing unverified until a tag
-
-**One producer for the release artifact.** `xtask::package` owns the target table, the
-artifact's name and its layout. `release.yml` calls `cargo xtask package`; it never builds an
-archive itself. `xtask/tests/release_channels.rs` checks the four consumers — `install.sh`,
-`action/action.yml`, the Homebrew template, the install docs — against that single definition,
-never against each other and never by eye. If you change what a release produces, change it
-there; if you add a consumer, add it to that test.
-
-**A mechanism whose first run is the release is not verified.** CI exercises `git-cliff`'s
-release-body rendering, `install.sh`'s install, the musl build, and the full suite on macOS and
-Windows on every push — the same things a release needs, run before any tag exists. Before
-adding a step that only runs during a release, build what exercises it beforehand — a step with
-nothing exercising it first is the thing to fix. Deliberate exceptions are written down with
-their measurement, not left silent: `cargo xtask bench` is not a CI gate because its baseline is
-machine-specific (CONTRIBUTING "Benchmarks" has the numbers), and `epoch_deadline` is not
-enabled because wall-clock cutoffs would break the determinism gates (`kndo-plugin-api`'s
-`engine.rs`).
-
-**Config the engine does not read is not shipped.** `config::LIVE_TABLES` is what `parse`
-actually reads; `kndo init`'s template is checked against it. A commented-out key is still a
-promise. Wire it or leave it out.
-
-## Verify on the toolchain CI uses, and with the targets CI installs
-
-"clippy is clean locally" is a claim about one toolchain. CI installs `stable`, which moves; a
-container can sit several releases behind. If a CI job disagrees with a local run, compare
-`rustc --version` **before** looking for anything subtler; `cargo +<version>` reproduces it.
-
-The same holds for targets. The workspace suite builds real WASM components at run time, so a
-job that runs it needs `targets: wasm32-unknown-unknown` on its toolchain step — without it the
-build dies with "can't find crate for `core`". A step that always fails and a step that never
-runs look the same from a distance; both are worse than no step, because the job list says the
-invariant is covered.
-
-## Gates that must never regress
-
-These are checked by name in CI — the `gates` job in `.github/workflows/ci.yml` runs one step
-per entry below, and its first step fails if any of them has been renamed or deleted, which a
-bulk `cargo test --workspace` cannot notice. Adding an entry here means adding its step there;
-the two lists are one list. All of them must stay green on every PR that touches
-graph/cache/analysis, and `doc_links` (whose subject is Markdown) on every PR that touches a
-`.md`:
-
-- `patch_equivalence` — full assembly and incremental patch produce identical graphs.
-- cache equivalence — a cached run and `--no-cache` produce byte-identical output.
-- `--threads 1` and the default thread count produce identical, deterministic output.
-- Every adapter's `tests/conformance.rs` fixtures stay byte-identical unless the PR is a
-  deliberate, documented contract change.
-- `dogfood` (`crates/kndo/tests/dogfood.rs`) — **kndo on kndo reports nothing.** Zero is the
-  standing state, not a target: the `ACCEPTED` list in that file is empty, and an entry added to
-  it needs a written reason in the same commit. Its second test is the one that keeps the first
-  honest — no analysis other than `crap` may abstain, because a change that quietly stopped an
-  analysis from judging would make a zero-findings gate *easier* to pass, which is the one
-  failure direction a dogfood gate must not have.
-- `plugin_dependency_implication` / `adapter_dependency_implication` — **a plugin named in
-  another plugin's `dependencies` activates even when its own rules never match.** This is the
-  only path to a plugin whose framework is an *indirect* dependency: a company framework that
-  uses Express internally is never `express` in its users' manifests, so `kndo:express` can
-  never self-activate there. No plugin we ship uses it, and it must exist anyway — that is what
-  makes it easy to delete by accident.
-- `builtin_plugin_proofs` (`crates/kndo/tests/builtin_plugin_proofs.rs`) — **every built-in
-  plugin has a baseline-then-plugin proof**, the standard `docs/src/plugins/authoring.md` already
-  demands of anyone writing one: the fixture's findings fire without the plugin, exactly those
-  disappear with it, unrelated dead code stays reported, and `PluginContribution` matches down
-  to `dropped`. `every_built_in_plugin_is_proven_here` closes the file against
-  `default_plugins()`, so a new built-in without a proof fails the suite — the same posture as
-  `Plugin::mutates_graph()` having no default. A plugin nothing asserts is a plugin nothing
-  notices breaking, and the effect of one is measured in findings that silently return.
-
-- `doc_links` (`crates/kndo/tests/doc_links.rs`) — **every relative Markdown link in the
-  repository resolves.** A link is the author asserting a path exists, and moving a document
-  means updating what points at it in the same commit. Deliberately links only: prose paths
-  carry too many false positives on this repository to be worth checking (examples from other
-  repositories, invented illustrations, paths that exist in a *user's* project), so an analysis
-  firing on those would be noise. The scanner blanks code spans first — a path inside backticks
-  is quoted, not claimed.
-
-- `internal_boundary` (`crates/kndo/tests/internal_boundary.rs`) — **the internal design-doc tree
-  has exactly one point of contact with the rest of the codebase: this file, `CLAUDE.md`.**
-  Nothing outside that tree may cite it — no path into it, no retired `RFC 00NN`/`ADR 00NN`
-  number, no section-sign citation — except the one line above that tells an agent the tree
-  exists. A handful of files are allowlisted in the test for a real, unrelated language
-  convention (Go's own package-visibility boundary, Node's internal-subpath-imports convention,
-  Kotlin's `internal` keyword); a new false positive there is fixed by extending that list,
-  never by weakening the gate.
-
-No PR should weaken or skip one of these to get green.
+English everywhere in the repo. Conventional commits — CI lints them. `DECISIONS.md` is
+append-only, one dated entry per decision with its measurement, and code never cites it
+by number.

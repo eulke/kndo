@@ -1,7 +1,0 @@
-<project>
-  <groupId>com.example</groupId>
-  <artifactId>multi-release</artifactId>
-  <dependencies>
-    <dependency><groupId>com.other</groupId><artifactId>lib</artifactId></dependency>
-  </dependencies>
-</project>

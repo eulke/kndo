@@ -1,278 +1,318 @@
-//! Ingested coverage ("coverage is ingested, never measured"): per-file,
-//! line-granular hit counts as coverage producers report them, plus the machinery `crap`
-//! needs to turn them into a per-function `cov(m)` fraction.
-//!
-//! Coverage deliberately does NOT live on the [`crate::graph::ProjectGraph`] or in its
-//! snapshot: a report's freshness varies independently of source content hashes, and caching
-//! it into the graph would serve stale coverage on every warm run — the exact "stale
-//! certainty" the freshness policy exists to prevent. The engine re-reads reports each
-//! run (they're small) and hands the map to `analysis::run_all` as a separate input.
-//!
-//! Parsing lives in plugins ([`crate::plugin::Plugin::ingest_coverage`], with the built-in
-//! ingesters in the `kndo-plugin-coverage` crate); this module owns only the format-neutral
-//! model and the span→fraction math.
+//! The engine's half of coverage ingestion — format-blind by construction. An
+//! ingesting extension states RECORDS (what its report format claims, contract
+//! vocabulary); this module maps them against the project the run actually
+//! discovered and answers span queries for the analyses. No format name appears
+//! here: the engine exposes the tools for an ingester to exist and judges what
+//! any of them delivers, uniformly.
 
-use rustc_hash::FxHashMap as HashMap;
+use kndo_contract::evidence::CoverageRecords;
+use kndo_contract::vocab::{ProjectPath, Span};
+use std::collections::BTreeMap;
 
-use crate::adapter::{ProjectPath, Span};
+pub struct Coverage {
+    pub files: BTreeMap<ProjectPath, FileCoverage>,
+}
 
-/// One file's instrumented lines → execution counts, exactly as reported.
-#[derive(Debug, Default, Clone)]
 pub struct FileCoverage {
-    pub lines: HashMap<u32, u64>,
+    /// Byte offset where each 1-based line starts, from the discovered content.
+    line_starts: Vec<u32>,
+    /// Instrumented lines (1-based) → hit count.
+    lines: BTreeMap<u32, u64>,
+    /// Function records: (declaration line, hit count), sorted by line.
+    functions: Vec<(u32, u64)>,
 }
 
-/// Everything ingested this run, keyed by project-relative path.
-#[derive(Debug, Default)]
-pub struct CoverageMap {
-    pub files: HashMap<ProjectPath, FileCoverage>,
-    /// Human-readable provenance per ingested report ("coverage-lcov coverage/lcov.info
-    /// (2d old)"), recorded by the *host* after each successful ingest — it located the
-    /// report and checked its freshness, so it owns saying what was used. Surfaced by
-    /// health's crap category so consumers can judge the source.
-    pub sources: Vec<String>,
-}
-
-impl CoverageMap {
-    pub fn is_empty(&self) -> bool {
-        self.files.is_empty()
-    }
-
-    /// Rebase report-absolute file keys onto the project root. Coverage tools commonly
-    /// record absolute paths (llvm-cov's lcov output does), while the graph keys files
-    /// project-relative — an absolute key can never match a graph path. Format plugins
-    /// parse paths verbatim (they don't know the root); the host does, so it rebases the
-    /// finished map once, for every ingesting plugin uniformly. Both the root as given and
-    /// its canonicalized form are tried (reports may record either); keys under neither
-    /// stay as they are and simply match nothing — degrade to silence, never to a wrong
-    /// file.
-    pub fn rebase(&mut self, root: &std::path::Path) {
-        let mut prefixes: Vec<(String, String)> = Vec::new();
-        for candidate in [Some(root.to_path_buf()), root.canonicalize().ok()]
-            .into_iter()
-            .flatten()
+/// Whether a function whose declaration spans `span` went unexecuted. `None` means
+/// the coverage cannot tell (no record overlaps) — the caller falls back to weaker
+/// evidence rather than accusing. Function records are the primary evidence — a
+/// declaration line executes at module load, so line hits alone would call every
+/// loaded function tested; line records are the fallback for producers that emit
+/// no function records.
+impl FileCoverage {
+    pub fn function_untested(&self, span: Span) -> Option<bool> {
+        let first = self.line_of(span.start);
+        let last = self.line_of(span.end.saturating_sub(1).max(span.start));
+        if let Some((_, count)) = self
+            .functions
+            .iter()
+            .filter(|(line, _)| (first..=last).contains(line))
+            .min_by_key(|(line, _)| *line)
         {
-            let mut p = candidate.to_string_lossy().replace('\\', "/");
-            if !p.ends_with('/') {
-                p.push('/');
-            }
-            if !prefixes.iter().any(|(prefix, _)| *prefix == p) {
-                prefixes.push((p, String::new()));
-            }
+            return Some(*count == 0);
         }
-        self.rebase_prefixes(&prefixes);
+        // Line fallback: the body's lines, excluding the declaration line itself
+        // (module load executes it).
+        let body = self.body_hits(span)?;
+        Some(body.iter().all(|&c| c == 0))
     }
 
-    /// The substitution core `rebase` is a wrapper over: every key starting with a
-    /// listed prefix is rewritten with that prefix replaced (first match wins; callers
-    /// order longest-first when prefixes can nest). Beyond stripping the absolute root,
-    /// the host uses this to land report keys that are qualified by a *name* rather than
-    /// a location — Go coverprofiles record module-qualified paths
-    /// (`github.com/x/y/pkg/file.go`), and only the host can map a module name to its
-    /// directory. A rewrite that collides with an existing key keeps the union — the same
-    /// accumulation rule as repeated DA records for one line.
-    pub fn rebase_prefixes(&mut self, prefixes: &[(String, String)]) {
-        if prefixes.is_empty() {
-            return;
-        }
-        let rebased: Vec<(ProjectPath, ProjectPath)> = self
-            .files
-            .keys()
-            .filter_map(|path| {
-                prefixes.iter().find_map(|(prefix, replacement)| {
-                    path.0.strip_prefix(prefix.as_str()).map(|rel| {
-                        (
-                            path.clone(),
-                            ProjectPath(smol_str::SmolStr::new(format!("{replacement}{rel}"))),
-                        )
-                    })
-                })
-            })
-            .collect();
-        for (from, to) in rebased {
-            if let Some(coverage) = self.files.remove(&from) {
-                let entry = self.files.entry(to).or_default();
-                for (line, hits) in coverage.lines {
-                    *entry.lines.entry(line).or_insert(0) += hits;
-                }
-            }
-        }
+    /// The fraction of the body's instrumented lines that executed — the
+    /// declaration line excluded, as above; `None` when no body line is
+    /// instrumented. Line records only: a function record says whether the
+    /// function ran, never how much of it.
+    pub fn function_coverage(&self, span: Span) -> Option<f64> {
+        let body = self.body_hits(span)?;
+        let hit = body.iter().filter(|&&c| c > 0).count();
+        Some(hit as f64 / body.len() as f64)
     }
 
-    /// The `cov(m)`, approximated at line granularity ("line-level lcov
-    /// ⇒ statement-level approximation"): the fraction of *instrumented* lines inside the
-    /// function's span that executed. `None` when the file appears in no report, or the span
-    /// contains no instrumented lines (a function the instrumenter skipped entirely) — both
-    /// are "coverage unknown", not "coverage zero", and the caller decides what unknown means
-    /// (`crap` applies cov = 0 plus a "coverage: none" flag).
-    pub fn function_coverage(&self, path: &ProjectPath, span: Span) -> Option<f64> {
-        let file = self.files.get(path)?;
-        let mut instrumented = 0usize;
-        let mut covered = 0usize;
-        for (&line, &hits) in &file.lines {
-            if line >= span.start.0 && line <= span.end.0 {
-                instrumented += 1;
-                if hits > 0 {
-                    covered += 1;
-                }
-            }
-        }
-        if instrumented == 0 {
+    /// Hit counts of the instrumented lines below the declaration line. A
+    /// function that fits on its declaration line has no body line to read,
+    /// and no record to answer with.
+    fn body_hits(&self, span: Span) -> Option<Vec<u64>> {
+        let first = self.line_of(span.start);
+        let last = self.line_of(span.end.saturating_sub(1).max(span.start));
+        if last <= first {
             return None;
         }
-        Some(covered as f64 / instrumented as f64)
-    }
-}
-
-/// The typed sink [`crate::plugin::Plugin::ingest_coverage`] writes through — the core owns
-/// the map; plugins only ever add validated facts to it (the sink discipline).
-#[derive(Debug, Default)]
-pub struct CoverageSink {
-    map: CoverageMap,
-}
-
-impl CoverageSink {
-    pub fn add_line(&mut self, path: ProjectPath, line: u32, hits: u64) {
-        // Multiple records for one line (lcov emits them across test suites) accumulate —
-        // a line any suite ran is covered.
-        *self
-            .map
-            .files
-            .entry(path)
-            .or_default()
+        let body: Vec<u64> = self
             .lines
-            .entry(line)
-            .or_insert(0) += hits;
+            .range(first + 1..=last)
+            .map(|(_, c)| *c)
+            .collect();
+        (!body.is_empty()).then_some(body)
     }
 
-    pub fn add_source(&mut self, source: String) {
-        self.map.sources.push(source);
+    fn line_of(&self, byte: u32) -> u32 {
+        self.line_starts.partition_point(|&s| s <= byte) as u32
+    }
+}
+
+/// Records → judgeable coverage, given the run's file contents (the line table each
+/// span query maps through). Records outside the project — paths naming no
+/// discovered file under [`locate`]'s rule — are skipped; records with nothing
+/// mappable are no coverage at all. The mapping half of ingestion, engine-side
+/// always: an extension states records in the report's own spelling, never a
+/// line table and never a guess about the project's layout.
+pub fn assemble(
+    records: CoverageRecords,
+    contents: &BTreeMap<ProjectPath, &[u8]>,
+) -> Option<Coverage> {
+    let by_name = ByName::over(contents);
+    let mut files: BTreeMap<ProjectPath, FileCoverage> = BTreeMap::new();
+    for (reported, rec) in records.files {
+        let Some(path) = by_name.locate(&reported, contents) else {
+            continue;
+        };
+        let content = contents[&path];
+        // Two report entries naming one file (a Java source's classes reported
+        // apart) accumulate, the same rule as repeated lcov sections.
+        let entry = files.entry(path).or_insert_with(|| FileCoverage {
+            line_starts: line_starts(content),
+            lines: BTreeMap::new(),
+            functions: Vec::new(),
+        });
+        for (line, hits) in rec.lines {
+            *entry.lines.entry(line).or_insert(0) += hits;
+        }
+        entry.functions.extend(rec.functions);
+    }
+    for fc in files.values_mut() {
+        fc.functions.sort_unstable();
+    }
+    (!files.is_empty()).then_some(Coverage { files })
+}
+
+/// Discovered paths by file name — the candidates a reported path can mean.
+struct ByName<'a> {
+    names: BTreeMap<&'a str, Vec<&'a ProjectPath>>,
+}
+
+impl<'a> ByName<'a> {
+    fn over(contents: &'a BTreeMap<ProjectPath, &[u8]>) -> Self {
+        let mut names: BTreeMap<&str, Vec<&ProjectPath>> = BTreeMap::new();
+        for path in contents.keys() {
+            let name = path.as_str().rsplit('/').next().unwrap_or(path.as_str());
+            names.entry(name).or_default().push(path);
+        }
+        ByName { names }
     }
 
-    pub fn into_map(self) -> CoverageMap {
-        self.map
+    /// The project file a reported path names: the path itself when the project
+    /// has it, else the ONE project file that ends with the reported path or
+    /// that the reported path ends with, at a `/` boundary. A Go profile keys by
+    /// import path (`github.com/x/y/render.go` for `render.go`), JaCoCo by
+    /// package and source name (`demo/Classify.java` for
+    /// `src/main/java/demo/Classify.java`), coverage.py by the path under a
+    /// source root it records separately. Two project files sharing the spelling
+    /// leave the record unmapped: crediting the wrong file would be a guess.
+    fn locate(
+        &self,
+        reported: &ProjectPath,
+        contents: &BTreeMap<ProjectPath, &[u8]>,
+    ) -> Option<ProjectPath> {
+        if contents.contains_key(reported) {
+            return Some(reported.clone());
+        }
+        let r = reported.as_str();
+        let name = r.rsplit('/').next().unwrap_or(r);
+        let mut found: Option<&ProjectPath> = None;
+        for candidate in self.names.get(name).into_iter().flatten() {
+            let p = candidate.as_str();
+            if suffix_at_boundary(r, p) || suffix_at_boundary(p, r) {
+                if found.is_some() {
+                    return None;
+                }
+                found = Some(candidate);
+            }
+        }
+        found.cloned()
     }
+}
+
+/// `longer` ends with `/shorter`.
+fn suffix_at_boundary(longer: &str, shorter: &str) -> bool {
+    longer.len() > shorter.len()
+        && longer.ends_with(shorter)
+        && longer.as_bytes()[longer.len() - shorter.len() - 1] == b'/'
+}
+
+/// Byte offset of each line's first byte — the one line table both coverage and
+/// suppression map spans through.
+pub fn line_starts(content: &[u8]) -> Vec<u32> {
+    let mut starts = vec![0u32];
+    for (i, &b) in content.iter().enumerate() {
+        if b == b'\n' {
+            starts.push(i as u32 + 1);
+        }
+    }
+    starts
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use smol_str::SmolStr;
+    use kndo_contract::evidence::FileRecords;
 
-    fn span(start: u32, end: u32) -> Span {
-        Span {
-            start: (start, 1),
-            end: (end, 1),
+    fn contents<'a>(entries: &[(&str, &'a str)]) -> BTreeMap<ProjectPath, &'a [u8]> {
+        entries
+            .iter()
+            .map(|(p, c)| (ProjectPath::new(*p), c.as_bytes()))
+            .collect()
+    }
+
+    type FileSpec<'a> = (&'a str, &'a [(u32, u64)], &'a [(u32, u64)]);
+
+    fn records(entries: &[FileSpec<'_>]) -> CoverageRecords {
+        CoverageRecords {
+            files: entries
+                .iter()
+                .map(|(path, lines, functions)| {
+                    (
+                        ProjectPath::new(*path),
+                        FileRecords {
+                            lines: lines.iter().copied().collect(),
+                            functions: functions.to_vec(),
+                        },
+                    )
+                })
+                .collect(),
         }
     }
 
     #[test]
-    fn function_coverage_is_the_covered_fraction_of_instrumented_lines_in_span() {
-        let mut sink = CoverageSink::default();
-        let p = ProjectPath(SmolStr::new("a.ts"));
-        sink.add_line(p.clone(), 2, 1);
-        sink.add_line(p.clone(), 3, 0);
-        sink.add_line(p.clone(), 4, 5);
-        sink.add_line(p.clone(), 40, 0); // outside the span — not this function's problem
-        let map = sink.into_map();
-        let cov = map.function_coverage(&p, span(1, 10)).unwrap();
-        assert!((cov - 2.0 / 3.0).abs() < 1e-9);
+    fn function_records_win_over_the_loaded_declaration_line() {
+        let src = "function a() {\n  return 1;\n}\nfunction b() {\n  return 2;\n}\n";
+        let map = contents(&[("src/x.js", src)]);
+        let cov = assemble(
+            records(&[(
+                "src/x.js",
+                &[(1, 1), (2, 3), (4, 1), (5, 0)],
+                &[(1, 3), (4, 0)],
+            )]),
+            &map,
+        )
+        .expect("assembles");
+        let fc = &cov.files[&ProjectPath::new("src/x.js")];
+        // a: bytes 0..28 (lines 1-3); b: bytes 29..57 (lines 4-6).
+        assert_eq!(fc.function_untested(Span::new(0, 28)), Some(false));
+        assert_eq!(fc.function_untested(Span::new(29, 57)), Some(true));
     }
 
     #[test]
-    fn unreported_files_and_uninstrumented_spans_are_unknown_not_zero() {
-        let mut sink = CoverageSink::default();
-        let p = ProjectPath(SmolStr::new("a.ts"));
-        sink.add_line(p.clone(), 50, 1);
-        let map = sink.into_map();
-        assert!(map
-            .function_coverage(&ProjectPath(SmolStr::new("other.ts")), span(1, 10))
-            .is_none());
-        assert!(map.function_coverage(&p, span(1, 10)).is_none());
+    fn line_fallback_ignores_the_declaration_line() {
+        let src = "function a() {\n  return 1;\n}\n";
+        let map = contents(&[("src/y.js", src)]);
+        let cov =
+            assemble(records(&[("src/y.js", &[(1, 1), (2, 0)], &[])]), &map).expect("assembles");
+        let fc = &cov.files[&ProjectPath::new("src/y.js")];
+        assert_eq!(fc.function_untested(Span::new(0, 28)), Some(true));
+    }
+
+    /// A one-line function has no body line below its declaration: the range
+    /// is empty, never inverted — the first real producer's report (pytest-cov
+    /// on flask) carried hundreds of these.
+    #[test]
+    fn a_one_line_function_without_a_function_record_is_unknown() {
+        let src = "def f(): return 1\ndef g():\n    return 2\n";
+        let map = contents(&[("src/o.py", src)]);
+        let cov = assemble(
+            records(&[("src/o.py", &[(1, 1), (2, 1), (3, 0)], &[])]),
+            &map,
+        )
+        .expect("assembles");
+        let fc = &cov.files[&ProjectPath::new("src/o.py")];
+        assert_eq!(fc.function_untested(Span::new(0, 17)), None);
+        assert_eq!(fc.function_untested(Span::new(18, 35)), Some(true));
     }
 
     #[test]
-    fn rebase_strips_the_project_root_from_absolute_keys_only() {
-        let root = tempfile::tempdir().unwrap();
-        let _ = std::fs::create_dir_all(root.path());
-        let abs = format!(
-            "{}/src/a.ts",
-            root.path().to_string_lossy().replace('\\', "/")
-        );
-        let mut sink = CoverageSink::default();
-        sink.add_line(ProjectPath(SmolStr::new(&abs)), 2, 1);
-        sink.add_line(ProjectPath(SmolStr::new("src/b.ts")), 3, 1); // already relative
-        sink.add_line(ProjectPath(SmolStr::new("/elsewhere/c.ts")), 4, 1); // foreign root
-        let mut map = sink.into_map();
-        map.rebase(root.path());
-        assert!(map
-            .function_coverage(&ProjectPath(SmolStr::new("src/a.ts")), span(1, 10))
-            .is_some());
-        assert!(map
-            .function_coverage(&ProjectPath(SmolStr::new("src/b.ts")), span(1, 10))
-            .is_some());
+    fn the_covered_fraction_counts_body_lines_only() {
+        let src = "def f(x):\n    if x:\n        return 1\n    return 2\n";
+        let map = contents(&[("src/p.py", src)]);
+        let cov = assemble(
+            records(&[("src/p.py", &[(1, 1), (2, 5), (3, 0), (4, 5)], &[(1, 5)])]),
+            &map,
+        )
+        .expect("assembles");
+        let fc = &cov.files[&ProjectPath::new("src/p.py")];
+        let whole = Span::new(0, src.len() as u32);
+        assert_eq!(fc.function_coverage(whole), Some(2.0 / 3.0));
+        assert_eq!(fc.function_untested(whole), Some(false));
+        assert_eq!(fc.function_coverage(Span::new(0, 9)), None);
+    }
+
+    /// A Go profile keys by import path, JaCoCo by package and source name:
+    /// each maps onto the one project file spelled that way, and an ambiguous
+    /// spelling maps onto nothing.
+    #[test]
+    fn a_reports_own_spelling_maps_onto_the_one_file_it_names() {
+        let map = contents(&[
+            (
+                "render/json.go",
+                "package render\nfunc a() {\n\treturn\n}\n",
+            ),
+            (
+                "src/main/java/demo/Classify.java",
+                "class Classify {\n  int f() {\n    return 1;\n  }\n}\n",
+            ),
+            ("a/util.py", "x\n"),
+            ("b/util.py", "x\n"),
+        ]);
+        let cov = assemble(
+            records(&[
+                ("github.com/x/y/render/json.go", &[(2, 1), (3, 1)], &[]),
+                ("demo/Classify.java", &[(2, 0), (3, 0)], &[(2, 0)]),
+                ("util.py", &[(1, 1)], &[]),
+            ]),
+            &map,
+        )
+        .expect("assembles");
+        assert!(cov.files.contains_key(&ProjectPath::new("render/json.go")));
         assert!(
-            map.function_coverage(&ProjectPath(SmolStr::new("/elsewhere/c.ts")), span(1, 10))
-                .is_some(),
-            "a key under a foreign root stays verbatim — silence, never a wrong file"
+            cov.files
+                .contains_key(&ProjectPath::new("src/main/java/demo/Classify.java"))
+        );
+        assert_eq!(
+            cov.files.len(),
+            2,
+            "the ambiguous `util.py` maps onto nothing"
         );
     }
 
     #[test]
-    fn rebase_merges_an_absolute_key_into_its_relative_twin() {
-        let root = tempfile::tempdir().unwrap();
-        let _ = std::fs::create_dir_all(root.path());
-        let abs = format!(
-            "{}/src/a.ts",
-            root.path().to_string_lossy().replace('\\', "/")
-        );
-        let mut sink = CoverageSink::default();
-        sink.add_line(ProjectPath(SmolStr::new(&abs)), 2, 1);
-        sink.add_line(ProjectPath(SmolStr::new("src/a.ts")), 3, 0);
-        let mut map = sink.into_map();
-        map.rebase(root.path());
-        let cov = map
-            .function_coverage(&ProjectPath(SmolStr::new("src/a.ts")), span(1, 10))
-            .unwrap();
-        assert!((cov - 0.5).abs() < 1e-9, "both records survive the merge");
-    }
-
-    #[test]
-    fn rebase_prefixes_substitutes_module_prefixes_for_directories() {
-        let mut sink = CoverageSink::default();
-        sink.add_line(ProjectPath(SmolStr::new("github.com/x/y/pkg/a.go")), 2, 1);
-        sink.add_line(ProjectPath(SmolStr::new("github.com/x/z/pkg/b.go")), 3, 1); // foreign module
-        let mut map = sink.into_map();
-        map.rebase_prefixes(&[("github.com/x/y/".into(), "".into())]);
-        assert!(map
-            .function_coverage(&ProjectPath(SmolStr::new("pkg/a.go")), span(1, 5))
-            .is_some());
-        assert!(
-            map.function_coverage(
-                &ProjectPath(SmolStr::new("github.com/x/z/pkg/b.go")),
-                span(1, 5)
-            )
-            .is_some(),
-            "a key under no listed prefix stays verbatim"
-        );
-        let mut sink = CoverageSink::default();
-        sink.add_line(ProjectPath(SmolStr::new("github.com/x/y/pkg/a.go")), 2, 1);
-        let mut map = sink.into_map();
-        map.rebase_prefixes(&[("github.com/x/y/".into(), "svc/".into())]);
-        assert!(
-            map.function_coverage(&ProjectPath(SmolStr::new("svc/pkg/a.go")), span(1, 5))
-                .is_some(),
-            "a nested module dir replaces, not just strips"
-        );
-    }
-
-    #[test]
-    fn repeated_line_records_accumulate() {
-        let mut sink = CoverageSink::default();
-        let p = ProjectPath(SmolStr::new("a.ts"));
-        sink.add_line(p.clone(), 2, 0);
-        sink.add_line(p.clone(), 2, 3);
-        let map = sink.into_map();
-        assert!((map.function_coverage(&p, span(1, 5)).unwrap() - 1.0).abs() < 1e-9);
+    fn unmappable_records_are_no_coverage() {
+        let map = contents(&[("src/z.js", "x\n")]);
+        assert!(assemble(records(&[("elsewhere/other.js", &[(1, 1)], &[])]), &map).is_none());
     }
 }

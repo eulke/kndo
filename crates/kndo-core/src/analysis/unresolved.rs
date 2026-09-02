@@ -1,163 +1,149 @@
-//! `unresolved` — a relative import specifier that points at no file.
+//! A relative import specifier that points at no file. Without this category a
+//! broken path is invisible: assembly drops the edge, and whatever the import
+//! would have kept alive reports `unused` instead — the wrong category, naming
+//! the wrong problem. Bare specifiers are never judged here: an unmatched
+//! package name is an external dependency, which is normal.
 //!
-//! Without a dedicated finding here, a broken relative path is invisible: `graph::assemble`
-//! drops `Resolution::Unresolved` rather than turning it into an edge, so whatever the import
-//! would have kept alive silently reports `unused` instead — the wrong category, naming the
-//! wrong problem.
-//!
-//! What makes it reportable at all is that the *adapter* already classified the specifier
-//! ([`crate::adapter::ImportKind`]). A `Package` specifier resolving to nothing is the
-//! declaration contract's business (`undeclared`) and is never reported twice; a `Relative` one
-//! is a path the adapter understood and could not follow, which is almost always a rename that
-//! missed a call site. Severity `error`: this is a defect, not waste.
-//!
-//! Confidence is the import's own. An adapter that could only partly read a dynamic specifier
-//! reports it below `Certain`, and the finding inherits that — a templated `import(…)` is not
-//! evidence of a broken path, and lands under the default report floor.
+//! One precision rule, derived from the corpus experiment: the missing target's
+//! parent directory must itself hold at least one file the graph knows. A
+//! specifier pointing into a directory the whole analysis never saw —
+//! `../dist/node/cli.js` into a gitignored build output — is the project
+//! reaching OUTSIDE the analyzed world, deliberately, and "no file there" is
+//! not evidence of a typo. A typo or a rename that missed a call site points
+//! beside real files, and that is exactly the case that stays judged. The
+//! boundary is stated, not hidden: a rename that deleted a whole directory
+//! escapes this analysis.
 
-use crate::analysis::{finding_id, FindingIdParts};
-use crate::engine::{Finding, Location, Severity};
-use crate::graph::ProjectGraph;
-use crate::vocab::{Category, FileOrigin, Group, SubjectKind};
+use super::{Analysis, AnalysisContext};
+use kndo_contract::evidence::ImportTarget;
+use kndo_contract::finding::{Finding, Severity};
+use kndo_contract::subject::Subject;
+use kndo_contract::vocab::Category;
 
-pub fn find_unresolved(graph: &ProjectGraph) -> Vec<Finding> {
-    graph
-        .unresolved_imports
-        .iter()
-        .filter(|(file, _)| {
-            let f = &graph.files[file.0 as usize];
-            // An unclaimed file has no adapter and so no resolution to have failed; generated
-            // and vendored files are not the project's to fix, the same exemption every other
-            // analysis applies.
-            f.class
-                .is_some_and(|c| !matches!(c.origin, FileOrigin::Generated | FileOrigin::Vendored))
-        })
-        .map(|(file, u)| {
-            let path = &graph.files[file.0 as usize].path;
-            Finding {
-                advisory: false,
-                id: finding_id(FindingIdParts {
-                    category: &Category::UNRESOLVED,
-                    subject_kind: &SubjectKind::IMPORT,
-                    path: path.0.as_str(),
-                    symbol_path: u.specifier.as_str(),
-                    discriminator: "",
-                }),
-                category: Category::UNRESOLVED,
-                group: Group::Defect,
-                subject_kind: SubjectKind::IMPORT,
-                severity: Severity::Error,
-                confidence: u.confidence,
-                message: format!(
-                    "{}'s import of '{}' resolves to no file — a broken path or a rename that \
-                     missed this call site",
-                    path.0, u.specifier
-                ),
-                location: Location {
-                    path: Some(path.clone()),
-                    range: Some(u.span),
-                    symbol: None,
-                    package: graph
-                        .package_name(graph.files[file.0 as usize].package)
-                        .map(str::to_string),
-                },
-                related: Vec::new(),
-                rolled_up: None,
-                sources: Vec::new(),
-                delta: None,
-                delta_origin: None,
+pub struct Unresolved;
+
+impl Analysis for Unresolved {
+    fn id(&self) -> &'static str {
+        "unresolved"
+    }
+
+    fn category(&self) -> Category {
+        Category::UNRESOLVED
+    }
+
+    fn run(&self, cx: &AnalysisContext<'_>) -> Vec<Finding> {
+        let g = cx.graph();
+        // Every directory that directly holds a graph file, `/`-separated.
+        let dirs: std::collections::BTreeSet<&str> = g
+            .files
+            .iter()
+            .map(|f| parent_dir(f.path.as_str()))
+            .collect();
+        let mut out = Vec::new();
+        for (i, f) in g.files.iter().enumerate() {
+            if !cx.measured[i] {
+                continue;
             }
-        })
-        .collect()
+            for (import, targets) in f.evidence.imports.iter().zip(&f.import_targets) {
+                if !targets.is_empty() {
+                    continue;
+                }
+                let ImportTarget::Relative(spec) = &import.target else {
+                    continue;
+                };
+                // The contract defines Relative as the `./`-style spelling; an
+                // adapter routing other project-internal path grammars through
+                // the variant is judged by ITS resolver, never by this one.
+                if !spec.starts_with('.') {
+                    continue;
+                }
+                // Only the author's own Certain statement accuses. A derived or
+                // partly-read specifier (an adapter's submodule probe, a
+                // templated dynamic import) is speculation — silence over
+                // accusation, the same tier rule every dependency claim obeys.
+                if import.confidence != kndo_contract::vocab::Confidence::Certain {
+                    continue;
+                }
+                let Some(target) = normalize(f.path.as_str(), strip_query(spec)) else {
+                    continue; // escapes the project root — not this tree's path
+                };
+                if !dirs.contains(parent_dir(&target)) {
+                    continue; // points into a world the graph never saw
+                }
+                // A target that EXISTS in the discovered tree is not missing —
+                // it lives outside the analyzed world (an asset, a manifest);
+                // resolution not claiming it is scope, not breakage.
+                if g.discovered
+                    .binary_search_by(|p| p.as_str().cmp(target.as_str()))
+                    .is_ok()
+                {
+                    continue;
+                }
+                out.push(Finding::new(
+                    Category::UNRESOLVED,
+                    Severity::Error,
+                    import.confidence,
+                    Subject::Import {
+                        path: f.path.clone(),
+                        specifier: spec.clone(),
+                        span: import.span,
+                    },
+                    "",
+                    format!(
+                        "import of '{spec}' resolves to no file — a broken path or a \
+                         rename that missed this call site"
+                    ),
+                ));
+            }
+        }
+        out
+    }
+}
+
+/// The specifier without its query/fragment suffix (`./worker?worker&url`) —
+/// resolvers strip it too; the analysis defends independently so a resolver
+/// that has not learned a suffix cannot manufacture a finding.
+fn strip_query(spec: &str) -> &str {
+    spec.split(['?', '#']).next().unwrap_or(spec)
+}
+
+fn parent_dir(path: &str) -> &str {
+    path.rsplit_once('/').map(|(d, _)| d).unwrap_or("")
+}
+
+/// `from`-relative `spec` as a root-relative path, `None` when it escapes the
+/// root. Purely lexical — the same arithmetic every resolver applies.
+fn normalize(from: &str, spec: &str) -> Option<String> {
+    let mut parts: Vec<&str> = parent_dir(from)
+        .split('/')
+        .filter(|s| !s.is_empty())
+        .collect();
+    for seg in spec.split('/') {
+        match seg {
+            "" | "." => {}
+            ".." => {
+                parts.pop()?;
+            }
+            other => parts.push(other),
+        }
+    }
+    Some(parts.join("/"))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::adapter::{ProjectPath, Span};
-    use crate::graph::{FileNode, UnresolvedImport};
-    use crate::vocab::FileId;
-    use crate::vocab::{Confidence, FileClass, FileRole};
-    use smol_str::SmolStr;
-
-    fn file(path: &str, origin: FileOrigin) -> FileNode {
-        FileNode {
-            path: ProjectPath(SmolStr::new(path)),
-            content_hash: [0; 32],
-            language: Some(SmolStr::new("mock")),
-            class: Some(FileClass {
-                role: FileRole::Production,
-                origin,
-            }),
-            package: crate::vocab::PackageId(0),
-            unit: None,
-            unit_parent: None,
-            test_spans: Vec::new(),
-            string_call_sites: Vec::new(),
-            string_attr_args: Vec::new(),
-        }
-    }
-
-    fn unresolved(specifier: &str, confidence: Confidence) -> UnresolvedImport {
-        UnresolvedImport {
-            specifier: SmolStr::new(specifier),
-            span: Span {
-                start: (3, 1),
-                end: (3, 20),
-            },
-            confidence,
-        }
-    }
-
-    fn graph_with(files: Vec<FileNode>, imports: Vec<(FileId, UnresolvedImport)>) -> ProjectGraph {
-        let mut g = ProjectGraph::for_test(files, vec![], vec![], vec![]);
-        g.unresolved_imports = imports;
-        g
-    }
+    use super::{normalize, parent_dir, strip_query};
 
     #[test]
-    fn a_relative_import_that_resolves_to_nothing_is_an_error() {
-        let g = graph_with(
-            vec![file("src/a.mock", FileOrigin::Authored)],
-            vec![(FileId(0), unresolved("./gone", Confidence::Certain))],
-        );
-        let findings = find_unresolved(&g);
-        assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].category, "unresolved");
-        assert_eq!(findings[0].group, Group::Defect);
-        assert_eq!(findings[0].subject_kind, "import");
-        assert_eq!(findings[0].severity, Severity::Error);
-        assert!(findings[0].message.contains("./gone"));
+    fn the_path_arithmetic_is_lexical_and_root_bounded() {
+        assert_eq!(normalize("src/a.js", "./b.js").as_deref(), Some("src/b.js"));
         assert_eq!(
-            findings[0].location.range.map(|r| r.start.0),
-            Some(3),
-            "located at the import, not the file"
+            normalize("src/x/a.js", "../b.js").as_deref(),
+            Some("src/b.js")
         );
-    }
-
-    #[test]
-    fn the_import_own_confidence_carries_through() {
-        // A specifier the adapter could only partly read (`import(templated)`) is not evidence
-        // of a broken path — it arrives below Certain and lands under the default floor.
-        let g = graph_with(
-            vec![file("src/a.mock", FileOrigin::Authored)],
-            vec![(FileId(0), unresolved("./maybe", Confidence::Possible))],
-        );
-        assert_eq!(find_unresolved(&g)[0].confidence, Confidence::Possible);
-    }
-
-    #[test]
-    fn generated_and_vendored_files_are_not_the_project_to_fix() {
-        let g = graph_with(
-            vec![
-                file("gen/a.mock", FileOrigin::Generated),
-                file("vendor/b.mock", FileOrigin::Vendored),
-            ],
-            vec![
-                (FileId(0), unresolved("./gone", Confidence::Certain)),
-                (FileId(1), unresolved("./gone", Confidence::Certain)),
-            ],
-        );
-        assert!(find_unresolved(&g).is_empty());
+        assert_eq!(normalize("a.js", "../escape.js"), None);
+        assert_eq!(strip_query("./w?worker&url"), "./w");
+        assert_eq!(parent_dir("src/a.js"), "src");
+        assert_eq!(parent_dir("a.js"), "");
     }
 }

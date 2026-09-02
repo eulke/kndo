@@ -1,6 +1,6 @@
 [book]
 title = "kndo"
-description = "Find what your codebase no longer needs"
+description = "Deterministic dead-code and health analysis"
 authors = ["the kndo contributors"]
 language = "en"
 src = "src"

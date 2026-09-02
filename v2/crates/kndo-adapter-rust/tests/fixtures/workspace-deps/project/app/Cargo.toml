@@ -1,7 +1,0 @@
-[package]
-name = "app"
-publish = false
-
-[dependencies]
-base = { path = "../base" }
-serde = "1"

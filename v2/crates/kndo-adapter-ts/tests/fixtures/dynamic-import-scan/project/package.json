@@ -1,5 +1,0 @@
-{
-  "name": "dynamic-import-scan",
-  "private": false,
-  "main": "src/index.ts"
-}

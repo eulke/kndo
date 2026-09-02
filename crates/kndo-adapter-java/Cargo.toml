@@ -1,19 +1,17 @@
 [package]
 name = "kndo-adapter-java"
-description = "Java language adapter for kndo"
 version.workspace = true
 edition.workspace = true
-rust-version.workspace = true
 license.workspace = true
-repository.workspace = true
+rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
-kndo-core = { path = "../kndo-core" }
-kndo-adapter-toolkit = { path = "../kndo-adapter-toolkit", features = ["jvm-xml"] }
-smol_str = { workspace = true }
-tree-sitter = { workspace = true }
-tree-sitter-java = { workspace = true }
+kndo-contract = { path = "../kndo-contract" }
+kndo-toolkit = { path = "../kndo-toolkit" }
+smol_str = { version = "0.3", features = ["serde"] }
+tree-sitter = "0.25"
+tree-sitter-java = "0.23"
 
 [dev-dependencies]
-rustc-hash = { workspace = true }
+kndo-testkit = { path = "../kndo-testkit" }
