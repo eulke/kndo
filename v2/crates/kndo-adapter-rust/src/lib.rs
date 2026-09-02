@@ -31,10 +31,10 @@ pub struct RustAdapter {
 impl RustAdapter {
     pub fn new() -> Self {
         RustAdapter {
-            // 5: type-headed and `use`-bound qualified paths are not imports.
+            // 6: a `use` headed by another `use`'s local is that path, not a crate.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:rust",
-                5,
+                6,
                 &["rs"],
                 &["**/Cargo.toml"],
                 &["crate"],

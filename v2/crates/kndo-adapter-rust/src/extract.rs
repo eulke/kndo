@@ -60,8 +60,29 @@ pub fn extract(
     // `#[path]`-redirect can be declared after the `use` that rides its alias), so
     // they process once every item has been seen.
     let uses = std::mem::take(&mut cx.uses);
-    for (node, stack) in uses {
-        cx.use_declaration(node, &stack);
+    let mut expanded: Vec<(Node<'_>, Vec<UseLeaf>)> = uses
+        .iter()
+        .map(|(node, stack)| (*node, cx.use_leaves(*node, stack)))
+        .collect();
+    // A `use` headed by the local another `use` in this file binds
+    // (`use a::b as c; use c::d;`) names that path, not a crate called `c`.
+    // Locals collect over every leaf first because `use` order carries no
+    // meaning; then each head rewrites through them.
+    let bound: BTreeMap<String, Vec<String>> = expanded
+        .iter()
+        .flat_map(|(_, leaves)| leaves.iter())
+        .filter_map(|leaf| Some((leaf.local()?.to_string(), leaf.segments.clone())))
+        .collect();
+    for (_, leaves) in &mut expanded {
+        for leaf in leaves {
+            leaf.rewrite_head(&bound);
+        }
+    }
+    for (node, leaves) in expanded {
+        let public = has_visibility(node);
+        for leaf in leaves {
+            cx.emit_use(node, public, leaf);
+        }
     }
     let free_declarations = std::mem::take(&mut cx.free_declarations);
     let use_locals = std::mem::take(&mut cx.use_locals);
@@ -415,11 +436,12 @@ impl<'a> ItemPass<'a, '_> {
         }
     }
 
-    fn use_declaration(&mut self, item: Node<'a>, stack: &[String]) {
+    /// Every leaf of one `use` tree, rebased against the inline-`mod` stack and
+    /// walked through `#[path]` redirects.
+    fn use_leaves(&self, item: Node<'a>, stack: &[String]) -> Vec<UseLeaf> {
         let Some(argument) = item.child_by_field_name("argument") else {
-            return;
+            return Vec::new();
         };
-        let public = has_visibility(item);
         let mut leaves = Vec::new();
         expand_use(argument, self.source, &Vec::new(), &mut leaves);
         let mut expanded = Vec::new();
@@ -452,9 +474,13 @@ impl<'a> ItemPass<'a, '_> {
                 None => expanded.push(leaf),
             }
         }
-        for leaf in expanded {
+        expanded
+    }
+
+    fn emit_use(&mut self, item: Node<'a>, public: bool, leaf: UseLeaf) {
+        {
             if leaf.segments.is_empty() {
-                continue;
+                return;
             }
             let target = target_for(&leaf.segments);
             let last = leaf.segments.last().unwrap().clone();
@@ -498,6 +524,43 @@ struct UseLeaf {
     segments: Vec<String>,
     alias: Option<String>,
     glob: bool,
+}
+
+impl UseLeaf {
+    /// The name this leaf binds in its file: the alias, else the last segment;
+    /// a glob binds no name of its own.
+    fn local(&self) -> Option<&str> {
+        if self.glob {
+            return None;
+        }
+        self.alias
+            .as_deref()
+            .or_else(|| self.segments.last().map(String::as_str))
+    }
+
+    /// Replaces a head that is a `use`-bound local of the same file with the
+    /// path it binds, repeatedly for a chain of aliases. Bounded: a cycle
+    /// (`use a::b as c; use c::d as a;`) is the compiler's to reject, and this
+    /// walk must not follow it forever.
+    fn rewrite_head(&mut self, bound: &BTreeMap<String, Vec<String>>) {
+        for _ in 0..8 {
+            let Some(head) = self.segments.first() else {
+                return;
+            };
+            if matches!(head.as_str(), "crate" | "self" | "super") {
+                return;
+            }
+            let Some(path) = bound.get(head) else {
+                return;
+            };
+            if path.first() == Some(head) {
+                return;
+            }
+            let mut segments = path.clone();
+            segments.extend(self.segments.drain(1..));
+            self.segments = segments;
+        }
+    }
 }
 
 /// Rewrites a path's leading `self`/`super` run against the inline-`mod` stack, so

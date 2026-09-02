@@ -554,3 +554,46 @@ pub fn f() -> u64 {
         .collect();
     assert!(specs.is_empty(), "{specs:?}");
 }
+
+#[test]
+fn a_use_headed_by_another_uses_local_is_that_path() {
+    let ev = extract(
+        "src/lib.rs",
+        r#"
+use wire::SymbolKind as WireSymbolKind;
+use crate::bindings::kndo::vocab::types as wire;
+use std::fmt;
+use fmt::Display;
+use serde;
+use serde::Serialize;
+
+fn f(_: WireSymbolKind, _: &dyn Display, _: &dyn Serialize) {}
+"#,
+    );
+    let specs: Vec<String> = ev
+        .imports
+        .iter()
+        .filter_map(|i| match &i.target {
+            ImportTarget::Relative(s) | ImportTarget::Package(s) => Some(s.to_string()),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        specs.contains(&"crate::bindings::kndo::vocab::types::SymbolKind".to_string()),
+        "the alias declared AFTER its use still resolves: {specs:?}"
+    );
+    assert!(
+        specs.contains(&"std::fmt::Display".to_string()),
+        "a module bound by `use` heads the path it binds: {specs:?}"
+    );
+    assert!(
+        specs.contains(&"serde::Serialize".to_string()),
+        "a crate bound under its own name stays itself: {specs:?}"
+    );
+    assert!(
+        !specs
+            .iter()
+            .any(|s| s.starts_with("wire::") || s.starts_with("fmt::")),
+        "no crate is named after a local: {specs:?}"
+    );
+}
