@@ -25,3 +25,6 @@ dist/
 # does, not to stay behind on the machine that authored it.
 .claude/*
 !.claude/skills/
+
+# The rendered docs site (mdbook output); the source is docs/src.
+/v2/docs/book/

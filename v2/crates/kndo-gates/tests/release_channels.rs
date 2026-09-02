@@ -2,7 +2,7 @@
 //!
 //! Four things consume kndo's release artifacts and none of them can call Rust:
 //! `install.sh`, `action/action.yml`, `packaging/homebrew/kndo.rb.tmpl`, and the
-//! published install docs. Each spells the artifact's name and assumes its
+//! published install page (`docs/src/install.md`). Each spells the artifact's name and assumes its
 //! layout independently of the others and of the one producer (`xtask package`,
 //! naming by `kndo_gates::release`) — and a channel that drifts (a stripped tag
 //! prefix, a triple the release never builds, an extraction that skips the
@@ -164,6 +164,36 @@ fn the_homebrew_template_matches_the_artifact() {
     );
 }
 
+/// The install page tells a user what to download and how, and every sentence
+/// of it that names the artifact, the installer or the tap is a copy of the
+/// table's answer.
+#[test]
+fn the_install_page_matches_the_artifact_and_the_channels() {
+    let page = read("docs/src/install.md");
+    for target in TARGETS {
+        assert!(
+            page.contains(&release::archive_name("<tag>", target.triple)),
+            "the install page does not name the archive for {}",
+            target.triple
+        );
+    }
+    assert_no_unreleased_triples(&page, "docs/src/install.md");
+    assert!(
+        page.contains("https://raw.githubusercontent.com/eulke/kondo/main/install.sh"),
+        "the install page does not point at the installer"
+    );
+    for var in ["KNDO_VERSION", "KNDO_INSTALL_DIR", "KNDO_BASE_URL"] {
+        assert!(
+            read("install.sh").contains(var) && page.contains(var),
+            "`{var}` is documented on the install page and honored by install.sh, or neither"
+        );
+    }
+    assert!(
+        page.contains("brew install eulke/tap/kndo"),
+        "the install page's Homebrew line names another tap than the template ships to"
+    );
+}
+
 /// Every published URL names the repository that exists — one owner, one name,
 /// in every file a user could be sent to.
 #[test]
@@ -174,6 +204,10 @@ fn every_published_url_names_the_repository_that_exists() {
         "install.sh",
         "action/action.yml",
         "packaging/homebrew/kndo.rb.tmpl",
+        "docs/src/install.md",
+        "docs/src/ci.md",
+        "docs/src/agents.md",
+        "docs/src/extensions.md",
     ] {
         let text = read(rel);
         for (i, line) in text.lines().enumerate() {

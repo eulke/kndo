@@ -1307,3 +1307,116 @@ fn query_contract_is_generated_and_pinned() {
     );
 }
 
+/// Every relative Markdown link in the tree resolves. A link is its author
+/// asserting a path exists, and moving a document means updating what points
+/// at it in the same commit. Links only — prose paths carry examples from other
+/// repositories and a user's own layout — and code spans and fenced blocks are
+/// blanked first: a path inside backticks is quoted, not claimed.
+#[test]
+fn every_relative_markdown_link_resolves() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("the workspace root");
+    let mut documents = Vec::new();
+    markdown_files(&root, &mut documents);
+    assert!(
+        documents.iter().any(|d| d.ends_with("docs/src/SUMMARY.md")),
+        "the docs site is part of the tree this gate reads"
+    );
+    let mut broken = Vec::new();
+    for document in &documents {
+        let text = std::fs::read_to_string(document).expect("readable markdown");
+        let dir = document.parent().expect("a file has a directory");
+        for target in relative_link_targets(&text) {
+            if !dir.join(&target).exists() {
+                broken.push(format!(
+                    "{}: [{target}]",
+                    document.strip_prefix(&root).unwrap_or(document).display()
+                ));
+            }
+        }
+    }
+    assert!(
+        broken.is_empty(),
+        "relative Markdown links naming nothing:\n{}",
+        broken.join("\n")
+    );
+}
+
+fn markdown_files(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let mut entries: Vec<_> = entries.filter_map(|e| e.ok()).map(|e| e.path()).collect();
+    entries.sort();
+    for path in entries {
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        if path.is_dir() {
+            // Build output, third-party trees and fixture corpora are not
+            // the repository's own claims.
+            if matches!(
+                name,
+                "target" | "node_modules" | "book" | "fixtures" | "vendor"
+            ) || name.starts_with('.')
+            {
+                continue;
+            }
+            markdown_files(&path, out);
+        } else if name.ends_with(".md") {
+            out.push(path);
+        }
+    }
+}
+
+/// The targets of inline links `[text](target)` that name a path: no scheme,
+/// no bare fragment; a fragment or query on a path is stripped. Fenced blocks
+/// and code spans are blanked before scanning.
+fn relative_link_targets(text: &str) -> Vec<String> {
+    let mut prose = String::with_capacity(text.len());
+    let mut in_fence = false;
+    for line in text.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+            in_fence = !in_fence;
+            prose.push('\n');
+            continue;
+        }
+        if in_fence {
+            prose.push('\n');
+            continue;
+        }
+        let mut in_span = false;
+        for c in line.chars() {
+            if c == '`' {
+                in_span = !in_span;
+                prose.push(' ');
+            } else if in_span {
+                prose.push(' ');
+            } else {
+                prose.push(c);
+            }
+        }
+        prose.push('\n');
+    }
+    let mut targets = Vec::new();
+    let mut rest = prose.as_str();
+    while let Some(at) = rest.find("](") {
+        let after = &rest[at + 2..];
+        let Some(end) = after.find(')') else {
+            break;
+        };
+        let raw = after[..end].trim();
+        let raw = raw.split_whitespace().next().unwrap_or("");
+        let target = raw.split(['#', '?']).next().unwrap_or("");
+        let is_path = !target.is_empty()
+            && !raw.starts_with('#')
+            && !target.contains("://")
+            && !target.starts_with("mailto:");
+        if is_path {
+            targets.push(target.to_string());
+        }
+        rest = &after[end + 1..];
+    }
+    targets
+}

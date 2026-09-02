@@ -2567,3 +2567,31 @@ its standard library, and gin reports 0 `undeclared`. No corpus finding traces
 to a builtin misclassification: dead, no port. Its vice: a dataset that must
 be regenerated against a moving runtime to stay true, standing in for a rule
 that does not move.
+
+## 2026-09-02 — The docs site: fourteen pages from the shipped surface, held by two tests
+
+**What.** `docs/` (mdBook): introduction, install, getting started, the
+command line, findings, health and coverage, configuration, suppressions and
+the baseline, CI, navigation, agents, languages, extensions, FAQ. Written
+from v2's behavior, never from v1's pages: every example is a real render of
+the release binary over a conformance fixture, every table is read off the
+spec builders and the CLI's own help, and a capability the docs describe is
+one the tree ships. v1's per-plugin pages have no successor — the two Apple
+plugins and the four ingesters are rows on the extensions page; a page per
+plugin was prose about code that `builtin_conduct_proofs` now pins.
+
+**Held by.** The install page is the fourth release-channel consumer:
+`release_channels.rs` reads it against the target table (every archive name,
+the installer URL and its three variables, the tap), the same way it reads
+`install.sh`, the Action and the Homebrew template. Every relative Markdown
+link in the tree resolves, by the `every_relative_markdown_link_resolves`
+gate — links only, code spans and fences blanked first, because a path in
+backticks is quoted rather than claimed. CI builds the book on every push
+(`docs` job, mdBook pinned by release tarball); deployment to Pages lands
+with the root swap, when the site's URLs become true.
+
+**Measurement.** Fourteen pages, one build, zero broken links on the first
+gate run over the whole tree (README, DECISIONS, EXPERIMENTS, CONTRIBUTING,
+the corpus notes, the docs). `deep-import` stays a reserved category with no
+analysis behind it — documented as such on the findings page, deferred with
+its number in EXPERIMENTS.

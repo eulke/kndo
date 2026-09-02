@@ -566,11 +566,23 @@ entry, never a builder's shortcut.
   name, a name under a source root — onto the one project file it names. gin with
   its profile: 7 functions no test executes, Certain; flask's cobertura and lcov
   from one test run judge identically.
-- **M7.f — the product cortex** (swap-blocking): the docs site rebuilt against v2's
-  real behavior; release channels re-pointed at v2's artifact under the one-producer
-  test law (release.yml + git-cliff, install.sh, the Action, the Homebrew template);
-  Windows back in the CI matrix; `xtask bench` on the recorded baseline; gen-stdlib
-  verified dead or ported.
+- **M7.f — the product cortex** — **shipped 2026-09-02**: the docs site
+  (`docs/`, mdBook, fourteen pages written from the shipped surface — every
+  example a real render, the install page a release-channel consumer the
+  `release_channels` tests read, every relative link held by the
+  `every_relative_markdown_link_resolves` gate, built in CI on every push and
+  deployed at the swap); the release surface rendered from one table
+  (`kndo_gates::release` → `v2-release.yml`, `xtask package`/`verify-artifact`,
+  `install.sh`, the Action, the Homebrew template, git-cliff — each exercised in
+  CI before any tag exists); Windows back in both CI matrices with the SCSS
+  grammar vendored on one portable flag; `cargo xtask bench` rebuilt with its
+  baseline recorded in `xtask/perf-baseline.json` and a `CONTRIBUTING.md`
+  carrying the machine-specific caveat; gen-stdlib verified dead with its
+  number (DECISIONS). Found on the way and fixed under the measure-first law:
+  the js-ts adapter now reads GitHub Actions launchers (workflow and composite
+  action `run:` steps, a JavaScript action's entries) as roots — vite 835 → 831,
+  the four files v1 accused too — on a typed `launchers` declaration apart from
+  `manifests` and a discovery opt-in for the dot-directory a glob names.
 - **M7.g — the root swap**: v2 becomes the repository root; v1 stays in history.
 - Candidates beside the plan, measured when a tranche touches them: JVM package
   (directory) cycles; the dataless rules (hollow-test, speculative-abstraction,

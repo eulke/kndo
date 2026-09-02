@@ -78,6 +78,10 @@ pub const GATES: &[Gate] = &[
         name: "abi_compat_matrix",
         invariant: "the pinned reference components still run against the HEAD host",
     },
+    Gate {
+        name: "every_relative_markdown_link_resolves",
+        invariant: "a relative Markdown link names a path that exists",
+    },
 ];
 
 /// Repo-relative location of the generated workflow.
@@ -185,6 +189,20 @@ jobs:
           done
           [ -z "$missing" ] || { echo "named gates missing from the harness:$missing"; exit 1; }
 @GATE_STEPS@
+  docs:
+    name: docs site builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: install mdBook
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL https://github.com/rust-lang/mdBook/releases/download/v0.4.40/mdbook-v0.4.40-x86_64-unknown-linux-gnu.tar.gz \
+            | tar -xz -C "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: mdbook build
+        run: mdbook build docs
+
   corpus:
     name: corpus is measured and its findings are committed
     runs-on: ubuntu-latest

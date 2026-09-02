@@ -1,0 +1,12 @@
+[book]
+title = "kndo"
+description = "Deterministic dead-code and health analysis"
+authors = ["the kndo contributors"]
+language = "en"
+src = "src"
+
+[output.html]
+default-theme = "rust"
+preferred-dark-theme = "navy"
+git-repository-url = "https://github.com/eulke/kondo"
+edit-url-template = "https://github.com/eulke/kondo/edit/main/docs/src/{path}"
