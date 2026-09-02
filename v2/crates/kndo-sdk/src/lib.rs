@@ -58,6 +58,7 @@ pub fn spec_to_wire(spec: &ExtensionSpec) -> wire::ExtensionSpec {
         // does not know yet degrades by omission, not by silent stripping.
         emits: spec.emits().iter().filter_map(stream_to_wire).collect(),
         manifests: spec.manifests().iter().map(|s| s.to_string()).collect(),
+        launchers: spec.launchers().iter().map(|s| s.to_string()).collect(),
         conducts: spec.declares_conduct(),
         activation: activation_to_wire(spec.activation()),
         mutates_graph: spec.mutates_graph(),

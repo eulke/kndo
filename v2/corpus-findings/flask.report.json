@@ -2,7 +2,7 @@
   "run": {
     "schema": "kndo-v2/m6",
     "mode": "full",
-    "files_discovered": 217,
+    "files_discovered": 226,
     "files_claimed": 105,
     "extensions": [
       {

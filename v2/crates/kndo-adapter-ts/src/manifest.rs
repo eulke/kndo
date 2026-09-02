@@ -1,9 +1,13 @@
 //! Roots and packages from `package.json`: the entry fields (`main`, `module`,
 //! `browser`, `bin`, every string leaf under `exports` and under `imports` — the
 //! `#alias` map — plus source files named in `scripts`), resolved dir-relative
-//! through the same candidate machinery imports use. Everything that fails —
-//! unparseable JSON, an entry naming a file that is not in the project (a built
-//! `dist/`) — degrades to absence: a root that anchors nothing accuses nothing.
+//! through the same candidate machinery imports use. The launchers GitHub
+//! Actions runs are read for roots the same way: a workflow's or composite
+//! action's `run:` steps hand files to runtimes exactly as npm scripts do, and
+//! a JavaScript action's `main`/`pre`/`post` are its entries. Everything that
+//! fails — unparseable JSON, an entry naming a file that is not in the project
+//! (a built `dist/`) — degrades to absence: a root that anchors nothing accuses
+//! nothing.
 
 use crate::resolve::resolve_in_dir;
 use kndo_contract::adapter::{
@@ -11,18 +15,28 @@ use kndo_contract::adapter::{
 };
 use kndo_contract::evidence::RootKind;
 use kndo_contract::vocab::{Confidence, ProjectPath};
+use kndo_toolkit::github_actions::{self, Launcher};
 use smol_str::SmolStr;
 use std::collections::BTreeSet;
 
 /// Commands whose first non-flag argument is a source file they run.
 const RUNTIMES: &[&str] = &["node", "tsx", "ts-node", "bun", "deno"];
 
+/// The parsed package manifest; the launchers this adapter declares reach
+/// `roots` only, by contract, and never arrive here.
+fn package_json(manifest: &SourceFile<'_>) -> Option<serde_json::Value> {
+    serde_json::from_slice(manifest.content).ok()
+}
+
 pub fn roots(
     manifest: &SourceFile<'_>,
     cx: &ResolveContext<'_>,
     exts: &[String],
 ) -> Vec<ProjectRoot> {
-    let Ok(json) = serde_json::from_slice::<serde_json::Value>(manifest.content) else {
+    if let Some(launcher) = github_actions::launcher(manifest.path.as_str()) {
+        return launcher_roots(manifest, launcher, cx, exts);
+    }
+    let Some(json) = package_json(manifest) else {
         return Vec::new();
     };
     let dir = kndo_toolkit::parent_dir(manifest.path.as_str());
@@ -80,34 +94,8 @@ pub fn roots(
     let mut script_files: BTreeSet<ProjectPath> = BTreeSet::new();
     if let Some(serde_json::Value::Object(scripts)) = json.get("scripts") {
         for value in scripts.values() {
-            let Some(command) = value.as_str() else {
-                continue;
-            };
-            // The word a runtime is handed is an entry however it is spelled
-            // (`node server`, `node --inspect-brk server`); anywhere else only a
-            // path-shaped token or a source suffix names a file — a bare word
-            // (`eslint src`) does not.
-            let mut launched = false;
-            for token in command.split(|c: char| c.is_whitespace() || c == ';' || c == '&') {
-                let token = token.trim_matches(|c| c == '"' || c == '\'');
-                if token.is_empty() {
-                    continue;
-                }
-                if RUNTIMES.contains(&token) {
-                    launched = true;
-                    continue;
-                }
-                if token.starts_with('-') {
-                    continue;
-                }
-                let file_shaped =
-                    token.contains('/') || exts.iter().any(|e| token.ends_with(e.as_str()));
-                if (launched || file_shaped)
-                    && let Some(path) = resolve_in_dir(dir, token, cx, exts)
-                {
-                    script_files.insert(path);
-                }
-                launched = false;
+            if let Some(command) = value.as_str() {
+                launched_files(command, dir, cx, exts, &mut script_files);
             }
         }
     }
@@ -122,6 +110,82 @@ pub fn roots(
         })
         .collect();
     out.extend(script_roots);
+    out
+}
+
+/// The project files a shell command runs, resolved from `dir`. The word a
+/// runtime is handed is an entry however it is spelled (`node server`,
+/// `node --inspect-brk server`); anywhere else only a path-shaped token or a
+/// source suffix names a file — a bare word (`eslint src`) does not.
+fn launched_files(
+    command: &str,
+    dir: &str,
+    cx: &ResolveContext<'_>,
+    exts: &[String],
+    out: &mut BTreeSet<ProjectPath>,
+) {
+    let mut launched = false;
+    for token in command.split(|c: char| c.is_whitespace() || c == ';' || c == '&') {
+        let token = token.trim_matches(|c| c == '"' || c == '\'');
+        if token.is_empty() {
+            continue;
+        }
+        if RUNTIMES.contains(&token) {
+            launched = true;
+            continue;
+        }
+        if token.starts_with('-') {
+            continue;
+        }
+        let file_shaped = token.contains('/') || exts.iter().any(|e| token.ends_with(e.as_str()));
+        if (launched || file_shaped)
+            && let Some(path) = resolve_in_dir(dir, token, cx, exts)
+        {
+            out.insert(path);
+        }
+        launched = false;
+    }
+}
+
+/// The roots a workflow or action declares: a JavaScript action's entries are
+/// what GitHub runs (`Production`, `Certain`, through the same built-to-source
+/// mapping as a package entry); every file a `run:` step hands a runtime has
+/// an npm script's standing (`Tooling`, `Probable`).
+fn launcher_roots(
+    manifest: &SourceFile<'_>,
+    launcher: Launcher,
+    cx: &ResolveContext<'_>,
+    exts: &[String],
+) -> Vec<ProjectRoot> {
+    let path = manifest.path.as_str();
+    let Ok(text) = std::str::from_utf8(manifest.content) else {
+        return Vec::new();
+    };
+    let mut entries: BTreeSet<ProjectPath> = BTreeSet::new();
+    if let Launcher::Action { dir } = &launcher {
+        for entry in github_actions::action_entries(path, text) {
+            if let Some(found) = resolve_entry(dir, &entry, cx, exts) {
+                entries.insert(found);
+            }
+        }
+    }
+    let mut launched: BTreeSet<ProjectPath> = BTreeSet::new();
+    for step in github_actions::run_steps(path, text) {
+        launched_files(&step.command, &step.dir, cx, exts, &mut launched);
+    }
+    let mut out: Vec<ProjectRoot> = entries
+        .iter()
+        .map(|file| ProjectRoot {
+            file: file.clone(),
+            kind: RootKind::Production,
+            confidence: Confidence::Certain,
+        })
+        .collect();
+    out.extend(launched.difference(&entries).map(|file| ProjectRoot {
+        file: file.clone(),
+        kind: RootKind::Tooling,
+        confidence: Confidence::Probable,
+    }));
     out
 }
 
@@ -176,7 +240,7 @@ pub fn packages(
     cx: &ResolveContext<'_>,
     exts: &[String],
 ) -> Vec<PackageEntry> {
-    let Ok(json) = serde_json::from_slice::<serde_json::Value>(manifest.content) else {
+    let Some(json) = package_json(manifest) else {
         return Vec::new();
     };
     let Some(name) = json.get("name").and_then(|v| v.as_str()) else {
@@ -199,7 +263,7 @@ pub fn packages(
 /// The dependency names this manifest declares, every section npm installs from —
 /// activation evidence for plugin `ManifestDependency` rules, never resolution.
 pub fn dependencies(manifest: &SourceFile<'_>) -> Vec<DependencyDeclaration> {
-    let Ok(json) = serde_json::from_slice::<serde_json::Value>(manifest.content) else {
+    let Some(json) = package_json(manifest) else {
         return Vec::new();
     };
     let mut out = Vec::new();
@@ -220,7 +284,7 @@ pub fn dependencies(manifest: &SourceFile<'_>) -> Vec<DependencyDeclaration> {
 /// The words this manifest spells outside its dependency sections and its
 /// prose, sorted — see [`mentioned_words`].
 pub fn mentions(manifest: &SourceFile<'_>) -> Vec<SmolStr> {
-    let Ok(json) = serde_json::from_slice::<serde_json::Value>(manifest.content) else {
+    let Some(json) = package_json(manifest) else {
         return Vec::new();
     };
     mentioned_words(&json)

@@ -324,3 +324,44 @@ fn a_script_hands_a_runtime_an_entry_however_it_is_spelled() {
     // `eslint src` runs no file: a directory handed to a linter roots nothing.
     assert!(!paths.contains(&"src/index.js"), "{paths:?}");
 }
+
+/// GitHub Actions launchers read like npm scripts: a workflow step's file from
+/// the directory the step runs in, a composite action's own file through
+/// `$GITHUB_ACTION_PATH`, a JavaScript action's built entry through its source.
+#[test]
+fn a_workflow_or_action_step_hands_a_runtime_an_entry_like_a_script() {
+    let roots = manifest_roots(
+        ".github/workflows/publish.yml",
+        "jobs:\n  publish:\n    steps:\n      - run: node scripts/detect-release.ts \"$(git log -1)\"\n      - working-directory: tools\n        run: node render-notes.mjs\n",
+        &[
+            "scripts/detect-release.ts",
+            "tools/render-notes.mjs",
+            "scripts/orphan.ts",
+        ],
+    );
+    assert_eq!(
+        roots,
+        [
+            ("scripts/detect-release.ts".to_string(), RootKind::Tooling),
+            ("tools/render-notes.mjs".to_string(), RootKind::Tooling),
+        ]
+    );
+    let roots = manifest_roots(
+        "action/action.yml",
+        "runs:\n  using: composite\n  steps:\n    - shell: bash\n      run: node \"$GITHUB_ACTION_PATH/render.mjs\"\n",
+        &["action/render.mjs"],
+    );
+    assert_eq!(
+        roots,
+        [("action/render.mjs".to_string(), RootKind::Tooling)]
+    );
+    let roots = manifest_roots(
+        "action/action.yml",
+        "runs:\n  using: node20\n  main: dist/index.js\n",
+        &["action/src/index.ts"],
+    );
+    assert_eq!(
+        roots,
+        [("action/src/index.ts".to_string(), RootKind::Production)]
+    );
+}

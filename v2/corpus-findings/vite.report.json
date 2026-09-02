@@ -2,7 +2,7 @@
   "run": {
     "schema": "kndo-v2/m6",
     "mode": "full",
-    "files_discovered": 2712,
+    "files_discovered": 2736,
     "files_claimed": 1946,
     "extensions": [
       {
@@ -32,7 +32,7 @@
     ]
   },
   "health": {
-    "implicated": 488,
+    "implicated": 484,
     "subjects": 5599,
     "by_category": [
       {
@@ -45,14 +45,14 @@
       },
       {
         "category": "unused",
-        "findings": 438
+        "findings": 434
       }
     ],
     "by_package": [
       {
         "name": "",
         "manifest": "",
-        "implicated": 343,
+        "implicated": 339,
         "subjects": 2046
       },
       {
@@ -7421,50 +7421,6 @@
       "subject": {
         "kind": "file",
         "path": "playground/worker/worker/main-format-es.js"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-41caaea3e203",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "scripts/detect-release.ts"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-bc22c9c3762a",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "scripts/extract-changelog.ts"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-0dc27b88a8e0",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "scripts/prepare-release.ts"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-60d0987a49cc",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "scripts/releaseUtils.ts"
       },
       "message": "no root anchors this file and no reachable file imports it"
     },

@@ -3,6 +3,8 @@
 //! the four lines of parser scaffolding around them live here once (v1 carried five
 //! verbatim copies of `parse`, three with comments defending the copy).
 
+pub mod github_actions;
+
 use kndo_contract::vocab::Span;
 use tree_sitter::{Language, Node, Parser, Tree};
 

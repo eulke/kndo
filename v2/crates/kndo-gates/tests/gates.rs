@@ -244,7 +244,7 @@ fn adapter_conformance_fixtures_are_byte_identical() {
     // the pinned reports GROW as analyses land, which is the point of pinning them.
     let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
     let corpora = [
-        (manifest.join("../kndo-adapter-ts/tests/fixtures"), 24),
+        (manifest.join("../kndo-adapter-ts/tests/fixtures"), 25),
         (manifest.join("../kndo-adapter-rust/tests/fixtures"), 26),
         (manifest.join("../kndo-adapter-go/tests/fixtures"), 8),
         (manifest.join("../kndo-adapter-java/tests/fixtures"), 6),

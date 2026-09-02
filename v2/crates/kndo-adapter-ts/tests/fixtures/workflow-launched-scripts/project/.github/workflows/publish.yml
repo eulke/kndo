@@ -1,0 +1,18 @@
+name: Publish
+on:
+  push:
+    branches: [main]
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Detect release
+        id: detect
+        run: node scripts/detect-release.ts "$(git log -1 --format=%s)" >> "$GITHUB_OUTPUT"
+      - name: Render notes
+        working-directory: tools
+        run: |
+          node render-notes.mjs "$VERSION" > "$NOTES_FILE"
+          echo "notes rendered"
+      - uses: ./.github/actions/report

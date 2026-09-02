@@ -305,6 +305,7 @@ pub struct ExtensionSpec {
     claims: Vec<SmolStr>,
     emits: EvidenceStreams,
     manifests: Vec<SmolStr>,
+    launchers: Vec<SmolStr>,
     // -- conduct --
     /// Whether this spec went through the conduct stage at all. Data, not
     /// inference: an empty-but-conducting spec (an always-on ingester before its
@@ -342,6 +343,7 @@ impl ExtensionSpec {
                 claims: Vec::new(),
                 emits: EvidenceStreams::none(),
                 manifests: Vec::new(),
+                launchers: Vec::new(),
                 // Inert neutrals for an extraction-only extension: activation
                 // gates only conduct and ingestion, and with no conduct declared
                 // there is nothing for these to gate.
@@ -433,6 +435,12 @@ impl ExtensionSpec {
         &self.manifests
     }
 
+    /// Files read for the roots they declare and nothing else — see
+    /// [`ExtensionSpecBuilder::launchers`].
+    pub fn launchers(&self) -> &[SmolStr] {
+        &self.launchers
+    }
+
     /// Whether this spec declares conduct or ingestion at all — the engine's
     /// round runs over exactly the extensions for which this is true, and only
     /// those appear as contributions in the report.
@@ -498,6 +506,7 @@ pub struct ExtensionSpecParts {
     pub claims: Vec<SmolStr>,
     pub emits: EvidenceStreams,
     pub manifests: Vec<SmolStr>,
+    pub launchers: Vec<SmolStr>,
     pub conducts: bool,
     pub activation: Activation,
     pub mutates_graph: bool,
@@ -537,6 +546,7 @@ impl From<ExtensionSpecParts> for ExtensionSpec {
             claims: parts.claims,
             emits: parts.emits,
             manifests: parts.manifests,
+            launchers: parts.launchers,
             conducts: parts.conducts,
             activation: parts.activation,
             mutates_graph: parts.mutates_graph,
@@ -650,6 +660,18 @@ impl ExtensionSpecBuilder {
     /// the default-compatibility rule.
     pub fn manifests(mut self, globs: &[&'static str]) -> Self {
         self.spec.manifests = globs.iter().map(|g| SmolStr::new_static(g)).collect();
+        self
+    }
+
+    /// Files that RUN the project's files without being package manifests — a
+    /// CI workflow, an action definition, a task runner's file. Each is handed
+    /// to [`Extension::roots`] like a manifest, and to nothing else: a launcher
+    /// declares no package, no dependencies and no mentions, and owns no files,
+    /// so a step's directory never becomes a package whose imports are judged
+    /// against empty declarations. A glob naming a dot-directory (`.github`)
+    /// is also what lets discovery enter it. Omitted ⇒ none.
+    pub fn launchers(mut self, globs: &[&'static str]) -> Self {
+        self.spec.launchers = globs.iter().map(|g| SmolStr::new_static(g)).collect();
         self
     }
 
@@ -1112,11 +1134,13 @@ mod tests {
             .suffixes(&["kmini"])
             .claims(&["**/legacy.km"])
             .manifests(&["kmini.toml"])
+            .launchers(&["**/.ci/*.yml"])
             .build();
         assert_eq!(extraction_only.coordinate(), "kndo:kmini");
         assert_eq!(extraction_only.version(), 3);
         assert_eq!(extraction_only.claims(), ["**/*.kmini", "**/legacy.km"]);
         assert_eq!(extraction_only.manifests(), ["kmini.toml"]);
+        assert_eq!(extraction_only.launchers(), ["**/.ci/*.yml"]);
         // The inert neutrals: nothing declared for them to gate.
         assert_eq!(extraction_only.activation(), &Activation::Always);
         assert!(!extraction_only.mutates_graph());

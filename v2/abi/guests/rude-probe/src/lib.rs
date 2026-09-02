@@ -25,6 +25,7 @@ impl bindings::Guest for RudeProbe {
             claims: vec!["**/*.rude".to_string()],
             emits: Vec::new(),
             manifests: Vec::new(),
+            launchers: Vec::new(),
             conducts: false,
             activation: wire::Activation::Always,
             mutates_graph: false,

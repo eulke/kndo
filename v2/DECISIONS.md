@@ -2444,3 +2444,55 @@ profile (seven `ginS` wrappers no test executes); flask's cobertura and lcov
 from one run judge the identical 46 findings. 89 conformance reports and every
 corpus report regenerated, audited to differ only by the three new always-on
 rows.
+
+## 2026-09-02 — GitHub Actions launchers are roots; a launcher is not a manifest; a named dot-directory enters discovery
+
+**Trigger.** The dogfood: `action/render.mjs`, v2's own Action, reported
+`unused` the moment a JS root existed anywhere in the repository — it is
+launched by a composite action's `run: node "$GITHUB_ACTION_PATH/render.mjs"`,
+a launcher no adapter read. Measure first: across the eight corpus
+repositories, exactly one launches project files from a workflow — vite's
+`publish.yml` and `prepare-release.yml` hand `scripts/detect-release.ts`,
+`scripts/extract-changelog.ts` and `scripts/prepare-release.ts` to `node`, all
+three reported `unused`, and `scripts/releaseUtils.ts` with them (two of the
+three import it). python, go, cargo, swift launches from workflows: none.
+
+**Mechanism, three parts.** (1) The js-ts adapter's launched-token rule
+(version 8) reads a second launcher: a workflow's or composite action's `run:`
+steps, and a JavaScript action's `main`/`pre`/`post` entries. The walk over
+the YAML is language-blind, so it lives once in the toolkit
+(`kndo_toolkit::github_actions`), on a real YAML parser (`yaml-rust2`) — block
+scalars, quoting and `defaults` are exactly where a line scan would lie. Each
+step is answered with the directory it runs in (`working-directory` at the
+step, the job, or the workflow's `defaults`) and its command with GitHub's path
+variables expanded relative to that directory: a composite action's steps run
+in the CALLER's workspace, so an action's own file is spelled through
+`$GITHUB_ACTION_PATH`, and the toolkit turns that into the action's directory.
+(2) `ExtensionSpec::launchers`, a declaration apart from `manifests` on the
+contract and the wire record alike: a launcher reaches `roots` and nothing
+else. The first cut declared the workflows as manifests, and the engine did
+what a manifest earns — an entry in `manifest_declarations`, owning files by
+directory — so `.github/workflows/` became a package owning nothing, on which
+every dependency judgment abstained (three categories, `nothing reaches owned
+files`), and an action's directory would have had its imports judged against
+empty declarations. The type makes that unrepresentable; the pinned guests
+were rebuilt, and the hand-rolled one states the field, as the record's shape
+forces it to. (3) Discovery's `HiddenOptIn`: dot-entries stay outside the
+walk — tool state, caches, the VCS; v1 drew the same line — except a
+dot-directory an extension's manifest or launcher glob names literally
+(`.github` from `**/.github/workflows/*.yml`), which enters whole. No hosting
+convention is spelled in the engine: the extension that reads one declares
+it, and that declaration is the opt-in.
+
+**Measurement.** Corpus: vite 835 → 831, exactly the four files above; every
+other repository's findings unchanged, its `files_discovered` grown by its
+`.github` files (gin 118 → 127, flask 217 → 226). Hidden source files
+anywhere else in the corpus: 8, all vite (`docs/.vitepress`, two fixture
+dot-directories) — no case for walking hidden entries in general. The
+dogfood's third finding of the batch was the duplicate analysis accusing the
+launcher pass of cloning the manifest pass; it was right, and the two
+collapsed into one iterator parameterized by which glob list it reads.
+Conformance: a 25th js-ts fixture (`workflow-launched-scripts`: a root step, a
+`working-directory` step, a composite action through `$GITHUB_ACTION_PATH`, a
+helper reached only through them, one orphan that stays accused); nothing
+else regenerated.

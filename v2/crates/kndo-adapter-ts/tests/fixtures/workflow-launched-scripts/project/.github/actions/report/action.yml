@@ -1,0 +1,7 @@
+name: report
+description: Publishes the release notes
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: node "$GITHUB_ACTION_PATH/render.mjs"

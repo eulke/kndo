@@ -1020,3 +1020,17 @@ coverage.py's `classify.py` under its recorded source root onto
 the wrong file. Every corpus and conformance report gains three always-on
 ingester rows and nothing else: 89 conformance reports regenerated, audited to
 differ by those rows alone.
+
+## M7.f — launchers: what a workflow runs is a root (2026-09-02)
+
+vite 835 → 831: `scripts/detect-release.ts`, `scripts/extract-changelog.ts`
+and `scripts/prepare-release.ts` — handed to `node` by
+`.github/workflows/publish.yml` and `prepare-release.yml` — and
+`scripts/releaseUtils.ts`, which two of them import. v1 accused the same four:
+its walk never entered `.github/` either, and its scripts rule read
+`package.json` alone. No other corpus repository launches a project file from
+a workflow (python, go, cargo, swift: none), so each gains only its `.github`
+files in `files_discovered` and nothing in findings. Surface v1 never had: a
+composite action's own file through `$GITHUB_ACTION_PATH` — the dogfood's
+`action/render.mjs`, the finding that started this — and a JavaScript action's
+`main`/`pre`/`post` entries.

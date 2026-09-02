@@ -93,8 +93,8 @@ impl TypeScriptAdapter {
     pub fn new() -> Self {
         let spec = kndo_toolkit::source_adapter_builder(
             "kndo:js-ts",
-            // 7: the file a runtime is handed in a script (`node server`) is a root.
-            7,
+            // 8: a workflow or action step's launched file is a root, like a script's.
+            8,
             &["ts", "tsx", "js", "jsx", "mjs", "cjs", "mts", "cts"],
             &["**/package.json"],
             &[],
@@ -102,6 +102,13 @@ impl TypeScriptAdapter {
             // partially-initialized modules at run time.
             kndo_contract::extension::CycleTolerance::Hazard,
         )
+        // GitHub Actions steps hand files to the same runtimes npm scripts do.
+        .launchers(&[
+            "**/.github/workflows/*.yml",
+            "**/.github/workflows/*.yaml",
+            "**/action.yml",
+            "**/action.yaml",
+        ])
         // Dropping `export` is the language-checked narrowing: tsc turns any
         // missed external use into a compile error.
         .export_narrowing(kndo_contract::extension::ExportNarrowing::Expressible)

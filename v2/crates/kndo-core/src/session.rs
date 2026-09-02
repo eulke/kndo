@@ -367,7 +367,15 @@ impl Session {
 
         let mut files = Vec::new();
         timed(&mut timings.discover, &mut || {
-            files = discover::discover(&self.root);
+            let hidden =
+                discover::HiddenOptIn::from_manifest_globs(self.extensions.iter().flat_map(|e| {
+                    let spec = e.spec();
+                    spec.manifests()
+                        .iter()
+                        .chain(spec.launchers())
+                        .map(|g| g.as_str())
+                }));
+            files = discover::discover(&self.root, &hidden);
         });
 
         let mut claims = Vec::new();

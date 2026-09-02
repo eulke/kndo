@@ -192,6 +192,8 @@ interface types {
         claims: list<string>,
         emits: list<evidence-stream>,
         manifests: list<string>,
+        /// Files read for roots only — never packages, dependencies or mentions.
+        launchers: list<string>,
         conducts: bool,
         activation: activation,
         mutates-graph: bool,

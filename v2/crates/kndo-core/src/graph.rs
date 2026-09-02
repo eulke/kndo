@@ -804,12 +804,24 @@ pub fn patch(
 pub(crate) fn for_each_manifest(
     files: &[DiscoveredFile],
     adapters: &[Box<dyn Extension>],
+    f: impl FnMut(&dyn Extension, SourceFile<'_>),
+) {
+    for_each_matching(files, adapters, |spec| spec.manifests(), f);
+}
+
+/// Every (adapter, discovered file) pair for the globs `globs_of` reads from
+/// the adapter's spec — manifests for every manifest pass, launchers for the
+/// roots pass alone — in file-path order.
+fn for_each_matching(
+    files: &[DiscoveredFile],
+    adapters: &[Box<dyn Extension>],
+    globs_of: impl Fn(&kndo_contract::extension::ExtensionSpec) -> &[SmolStr],
     mut f: impl FnMut(&dyn Extension, SourceFile<'_>),
 ) {
     let manifest_sets: Vec<Option<globset::GlobSet>> = adapters
         .iter()
         .map(|a| {
-            let globs = a.spec().manifests();
+            let globs = globs_of(a.spec());
             if globs.is_empty() {
                 return None;
             }
@@ -850,8 +862,8 @@ fn anchor_manifest_roots(
     graph_files: &mut [GraphFile],
 ) {
     let mut anchors: Vec<(usize, Root)> = Vec::new();
-    for_each_manifest(files, adapters, |adapter, manifest| {
-        for root in adapter.roots(&manifest, cx) {
+    let mut anchor = |adapter: &dyn Extension, declaring: SourceFile<'_>| {
+        for root in adapter.roots(&declaring, cx) {
             let Ok(ix) = graph_files.binary_search_by(|x| x.path.cmp(&root.file)) else {
                 continue;
             };
@@ -864,7 +876,13 @@ fn anchor_manifest_roots(
                 },
             ));
         }
-    });
+    };
+    for_each_manifest(files, adapters, &mut anchor);
+    // Launchers reach this pass and no other: they declare roots, never a
+    // package ([`ExtensionSpecBuilder::launchers`]).
+    //
+    // [`ExtensionSpecBuilder::launchers`]: kndo_contract::extension::ExtensionSpecBuilder::launchers
+    for_each_matching(files, adapters, |spec| spec.launchers(), &mut anchor);
     for (ix, root) in anchors {
         graph_files[ix].anchored.push(root);
     }
