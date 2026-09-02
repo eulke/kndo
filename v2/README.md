@@ -49,11 +49,15 @@ root swap; `cargo` commands run from here, on the pinned toolchain
 - CI (`v2.yml`): lint (fmt, clippy, conventional-commit), test matrix on linux/macos
   (Windows deferred by owner decision — tree-sitter-scss upstream; see DECISIONS.md),
   named gates, and package+verify-install on both platforms.
-- CI verification: the exhausted Actions credits blocked every run through
-  2026-09-01 01:57 UTC as startup failures (zero jobs created — which is why those
-  runs are not retriable, and `workflow_dispatch` cannot target a workflow absent
-  from the default branch). Credits reset 2026-09-01; the re-fire is the push
-  carrying this note, and M0 closes on its green run.
+- CI verification: GitHub Actions is billing-blocked for this repository — every
+  `v2.yml` run on the branch (79 through 2026-09-01 20:20 UTC, past the credit
+  reset) completes as a startup failure with zero jobs created, which is why those
+  runs are not retriable (`403 This workflow run cannot be retried`) and why
+  `workflow_dispatch` cannot help (it cannot target a workflow absent from the
+  default branch). Three scheduled checks confirmed it; the block lifts only from
+  the repository's billing settings (Actions spending limit or payment method),
+  which no API this session holds can read or change. M0 closes on the first green
+  run after that.
 - Exit-criterion adaptation, recorded in `DECISIONS.md`: the ceremonial `v0.0.0-rc` tag
   is deferred — v1's release.yml fires on any `v*` tag — and the package+install matrix
   proves the same loop on every push instead.
