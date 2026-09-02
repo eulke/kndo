@@ -16,7 +16,7 @@
 world extension {
     use types.{
         extension-spec, file-evidence, resolution, project-root, package-entry,
-        contributed-root, contributed-finding, coverage-records,
+        contributed-root, contributed-finding, coverage-records, declared-symbol,
     };
 
     // ---- extraction-phase imports: the project as ResolveContext sees it ----
@@ -34,6 +34,10 @@ world extension {
 
     /// Membership without the full list.
     import graph-contains: func(path: string) -> bool;
+
+    /// Every declaration in the assembled graph, file by file in path order and
+    /// in declaration order within a file. The SDK fetches it on first use.
+    import graph-declarations: func() -> list<declared-symbol>;
 
     /// The discovered paths the spec's `requested-file-access` globs admit, in
     /// path order — names only, nothing charged.

@@ -27,46 +27,24 @@
     ]
   },
   "health": {
-    "implicated": 154,
+    "implicated": 151,
     "subjects": 3380,
     "by_category": [
       {
         "category": "unused",
-        "findings": 154
+        "findings": 151
       }
     ],
     "by_package": [
       {
         "name": "",
         "manifest": "",
-        "implicated": 154,
+        "implicated": 151,
         "subjects": 3380
       }
     ]
   },
   "findings": [
-    {
-      "id": "kndo-1cf773ac8eee",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "Example/Source/MasterViewController.swift",
-        "selector": {
-          "Free": "MasterViewController"
-        },
-        "span": {
-          "start": 1244,
-          "end": 4056
-        }
-      },
-      "lines": {
-        "start": 28,
-        "end": 101
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
     {
       "id": "kndo-7070e97c0d9f",
       "category": "unused",
@@ -3318,50 +3296,6 @@
       "lines": {
         "start": 43,
         "end": 45
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-8ba360eceafc",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "watchOS Example/watchOS Example WatchKit Extension/ExtensionDelegate.swift",
-        "selector": {
-          "Free": "ExtensionDelegate"
-        },
-        "span": {
-          "start": 1222,
-          "end": 3260
-        }
-      },
-      "lines": {
-        "start": 27,
-        "end": 57
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-8037f56d952f",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "watchOS Example/watchOS Example WatchKit Extension/HostingController.swift",
-        "selector": {
-          "Free": "HostingController"
-        },
-        "span": {
-          "start": 1255,
-          "end": 1438
-        }
-      },
-      "lines": {
-        "start": 29,
-        "end": 35
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -6911,106 +6845,6 @@
         "end": 31
       },
       "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
-    },
-    {
-      "id": "kndo-96d1063ab135",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "Example/Source/DetailViewController.swift",
-        "selector": {
-          "Member": {
-            "owner": "DetailViewController",
-            "name": "elapsedTime"
-          }
-        },
-        "span": {
-          "start": 1818,
-          "end": 1848
-        }
-      },
-      "lines": {
-        "start": 51,
-        "end": 51
-      },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
-    },
-    {
-      "id": "kndo-e1f537c57db9",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "Example/Source/DetailViewController.swift",
-        "selector": {
-          "Member": {
-            "owner": "DetailViewController",
-            "name": "numberFormatter"
-          }
-        },
-        "span": {
-          "start": 1887,
-          "end": 2050
-        }
-      },
-      "lines": {
-        "start": 54,
-        "end": 58
-      },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
-    },
-    {
-      "id": "kndo-1dfaa2fa52be",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "Example/Source/MasterViewController.swift",
-        "selector": {
-          "Member": {
-            "owner": "MasterViewController",
-            "name": "detailViewController"
-          }
-        },
-        "span": {
-          "start": 1375,
-          "end": 1422
-        }
-      },
-      "lines": {
-        "start": 33,
-        "end": 33
-      },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
-    },
-    {
-      "id": "kndo-8865fc2e7c4b",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "Example/Source/MasterViewController.swift",
-        "selector": {
-          "Member": {
-            "owner": "MasterViewController",
-            "name": "titleImageView"
-          }
-        },
-        "span": {
-          "start": 1327,
-          "end": 1369
-        }
-      },
-      "lines": {
-        "start": 31,
-        "end": 31
-      },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
     },
     {
       "id": "kndo-01f76b9ffc9a",
@@ -13311,28 +13145,6 @@
       "message": "production-reachable, but no test reaches this file"
     },
     {
-      "id": "kndo-40dcfd63d60d",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "Example/Source/DetailViewController.swift"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-f908dc1767a6",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "Example/Source/MasterViewController.swift"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
       "id": "kndo-a592b695a3d2",
       "category": "untested",
       "severity": "info",
@@ -13740,17 +13552,6 @@
       "message": "production-reachable, but no test reaches this file"
     },
     {
-      "id": "kndo-e75b0a413136",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "watchOS Example/watchOS Example WatchKit Extension/ExtensionDelegate.swift"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
       "id": "kndo-1b819c523a84",
       "category": "untested",
       "severity": "info",
@@ -13806,6 +13607,20 @@
     {
       "coordinate": "kndo:coverage-lcov",
       "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:interface-builder",
+      "roots": 4,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:info-plist",
+      "roots": 1,
       "findings": 0,
       "dropped": [],
       "content_budget_cut": false

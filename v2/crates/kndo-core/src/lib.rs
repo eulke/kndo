@@ -21,8 +21,9 @@ mod suppress;
 pub use analysis::{Abstention, AbstentionReason, AbstentionScope, Analysis};
 pub use conduct::{
     Activation, ActivationReason, ActivationRule, CONTENT_MAX_BYTES, CONTENT_MAX_FILES,
-    ConductSeverity, ConductSink, ConductTarget, ContentView, Contribution, Extension, GraphAccess,
-    GraphView, RuleDescriptor, WellKnown, activate, is_reserved_coordinate, run_round,
+    ConductSeverity, ConductSink, ConductTarget, ContentView, Contribution, DeclaredSymbol,
+    Extension, GraphAccess, GraphView, RuleDescriptor, WellKnown, activate, is_reserved_coordinate,
+    run_round,
 };
 pub use graph::{Graph, GraphFile};
 pub use health::{CategoryCount, Health, Universe};

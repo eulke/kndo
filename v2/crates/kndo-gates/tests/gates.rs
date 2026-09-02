@@ -251,6 +251,7 @@ fn adapter_conformance_fixtures_are_byte_identical() {
         (manifest.join("../kndo-adapter-kotlin/tests/fixtures"), 5),
         (manifest.join("../kndo-adapter-swift/tests/fixtures"), 4),
         (manifest.join("../kndo-adapter-python/tests/fixtures"), 7),
+        (manifest.join("../kndo-apple/tests/fixtures"), 1),
     ];
     let overwrite = std::env::var_os("KNDO_CONFORMANCE").is_some_and(|v| v == "overwrite");
     let mut failures = Vec::new();
@@ -360,7 +361,11 @@ fn builtin_conduct_proofs() {
     // here fails, the same posture that makes the conduct gates arguments of
     // `.conduct()` — an extension nothing asserts is one nothing notices
     // breaking, and the cost is measured in findings that silently return.
-    const PROVEN: &[&str] = &["kndo:coverage-lcov"];
+    const PROVEN: &[&str] = &[
+        "kndo:coverage-lcov",
+        "kndo:interface-builder",
+        "kndo:info-plist",
+    ];
     let shipped: Vec<String> = kndo::default_extensions()
         .iter()
         .filter(|e| e.spec().declares_conduct())
@@ -372,32 +377,68 @@ fn builtin_conduct_proofs() {
          baseline-then-plugin proof added to this gate in the same commit.\n"
     );
 
-    // kndo:coverage-lcov — the lcov fixture's `neverRan` finding exists only
-    // because coverage was ingested: uncovered ⇒ Certain, on the function.
-    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../kndo-adapter-ts/tests/fixtures/coverage-lcov/project");
-    let config = || Config {
-        threads: Threads::Auto,
-        use_cache: false,
-        ..Config::default()
-    };
-
-    let extraction_only = || {
-        kndo::default_extensions()
+    // The proof's two runs over one fixture: the stock composition minus every
+    // conducting extension, then the stock composition.
+    let baseline_then_plugins = |fixture: std::path::PathBuf| {
+        let config = || Config {
+            threads: Threads::Auto,
+            use_cache: false,
+            ..Config::default()
+        };
+        let extraction_only: Vec<Box<dyn kndo::Extension>> = kndo::default_extensions()
             .into_iter()
             .filter(|e| !e.spec().declares_conduct())
+            .collect();
+        let without = Session::open(&fixture, config(), extraction_only)
+            .expect("open baseline session")
+            .analyze(RunMode::Full)
+            .expect("analyze baseline");
+        let with = kndo::open(&fixture, config())
+            .expect("open stock session")
+            .analyze(RunMode::Full)
+            .expect("analyze with plugins");
+        assert!(!with.graph.files.is_empty(), "the fixture is measured");
+        assert_eq!(
+            without.contributions.len(),
+            0,
+            "the baseline run carries no plugin"
+        );
+        (without, with)
+    };
+    let fixtures = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let contributions = |snap: &Snapshot| -> Vec<(String, u32, u32)> {
+        for c in &snap.contributions {
+            assert!(
+                c.dropped.is_empty() && !c.content_budget_cut,
+                "every contribution lands whole: {c:#?}"
+            );
+        }
+        snap.contributions
+            .iter()
+            .map(|c| (c.coordinate.to_string(), c.roots, c.findings))
             .collect()
     };
-    let without = Session::open(&fixture, config(), extraction_only())
-        .expect("open baseline session")
-        .analyze(RunMode::Full)
-        .expect("analyze baseline");
-    let with = kndo::open(&fixture, config())
-        .expect("open stock session")
-        .analyze(RunMode::Full)
-        .expect("analyze with plugins");
+    // `category name` — a finding's identity as the proofs below spell it.
+    let label = |f: &kndo::Finding| -> String {
+        let name = match &f.subject {
+            kndo::Subject::Symbol {
+                selector: kndo::SymbolSelector::Free(name),
+                ..
+            } => name.to_string(),
+            kndo::Subject::Symbol {
+                selector: kndo::SymbolSelector::Member { owner, name },
+                ..
+            } => format!("{owner}.{name}"),
+            other => format!("{other:?}"),
+        };
+        format!("{} {name}", f.category.as_str())
+    };
 
-    assert!(!with.graph.files.is_empty(), "the fixture is measured");
+    // kndo:coverage-lcov — the lcov fixture's `neverRan` finding exists only
+    // because coverage was ingested: uncovered ⇒ Certain, on the function.
+    let (without, with) = baseline_then_plugins(
+        fixtures.join("../kndo-adapter-ts/tests/fixtures/coverage-lcov/project"),
+    );
     let never_ran = |snap: &Snapshot| {
         snap.findings
             .iter()
@@ -408,11 +449,6 @@ fn builtin_conduct_proofs() {
             })
             .count()
     };
-    assert_eq!(
-        without.contributions.len(),
-        0,
-        "the baseline run carries no plugin"
-    );
     assert_eq!(
         never_ran(&without),
         0,
@@ -428,15 +464,62 @@ fn builtin_conduct_proofs() {
         with.findings.len() - 1,
         "the plugin's whole effect is that one finding — nothing else moved"
     );
-
-    let contribution = &with.contributions[0];
-    assert_eq!(contribution.coordinate, "kndo:coverage-lcov");
     assert_eq!(
-        (contribution.roots, contribution.findings),
-        (0, 0),
-        "an ingester asserts no graph facts and no findings of its own"
+        contributions(&with),
+        [("kndo:coverage-lcov".to_string(), 0, 0)],
+        "an ingester asserts no graph facts and no findings of its own, and a \
+         conduct extension whose activation rules match nothing is no row at all"
     );
-    assert!(contribution.dropped.is_empty() && !contribution.content_budget_cut);
+
+    // kndo:interface-builder + kndo:info-plist — Alamofire's example targets in
+    // shape, with Xcode's own artifacts verbatim: the iOS storyboard names
+    // `MasterViewController` and `DetailViewController` and connects the
+    // `titleImageView` outlet, the watchKit storyboard names
+    // `HostingController`, the extension's plist names `ExtensionDelegate`.
+    // Without the plugins every one of them is dead code; with them the roots
+    // land on exactly those, their members leave `internal-only` with them
+    // (a rooted owner is used from outside the graph's sight), and the SwiftUI
+    // preview nothing names stays reported.
+    let (without, with) =
+        baseline_then_plugins(fixtures.join("../kndo-apple/tests/fixtures/apple-bundles/project"));
+    let before: Vec<String> = without.findings.iter().map(label).collect();
+    let after: Vec<String> = with.findings.iter().map(label).collect();
+    let mut gone: Vec<&str> = before
+        .iter()
+        .filter(|l| !after.contains(l))
+        .map(String::as_str)
+        .collect();
+    gone.sort_unstable();
+    assert_eq!(
+        gone,
+        [
+            "internal-only DetailViewController.request",
+            "internal-only MasterViewController.detailViewController",
+            "internal-only MasterViewController.titleImageView",
+            "unused ExtensionDelegate",
+            "unused HostingController",
+            "unused MasterViewController",
+        ],
+        "the artifacts' names, and only those, stop being dead:\nbefore {before:#?}\nafter {after:#?}"
+    );
+    assert!(
+        after.iter().all(|l| before.contains(l)),
+        "a root can only keep something alive, never accuse: {after:#?}"
+    );
+    assert!(
+        after.contains(&"unused ContentView_Previews".to_string()),
+        "unrelated dead code stays reported: {after:#?}"
+    );
+    assert_eq!(
+        contributions(&with),
+        [
+            ("kndo:coverage-lcov".to_string(), 0, 0),
+            ("kndo:interface-builder".to_string(), 4, 0),
+            ("kndo:info-plist".to_string(), 1, 0),
+        ],
+        "two classes, one outlet and one watchKit controller from the documents; \
+         one delegate from the plist"
+    );
 }
 
 #[test]

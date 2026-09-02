@@ -942,6 +942,7 @@ dependencies = [
  "kndo-adapter-rust",
  "kndo-adapter-swift",
  "kndo-adapter-ts",
+ "kndo-apple",
  "kndo-contract",
  "kndo-core",
  "kndo-coverage",
@@ -1033,6 +1034,15 @@ dependencies = [
  "smol_str",
  "tree-sitter",
  "tree-sitter-typescript",
+]
+
+[[package]]
+name = "kndo-apple"
+version = "0.0.0"
+dependencies = [
+ "kndo-contract",
+ "roxmltree",
+ "smol_str",
 ]
 
 [[package]]
@@ -1591,6 +1601,12 @@ name = "regex-syntax"
 version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
+
+[[package]]
+name = "roxmltree"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c20b6793b5c2fa6553b250154b78d6d0db37e72700ae35fad9387a46f487c97"
 
 [[package]]
 name = "rustc-hash"

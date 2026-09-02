@@ -19,7 +19,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// lives.
 pub use kndo_contract::extension::{
     Activation, ActivationRule, CONTENT_MAX_BYTES, CONTENT_MAX_FILES, ConductSeverity, ConductSink,
-    ConductTarget, ContentView, Extension, GraphAccess, RuleDescriptor,
+    ConductTarget, ContentView, DeclaredSymbol, Extension, GraphAccess, RuleDescriptor,
 };
 
 pub use kndo_contract::extension::is_reserved_coordinate;
@@ -47,6 +47,14 @@ impl GraphAccess for GraphView<'_> {
 
     fn contains(&self, path: &ProjectPath) -> bool {
         GraphView::contains(self, path)
+    }
+
+    fn declarations(&self) -> Box<dyn Iterator<Item = DeclaredSymbol<'_>> + '_> {
+        Box::new(
+            self.files
+                .iter()
+                .flat_map(|f| DeclaredSymbol::of_file(&f.path, &f.evidence.declarations)),
+        )
     }
 }
 

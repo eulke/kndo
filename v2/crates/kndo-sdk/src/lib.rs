@@ -20,7 +20,7 @@ use kndo_contract::evidence::{
 };
 use kndo_contract::extension::{
     Activation, ActivationRule, ConductSeverity, ConductSink, ConductTarget, ContentAccess,
-    Extension, ExtensionSpec, GraphAccess,
+    DeclaredSymbol, Extension, ExtensionSpec, GraphAccess,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use smol_str::SmolStr;
@@ -124,18 +124,8 @@ fn confidence_to_wire(c: Confidence) -> wire::Confidence {
     }
 }
 
-fn symbol_kind_to_wire(kind: &ev::SymbolKind) -> wire::SymbolKind {
-    match kind {
-        ev::SymbolKind::Function => wire::SymbolKind::Function,
-        ev::SymbolKind::Method => wire::SymbolKind::Method,
-        ev::SymbolKind::Type => wire::SymbolKind::Type,
-        ev::SymbolKind::Constant => wire::SymbolKind::Constant,
-        ev::SymbolKind::Variable => wire::SymbolKind::Variable,
-        ev::SymbolKind::Module => wire::SymbolKind::Module,
-        ev::SymbolKind::Other(name) => wire::SymbolKind::Other(name.to_string()),
-        other => wire::SymbolKind::Other(format!("{other:?}")),
-    }
-}
+use wire::SymbolKind as WireSymbolKind;
+kndo_contract::symbol_kind_conversions!(WireSymbolKind);
 
 fn ref_kind_to_wire(kind: ev::RefKind) -> wire::RefKind {
     match kind {
@@ -391,9 +381,18 @@ pub fn resolve_context() -> ResolveContext<'static> {
 // --------------------------------------------------- the guest-side conduct views
 
 /// The assembled graph over the conduct imports — the same [`GraphAccess`] shape
-/// a native extension's hooks receive.
+/// a native extension's hooks receive. Paths arrive at hook entry; the
+/// declarations, the larger list, only when a hook first asks.
 struct WireGraph {
     paths: Vec<ProjectPath>,
+    declarations: OnceLock<Vec<WireDeclared>>,
+}
+
+struct WireDeclared {
+    path: ProjectPath,
+    name: SmolStr,
+    kind: ev::SymbolKind,
+    owner: Option<SmolStr>,
 }
 
 impl WireGraph {
@@ -403,6 +402,7 @@ impl WireGraph {
                 .into_iter()
                 .map(ProjectPath::new)
                 .collect(),
+            declarations: OnceLock::new(),
         }
     }
 }
@@ -414,6 +414,26 @@ impl GraphAccess for WireGraph {
 
     fn contains(&self, path: &ProjectPath) -> bool {
         self.paths.binary_search(path).is_ok()
+    }
+
+    fn declarations(&self) -> Box<dyn Iterator<Item = DeclaredSymbol<'_>> + '_> {
+        let declared = self.declarations.get_or_init(|| {
+            bindings::graph_declarations()
+                .into_iter()
+                .map(|d| WireDeclared {
+                    path: ProjectPath::new(d.path),
+                    name: SmolStr::new(d.name),
+                    kind: symbol_kind_from_wire(d.kind),
+                    owner: d.owner.map(SmolStr::new),
+                })
+                .collect()
+        });
+        Box::new(declared.iter().map(|d| DeclaredSymbol {
+            path: &d.path,
+            name: d.name.as_str(),
+            kind: &d.kind,
+            owner: d.owner.as_deref(),
+        }))
     }
 }
 

@@ -884,3 +884,48 @@ pytest-cov itself.
 With `crap` registered, every corpus report gains one whole-run abstention —
 `no-coverage-ingested` — and nothing else moves: findings are identical on all
 nine repositories.
+
+## M7.c — framework conduct: nine candidates measured, two plugins and a rule (2026-09-02)
+
+v1 shipped nine built-in plugins. Each went through the reflection-dispatch rule
+before anything was built: measure the demand on the corpus, and a plugin lands
+only when its roots would land on real findings.
+
+| v1 plugin | corpus demand | disposition |
+|---|---|---|
+| uikit | Alamofire: `MasterViewController`, `HostingController` unused; `titleImageView` internal-only | built as `kndo:interface-builder` |
+| info-plist | Alamofire: `ExtensionDelegate` unused | built as `kndo:info-plist` |
+| express | vite: 11 files a package script hands to `node` reported unused | a js-ts adapter rule (the runtime's argument is an entry), no plugin |
+| serde, rkyv, wasmtime | 0 — v1's roots kept trait-impl members alive; v2 never makes those subjects | dead by construction |
+| nextjs | 0 — no corpus repository is a Next.js app | deferred: no instrument to measure with |
+| thymeleaf, libsass | 0 — their subjects are html and css files, which no v2 adapter claims yet | deferred to M7.d, spring-petclinic as the instrument |
+
+**Alamofire: 609 → 599.** Ten findings leave and none arrive. Three `unused`
+classes — `MasterViewController` (`Main.storyboard`, `iOS.CocoaTouch`),
+`HostingController` (`Interface.storyboard`, `watchKit`), `ExtensionDelegate`
+(`WKExtensionDelegateClassName` in the extension's `Info.plist`). Four
+`internal-only` members — `titleImageView`, the connected outlet, and
+`detailViewController`, `elapsedTime`, `numberFormatter`, members of the classes
+the storyboard instantiates: a rooted owner is used from outside the graph's
+sight, and its members with it (core's rule since M6.c, not the plugin's). Three
+file-level `untested` verdicts on the same files: a file carrying an anchored
+Production root is declared wiring — the rule that already exempts a manifest's
+entry point — so the graph heuristic passes on it rather than accuse what UIKit
+reaches and no test can. v1's `uikit` read `iOS.CocoaTouch` documents only and
+would have left `HostingController` dead; the document format is one, so v2's
+plugin reads every runtime the editor writes for, and the coordinate names the
+editor.
+
+**vite: 1,011 → 1,000.** Eleven `unused` files, every one the argument of a
+`node …` or `tsx …` package script (`playground/ssr/server.js` and its nine
+siblings, `ssr-html/test-stacktrace.js`, `ssr-webworker/worker.js`). The old
+rule rooted a script's path-shaped tokens only; a bare `server` handed to a
+runtime is an entry however it is spelled.
+
+Every other repository is byte-identical, ripgrep included — the Rust adapter's
+alias fix (a `use` headed by another `use`'s local, found by the dogfood gate
+on the host and SDK sources) moves nothing there. The proof fixture carries
+`Main.storyboard`, `LaunchScreen.storyboard`, `Interface.storyboard` and both
+`Info.plist` files verbatim from the pinned Alamofire clone beside sources in
+its shape: eight findings without the plugins, two with, and every one that
+leaves is a name one of the artifacts spells.

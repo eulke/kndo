@@ -10,7 +10,7 @@ declines to judge rather than accuse everything.
 
 | repo | discovered | claimed | decls | refs | import edges | unresolved | findings | abstentions | diagnostics |
 |---|---|---|---|---|---|---|---|---|---|
-| Alamofire | 555 | 108 | 3272 | 87176 | 0 | 0 | 609 | 4 | 9 |
+| Alamofire | 555 | 108 | 3272 | 87176 | 0 | 0 | 599 | 4 | 9 |
 | Exposed | 5476 | 809 | 11673 | 236954 | 29499 | 0 | 987 | 4 | 61 |
 | flask | 217 | 83 | 1104 | 18899 | 226 | 162 | 26 | 4 | 0 |
 | gin | 118 | 99 | 1205 | 43995 | 230 | 0 | 108 | 1 | 0 |
@@ -18,4 +18,4 @@ declines to judge rather than accuse everything.
 | lodash | 146 | 54 | 133 | 134577 | 34 | 8 | 16 | 4 | 0 |
 | ripgrep | 231 | 110 | 2447 | 61733 | 309 | 54 | 155 | 1 | 0 |
 | vapor | 273 | 251 | 2898 | 43955 | 9638 | 0 | 216 | 4 | 26 |
-| vite | 2712 | 1558 | 3494 | 87576 | 1946 | 226 | 1011 | 10 | 6 |
+| vite | 2712 | 1558 | 3494 | 87576 | 1946 | 226 | 1000 | 10 | 6 |

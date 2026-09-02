@@ -1,0 +1,153 @@
+{
+  "run": {
+    "schema": "kndo-v2/m6",
+    "mode": "full",
+    "files_discovered": 13,
+    "files_claimed": 8,
+    "extensions": [
+      {
+        "id": "kndo:swift",
+        "files": 8,
+        "narrowable_scopes": [
+          "module"
+        ],
+        "export_narrowing": "none",
+        "import_cycles": "tolerated",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "underivable"
+      }
+    ]
+  },
+  "health": {
+    "implicated": 2,
+    "subjects": 31,
+    "by_category": [
+      {
+        "category": "unused",
+        "findings": 2
+      }
+    ],
+    "by_package": [
+      {
+        "name": "",
+        "manifest": "",
+        "implicated": 2,
+        "subjects": 31
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "kndo-9e1095534dac",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "watchOS Example/watchOS Example WatchKit Extension/ContentView.swift",
+        "selector": {
+          "Free": "ContentView_Previews"
+        },
+        "span": {
+          "start": 108,
+          "end": 221
+        }
+      },
+      "lines": {
+        "start": 9,
+        "end": 13
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-f7f669121f46",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "watchOS Example/watchOS Example WatchKit Extension/ContentView.swift",
+        "selector": {
+          "Member": {
+            "owner": "ContentView_Previews",
+            "name": "previews"
+          }
+        },
+        "span": {
+          "start": 159,
+          "end": 219
+        }
+      },
+      "lines": {
+        "start": 10,
+        "end": 12
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    }
+  ],
+  "fixed": [],
+  "baselined": 0,
+  "abstained": [
+    {
+      "category": "unused",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 1
+        }
+      }
+    },
+    {
+      "category": "test-only",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    },
+    {
+      "category": "untested",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    },
+    {
+      "category": "undeclared",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 1
+        }
+      }
+    },
+    {
+      "category": "crap",
+      "reason": "no-coverage-ingested",
+      "scope": "whole-run"
+    }
+  ],
+  "suppressed": {
+    "total": 0,
+    "by_category": []
+  },
+  "plugins": [
+    {
+      "coordinate": "kndo:coverage-lcov",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:interface-builder",
+      "roots": 4,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:info-plist",
+      "roots": 1,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    }
+  ],
+  "diagnostics": []
+}

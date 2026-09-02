@@ -118,6 +118,45 @@ pub enum SymbolKind {
     Other(SmolStr),
 }
 
+/// Both conversions between [`SymbolKind`] and a MIRROR enum with the same
+/// variant names — the generated wire type on either side of the ABI. The table
+/// lives here once: a side invokes the macro on its own generated type and gets
+/// `symbol_kind_to_wire` and `symbol_kind_from_wire`, so the two sides cannot
+/// drift by hand. `$wire` is an identifier: bring the generated type into scope
+/// under one (`use … as WireSymbolKind`) and name that.
+#[macro_export]
+macro_rules! symbol_kind_conversions {
+    ($wire:ident) => {
+        fn symbol_kind_to_wire(kind: &$crate::evidence::SymbolKind) -> $wire {
+            match kind {
+                $crate::evidence::SymbolKind::Function => $wire::Function,
+                $crate::evidence::SymbolKind::Method => $wire::Method,
+                $crate::evidence::SymbolKind::Type => $wire::Type,
+                $crate::evidence::SymbolKind::Constant => $wire::Constant,
+                $crate::evidence::SymbolKind::Variable => $wire::Variable,
+                $crate::evidence::SymbolKind::Module => $wire::Module,
+                $crate::evidence::SymbolKind::Other(name) => $wire::Other(name.to_string()),
+                // The contract enum is `#[non_exhaustive]`: a kind this wire
+                // build does not know yet crosses under `other` in its debug
+                // spelling, never as a dropped declaration.
+                other => $wire::Other(format!("{other:?}")),
+            }
+        }
+
+        fn symbol_kind_from_wire(kind: $wire) -> $crate::evidence::SymbolKind {
+            match kind {
+                $wire::Function => $crate::evidence::SymbolKind::Function,
+                $wire::Method => $crate::evidence::SymbolKind::Method,
+                $wire::Type => $crate::evidence::SymbolKind::Type,
+                $wire::Constant => $crate::evidence::SymbolKind::Constant,
+                $wire::Variable => $crate::evidence::SymbolKind::Variable,
+                $wire::Module => $crate::evidence::SymbolKind::Module,
+                $wire::Other(name) => $crate::evidence::SymbolKind::Other(name.into()),
+            }
+        }
+    };
+}
+
 impl SymbolKind {
     /// The one text spelling, the adapter's own word included.
     pub fn as_str(&self) -> &str {

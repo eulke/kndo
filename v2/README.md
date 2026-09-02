@@ -539,10 +539,16 @@ entry, never a builder's shortcut.
   line of 30, 1 and 70 of them partially covered — the signal `untested` cannot give.
   `Info`, whole-run abstention without a report, `[analysis.crap] threshold`
   configurable; two ingestion defects found by the real reports fixed on the way.
-- **M7.c — framework conduct plugins** (swap-blocking): v1's nine, each through the
-  reflection-dispatch rule — a plugin lands only when its roots land on real
-  findings, proven baseline-then-plugin like the coverage plugin; v1's harvested
-  plugin fixtures are the first instrument, ordered by v1's measured impact.
+- **M7.c — framework conduct plugins** — **shipped 2026-09-02**: v1's nine each
+  measured on the corpus before anything was built. Two are built-ins in
+  `kndo-apple`, proven baseline-then-plugin on Xcode's own artifacts:
+  `kndo:interface-builder` (storyboards and xibs, every runtime the editor writes
+  for) and `kndo:info-plist` — ten findings leave Alamofire. express is a js-ts
+  scripts rule, not a plugin (`node server` roots the entry: eleven leave vite);
+  serde, rkyv and wasmtime have no subjects in v2 by construction; nextjs measured
+  zero demand; thymeleaf and libsass wait for M7.d's html and css adapters.
+  Conduct gained `GraphAccess::declarations()` — the one door from a name read in
+  an artifact to a `ConductTarget` — natively and across the ABI.
 - **M7.d — the web adapters** (swap-blocking): html and css rebuilt on the extension
   contract (vite's playground gap is the measured demand); json only after its own
   demand check.

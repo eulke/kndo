@@ -11,6 +11,7 @@ members = [
     "crates/kndo-adapter-rust",
     "crates/kndo-adapter-swift",
     "crates/kndo-adapter-ts",
+    "crates/kndo-apple",
     "crates/kndo-cli",
     "crates/kndo-contract",
     "crates/kndo-contract-fingerprint",

@@ -259,6 +259,15 @@ interface types {
         symbol(symbol-ref),
     }
 
+    /// Mirrors `DeclaredSymbol` — one declaration as conduct sees it: where it
+    /// is, its name, its kind, and the name of the declaration it belongs to.
+    record declared-symbol {
+        path: string,
+        name: string,
+        kind: symbol-kind,
+        owner: option<string>,
+    }
+
     record contributed-root {
         target: conduct-target,
         kind: root-kind,

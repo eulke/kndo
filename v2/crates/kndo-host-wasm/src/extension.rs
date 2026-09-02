@@ -57,6 +57,7 @@ struct StoreData {
     known_files: Vec<String>,
     packages: Vec<wire::PackageEntry>,
     graph_paths: Vec<String>,
+    graph_declarations: Vec<wire::DeclaredSymbol>,
     readable: Vec<String>,
     snapshot: BTreeMap<String, Vec<u8>>,
     violation: Option<String>,
@@ -70,6 +71,7 @@ impl StoreData {
             known_files: Vec::new(),
             packages: Vec::new(),
             graph_paths: Vec::new(),
+            graph_declarations: Vec::new(),
             readable: Vec::new(),
             snapshot: BTreeMap::new(),
             violation: None,
@@ -102,6 +104,10 @@ impl StoreData {
         }
         StoreData {
             graph_paths: graph.paths().map(|p| p.as_str().to_string()).collect(),
+            graph_declarations: graph
+                .declarations()
+                .map(convert::declared_symbol_to_wire)
+                .collect(),
             readable,
             snapshot,
             ..StoreData::bare(Phase::Conduct)
@@ -143,6 +149,11 @@ impl ExtensionImports for StoreData {
     fn graph_contains(&mut self, path: String) -> wasmtime::Result<bool> {
         self.gate("graph-contains", Phase::Conduct)?;
         Ok(self.graph_paths.binary_search(&path).is_ok())
+    }
+
+    fn graph_declarations(&mut self) -> wasmtime::Result<Vec<wire::DeclaredSymbol>> {
+        self.gate("graph-declarations", Phase::Conduct)?;
+        Ok(self.graph_declarations.clone())
     }
 
     fn readable_paths(&mut self) -> wasmtime::Result<Vec<String>> {

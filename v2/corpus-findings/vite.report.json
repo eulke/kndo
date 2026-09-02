@@ -16,7 +16,7 @@
     ]
   },
   "health": {
-    "implicated": 747,
+    "implicated": 736,
     "subjects": 5095,
     "by_category": [
       {
@@ -29,14 +29,14 @@
       },
       {
         "category": "unused",
-        "findings": 703
+        "findings": 692
       }
     ],
     "by_package": [
       {
         "name": "",
         "manifest": "",
-        "implicated": 600,
+        "implicated": 589,
         "subjects": 1826
       },
       {
@@ -3404,17 +3404,6 @@
       "subject": {
         "kind": "file",
         "path": "playground/css-dynamic-import/static.js"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-be64f9c8de2e",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "playground/css-lightningcss-proxy/server.js"
       },
       "message": "no root anchors this file and no reachable file imports it"
     },
@@ -7709,17 +7698,6 @@
       "message": "no root anchors this file and no reachable file imports it"
     },
     {
-      "id": "kndo-40b21e0df6b9",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "playground/optimize-missing-deps/server.js"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
       "id": "kndo-75b688659792",
       "category": "unused",
       "severity": "warning",
@@ -8369,17 +8347,6 @@
       "message": "no root anchors this file and no reachable file imports it"
     },
     {
-      "id": "kndo-d7fd9eb0ac94",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "playground/ssr-conditions/server.js"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
       "id": "kndo-27182c27d908",
       "category": "unused",
       "severity": "warning",
@@ -8523,17 +8490,6 @@
       "message": "no root anchors this file and no reachable file imports it"
     },
     {
-      "id": "kndo-9f21c2e252c2",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "playground/ssr-deps/server.js"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
       "id": "kndo-2432b15773dc",
       "category": "unused",
       "severity": "warning",
@@ -8585,17 +8541,6 @@
       "subject": {
         "kind": "file",
         "path": "playground/ssr-html/public/slash@3.0.0.js"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-f283ecc0dbab",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "playground/ssr-html/server.js"
       },
       "message": "no root anchors this file and no reachable file imports it"
     },
@@ -8688,17 +8633,6 @@
       "message": "no root anchors this file and no reachable file imports it"
     },
     {
-      "id": "kndo-63cbe90dbedf",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "playground/ssr-html/test-stacktrace.js"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
       "id": "kndo-ba0aa61deaf0",
       "category": "unused",
       "severity": "warning",
@@ -8717,28 +8651,6 @@
       "subject": {
         "kind": "file",
         "path": "playground/ssr-html/trailing-slash/other.js"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-82c3a206a219",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "playground/ssr-noexternal/server.js"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-e1763f45dac3",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "playground/ssr-pug/server.js"
       },
       "message": "no root anchors this file and no reachable file imports it"
     },
@@ -8798,17 +8710,6 @@
       "message": "no root anchors this file and no reachable file imports it"
     },
     {
-      "id": "kndo-1f7216c64914",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "playground/ssr-wasm/server.js"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
       "id": "kndo-f5832ab211e0",
       "category": "unused",
       "severity": "warning",
@@ -8860,28 +8761,6 @@
       "subject": {
         "kind": "file",
         "path": "playground/ssr-wasm/src/static-light.js"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-df6879f3970b",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "playground/ssr-webworker/worker.js"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-b6ff6b448329",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "playground/ssr/server.js"
       },
       "message": "no root anchors this file and no reachable file imports it"
     },

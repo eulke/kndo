@@ -9,7 +9,9 @@
 use crate::adapter::{
     DependencyDeclaration, PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile,
 };
-use crate::evidence::{CoverageRecords, EvidenceSink, EvidenceStreams, RootKind};
+use crate::evidence::{
+    CoverageRecords, Declaration, EvidenceSink, EvidenceStreams, RootKind, SymbolKind,
+};
 use crate::finding::Severity;
 use crate::vocab::{Confidence, ProjectPath};
 use serde::Serialize;
@@ -736,8 +738,8 @@ pub enum ConductTarget {
     Symbol { path: ProjectPath, name: SmolStr },
 }
 
-/// The graph as conduct hooks may see it: paths and membership, no internals —
-/// the surface the WASM boundary already proved sufficient. The engine
+/// The graph as conduct hooks may see it: paths, membership and the declared
+/// names — no internals; the surface the WASM boundary carries. The engine
 /// implements it; extensions only consume it.
 pub trait GraphAccess {
     /// Every path in the assembled graph, in path order.
@@ -745,6 +747,40 @@ pub trait GraphAccess {
 
     /// Membership without the full list.
     fn contains(&self, path: &ProjectPath) -> bool;
+
+    /// Every declaration in the graph — file by file in path order, in
+    /// declaration order within a file. A name an extension reads outside the
+    /// code (a storyboard's class, a plist's principal class) becomes a
+    /// [`ConductTarget::Symbol`] only through here: the graph alone knows
+    /// where, and whether, the name is declared.
+    fn declarations(&self) -> Box<dyn Iterator<Item = DeclaredSymbol<'_>> + '_>;
+}
+
+/// One declaration as conduct sees it: where it is, what it is called, what it
+/// is, and the declaration it is a member of — by name, so an extension that
+/// read `Owner.member` from an artifact matches it without a second lookup.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DeclaredSymbol<'a> {
+    pub path: &'a ProjectPath,
+    pub name: &'a str,
+    pub kind: &'a SymbolKind,
+    pub owner: Option<&'a str>,
+}
+
+impl<'a> DeclaredSymbol<'a> {
+    /// One file's declarations with owners named rather than numbered — how a
+    /// graph view answers [`GraphAccess::declarations`].
+    pub fn of_file(
+        path: &'a ProjectPath,
+        declarations: &'a [Declaration],
+    ) -> impl Iterator<Item = DeclaredSymbol<'a>> + 'a {
+        declarations.iter().map(move |d| DeclaredSymbol {
+            path,
+            name: d.name.as_str(),
+            kind: &d.kind,
+            owner: d.owner.map(|o| declarations[o.index()].name.as_str()),
+        })
+    }
 }
 
 /// The write side of one extension's conduct round.
@@ -1112,6 +1148,9 @@ mod tests {
             }
             fn contains(&self, _: &ProjectPath) -> bool {
                 false
+            }
+            fn declarations(&self) -> Box<dyn Iterator<Item = DeclaredSymbol<'_>> + '_> {
+                Box::new(std::iter::empty())
             }
         }
 

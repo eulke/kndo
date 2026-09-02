@@ -14,8 +14,8 @@ use kndo_contract::evidence::{
     RootKind,
 };
 use kndo_contract::extension::{
-    Activation, ActivationRule, ConductSeverity, ConductTarget, ExtensionSpec, ExtensionSpecParts,
-    RuleDescriptor,
+    Activation, ActivationRule, ConductSeverity, ConductTarget, DeclaredSymbol, ExtensionSpec,
+    ExtensionSpecParts, RuleDescriptor,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use smol_str::SmolStr;
@@ -181,17 +181,17 @@ pub(crate) fn resolution(r: awire::Resolution) -> Resolution {
     }
 }
 
-fn symbol_kind(kind: awire::SymbolKind) -> ev::SymbolKind {
-    match kind {
-        awire::SymbolKind::Function => ev::SymbolKind::Function,
-        awire::SymbolKind::Method => ev::SymbolKind::Method,
-        awire::SymbolKind::Type => ev::SymbolKind::Type,
-        awire::SymbolKind::Constant => ev::SymbolKind::Constant,
-        awire::SymbolKind::Variable => ev::SymbolKind::Variable,
-        awire::SymbolKind::Module => ev::SymbolKind::Module,
-        awire::SymbolKind::Other(name) => ev::SymbolKind::Other(SmolStr::new(name)),
+pub(crate) fn declared_symbol_to_wire(d: DeclaredSymbol<'_>) -> awire::DeclaredSymbol {
+    awire::DeclaredSymbol {
+        path: d.path.as_str().to_string(),
+        name: d.name.to_string(),
+        kind: symbol_kind_to_wire(d.kind),
+        owner: d.owner.map(str::to_string),
     }
 }
+
+use awire::SymbolKind as WireSymbolKind;
+kndo_contract::symbol_kind_conversions!(WireSymbolKind);
 
 fn ref_kind(kind: awire::RefKind) -> ev::RefKind {
     match kind {
@@ -229,7 +229,7 @@ pub(crate) fn replay_evidence(
         .map(|d| {
             sink.declaration(
                 SmolStr::new(&d.name),
-                symbol_kind(d.kind.clone()),
+                symbol_kind_from_wire(d.kind.clone()),
                 span(d.span),
                 match &d.reach {
                     awire::Reach::Private => ev::Reach::Private,

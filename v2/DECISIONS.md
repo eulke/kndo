@@ -2304,3 +2304,53 @@ never hand-written. 81 conformance reports regenerated: 80 differ only by the
 `crap` whole-run abstention; ts/crap (v1's harvested fixture) also reports one
 uninstrumented file, and the new fixture pins a `crap` finding beside an
 `untested` one.
+
+## 2026-09-02 — Framework conduct: two Apple plugins, one scripts rule, six verdicts
+
+**Decision.** v1's nine built-in plugins each went through the reflection-dispatch
+rule — demand measured on the corpus first; only roots that land on real findings
+earn a plugin. Two land as built-ins in `kndo-apple`, proven baseline-then-plugin
+in `builtin_conduct_proofs` on Xcode's artifacts verbatim. `kndo:interface-builder`
+roots every `customClass` a storyboard or xib instantiates and every outlet or
+action it connects — members it can point at a real declaration of that class
+for, nothing else — under every runtime the editor writes for: the document
+format is one, `customClass` is instantiated and connections bind by name under
+`iOS.CocoaTouch`, `watchKit` and `MacOSX.Cocoa` alike, so the coordinate names
+the editor rather than one framework (v1's `kndo:uikit` read iOS documents only
+and would leave Alamofire's watchKit `HostingController` dead). `kndo:info-plist`
+roots the classes a bundle's class-naming keys name. Both resolve a bare name to
+the declarations closest to the artifact and both are `Probable`: the artifact's
+claim is certain, the match from a name to a declaration is by name alone with
+no module to check, and a wrong match keeps alive, never accuses. Root
+confidence has no consumer beyond the report, so the choice is documentary.
+
+express is not a plugin: a package script handing a runtime a file (`node
+server`, `tsx src/worker.ts`) makes that file an entry, an adapter fact — js-ts
+version 7. serde, rkyv and wasmtime are dead by construction: v1's roots kept
+trait-impl members alive, and in v2 a trait impl's members are never declarations,
+so there is nothing to root (zero demand on ripgrep and on kndo itself). nextjs
+is deferred at zero demand — no corpus repository is a Next.js app, and a plugin
+without an instrument would be a guess. thymeleaf and libsass are deferred to
+M7.d: their subjects are html and css files no adapter claims yet, and
+spring-petclinic joins the corpus when they do.
+
+**Contract.** `GraphAccess::declarations()` — every declaration in the graph as
+path, name, kind and owner name — is the one door from a name read outside the
+code to a `ConductTarget::Symbol`; the engine's graph view answers it, the ABI
+carries it as the `graph-declarations` import (fetched on first use), and the
+pinned guests are rebuilt in this commit. The symbol-kind wire table now exists
+once, as `symbol_kind_conversions!` in the contract invoked by host and SDK: the
+dogfood gate flagged the second copy the moment each side needed both directions.
+
+**Rust adapter, version 6.** A `use` headed by a local another `use` in the same
+file binds (`use a::b as c; use c::d;`) names that path, not a crate called `c`,
+whatever the order of the two declarations — also the dogfood gate's finding
+(`wire` and `awire` accused as undeclared on the host and SDK manifests).
+
+**Measurement.** Alamofire 609 → 599: three `unused` classes, four `internal-only`
+members of the rooted owners, three file `untested` verdicts on files that now
+carry an anchored Production root (declared wiring, the rule that exempts a
+manifest's entry). vite 1,011 → 1,000: eleven `unused` files handed to a runtime
+by a script. Every other report byte-identical; every conformance fixture
+unmoved; the proof fixture pinned at eight findings without the plugins and two
+with. Contributions: interface-builder 4 roots, info-plist 1, nothing dropped.

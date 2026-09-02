@@ -7,8 +7,8 @@
 pub use kndo_contract::adapter::{ResolveContext, SourceFile};
 pub use kndo_contract::evidence::{DiagnosticLevel, RootKind};
 pub use kndo_contract::extension::{
-    DependencyIdentity, DependencyScoping, Extension, ExtensionSpec, ExtensionSpecBuilder,
-    GraphAccess, MutatesGraph,
+    DeclaredSymbol, DependencyIdentity, DependencyScoping, Extension, ExtensionSpec,
+    ExtensionSpecBuilder, GraphAccess, MutatesGraph,
 };
 pub use kndo_contract::finding::{Finding, LineSpan, Severity, sort_findings};
 pub use kndo_contract::subject::{FindingId, Subject, SymbolSelector};
@@ -30,6 +30,7 @@ use kndo_adapter_python::PythonAdapter;
 use kndo_adapter_rust::RustAdapter;
 use kndo_adapter_swift::SwiftAdapter;
 use kndo_adapter_ts::TypeScriptAdapter;
+use kndo_apple::{InfoPlistPlugin, InterfaceBuilderPlugin};
 use kndo_coverage::LcovPlugin;
 
 /// Everything a stock run is, in deterministic registration order: claim priority
@@ -47,6 +48,8 @@ pub fn default_extensions() -> Vec<Box<dyn Extension>> {
         Box::new(PythonAdapter::new()),
         Box::new(SwiftAdapter::new()),
         Box::new(LcovPlugin),
+        Box::new(InterfaceBuilderPlugin),
+        Box::new(InfoPlistPlugin),
     ]
 }
 
