@@ -123,7 +123,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.98.0
+          toolchain: @TOOLCHAIN@
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
@@ -146,13 +146,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Windows deferred by owner decision (tree-sitter-scss upstream) — v2/DECISIONS.md.
-        os: [ubuntu-latest, macos-latest]
+        # Windows builds since the SCSS grammar's build script is vendored with
+        # its one portable flag (vendor/README.md); a platform the suite never ran
+        # on is a platform a tag would meet first.
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.98.0
+          toolchain: @TOOLCHAIN@
           # The ABI compliance suite builds the reference guests at run time; a
           # toolchain without this target dies with "can't find crate for `core`".
           targets: wasm32-unknown-unknown
@@ -169,7 +171,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.98.0
+          toolchain: @TOOLCHAIN@
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: v2
@@ -190,7 +192,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.98.0
+          toolchain: @TOOLCHAIN@
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: v2
@@ -211,13 +213,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Windows deferred by owner decision (tree-sitter-scss upstream) — v2/DECISIONS.md.
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.98.0
+          toolchain: @TOOLCHAIN@
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: v2
@@ -225,7 +226,57 @@ jobs:
         run: cargo run -p xtask -- package --tag v0.0.0-ci --out-dir dist
       - name: verify checksum, install and run from the artifact
         run: cargo run -p xtask -- verify-artifact --dir dist
+      # The Linux release artifact is musl — a static binary that runs on any
+      # distribution — and the release build is the first time a musl binary
+      # would otherwise exist. Built and run here on every push instead.
+      - name: package the musl release target
+        if: runner.os == 'Linux'
+        run: |
+          rustup target add x86_64-unknown-linux-musl
+          sudo apt-get update && sudo apt-get install -y musl-tools
+          cargo run -p xtask -- package --target x86_64-unknown-linux-musl --tag v0.0.0-ci --out-dir dist-musl
+          cargo run -p xtask -- verify-artifact --dir dist-musl
+          ldd target/x86_64-unknown-linux-musl/release/kndo 2>&1 | grep -Eq "statically linked|not a dynamic executable" \
+            || { echo "the musl release binary is not statically linked"; exit 1; }
+      # The installer is a contract about the artifact's name and layout; until
+      # it runs end to end against the producer's own output, nothing checks it.
+      # Served over HTTP so every line it runs for a user runs here.
+      - name: install through install.sh from the artifact just built
+        if: runner.os != 'Windows'
+        run: |
+          served=dist; [ "$RUNNER_OS" = "Linux" ] && served=dist-musl
+          (cd "$served" && python3 -m http.server 8765 >/dev/null 2>&1 &)
+          sleep 1
+          KNDO_VERSION=v0.0.0-ci KNDO_BASE_URL=http://127.0.0.1:8765 KNDO_INSTALL_DIR="$RUNNER_TEMP/kndo-bin" sh install.sh
+          "$RUNNER_TEMP/kndo-bin/kndo" --version
+
+  release-notes:
+    name: release notes render (git-cliff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: git-cliff
+      - name: the changelog config renders the unreleased commits
+        run: git-cliff --config cliff.toml --unreleased --strip header
 "#;
+
+/// The pinned toolchain, read from `rust-toolchain.toml` at render time so the
+/// workflow and the local pin cannot disagree: one file is the source, the
+/// generator copies it.
+pub fn toolchain() -> String {
+    let text = std::fs::read_to_string(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../rust-toolchain.toml"),
+    )
+    .expect("rust-toolchain.toml at the workspace root");
+    text.lines()
+        .find_map(|l| l.trim().strip_prefix("channel = "))
+        .map(|v| v.trim_matches('"').to_string())
+        .expect("rust-toolchain.toml declares a channel")
+}
 
 pub fn render_ci() -> String {
     let names: Vec<&str> = GATES.iter().map(|g| g.name).collect();
@@ -241,4 +292,247 @@ pub fn render_ci() -> String {
     TEMPLATE
         .replace("@GATE_NAMES@", &names.join(" "))
         .replace("@GATE_STEPS@", &steps)
+        .replace("@TOOLCHAIN@", &toolchain())
+}
+
+/// The release surface's one table: every platform a release publishes, and
+/// the artifact's name and layout. The release workflow's build matrix is
+/// rendered from it, `xtask package` names its archive by it, and
+/// `tests/release_channels.rs` reads the consumers that cannot call Rust —
+/// `install.sh`, the Action, the Homebrew template, the install docs — against
+/// it, so a channel that drifts fails on the commit that drifts it, not on the
+/// tag that ships it.
+pub mod release {
+    /// One released platform: everything the pipeline and its consumers agree on.
+    pub struct Target {
+        /// The Rust target triple — also the last field of every artifact name.
+        pub triple: &'static str,
+        /// The GitHub runner that builds it.
+        pub runner: &'static str,
+        /// Built through `cross` rather than natively: musl needs it (a real
+        /// static binary, independent of the host's glibc, and an aarch64 one
+        /// from an x86_64 runner); macOS builds on its own runner.
+        pub cross: bool,
+        /// `(uname -s, uname -m)` pairs that resolve to this triple — what makes
+        /// the installer's and the Action's platform detection checkable: a
+        /// triple nothing maps to is a triple nobody can install.
+        pub uname: &'static [(&'static str, &'static str)],
+    }
+
+    /// Linux is musl, deliberately: a static binary that runs on any
+    /// distribution regardless of its glibc. Windows is a CI platform, not a
+    /// release target: no consumer maps a Windows platform yet — a `.zip` and a
+    /// PowerShell installer are a channel of their own, with their own test.
+    pub const TARGETS: &[Target] = &[
+        Target {
+            triple: "x86_64-unknown-linux-musl",
+            runner: "ubuntu-latest",
+            cross: true,
+            uname: &[("Linux", "x86_64")],
+        },
+        Target {
+            triple: "aarch64-unknown-linux-musl",
+            runner: "ubuntu-latest",
+            cross: true,
+            uname: &[("Linux", "aarch64"), ("Linux", "arm64")],
+        },
+        Target {
+            triple: "x86_64-apple-darwin",
+            runner: "macos-latest",
+            cross: false,
+            uname: &[("Darwin", "x86_64")],
+        },
+        Target {
+            triple: "aarch64-apple-darwin",
+            runner: "macos-latest",
+            cross: false,
+            uname: &[("Darwin", "arm64")],
+        },
+    ];
+
+    /// The binary's name inside every archive.
+    pub const BINARY: &str = "kndo";
+
+    /// The archive's stem — its base name, and the single directory it holds:
+    /// `kndo-v1.2.0-aarch64-apple-darwin`. The tag is verbatim, leading `v`
+    /// included: that is what `GITHUB_REF_NAME` holds and what the producer
+    /// uploads, and a consumer that strips it asks for a file that never was.
+    pub fn stem(tag: &str, triple: &str) -> String {
+        format!("kndo-{tag}-{triple}")
+    }
+
+    /// The archive file name: the stem plus `.tar.gz`. Every archive nests its
+    /// contents under the stem, which is why every consumer strips exactly one
+    /// leading path component.
+    pub fn archive_name(tag: &str, triple: &str) -> String {
+        format!("{}.tar.gz", stem(tag, triple))
+    }
+
+    /// The Homebrew template's checksum placeholder for one target.
+    pub fn sha_placeholder(triple: &str) -> String {
+        format!("{{{{SHA256:{triple}}}}}")
+    }
+}
+
+pub const RELEASE_WORKFLOW_REPO_PATH: &str = ".github/workflows/v2-release.yml";
+
+pub fn release_workflow_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .join(RELEASE_WORKFLOW_REPO_PATH)
+}
+
+const RELEASE_TEMPLATE: &str = r#"# GENERATED by `cargo xtask gen-ci` from kndo-gates' release table — edits land
+# there, never here. The `generated_ci_is_current` gate fails when this file drifts.
+#
+# Dispatched by hand with the tag to publish; the tag trigger arrives with the
+# root swap, when this file becomes release.yml. The one producer of the artifact
+# is `cargo xtask package`: this workflow never builds an archive by hand.
+name: v2 release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The release tag to publish (vX.Y.Z), verbatim"
+        required: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+defaults:
+  run:
+    shell: bash
+    working-directory: v2
+
+jobs:
+  build:
+    name: build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+@MATRIX@
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: @TOOLCHAIN@
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: v2
+          key: ${{ matrix.target }}
+      - name: Install cross
+        if: matrix.cross
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
+      - name: package through xtask
+        env:
+          TAG: ${{ inputs.tag }}
+        run: cargo run -p xtask -- package --target ${{ matrix.target }} ${{ matrix.cross && '--cross' || '' }} --tag "$TAG" --out-dir dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: v2/dist/*.tar.gz
+          if-no-files-found: error
+
+  release:
+    name: release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          path: v2/dist
+          merge-multiple: true
+      - name: checksums over every artifact
+        working-directory: v2/dist
+        run: sha256sum -- *.tar.gz > checksums.txt
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: git-cliff
+      - name: release notes
+        env:
+          TAG: ${{ inputs.tag }}
+        run: git-cliff --config cliff.toml --unreleased --tag "$TAG" --strip header -o RELEASE_NOTES.md
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          body_path: v2/RELEASE_NOTES.md
+          files: v2/dist/*
+          fail_on_unmatched_files: true
+
+  update-tap:
+    name: update-tap
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: v2/dist
+          merge-multiple: true
+      - name: render the formula from the template
+        working-directory: v2/dist
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -eu
+          version="${TAG#v}"
+          sha() { sha256sum "$1" | awk '{print $1}'; }
+          sed -e "s/{{VERSION}}/${version}/g" @SHA_SUBSTITUTIONS@
+            ../packaging/homebrew/kndo.rb.tmpl > kndo.rb
+      # Needs the tap repository (eulke/homebrew-tap) and a token with push access
+      # to it (secrets.HOMEBREW_TAP_TOKEN) — neither is assumed to exist yet.
+      - name: push the formula to the tap
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          set -eu
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/eulke/homebrew-tap.git" tap
+          mkdir -p tap/Formula
+          cp dist/kndo.rb tap/Formula/kndo.rb
+          cd tap
+          git config user.name "kndo release"
+          git config user.email "release@kndo.invalid"
+          git add Formula/kndo.rb
+          git commit -m "kndo ${{ inputs.tag }}" || true
+          git push
+"#;
+
+pub fn render_release() -> String {
+    let matrix: String = release::TARGETS
+        .iter()
+        .map(|t| {
+            format!(
+                "          - target: {}
+            os: {}
+            cross: {}
+",
+                t.triple, t.runner, t.cross
+            )
+        })
+        .collect();
+    let shas: String = release::TARGETS
+        .iter()
+        .map(|t| {
+            format!(
+                "            -e \"s|{}|$(sha \"kndo-${{TAG}}-{}.tar.gz\")|\" \\\n",
+                release::sha_placeholder(t.triple),
+                t.triple
+            )
+        })
+        .collect();
+    RELEASE_TEMPLATE
+        .replace("@MATRIX@", matrix.trim_end_matches('\n'))
+        .replace("@SHA_SUBSTITUTIONS@", shas.trim_end_matches('\n'))
+        .replace("@TOOLCHAIN@", &toolchain())
 }

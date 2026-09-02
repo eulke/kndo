@@ -53,8 +53,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Windows deferred by owner decision (tree-sitter-scss upstream) — v2/DECISIONS.md.
-        os: [ubuntu-latest, macos-latest]
+        # Windows builds since the SCSS grammar's build script is vendored with
+        # its one portable flag (vendor/README.md); a platform the suite never ran
+        # on is a platform a tag would meet first.
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -148,8 +150,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Windows deferred by owner decision (tree-sitter-scss upstream) — v2/DECISIONS.md.
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -162,3 +163,39 @@ jobs:
         run: cargo run -p xtask -- package --tag v0.0.0-ci --out-dir dist
       - name: verify checksum, install and run from the artifact
         run: cargo run -p xtask -- verify-artifact --dir dist
+      # The Linux release artifact is musl — a static binary that runs on any
+      # distribution — and the release build is the first time a musl binary
+      # would otherwise exist. Built and run here on every push instead.
+      - name: package the musl release target
+        if: runner.os == 'Linux'
+        run: |
+          rustup target add x86_64-unknown-linux-musl
+          sudo apt-get update && sudo apt-get install -y musl-tools
+          cargo run -p xtask -- package --target x86_64-unknown-linux-musl --tag v0.0.0-ci --out-dir dist-musl
+          cargo run -p xtask -- verify-artifact --dir dist-musl
+          ldd target/x86_64-unknown-linux-musl/release/kndo 2>&1 | grep -Eq "statically linked|not a dynamic executable" \
+            || { echo "the musl release binary is not statically linked"; exit 1; }
+      # The installer is a contract about the artifact's name and layout; until
+      # it runs end to end against the producer's own output, nothing checks it.
+      # Served over HTTP so every line it runs for a user runs here.
+      - name: install through install.sh from the artifact just built
+        if: runner.os != 'Windows'
+        run: |
+          served=dist; [ "$RUNNER_OS" = "Linux" ] && served=dist-musl
+          (cd "$served" && python3 -m http.server 8765 >/dev/null 2>&1 &)
+          sleep 1
+          KNDO_VERSION=v0.0.0-ci KNDO_BASE_URL=http://127.0.0.1:8765 KNDO_INSTALL_DIR="$RUNNER_TEMP/kndo-bin" sh install.sh
+          "$RUNNER_TEMP/kndo-bin/kndo" --version
+
+  release-notes:
+    name: release notes render (git-cliff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: git-cliff
+      - name: the changelog config renders the unreleased commits
+        run: git-cliff --config cliff.toml --unreleased --strip header

@@ -30,6 +30,14 @@ fn generated_ci_is_current() {
         "\n.github/workflows/v2.yml drifted from kndo-gates' registry — \
          run `cargo xtask gen-ci` and commit the result\n"
     );
+    let committed = std::fs::read_to_string(kndo_gates::release_workflow_path())
+        .expect("the generated release workflow exists — run `cargo xtask gen-ci`");
+    assert_eq!(
+        committed,
+        kndo_gates::render_release(),
+        "\n.github/workflows/v2-release.yml drifted from kndo-gates' release table — \
+         run `cargo xtask gen-ci` and commit the result\n"
+    );
 }
 
 use kndo_core::{Config, GatePolicy, RunMode, RunOutcome, Session, Snapshot, Threads};
@@ -1298,3 +1306,4 @@ fn query_contract_is_generated_and_pinned() {
          changed meaning, bump AGENT_FORMAT in the same commit.\n"
     );
 }
+

@@ -34,3 +34,8 @@ edition = "2024"
 license = "Apache-2.0"
 rust-version = "1.98"
 publish = false
+
+# One line of the SCSS grammar's build script keeps it off Windows; the vendored copy
+# under `vendor/` fixes that line and nothing else (vendor/README.md).
+[patch.crates-io]
+tree-sitter-scss = { path = "vendor/tree-sitter-scss" }

@@ -52,6 +52,12 @@ fn gen_ci() -> Result<()> {
     fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
     fs::write(&path, kndo_gates::render_ci()).map_err(|e| e.to_string())?;
     println!("wrote {}", kndo_gates::WORKFLOW_REPO_PATH);
+    fs::write(
+        kndo_gates::release_workflow_path(),
+        kndo_gates::render_release(),
+    )
+    .map_err(|e| e.to_string())?;
+    println!("wrote {}", kndo_gates::RELEASE_WORKFLOW_REPO_PATH);
     Ok(())
 }
 
@@ -224,36 +230,50 @@ fn host_triple() -> Result<String> {
         .ok_or_else(|| "rustc -vV had no host line".into())
 }
 
+/// The one producer of a release artifact: builds `kndo-cli` for `--target` (the
+/// host by default; through `cross` with `--cross`), and packs the binary under
+/// the archive's staged directory — `<stem>/kndo` — with a `checksums.txt`
+/// beside it. The name and layout are the release table's
+/// (`kndo_gates::release`), which every consumer is checked against.
 fn package(args: &[String]) -> Result<()> {
     let tag = flag(args, "--tag").ok_or("--tag is required")?;
     let out_dir = workspace_root().join(flag(args, "--out-dir").ok_or("--out-dir is required")?);
+    let triple = match flag(args, "--target") {
+        Some(t) => t,
+        None => host_triple()?,
+    };
+    let cross = args.iter().any(|a| a == "--cross");
     let root = workspace_root();
-
-    let status = Command::new("cargo")
-        .args(["build", "--release", "-p", "kndo-cli"])
+    let status = Command::new(if cross { "cross" } else { "cargo" })
+        .args([
+            "build",
+            "--release",
+            "--locked",
+            "-p",
+            "kndo-cli",
+            "--target",
+            &triple,
+        ])
         .current_dir(&root)
         .status()
         .map_err(|e| e.to_string())?;
     if !status.success() {
         return Err("release build failed".into());
     }
-
-    let triple = host_triple()?;
-    let bin = root.join("target/release").join(BIN);
+    let bin = root.join("target").join(&triple).join("release").join(BIN);
     fs::create_dir_all(&out_dir).map_err(|e| e.to_string())?;
-    let archive_name = format!("kndo-{tag}-{triple}.tar.gz");
+    let stem = kndo_gates::release::stem(&tag, &triple);
+    let archive_name = kndo_gates::release::archive_name(&tag, &triple);
     let archive_path = out_dir.join(&archive_name);
-
     let file = fs::File::create(&archive_path).map_err(|e| e.to_string())?;
     let enc = flate2::write::GzEncoder::new(file, flate2::Compression::default());
     let mut tar = tar::Builder::new(enc);
-    tar.append_path_with_name(&bin, BIN)
+    tar.append_path_with_name(&bin, format!("{stem}/{BIN}"))
         .map_err(|e| e.to_string())?;
     tar.into_inner()
         .map_err(|e| e.to_string())?
         .finish()
         .map_err(|e| e.to_string())?;
-
     let digest = sha256_hex(&archive_path)?;
     fs::write(
         out_dir.join("checksums.txt"),
@@ -288,7 +308,11 @@ fn verify_artifact(args: &[String]) -> Result<()> {
     let mut ar = tar::Archive::new(flate2::read::GzDecoder::new(tar_gz));
     ar.unpack(&dest).map_err(|e| e.to_string())?;
 
-    let bin = dest.join(BIN);
+    // The archive holds one directory named for itself; the binary is inside it.
+    let stem = name
+        .strip_suffix(".tar.gz")
+        .ok_or("the artifact is not a .tar.gz")?;
+    let bin = dest.join(stem).join(BIN);
     // The install check is a version handshake — bare `kndo` is a real analysis of
     // the current directory, which is the product, not the smoke test.
     let out = Command::new(&bin)

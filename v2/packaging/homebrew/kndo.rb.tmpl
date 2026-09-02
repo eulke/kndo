@@ -1,0 +1,46 @@
+# Homebrew formula template. Rendered by the release workflow into a real `kndo.rb`
+# and pushed to the tap repository (eulke/homebrew-tap) — this file itself never
+# ships anywhere.
+#
+# Placeholders, substituted by the release workflow from that run's own values:
+#   {{VERSION}}                      — e.g. 1.2.0 (no leading "v"; the URLs put it back)
+#   {{SHA256:<target triple>}}       — the checksum of that target's archive
+#
+# The formula only ever downloads a precompiled binary; nothing compiles on the
+# user's machine.
+class Kndo < Formula
+  desc "Deterministic dead-code and health analysis"
+  homepage "https://github.com/eulke/kondo"
+  version "{{VERSION}}"
+  license "Apache-2.0"
+
+  on_macos do
+    on_arm do
+      url "https://github.com/eulke/kondo/releases/download/v{{VERSION}}/kndo-v{{VERSION}}-aarch64-apple-darwin.tar.gz"
+      sha256 "{{SHA256:aarch64-apple-darwin}}"
+    end
+    on_intel do
+      url "https://github.com/eulke/kondo/releases/download/v{{VERSION}}/kndo-v{{VERSION}}-x86_64-apple-darwin.tar.gz"
+      sha256 "{{SHA256:x86_64-apple-darwin}}"
+    end
+  end
+
+  on_linux do
+    on_arm do
+      url "https://github.com/eulke/kondo/releases/download/v{{VERSION}}/kndo-v{{VERSION}}-aarch64-unknown-linux-musl.tar.gz"
+      sha256 "{{SHA256:aarch64-unknown-linux-musl}}"
+    end
+    on_intel do
+      url "https://github.com/eulke/kondo/releases/download/v{{VERSION}}/kndo-v{{VERSION}}-x86_64-unknown-linux-musl.tar.gz"
+      sha256 "{{SHA256:x86_64-unknown-linux-musl}}"
+    end
+  end
+
+  def install
+    bin.install "kndo"
+  end
+
+  test do
+    system "#{bin}/kndo", "--version"
+  end
+end

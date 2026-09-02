@@ -27,3 +27,7 @@
 # Oracle output and corpus measurements: JSON captured from real runs, not code.
 /v2/oracle/
 /v2/corpus-findings/
+
+# Third-party source vendored verbatim for one build-flag fix (its README records the
+# one deviation): not the code under judgment, and its manifest is not ours to align.
+/v2/vendor/

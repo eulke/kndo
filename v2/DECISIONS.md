@@ -2496,3 +2496,42 @@ Conformance: a 25th js-ts fixture (`workflow-launched-scripts`: a root step, a
 `working-directory` step, a composite action through `$GITHUB_ACTION_PATH`, a
 helper reached only through them, one orphan that stays accused); nothing
 else regenerated.
+
+## 2026-09-02 — Windows returns to the CI matrix; the release surface is rendered from one table
+
+**Windows.** The 2026-08-30 deferral named its exit: the CSS grammar question
+resolved. M7.d resolved it by shipping the grammar, and the one obstacle was
+always a single line of `tree-sitter-scss`'s build script — a C flag MSVC
+rejects. The grammar is vendored under `vendor/` verbatim but for that line
+(`flag_if_supported`; `vendor/README.md` records the one deviation) and
+reached through `[patch.crates-io]`. The vendored tree sits in `.ignore`:
+third-party source is not the code under judgment, and its manifest is not
+ours to align — the dogfood reported its `>=0.21.0` against the workspace's
+`0.25` as version skew the moment discovery saw it. Windows is back in both
+matrices, the test suite and the package-install loop; the MSVC run is the
+first thing CI shows when it returns (M0).
+
+**The release surface.** One producer: `kndo_gates::release` holds the target
+table (four — x86_64 and aarch64 Linux musl through `cross`, x86_64 and
+aarch64 macOS), the binary name, and the artifact's name and layout
+(`kndo-<tag>-<triple>.tar.gz`, one directory holding `kndo`). `xtask package`
+builds and archives from it, `xtask verify-artifact` checksums, unpacks and
+runs the result, `render_release()` writes `v2-release.yml` from it —
+dispatched with a tag until the swap gives it the tag trigger — and the tap
+job substitutes each triple's checksum into the Homebrew template. The four
+consumers (`install.sh`, `action/action.yml`, the Homebrew template, the
+install page once the docs site exists) are read against that table by
+`release_channels.rs`, never against each other. Nothing unverified until a
+tag: on every push CI packages the musl target and proves it static, installs
+through `install.sh` over a local HTTP server from the artifact just built,
+and renders the notes with git-cliff; the workflow installs the pinned
+toolchain (`rust-toolchain.toml` rendered into it, held by the same test).
+`publish-crates` is not carried: every crate is `publish = false` until the
+ABI freezes.
+
+**Measurement.** The loop ran here end to end before the workflow existed:
+package (musl) → verify-artifact → `ldd` answering "statically linked" →
+`install.sh` over `python3 -m http.server` → `kndo --version` from the
+installed binary. Six channel tests; `generated_ci_is_current` holds both
+workflows. Windows itself is unmeasured from this container — CI's return is
+its measurement.
