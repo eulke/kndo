@@ -365,6 +365,9 @@ fn builtin_conduct_proofs() {
     // breaking, and the cost is measured in findings that silently return.
     const PROVEN: &[&str] = &[
         "kndo:coverage-lcov",
+        "kndo:coverage-cobertura",
+        "kndo:coverage-jacoco",
+        "kndo:coverage-go",
         "kndo:interface-builder",
         "kndo:info-plist",
     ];
@@ -466,11 +469,69 @@ fn builtin_conduct_proofs() {
         with.findings.len() - 1,
         "the plugin's whole effect is that one finding — nothing else moved"
     );
-    assert_eq!(
-        contributions(&with),
-        [("kndo:coverage-lcov".to_string(), 0, 0)],
-        "an ingester asserts no graph facts and no findings of its own, and a \
-         conduct extension whose activation rules match nothing is no row at all"
+    // Every ingester is always on and asserts no graph facts and no findings
+    // of its own; a conduct extension whose activation rules match nothing is
+    // no row at all.
+    let ingesters = || -> Vec<(String, u32, u32)> {
+        [
+            "kndo:coverage-lcov",
+            "kndo:coverage-cobertura",
+            "kndo:coverage-jacoco",
+            "kndo:coverage-go",
+        ]
+        .iter()
+        .map(|c| (c.to_string(), 0, 0))
+        .collect()
+    };
+    assert_eq!(contributions(&with), ingesters());
+
+    // kndo:coverage-cobertura, kndo:coverage-jacoco, kndo:coverage-go — each
+    // fixture carries the one report its producer wrote (coverage.py, the jacoco
+    // Maven plugin, `go test -coverprofile`), spelled the producer's way: a file
+    // name under a source root, a package and source name, an import path. With
+    // the ingester the function no test ran is `untested` and Certain; without
+    // it the graph's file-level Probable stands or nothing does. Nothing else
+    // moves.
+    let ingested = |fixture: &str, gone: &[&str], added: &[&str]| {
+        let (without, with) = baseline_then_plugins(fixtures.join(fixture));
+        let before: Vec<String> = without.findings.iter().map(label).collect();
+        let after: Vec<String> = with.findings.iter().map(label).collect();
+        let mut left: Vec<&str> = before
+            .iter()
+            .filter(|l| !after.contains(l))
+            .map(String::as_str)
+            .collect();
+        left.sort_unstable();
+        let mut arrived: Vec<&str> = after
+            .iter()
+            .filter(|l| !before.contains(l))
+            .map(String::as_str)
+            .collect();
+        arrived.sort_unstable();
+        assert_eq!(
+            left, gone,
+            "{fixture}: before {before:#?}\nafter {after:#?}"
+        );
+        assert_eq!(
+            arrived, added,
+            "{fixture}: before {before:#?}\nafter {after:#?}"
+        );
+        assert_eq!(contributions(&with), ingesters(), "{fixture}");
+    };
+    ingested(
+        "../kndo-adapter-python/tests/fixtures/coverage-cobertura/project",
+        &["untested File { path: ProjectPath(\"src/dark.py\") }"],
+        &["crap classify", "untested never_run"],
+    );
+    ingested(
+        "../kndo-adapter-java/tests/fixtures/coverage-jacoco/project",
+        &[],
+        &["untested Classify.neverRan", "untested Dark.untouched"],
+    );
+    ingested(
+        "../kndo-adapter-go/tests/fixtures/coverage-gocover/project",
+        &[],
+        &["untested NeverRan"],
     );
 
     // kndo:interface-builder + kndo:info-plist — Alamofire's example targets in
@@ -512,13 +573,12 @@ fn builtin_conduct_proofs() {
         after.contains(&"unused ContentView_Previews".to_string()),
         "unrelated dead code stays reported: {after:#?}"
     );
+    let mut expected = ingesters();
+    expected.push(("kndo:interface-builder".to_string(), 4, 0));
+    expected.push(("kndo:info-plist".to_string(), 1, 0));
     assert_eq!(
         contributions(&with),
-        [
-            ("kndo:coverage-lcov".to_string(), 0, 0),
-            ("kndo:interface-builder".to_string(), 4, 0),
-            ("kndo:info-plist".to_string(), 1, 0),
-        ],
+        expected,
         "two classes, one outlet and one watchKit controller from the documents; \
          one delegate from the plist"
     );

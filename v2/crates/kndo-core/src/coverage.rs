@@ -79,31 +79,92 @@ impl FileCoverage {
 }
 
 /// Records → judgeable coverage, given the run's file contents (the line table each
-/// span query maps through). Records outside the project — paths matching no
-/// discovered file — are skipped; records with nothing mappable are no coverage at
-/// all. The mapping half of ingestion, engine-side always: an extension states
-/// records, never a line table.
+/// span query maps through). Records outside the project — paths naming no
+/// discovered file under [`locate`]'s rule — are skipped; records with nothing
+/// mappable are no coverage at all. The mapping half of ingestion, engine-side
+/// always: an extension states records in the report's own spelling, never a
+/// line table and never a guess about the project's layout.
 pub fn assemble(
     records: CoverageRecords,
     contents: &BTreeMap<ProjectPath, &[u8]>,
 ) -> Option<Coverage> {
-    let mut files = BTreeMap::new();
-    for (path, rec) in records.files {
-        let Some(content) = contents.get(&path) else {
+    let by_name = ByName::over(contents);
+    let mut files: BTreeMap<ProjectPath, FileCoverage> = BTreeMap::new();
+    for (reported, rec) in records.files {
+        let Some(path) = by_name.locate(&reported, contents) else {
             continue;
         };
-        let mut functions = rec.functions;
-        functions.sort_unstable();
-        files.insert(
-            path,
-            FileCoverage {
-                line_starts: line_starts(content),
-                lines: rec.lines,
-                functions,
-            },
-        );
+        let content = contents[&path];
+        // Two report entries naming one file (a Java source's classes reported
+        // apart) accumulate, the same rule as repeated lcov sections.
+        let entry = files.entry(path).or_insert_with(|| FileCoverage {
+            line_starts: line_starts(content),
+            lines: BTreeMap::new(),
+            functions: Vec::new(),
+        });
+        for (line, hits) in rec.lines {
+            *entry.lines.entry(line).or_insert(0) += hits;
+        }
+        entry.functions.extend(rec.functions);
+    }
+    for fc in files.values_mut() {
+        fc.functions.sort_unstable();
     }
     (!files.is_empty()).then_some(Coverage { files })
+}
+
+/// Discovered paths by file name — the candidates a reported path can mean.
+struct ByName<'a> {
+    names: BTreeMap<&'a str, Vec<&'a ProjectPath>>,
+}
+
+impl<'a> ByName<'a> {
+    fn over(contents: &'a BTreeMap<ProjectPath, &[u8]>) -> Self {
+        let mut names: BTreeMap<&str, Vec<&ProjectPath>> = BTreeMap::new();
+        for path in contents.keys() {
+            let name = path.as_str().rsplit('/').next().unwrap_or(path.as_str());
+            names.entry(name).or_default().push(path);
+        }
+        ByName { names }
+    }
+
+    /// The project file a reported path names: the path itself when the project
+    /// has it, else the ONE project file that ends with the reported path or
+    /// that the reported path ends with, at a `/` boundary. A Go profile keys by
+    /// import path (`github.com/x/y/render.go` for `render.go`), JaCoCo by
+    /// package and source name (`demo/Classify.java` for
+    /// `src/main/java/demo/Classify.java`), coverage.py by the path under a
+    /// source root it records separately. Two project files sharing the spelling
+    /// leave the record unmapped: crediting the wrong file would be a guess.
+    fn locate(
+        &self,
+        reported: &ProjectPath,
+        contents: &BTreeMap<ProjectPath, &[u8]>,
+    ) -> Option<ProjectPath> {
+        if contents.contains_key(reported) {
+            return Some(reported.clone());
+        }
+        let r = reported.as_str();
+        let name = r.rsplit('/').next().unwrap_or(r);
+        let mut found: Option<&ProjectPath> = None;
+        for candidate in self.names.get(name).into_iter().flatten() {
+            let p = candidate.as_str();
+            if suffix_at_boundary(r, p) || suffix_at_boundary(p, r) {
+                if found.is_some() {
+                    return None;
+                }
+                found = Some(candidate);
+            }
+        }
+        found.cloned()
+    }
+}
+
+/// `longer` ends with `/shorter`.
+fn suffix_at_boundary(longer: &str, shorter: &str) -> bool {
+    longer.len() > shorter.len()
+        && longer.ends_with(shorter)
+        && longer.as_bytes()[longer.len() - shorter.len() - 1] == b'/'
 }
 
 /// Byte offset of each line's first byte — the one line table both coverage and
@@ -209,6 +270,44 @@ mod tests {
         assert_eq!(fc.function_coverage(whole), Some(2.0 / 3.0));
         assert_eq!(fc.function_untested(whole), Some(false));
         assert_eq!(fc.function_coverage(Span::new(0, 9)), None);
+    }
+
+    /// A Go profile keys by import path, JaCoCo by package and source name:
+    /// each maps onto the one project file spelled that way, and an ambiguous
+    /// spelling maps onto nothing.
+    #[test]
+    fn a_reports_own_spelling_maps_onto_the_one_file_it_names() {
+        let map = contents(&[
+            (
+                "render/json.go",
+                "package render\nfunc a() {\n\treturn\n}\n",
+            ),
+            (
+                "src/main/java/demo/Classify.java",
+                "class Classify {\n  int f() {\n    return 1;\n  }\n}\n",
+            ),
+            ("a/util.py", "x\n"),
+            ("b/util.py", "x\n"),
+        ]);
+        let cov = assemble(
+            records(&[
+                ("github.com/x/y/render/json.go", &[(2, 1), (3, 1)], &[]),
+                ("demo/Classify.java", &[(2, 0), (3, 0)], &[(2, 0)]),
+                ("util.py", &[(1, 1)], &[]),
+            ]),
+            &map,
+        )
+        .expect("assembles");
+        assert!(cov.files.contains_key(&ProjectPath::new("render/json.go")));
+        assert!(
+            cov.files
+                .contains_key(&ProjectPath::new("src/main/java/demo/Classify.java"))
+        );
+        assert_eq!(
+            cov.files.len(),
+            2,
+            "the ambiguous `util.py` maps onto nothing"
+        );
     }
 
     #[test]

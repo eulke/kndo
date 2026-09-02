@@ -33,7 +33,7 @@ use kndo_adapter_rust::RustAdapter;
 use kndo_adapter_swift::SwiftAdapter;
 use kndo_adapter_ts::TypeScriptAdapter;
 use kndo_apple::{InfoPlistPlugin, InterfaceBuilderPlugin};
-use kndo_coverage::LcovPlugin;
+use kndo_coverage::{CoberturaPlugin, GoCoverPlugin, JacocoPlugin, LcovPlugin};
 
 /// Everything a stock run is, in deterministic registration order: claim priority
 /// among claiming extensions, and — among conduct-declaring ones — coverage
@@ -52,6 +52,9 @@ pub fn default_extensions() -> Vec<Box<dyn Extension>> {
         Box::new(HtmlAdapter::new()),
         Box::new(CssAdapter::new()),
         Box::new(LcovPlugin),
+        Box::new(CoberturaPlugin),
+        Box::new(JacocoPlugin),
+        Box::new(GoCoverPlugin),
         Box::new(InterfaceBuilderPlugin),
         Box::new(InfoPlistPlugin),
     ]

@@ -559,8 +559,13 @@ entry, never a builder's shortcut.
   A manifest now reads the package imports of files another adapter claims
   (`dependency_importers`, two-sided). json is dead with its vice named: a config's
   consumer is a tool, never an import.
-- **M7.e — coverage ingesters**: jacoco, go-cover, cobertura — each from a captured
-  real-producer fixture, never a hand-written one.
+- **M7.e — coverage ingesters** — **shipped 2026-09-02**: `kndo:coverage-cobertura`,
+  `kndo:coverage-jacoco`, `kndo:coverage-go` beside lcov, each proven on a report its
+  producer wrote (coverage.py, the jacoco Maven plugin, `go test -coverprofile`). The
+  engine maps a report's own path spelling — an import path, a package and source
+  name, a name under a source root — onto the one project file it names. gin with
+  its profile: 7 functions no test executes, Certain; flask's cobertura and lcov
+  from one test run judge identically.
 - **M7.f — the product cortex** (swap-blocking): the docs site rebuilt against v2's
   real behavior; release channels re-pointed at v2's artifact under the one-producer
   test law (release.yml + git-cliff, install.sh, the Action, the Homebrew template);

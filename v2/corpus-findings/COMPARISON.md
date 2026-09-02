@@ -992,3 +992,31 @@ unreferenced data files (its 500-odd `package.json` rows are dependency
 subjects, which v2 already judges). A config file's consumer is a tool, never an
 import, so claiming it manufactures the accusation. The 22 edges keep alive
 files nothing accuses today.
+
+## M7.e — three more report formats, each from its producer (2026-09-02)
+
+The corpus carries no coverage, so the instrument is the same as `crap`'s:
+real producers run on scratch copies, reports captured, kndo run with and
+without them.
+
+- **go-cover on gin** (`go test -coverprofile`, 1,641 blocks keyed by import
+  path): 108 → 115 findings, the seven `untested` and Certain — `ginS`'s
+  `Run`, `RunTLS`, `RunFd`, `RunUnix`, `LoadHTMLFS`, `LoadHTMLFiles` and a
+  sibling, the wrappers gin's own suite never executes. Nothing at `crap`'s
+  line.
+- **cobertura on flask** (coverage.py, 482 tests): 46 findings — 26
+  `untested` (17 Certain), 1 `crap` — and the lcov report from the SAME test
+  run gives the identical 46. Two formats, one judgment.
+- **jacoco** (the jacoco Maven plugin, on a two-class Maven project): the
+  method counters are function records — `Classify.neverRan` and
+  `Dark.untouched` Certain, `grade` covered — the primary evidence a declaration
+  line's own hit cannot give.
+
+The one engine change underneath: a report's own spelling maps onto the ONE
+project file it names — `github.com/gin-gonic/gin/render/json.go` onto
+`render/json.go`, `demo/Classify.java` onto `src/main/java/demo/Classify.java`,
+coverage.py's `classify.py` under its recorded source root onto
+`src/classify.py`; an ambiguous spelling maps onto nothing rather than credit
+the wrong file. Every corpus and conformance report gains three always-on
+ingester rows and nothing else: 89 conformance reports regenerated, audited to
+differ by those rows alone.

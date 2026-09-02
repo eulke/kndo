@@ -1,0 +1,93 @@
+{
+  "run": {
+    "schema": "kndo-v2/m6",
+    "mode": "full",
+    "files_discovered": 4,
+    "files_claimed": 2,
+    "extensions": [
+      {
+        "id": "kndo:go",
+        "files": 2,
+        "export_narrowing": "none",
+        "import_cycles": "tolerated",
+        "dependency_scoping": "unscoped",
+        "dependency_identity": "module-path"
+      }
+    ]
+  },
+  "health": {
+    "implicated": 0,
+    "subjects": 7,
+    "by_category": [],
+    "by_package": [
+      {
+        "name": "example.com/cov",
+        "manifest": "go.mod",
+        "implicated": 0,
+        "subjects": 7
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "kndo-679d5c9ae352",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "calc.go",
+        "selector": {
+          "Free": "NeverRan"
+        },
+        "span": {
+          "start": 199,
+          "end": 268
+        }
+      },
+      "lines": {
+        "start": 12,
+        "end": 17
+      },
+      "message": "no test executes this function"
+    }
+  ],
+  "fixed": [],
+  "baselined": 0,
+  "abstained": [],
+  "suppressed": {
+    "total": 0,
+    "by_category": []
+  },
+  "plugins": [
+    {
+      "coordinate": "kndo:coverage-lcov",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-cobertura",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-jacoco",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-go",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    }
+  ],
+  "diagnostics": []
+}

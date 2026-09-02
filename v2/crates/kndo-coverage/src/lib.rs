@@ -1,18 +1,30 @@
-//! The lcov coverage extension — ALL the format knowledge in one crate, and only
-//! format knowledge: the parser turns an lcov stream into the contract's records
-//! ("what the report states"), and the built-in ingester is that parser behind
-//! the same [`Extension`] trait everything else implements. No I/O and no
-//! engine dependency by design: the same crate compiles natively (the built-in)
-//! and to WASM (the reference external ingester), so the two can never drift
-//! apart by prose — and mapping records onto the project is the ENGINE's job,
-//! uniformly for every ingester, never done here.
+//! The coverage extensions — ALL the format knowledge in one crate, and only
+//! format knowledge: each parser turns one report format into the contract's
+//! records ("what the report states", in the report's own path spelling), and
+//! each built-in ingester is that parser behind the same [`Extension`] trait
+//! everything else implements. No I/O and no engine dependency by design: the
+//! crate compiles natively (the built-ins) and to WASM (the reference external
+//! ingester), so the two can never drift apart by prose — and mapping records
+//! onto the project is the ENGINE's job, uniformly for every ingester, never
+//! done here.
 //!
-//! A format earns its parser here with a fixture captured from a real producer;
-//! lcov is the one that has. Function records (`FN`/`FNDA`) are the primary
-//! evidence — a declaration line executes at module load, so line hits alone
-//! would call every loaded function tested; `DA` lines are the fallback for
-//! producers that emit no function records. Everything unparseable degrades to
-//! absence, and absence never accuses.
+//! A format earns its parser with a fixture captured from a real producer:
+//! lcov (vitest, pytest-cov), Cobertura XML (coverage.py), JaCoCo XML (the
+//! jacoco Maven plugin) and Go's coverprofile (`go test -coverprofile`).
+//! Function records are the primary evidence where a format carries them —
+//! lcov's `FN`/`FNDA`, JaCoCo's method counters — because a declaration line
+//! executes at module load, so line hits alone would call every loaded
+//! function tested; line records are the fallback for the formats without
+//! them. Everything unparseable degrades to absence, and absence never
+//! accuses.
+
+mod cobertura;
+mod gocover;
+mod jacoco;
+
+pub use cobertura::{CoberturaPlugin, parse_cobertura_records};
+pub use gocover::{GoCoverPlugin, parse_gocover_records};
+pub use jacoco::{JacocoPlugin, parse_jacoco_records};
 
 use kndo_contract::extension::{Activation, Extension, ExtensionSpec, MutatesGraph};
 use kndo_contract::vocab::ProjectPath;
@@ -80,10 +92,11 @@ pub fn parse_lcov_records(text: &str) -> Option<CoverageRecords> {
     (!files.is_empty()).then_some(CoverageRecords { files })
 }
 
-/// Repeated `SF:` blocks for one path ACCUMULATE — sharded runs concatenated into
-/// one report mean "more executions", never "replace the earlier shard". The wire
-/// conversion merges the same way; the two ingestion routes must agree.
-fn merge_record(
+/// Repeated sections for one path ACCUMULATE — sharded runs concatenated into
+/// one report mean "more executions", never "replace the earlier shard"; the
+/// same rule for every format here, and the wire conversion merges the same
+/// way, so the two ingestion routes agree.
+pub(crate) fn merge_record(
     files: &mut std::collections::BTreeMap<ProjectPath, FileRecords>,
     path: ProjectPath,
     fc: FileRecords,
@@ -93,6 +106,16 @@ fn merge_record(
         *slot.lines.entry(line).or_insert(0) += hits;
     }
     slot.functions.extend(fc.functions);
+}
+
+/// Every XML report a real tool writes declares a DOCTYPE — JaCoCo on every
+/// report, Cobertura's DTD reference — and roxmltree refuses one by default.
+/// Safe to allow: it never resolves external entities.
+pub(crate) fn xml_options() -> roxmltree::ParsingOptions {
+    roxmltree::ParsingOptions {
+        allow_dtd: true,
+        ..Default::default()
+    }
 }
 
 static SPEC: LazyLock<ExtensionSpec> = LazyLock::new(|| {

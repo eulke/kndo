@@ -2409,3 +2409,38 @@ config file's consumer is a tool, never an import, and the accusation is the
 vice. v1's whole-file `duplicate` on html and css (28 on vite, identical
 playground scaffolds) is not inherited: a document declares nothing to
 fingerprint.
+
+## 2026-09-02 — Coverage ingesters: cobertura, jacoco, go-cover, on the report's own spelling
+
+**Decision.** Three ingesters join lcov in the coverage crate, one parser per
+format and format knowledge only: `kndo:coverage-cobertura` (`coverage.xml`,
+`cobertura.xml`, `coverage/cobertura-coverage.xml`; `<class filename>` line
+hits, no declaration lines in the format), `kndo:coverage-jacoco`
+(`target/site/jacoco/jacoco.xml`, `build/reports/jacoco/test/jacocoTestReport.xml`,
+`jacoco.xml`; `<line nr ci>` hits and `<method line>` METHOD counters as
+function records — the primary evidence), `kndo:coverage-go` (`coverage.out`,
+`cover.out`, `coverage.txt`; every line of a block takes the block's count,
+blocks sharing a line accumulate, no function records). All `Always` on and
+`MutatesGraph::No`, first answer wins in registration order, lcov first. A
+DOCTYPE is allowed on every XML read: real tools write one, and a parser that
+refused it would ingest nothing in the field while a DOCTYPE-less fixture
+passed.
+
+**Engine.** Mapping records onto the project stays the engine's, uniformly: a
+reported path is the project file itself when the project has it, else the ONE
+project file that ends with it or that it ends with at a `/` boundary — a Go
+profile keys by import path, JaCoCo by package and source name, coverage.py by
+the name under a source root it records apart. Two candidates leave the record
+unmapped: crediting the wrong file would be a guess. Two report entries naming
+one file accumulate, the same rule as repeated lcov sections.
+
+**Measurement.** Every fixture's report is its producer's: `go test
+-coverprofile` in the go fixture, pytest-cov's `--cov-report=xml` in the python
+one, jacoco-maven-plugin 0.8.12 in a Maven project committed whole. Proofs in
+`builtin_conduct_proofs`: the never-run function is `untested` and Certain only
+with the ingester, the graph's file-level Probable leaves where coverage now
+speaks, nothing else moves. On the corpus copies: gin 108 → 115 with its
+profile (seven `ginS` wrappers no test executes); flask's cobertura and lcov
+from one run judge the identical 46 findings. 89 conformance reports and every
+corpus report regenerated, audited to differ only by the three new always-on
+rows.

@@ -8,3 +8,4 @@ publish.workspace = true
 
 [dependencies]
 kndo-contract = { path = "../kndo-contract" }
+roxmltree = "0.20"
