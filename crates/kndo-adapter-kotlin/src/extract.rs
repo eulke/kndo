@@ -24,7 +24,7 @@ use kndo_contract::evidence::{
     DeclarationId, EvidenceSink, ImportBinding, ImportShape, ImportTarget, Reach, RefKind,
     RootKind, RootTarget, SymbolKind,
 };
-use kndo_contract::vocab::{Confidence, ProjectPath};
+use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use kndo_toolkit as tk;
 use smol_str::SmolStr;
 use tree_sitter::Node;
@@ -394,6 +394,14 @@ fn references_and_comments(root: Node<'_>, source: &[u8], out: &mut EvidenceSink
             tk::comment_evidence(n, source, &COMMENT_MARKERS, out);
             return;
         }
+        if n.kind() == "string_literal" {
+            // `"CHARSET=$charset"`: kotlin-ng gives a bare `$` and the name as
+            // plain content, so the simple form of a template is invisible to
+            // the walk — only `${…}` gets real nodes. Scanning the literal
+            // recovers the use; Exposed hides four declarations behind it.
+            template_references(n, source, out);
+            return;
+        }
         if !matches!(n.kind(), "identifier" | "type_identifier") {
             return;
         }
@@ -405,6 +413,50 @@ fn references_and_comments(root: Node<'_>, source: &[u8], out: &mut EvidenceSink
         }
         out.reference(tk::text(n, source), classify(n, parent), tk::span(n));
     });
+}
+
+/// The names a string template interpolates in its SIMPLE form (`$name`), as
+/// references. The braced form (`${expr}`) parses into real nodes the walk
+/// already visits, so this covers exactly what the grammar leaves as text: a
+/// `$` that is not escaped (`\$`), not doubled, and not the start of `${`,
+/// followed by an identifier.
+fn template_references(literal: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
+    let text = tk::text(literal, source);
+    let base = literal.start_byte() as u32;
+    let bytes = text.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] != b'$' {
+            i += 1;
+            continue;
+        }
+        // A backslash before it escapes the sigil; `${` is the braced form.
+        if i > 0 && bytes[i - 1] == b'\\' {
+            i += 1;
+            continue;
+        }
+        let start = i + 1;
+        if !bytes
+            .get(start)
+            .is_some_and(|c| c.is_ascii_alphabetic() || *c == b'_')
+        {
+            i += 1;
+            continue;
+        }
+        let mut end = start;
+        while bytes
+            .get(end)
+            .is_some_and(|c| c.is_ascii_alphanumeric() || *c == b'_')
+        {
+            end += 1;
+        }
+        out.reference(
+            &text[start..end],
+            RefKind::Read,
+            Span::new(base + start as u32, base + end as u32),
+        );
+        i = end;
+    }
 }
 
 /// Binding and naming positions are not uses; the bias stays keep-alive — only

@@ -269,11 +269,21 @@ pub fn keepers(
                 return kept.out;
             }
         }
-        // Any whole-surface importer keeps every member (the engine cannot see
-        // through a namespace import, so it degrades toward keep-alive).
-        for &site in index.surface_importers(file) {
-            if kept.push(Keeper::SurfaceImport { site }) {
-                return kept.out;
+        // A surface hands out what the language exports and nothing else, so a
+        // member whose OWN reach is Private rides none of the three surface
+        // keepers below — not a namespace importer, not an entry, not its
+        // owner's binding. Its name cannot be spelled outside this file; the
+        // dispatch pool above, which is every reachable file, is the whole of
+        // its keep-alive.
+        let handed_out = !matches!(d.reach, Reach::Private);
+        // Any whole-surface importer keeps every member it could name (the
+        // engine cannot see through a namespace import, so it degrades toward
+        // keep-alive for everything the import can reach).
+        if handed_out {
+            for &site in index.surface_importers(file) {
+                if kept.push(Keeper::SurfaceImport { site }) {
+                    return kept.out;
+                }
             }
         }
         let surface_reach = match d.owner {
@@ -282,7 +292,8 @@ pub fn keepers(
         };
         let owner_surface_exported = matches!(surface_reach, Reach::Exported)
             || matches!(surface_reach, Reach::Scoped { scope } if region_of(scope).is_none());
-        if entry_surface
+        if handed_out
+            && entry_surface
             && owner_surface_exported
             && region.is_none()
             && kept.push(Keeper::EntrySurface)
@@ -290,10 +301,8 @@ pub fn keepers(
             return kept.out;
         }
         // Riding the owner: an importer binding the owner's name — from inside
-        // the member's region when it has one; never for Private members.
-        if !matches!(d.reach, Reach::Private)
-            && let Some(o) = d.owner
-        {
+        // the member's region when it has one.
+        if handed_out && let Some(o) = d.owner {
             let od = &f.evidence.declarations[o.index()];
             if !matches!(od.reach, Reach::Private) {
                 let mut owner_names: Vec<&str> = vec![od.name.as_str()];

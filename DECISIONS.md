@@ -3131,3 +3131,49 @@ The argument splitting the Rust adapter wrote in M8.a is promoted to the
 toolkit (`split_arguments`, `normalize_whitespace`) on its second use, per the
 second-copy rule: depth-zero commas and opaque string literals are grammar
 knowledge no adapter owns.
+
+## 2026-09-06 — M8.b.2: a surface hands out what the language exports, and nothing else
+
+**The rule.** A member whose OWN reach is `Private` no longer rides any surface
+keeper — not a whole-surface (namespace, glob, side-effect) importer, not an
+entry point's exported API, not its owner's binding. Its name cannot be spelled
+outside the file that declares it, so neither surface can hand it out; the
+`OwnerBinding` keeper already knew this and the other two did not. What still
+keeps such a member is unchanged and generous: dispatch is not lexical, so ANY
+reachable reference to its name counts. Cause (4) of the M8 design, the half
+that needed no adapter migration.
+
+**Measurement, and what it cost to earn.** The first run of this rule produced
+47 new `unused` findings, and the sample said 27 of them were false — so the
+rule was reverted and its two blockers fixed first, each measured on its own:
+
+| step | Exposed | guava | vapor |
+|---|---|---|---|
+| the rule, first attempt | +17, all false | +28, 10 false | +2, both true |
+| kotlin: a parameter's default value is a use | −13 of those | — | — |
+| java: `@SuppressWarnings("unused")` exempts | — | −88 existing, −11 of those | — |
+| kotlin: `$name` in a string template is a use | −4 of those, −1 existing | — | — |
+| the rule, shipped | +0 | +17 | +2 |
+
+Nineteen accusations, every one verified against the source: guava's
+`ForwardingCacheTest.OnlyGet`, `Fingerprint2011Test.MAX_BYTES`,
+`FuturesTest.MapperFunction` and kin — private test helpers whose names appear
+exactly once in their file — and vapor's `insertOrReturn` and
+`checkBodyStorage`, each declared once and never called. Zero false positives
+survive the three fixes. Every conformance fixture stays byte-identical: not
+one pinned fixture had a private member riding a surface.
+
+**What the measurement was really for.** Removing a blanket keep is a lens: it
+shows which adapters under-report. All three defects it found — Kotlin's
+constructor defaults, Kotlin's simple string templates, Java's unhonored
+suppression — were pre-existing under-reports that the surface keep was
+hiding, and each is fixed at its root rather than papered over by keeping
+everything alive. That is the exchange this milestone is for: the engine stops
+guessing generously, and the adapters start reporting completely.
+
+**Conformance.** The kmock language gained types and members (`type Widget`,
+`pub member Widget.shown`, `member Widget.hidden`), so the engine's own
+language can express the case its rule is about, and
+`crates/kndo/tests/surfaces.rs` pins both halves: a private member accused
+beside an exported sibling kept by both surfaces, and the same private member
+kept the moment any reachable file references its name.

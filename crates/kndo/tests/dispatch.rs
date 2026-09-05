@@ -5,9 +5,8 @@
 
 mod common;
 
-use common::reported;
+use common::{keeper_kinds, reported};
 use kndo::Category;
-use kndo::query::{Answer, Outcome, Request, Verb};
 use kndo_contract::evidence::RootKind;
 use kndo_contract::extension::{DispatchRule, Effect, Trigger};
 use kndo_contract::vocab::Confidence;
@@ -27,20 +26,6 @@ fn rules() -> Vec<DispatchRule> {
 
 fn run(project: &TempProject) -> kndo::Snapshot {
     common::analyze(project, vec![Box::new(MockExtension::dispatching(rules()))])
-}
-
-fn keeper_kinds(snap: &kndo::Snapshot, selector: &str) -> Vec<String> {
-    let response = snap.query(&Request {
-        verb: Verb::UsedBy,
-        inputs: vec![selector.to_string()],
-        options: Default::default(),
-    });
-    match &response.results[0] {
-        Outcome::Ok {
-            answer: Answer::UsedBy(a),
-        } => a.kept_by.iter().map(|e| e.kind.to_string()).collect(),
-        _ => panic!("used-by {selector}: not an answer"),
-    }
 }
 
 #[test]

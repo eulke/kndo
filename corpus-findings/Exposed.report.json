@@ -43,19 +43,19 @@
     ]
   },
   "health": {
-    "implicated": 35,
+    "implicated": 30,
     "subjects": 16823,
     "by_category": [
       {
         "category": "unused",
-        "findings": 35
+        "findings": 30
       }
     ],
     "by_package": [
       {
         "name": "",
         "manifest": "",
-        "implicated": 21,
+        "implicated": 20,
         "subjects": 4815
       },
       {
@@ -67,7 +67,7 @@
       {
         "name": "exposed-core",
         "manifest": "exposed-core/build.gradle.kts",
-        "implicated": 3,
+        "implicated": 2,
         "subjects": 2569
       },
       {
@@ -229,7 +229,7 @@
       {
         "name": "exposed-r2dbc-tests",
         "manifest": "exposed-r2dbc-tests/build.gradle.kts",
-        "implicated": 4,
+        "implicated": 2,
         "subjects": 1769
       },
       {
@@ -253,7 +253,7 @@
       {
         "name": "exposed-tests",
         "manifest": "exposed-tests/build.gradle.kts",
-        "implicated": 3,
+        "implicated": 2,
         "subjects": 2351
       },
       {
@@ -437,28 +437,6 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
-      "id": "kndo-b5918a7fef67",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/vendors/SQLiteDialect.kt",
-        "selector": {
-          "Free": "UNSUPPORTED_AGGREGATE"
-        },
-        "span": {
-          "start": 5356,
-          "end": 5450
-        }
-      },
-      "lines": {
-        "start": 149,
-        "end": 149
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
       "id": "kndo-94d002616055",
       "category": "unused",
       "severity": "warning",
@@ -499,53 +477,6 @@
       "lines": {
         "start": 422,
         "end": 425
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-050f9b846618",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-r2dbc-tests/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/tests/shared/Assert.kt",
-        "selector": {
-          "Free": "failedOn"
-        },
-        "span": {
-          "start": 2805,
-          "end": 2905
-        }
-      },
-      "lines": {
-        "start": 75,
-        "end": 75
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-3183cc7b5eba",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/StatementInterceptorTests.kt",
-        "selector": {
-          "Member": {
-            "owner": "RollbackCheckInterceptor",
-            "name": "ROLLBACK_CHECK"
-          }
-        },
-        "span": {
-          "start": 2348,
-          "end": 2408
-        }
-      },
-      "lines": {
-        "start": 56,
-        "end": 56
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -640,28 +571,6 @@
       "lines": {
         "start": 108,
         "end": 108
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-1ced7a3cd626",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-tests/src/main/kotlin/org/jetbrains/exposed/v1/tests/shared/Assert.kt",
-        "selector": {
-          "Free": "failedOn"
-        },
-        "span": {
-          "start": 1894,
-          "end": 1993
-        }
-      },
-      "lines": {
-        "start": 49,
-        "end": 49
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -800,31 +709,6 @@
       "lines": {
         "start": 40,
         "end": 64
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-94c18ea22983",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "samples/springboot3-exposed-r2dbc/src/main/kotlin/com/example/controller/HelloController.kt",
-        "selector": {
-          "Member": {
-            "owner": "HelloController",
-            "name": "emailUser"
-          }
-        },
-        "span": {
-          "start": 1030,
-          "end": 1062
-        }
-      },
-      "lines": {
-        "start": 29,
-        "end": 29
       },
       "message": "nothing references, roots, or imports this declaration"
     },

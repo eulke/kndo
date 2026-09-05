@@ -7,6 +7,10 @@
 //! ```text
 //! fn name              private function declaration
 //! pub fn name          exported function declaration
+//! type Name            private type declaration
+//! pub type Name        exported type declaration
+//! member Owner.name    private member of `Owner`
+//! pub member Owner.name   exported member of `Owner`
 //! call name            a Call reference to `name`
 //! import ./x           side-effect import of x.kmock in the same directory
 //! import ./x { a, b }  binding import
@@ -189,19 +193,43 @@ impl Extension for MockExtension {
         }
         let text = String::from_utf8_lossy(file.content);
 
-        // Pass 1: declarations, so roots can anchor by id regardless of line order.
+        // Pass 1: declarations, so roots and members can name each other by id
+        // regardless of line order — types first, so a member finds its owner.
         let mut decls: BTreeMap<&str, DeclarationId> = BTreeMap::new();
         for (line, span) in lines_with_spans(&text) {
-            let (reach, rest) = match line.strip_prefix("pub fn ") {
-                Some(rest) => (Reach::Exported, rest),
-                None => match line.strip_prefix("fn ") {
-                    Some(rest) => (Reach::Private, rest),
-                    None => continue,
-                },
+            let Some((reach, kind, rest)) = declaration_line(line) else {
+                continue;
             };
+            if kind == SymbolKind::Method {
+                continue;
+            }
             let name = rest.trim();
-            let id = out.declaration(name, SymbolKind::Function, span, reach);
+            let id = out.declaration(name, kind, span, reach);
             decls.insert(name, id);
+        }
+        for (line, span) in lines_with_spans(&text) {
+            let Some((reach, kind, rest)) = declaration_line(line) else {
+                continue;
+            };
+            if kind != SymbolKind::Method {
+                continue;
+            }
+            // `member Owner.name`: the owner is a type declared above.
+            let (owner, name) = match rest.trim().split_once('.') {
+                Some((owner, name)) => (Some(owner), name),
+                None => (None, rest.trim()),
+            };
+            let id = out.declaration(name, kind, span, reach);
+            decls.insert(name, id);
+            match owner.map(|o| decls.get(o)) {
+                Some(Some(owner)) => out.member_of(id, *owner),
+                Some(None) => out.diagnostic(
+                    DiagnosticLevel::Warn,
+                    format!("member names undeclared owner in `{line}`"),
+                    Some(span),
+                ),
+                None => {}
+            }
         }
 
         // Pass 2: everything that may point at a declaration.
@@ -358,6 +386,23 @@ fn normalized(path: &str) -> String {
         }
     }
     parts.join("/")
+}
+
+/// `pub fn f`, `type T`, `pub member T.m` — a declaration line's reach, kind
+/// and the rest of it.
+fn declaration_line(line: &str) -> Option<(Reach, SymbolKind, &str)> {
+    let (reach, rest) = match line.strip_prefix("pub ") {
+        Some(rest) => (Reach::Exported, rest),
+        None => (Reach::Private, line),
+    };
+    let (kind, rest) = [
+        ("fn ", SymbolKind::Function),
+        ("type ", SymbolKind::Type),
+        ("member ", SymbolKind::Method),
+    ]
+    .into_iter()
+    .find_map(|(word, kind)| rest.strip_prefix(word).map(|rest| (kind, rest)))?;
+    Some((reach, kind, rest))
 }
 
 fn unit_kind(word: &str) -> Option<UnitKind> {

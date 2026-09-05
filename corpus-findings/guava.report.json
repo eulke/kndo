@@ -35,12 +35,12 @@
     ]
   },
   "health": {
-    "implicated": 929,
+    "implicated": 946,
     "subjects": 70176,
     "by_category": [
       {
         "category": "unused",
-        "findings": 929
+        "findings": 946
       }
     ],
     "by_package": [
@@ -89,13 +89,13 @@
       {
         "name": "guava-tests",
         "manifest": "android/guava-tests/pom.xml",
-        "implicated": 317,
+        "implicated": 325,
         "subjects": 14678
       },
       {
         "name": "guava-tests",
         "manifest": "guava-tests/pom.xml",
-        "implicated": 317,
+        "implicated": 326,
         "subjects": 14998
       },
       {
@@ -4743,6 +4743,56 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
+      "id": "kndo-052d00b06cdb",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/test/com/google/common/cache/ForwardingCacheTest.java",
+        "selector": {
+          "Member": {
+            "owner": "ForwardingCacheTest",
+            "name": "OnlyGet"
+          }
+        },
+        "span": {
+          "start": 3394,
+          "end": 3565
+        }
+      },
+      "lines": {
+        "start": 111,
+        "end": 117
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-b015d10c9279",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/test/com/google/common/cache/ForwardingLoadingCacheTest.java",
+        "selector": {
+          "Member": {
+            "owner": "ForwardingLoadingCacheTest",
+            "name": "OnlyGet"
+          }
+        },
+        "span": {
+          "start": 3720,
+          "end": 3905
+        }
+      },
+      "lines": {
+        "start": 122,
+        "end": 128
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
       "id": "kndo-0103ba537ca6",
       "category": "unused",
       "severity": "warning",
@@ -6300,6 +6350,56 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
+      "id": "kndo-5a86026319bc",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/test/com/google/common/hash/Fingerprint2011Test.java",
+        "selector": {
+          "Member": {
+            "owner": "Fingerprint2011Test",
+            "name": "LENGTH_FINGERPRINTS"
+          }
+        },
+        "span": {
+          "start": 1075,
+          "end": 2311
+        }
+      },
+      "lines": {
+        "start": 32,
+        "end": 62
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-f218d942894c",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/test/com/google/common/hash/Fingerprint2011Test.java",
+        "selector": {
+          "Member": {
+            "owner": "Fingerprint2011Test",
+            "name": "MAX_BYTES"
+          }
+        },
+        "span": {
+          "start": 944,
+          "end": 960
+        }
+      },
+      "lines": {
+        "start": 29,
+        "end": 29
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
       "id": "kndo-6fd807456ba2",
       "category": "unused",
       "severity": "warning",
@@ -6343,6 +6443,31 @@
       "lines": {
         "start": 489,
         "end": 494
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-7ae375017e4e",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/test/com/google/common/hash/HashingTest.java",
+        "selector": {
+          "Member": {
+            "owner": "HashingTest",
+            "name": "MAX_PERCENT_SPREAD"
+          }
+        },
+        "span": {
+          "start": 10767,
+          "end": 10791
+        }
+      },
+      "lines": {
+        "start": 281,
+        "end": 281
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -9753,6 +9878,81 @@
       "lines": {
         "start": 27,
         "end": 177
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-01b0131e2a5f",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/test/com/google/common/util/concurrent/FuturesTest.java",
+        "selector": {
+          "Member": {
+            "owner": "FuturesTest",
+            "name": "MapperFunction"
+          }
+        },
+        "span": {
+          "start": 126452,
+          "end": 126603
+        }
+      },
+      "lines": {
+        "start": 3166,
+        "end": 3168
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-3dfb201e3958",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/test/com/google/common/util/concurrent/FuturesTest.java",
+        "selector": {
+          "Member": {
+            "owner": "FuturesTest",
+            "name": "constantAsyncCallable"
+          }
+        },
+        "span": {
+          "start": 69366,
+          "end": 69492
+        }
+      },
+      "lines": {
+        "start": 1754,
+        "end": 1756
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-72c57c6b49e8",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/test/com/google/common/util/concurrent/FuturesTest.java",
+        "selector": {
+          "Member": {
+            "owner": "FuturesTest",
+            "name": "TestException"
+          }
+        },
+        "span": {
+          "start": 126239,
+          "end": 126448
+        }
+      },
+      "lines": {
+        "start": 3157,
+        "end": 3164
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -16932,6 +17132,56 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
+      "id": "kndo-53657a1dd912",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/test/com/google/common/cache/ForwardingCacheTest.java",
+        "selector": {
+          "Member": {
+            "owner": "ForwardingCacheTest",
+            "name": "OnlyGet"
+          }
+        },
+        "span": {
+          "start": 3394,
+          "end": 3565
+        }
+      },
+      "lines": {
+        "start": 111,
+        "end": 117
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-a79ae81c2c18",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/test/com/google/common/cache/ForwardingLoadingCacheTest.java",
+        "selector": {
+          "Member": {
+            "owner": "ForwardingLoadingCacheTest",
+            "name": "OnlyGet"
+          }
+        },
+        "span": {
+          "start": 3720,
+          "end": 3905
+        }
+      },
+      "lines": {
+        "start": 122,
+        "end": 128
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
       "id": "kndo-2b4bf0dda700",
       "category": "unused",
       "severity": "warning",
@@ -17748,6 +17998,31 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
+      "id": "kndo-ce1f6e2740a4",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/test/com/google/common/collect/ImmutableSetTest.java",
+        "selector": {
+          "Member": {
+            "owner": "ImmutableSetTest",
+            "name": "HASH_FLOODING_FPP"
+          }
+        },
+        "span": {
+          "start": 14216,
+          "end": 14241
+        }
+      },
+      "lines": {
+        "start": 384,
+        "end": 384
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
       "id": "kndo-361ecc4ff297",
       "category": "unused",
       "severity": "warning",
@@ -18489,6 +18764,56 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
+      "id": "kndo-7e1a412501df",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/test/com/google/common/hash/Fingerprint2011Test.java",
+        "selector": {
+          "Member": {
+            "owner": "Fingerprint2011Test",
+            "name": "MAX_BYTES"
+          }
+        },
+        "span": {
+          "start": 944,
+          "end": 960
+        }
+      },
+      "lines": {
+        "start": 29,
+        "end": 29
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-d46a320ba0b4",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/test/com/google/common/hash/Fingerprint2011Test.java",
+        "selector": {
+          "Member": {
+            "owner": "Fingerprint2011Test",
+            "name": "LENGTH_FINGERPRINTS"
+          }
+        },
+        "span": {
+          "start": 1075,
+          "end": 2311
+        }
+      },
+      "lines": {
+        "start": 32,
+        "end": 62
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
       "id": "kndo-cf3fd7de4327",
       "category": "unused",
       "severity": "warning",
@@ -18532,6 +18857,31 @@
       "lines": {
         "start": 489,
         "end": 494
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-ff33ebafd928",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/test/com/google/common/hash/HashingTest.java",
+        "selector": {
+          "Member": {
+            "owner": "HashingTest",
+            "name": "MAX_PERCENT_SPREAD"
+          }
+        },
+        "span": {
+          "start": 10767,
+          "end": 10791
+        }
+      },
+      "lines": {
+        "start": 281,
+        "end": 281
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -21942,6 +22292,81 @@
       "lines": {
         "start": 27,
         "end": 177
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-2d307dd07d33",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/test/com/google/common/util/concurrent/FuturesTest.java",
+        "selector": {
+          "Member": {
+            "owner": "FuturesTest",
+            "name": "constantAsyncCallable"
+          }
+        },
+        "span": {
+          "start": 69366,
+          "end": 69492
+        }
+      },
+      "lines": {
+        "start": 1754,
+        "end": 1756
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-4db7df36c440",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/test/com/google/common/util/concurrent/FuturesTest.java",
+        "selector": {
+          "Member": {
+            "owner": "FuturesTest",
+            "name": "TestException"
+          }
+        },
+        "span": {
+          "start": 126239,
+          "end": 126448
+        }
+      },
+      "lines": {
+        "start": 3157,
+        "end": 3164
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-8f7002b2f42b",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/test/com/google/common/util/concurrent/FuturesTest.java",
+        "selector": {
+          "Member": {
+            "owner": "FuturesTest",
+            "name": "MapperFunction"
+          }
+        },
+        "span": {
+          "start": 126452,
+          "end": 126603
+        }
+      },
+      "lines": {
+        "start": 3166,
+        "end": 3168
       },
       "message": "nothing references, roots, or imports this declaration"
     },

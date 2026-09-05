@@ -27,19 +27,19 @@
     ]
   },
   "health": {
-    "implicated": 77,
+    "implicated": 79,
     "subjects": 3152,
     "by_category": [
       {
         "category": "unused",
-        "findings": 77
+        "findings": 79
       }
     ],
     "by_package": [
       {
         "name": "",
         "manifest": "",
-        "implicated": 77,
+        "implicated": 79,
         "subjects": 3152
       }
     ]
@@ -336,6 +336,50 @@
       "lines": {
         "start": 397,
         "end": 400
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-d22bda61e5a2",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/Vapor/Application.swift",
+        "selector": {
+          "Free": "insertOrReturn"
+        },
+        "span": {
+          "start": 10636,
+          "end": 10901
+        }
+      },
+      "lines": {
+        "start": 300,
+        "end": 307
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-c2876e48f363",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/Vapor/Concurrency/RequestBody+Concurrency.swift",
+        "selector": {
+          "Free": "checkBodyStorage"
+        },
+        "span": {
+          "start": 3915,
+          "end": 4324
+        }
+      },
+      "lines": {
+        "start": 109,
+        "end": 121
       },
       "message": "nothing references, roots, or imports this declaration"
     },

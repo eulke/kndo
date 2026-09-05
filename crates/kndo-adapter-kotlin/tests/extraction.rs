@@ -290,3 +290,31 @@ class Hasher(
         );
     }
 }
+
+#[test]
+fn a_string_template_interpolates_uses() {
+    // kotlin-ng parses `${expr}` into real nodes but leaves `$name` as plain
+    // string content, so the simple form was invisible: Exposed's SQL builders
+    // spell every private property they read that way.
+    let ev = ev(
+        "src/main/kotlin/A.kt",
+        r#"
+class Q(private val charset: String, private val other: Q) {
+    fun toSQL(): String = "DEFAULT CHARSET=$charset AND ${other.charset} \$literal"
+}
+"#,
+    );
+    let refs: Vec<&str> = ev.references.iter().map(|r| r.name.as_str()).collect();
+    assert!(
+        refs.contains(&"charset"),
+        "the simple form is a use: {refs:?}"
+    );
+    assert!(
+        refs.contains(&"other"),
+        "the braced form still parses into nodes: {refs:?}"
+    );
+    assert!(
+        !refs.contains(&"literal"),
+        "an escaped sigil is text, not a use: {refs:?}"
+    );
+}
