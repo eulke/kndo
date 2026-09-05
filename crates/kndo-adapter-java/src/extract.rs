@@ -26,8 +26,8 @@
 //!   Java has no `internal/` fence at all.
 
 use kndo_contract::evidence::{
-    DeclarationId, EvidenceSink, ImportBinding, ImportShape, ImportTarget, Reach, RefKind,
-    RootKind, RootTarget, SymbolKind,
+    DeclarationId, EvidenceSink, ImportBinding, ImportShape, ImportTarget, MarkerTarget, Reach,
+    RefKind, RootKind, RootTarget, SymbolKind,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use kndo_toolkit as tk;
@@ -163,16 +163,45 @@ fn has_modifier(item: Node<'_>, keyword: &str) -> bool {
     })
 }
 
-fn has_annotation(item: Node<'_>, source: &[u8], name: &str) -> bool {
-    modifiers_node(item).is_some_and(|m| {
-        let mut c = m.walk();
-        m.children(&mut c).any(|child| {
-            matches!(child.kind(), "marker_annotation" | "annotation")
-                && child
-                    .child_by_field_name("name")
-                    .is_some_and(|n| tk::text(n, source) == name)
-        })
-    })
+/// Every annotation on a declaration, as marker evidence: the name as written
+/// (`Override`, `org.junit.Test`) and its arguments split at the top-level
+/// commas (`{"unused", "rawtypes"}` is ONE argument, a brace initializer).
+/// What a marker MEANS is the spec's dispatch rules — the engine's business,
+/// not a text table here.
+fn markers_of(item: Node<'_>, source: &[u8], id: DeclarationId, out: &mut EvidenceSink) {
+    let Some(modifiers) = modifiers_node(item) else {
+        return;
+    };
+    let mut c = modifiers.walk();
+    for child in modifiers.children(&mut c) {
+        if !matches!(child.kind(), "marker_annotation" | "annotation") {
+            continue;
+        }
+        let Some(name) = child.child_by_field_name("name") else {
+            continue;
+        };
+        let path: String = tk::text(name, source)
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .collect();
+        let args = child
+            .child_by_field_name("arguments")
+            .map(|list| {
+                let text = tk::text(list, source);
+                let inner = text
+                    .strip_prefix('(')
+                    .and_then(|t| t.strip_suffix(')'))
+                    .unwrap_or(text);
+                tk::split_arguments(inner)
+            })
+            .unwrap_or_default();
+        out.marker(
+            MarkerTarget::Declaration(id),
+            path,
+            args.into_iter().map(SmolStr::from).collect(),
+            tk::span(child),
+        );
+    }
 }
 
 /// One type declaration (top-level or nested): the declaration, its owner link,
@@ -186,6 +215,7 @@ fn handle_type(item: Node<'_>, source: &[u8], ctx: &Ctx, out: &mut EvidenceSink)
     if let Some(owner) = ctx.owner {
         out.member_of(id, owner);
     }
+    markers_of(item, source, id, out);
 
     let body_ctx = |implicit_public| Ctx {
         owner: Some(id),
@@ -275,16 +305,18 @@ fn handle_method(item: Node<'_>, source: &[u8], ctx: &Ctx, out: &mut EvidenceSin
             Confidence::Probable,
         );
     }
-    // Dispatch the source never names: an `@Override` body is reached through
-    // its supertype's contract, a serialization hook reflectively by the JVM —
-    // no call site can exist, by specification.
-    if has_annotation(item, source, "Override") || SERIALIZATION_HOOKS.contains(&name) {
+    // Dispatch the source never names: a serialization hook is called
+    // reflectively by the JVM, so no call site can exist by specification.
+    // `@Override` is the same story told by a marker, and its rule lives in
+    // the spec beside the rest of the language's.
+    if SERIALIZATION_HOOKS.contains(&name) {
         out.root(
             RootTarget::Declaration(id),
             RootKind::Production,
             Confidence::Probable,
         );
     }
+    markers_of(item, source, id, out);
 }
 
 fn handle_field(item: Node<'_>, source: &[u8], ctx: &Ctx, out: &mut EvidenceSink) {
@@ -310,6 +342,9 @@ fn handle_field(item: Node<'_>, source: &[u8], ctx: &Ctx, out: &mut EvidenceSink
         if let Some(owner) = ctx.owner {
             out.member_of(id, owner);
         }
+        // `@SuppressWarnings("unused") int a, b;` annotates the declaration,
+        // so every name it declares carries the marker.
+        markers_of(item, source, id, out);
     }
 }
 

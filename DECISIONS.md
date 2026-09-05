@@ -3106,3 +3106,28 @@ the constants this hid were kept anyway by a surface keeper that hands out
 private members — which is the defect the next slice removes, and which would
 have turned all seventeen of Exposed's crypt-hasher constants into false
 accusations the day it did. Every conformance fixture byte-identical.
+
+## 2026-09-06 — kndo:java (4): annotations are markers, and the source's own suppression is honored
+
+Java's annotations now ride the markers stream — the name as written
+(`Override`, `org.junit.Test`) and its arguments split at the top-level commas,
+so a brace initializer (`{"unused", "rawtypes"}`) is ONE argument, as the
+grammar has it. Their meaning moved to the spec: `@Override` roots Production
+(`Probable` — an override nobody calls is still dead one supertype up), and
+`@SuppressWarnings` naming `"unused"` exempts, the owner's 2026-09-05 decision
+reaching its second language. The exemption is lexically scoped like the lint
+it mirrors: a class-level suppression covers the class's members, which is
+exactly how javac reads it.
+
+**Measurement.** guava 9,925 → 9,837: 88 `unused` findings gone, every one in
+a file whose `@SuppressWarnings` names `"unused"` — guava's reflection-tested
+helpers, whose own comment reads "many methods tested reflectively". Nothing
+else moved on any repository, and every conformance fixture is byte-identical:
+the `@Override` root is the same root, derived by rule instead of stated by
+extraction. No new diagnostics, because a class-level suppression is a
+declaration marker with a lexical extent, not a blanket over a file.
+
+The argument splitting the Rust adapter wrote in M8.a is promoted to the
+toolkit (`split_arguments`, `normalize_whitespace`) on its second use, per the
+second-copy rule: depth-zero commas and opaque string literals are grammar
+knowledge no adapter owns.

@@ -81,7 +81,9 @@ fn dispatch_and_entry_points_are_rooted_not_guessed() {
             _ => None,
         })
         .collect();
-    for name in ["main", "toString", "readObject"] {
+    // What the grammar alone proves: the JVM entry, and a hook the runtime
+    // calls reflectively.
+    for name in ["main", "readObject"] {
         let ix = ev.declarations.iter().position(|d| d.name == name).unwrap();
         assert!(
             rooted.contains(&ix),
@@ -89,6 +91,64 @@ fn dispatch_and_entry_points_are_rooted_not_guessed() {
             ev.roots
         );
     }
+    // `@Override` is a marker; the root is the spec's rule, derived by the
+    // engine — extraction states the annotation and stops there.
+    assert_eq!(markers_on(&ev, "toString"), [("Override", vec![])]);
+    let ix = ev
+        .declarations
+        .iter()
+        .position(|d| d.name == "toString")
+        .unwrap();
+    assert!(!rooted.contains(&ix));
+}
+
+/// `(path, args)` of every marker on the declaration `name`, in source order.
+fn markers_on<'e>(
+    ev: &'e kndo_contract::evidence::FileEvidence,
+    name: &str,
+) -> Vec<(&'e str, Vec<&'e str>)> {
+    let ix = ev
+        .declarations
+        .iter()
+        .position(|d| d.name == name)
+        .unwrap_or_else(|| panic!("declaration {name} missing: {:#?}", ev.declarations));
+    ev.markers
+        .iter()
+        .filter(|m| matches!(m.on, kndo_contract::evidence::MarkerTarget::Declaration(id) if id.index() == ix))
+        .map(|m| (m.path.as_str(), m.args.iter().map(|a| a.as_str()).collect()))
+        .collect()
+}
+
+#[test]
+fn annotations_are_markers_as_written() {
+    let ev = ev(
+        "src/main/java/com/foo/Ann.java",
+        "package com.foo;\n\
+         @Deprecated\n\
+         public class Ann {\n\
+           @SuppressWarnings(\"unused\") private int one, two;\n\
+           @SuppressWarnings({\"unused\", \"rawtypes\"})\n\
+           @org.junit.Test(timeout = 5)\n\
+           void probe() {}\n\
+         }\n",
+    );
+    assert_eq!(markers_on(&ev, "Ann"), [("Deprecated", vec![])]);
+    // A declaration's annotations reach every name it declares.
+    for field in ["one", "two"] {
+        assert_eq!(
+            markers_on(&ev, field),
+            [("SuppressWarnings", vec!["\"unused\""])]
+        );
+    }
+    // A brace initializer is ONE argument; arguments come as written, with
+    // whitespace runs collapsed.
+    assert_eq!(
+        markers_on(&ev, "probe"),
+        [
+            ("SuppressWarnings", vec!["{\"unused\", \"rawtypes\"}"]),
+            ("org.junit.Test", vec!["timeout = 5"]),
+        ]
+    );
 }
 
 #[test]

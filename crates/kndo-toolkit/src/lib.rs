@@ -240,7 +240,18 @@ pub mod jvm_manifest {
         suffixes: &[&'static str],
         narrowable: &'static [&'static str],
     ) -> kndo_contract::extension::ExtensionSpec {
-        crate::source_adapter_spec(
+        jvm_builder(coordinate, version, suffixes, narrowable).build()
+    }
+
+    /// The same shared spelling, still open: a JVM adapter that declares a
+    /// capability beyond it (markers and what they mean) chains and builds.
+    pub fn jvm_builder(
+        coordinate: &'static str,
+        version: u32,
+        suffixes: &[&'static str],
+        narrowable: &'static [&'static str],
+    ) -> kndo_contract::extension::ExtensionSpecBuilder {
+        crate::source_adapter_builder(
             coordinate,
             version,
             suffixes,
@@ -250,6 +261,19 @@ pub mod jvm_manifest {
             // routine structure, never an initialization hazard worth a finding.
             kndo_contract::extension::CycleTolerance::Tolerated,
         )
+    }
+
+    /// The rule for a lint suppression naming the unused-code check: the author
+    /// already answered the question this analysis asks, so the declaration is
+    /// exempt and says so as a keeper. The argument pattern matches the
+    /// quoted name wherever it sits, alone (`@SuppressWarnings("unused")`) or
+    /// inside a brace initializer (`{"unused", "rawtypes"}`).
+    pub fn suppresses_unused(marker: &'static str) -> kndo_contract::extension::DispatchRule {
+        kndo_contract::extension::DispatchRule {
+            when: kndo_contract::extension::Trigger::marker_with(marker, "*\"unused\"*"),
+            then: kndo_contract::extension::Effect::Exempt,
+            confidence: kndo_contract::vocab::Confidence::Certain,
+        }
     }
 
     /// The one build system's manifest names — the shared half of every JVM
@@ -777,4 +801,80 @@ pub fn web_test_path(path: &str) -> bool {
         || in_dir("tests")
         || name.contains(".test.")
         || name.contains(".spec.")
+}
+
+/// An argument list split at DEPTH-ZERO commas, each argument trimmed with its
+/// whitespace runs collapsed — the one spelling shared by every grammar whose
+/// annotations, attributes and decorators carry a parenthesized list
+/// (`#[serde(rename_all = "camelCase")]`, `@SuppressWarnings({"a", "b"})`).
+/// Nesting and string literals are opaque, so a comma inside either does not
+/// split.
+pub fn split_arguments(text: &str) -> Vec<String> {
+    let mut pieces: Vec<&str> = Vec::new();
+    let mut depth = 0i32;
+    let mut in_str = false;
+    let mut escaped = false;
+    let mut start = 0;
+    for (i, ch) in text.char_indices() {
+        if in_str {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                in_str = false;
+            }
+            continue;
+        }
+        match ch {
+            '"' => in_str = true,
+            '(' | '[' | '{' => depth += 1,
+            ')' | ']' | '}' => depth -= 1,
+            ',' if depth == 0 => {
+                pieces.push(&text[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    pieces.push(&text[start..]);
+    pieces
+        .into_iter()
+        .map(normalize_whitespace)
+        .filter(|a| !a.is_empty())
+        .collect()
+}
+
+/// Trimmed, whitespace runs outside string literals collapsed to one space.
+pub fn normalize_whitespace(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut in_str = false;
+    let mut escaped = false;
+    let mut pending_space = false;
+    for ch in text.trim().chars() {
+        if in_str {
+            out.push(ch);
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                in_str = false;
+            }
+            continue;
+        }
+        if ch.is_whitespace() {
+            pending_space = true;
+            continue;
+        }
+        if pending_space {
+            out.push(' ');
+            pending_space = false;
+        }
+        if ch == '"' {
+            in_str = true;
+        }
+        out.push(ch);
+    }
+    out
 }

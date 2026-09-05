@@ -24,13 +24,37 @@ pub struct JavaAdapter {
     spec: ExtensionSpec,
 }
 
+/// What Java's annotations mean, as data. `@Override` is dispatch the source
+/// never names — the body is reached through its supertype's contract, so no
+/// call site can exist — and `Probable` because an override of a method the
+/// project itself declares and nobody calls is still dead, one supertype up.
+/// `@SuppressWarnings("unused")` exempts: the author answered this analysis's
+/// question before it was asked (the owner's 2026-09-05 decision).
+fn dispatch_rules() -> Vec<kndo_contract::extension::DispatchRule> {
+    vec![
+        kndo_contract::extension::DispatchRule {
+            when: kndo_contract::extension::Trigger::marker("Override"),
+            then: kndo_contract::extension::Effect::Root(
+                kndo_contract::evidence::RootKind::Production,
+            ),
+            confidence: kndo_contract::vocab::Confidence::Probable,
+        },
+        kndo_toolkit::jvm_manifest::suppresses_unused("SuppressWarnings"),
+    ]
+}
+
 impl JavaAdapter {
     pub fn new() -> Self {
         JavaAdapter {
-            // 3: qualified-type package segments left the reference stream
-            // (spelling, not uses), and supertype names classify as Extend
-            // through generic/qualified wrappers.
-            spec: kndo_toolkit::jvm_manifest::jvm_spec("kndo:java", 3, &["java"], &["package"]),
+            // 4: annotations are markers, and what they mean is dispatch data.
+            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:java", 4, &["java"], &["package"])
+                .emits(kndo_contract::evidence::EvidenceStreams::of(&[
+                    kndo_contract::evidence::EvidenceStream::Comments,
+                    kndo_contract::evidence::EvidenceStream::Metrics,
+                    kndo_contract::evidence::EvidenceStream::Markers,
+                ]))
+                .dispatch(dispatch_rules())
+                .build(),
         }
     }
 }

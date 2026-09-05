@@ -832,9 +832,9 @@ fn attribute_parts(attr: Node<'_>, source: &[u8]) -> Option<(String, Vec<String>
                 .strip_prefix('(')
                 .and_then(|t| t.strip_suffix(')'))
                 .unwrap_or(text);
-            split_arguments(inner)
+            tk::split_arguments(inner)
         }
-        (None, Some(value)) => vec![normalize_whitespace(tk::text(value, source))],
+        (None, Some(value)) => vec![tk::normalize_whitespace(tk::text(value, source))],
         (None, None) => Vec::new(),
     };
     Some(normalize_attribute(path, args))
@@ -865,84 +865,13 @@ fn split_attribute_text(text: &str) -> (String, Vec<String>) {
     let path = text[..end].to_string();
     let rest = text[end..].trim();
     let args = if let Some(inner) = rest.strip_prefix('(').and_then(|r| r.strip_suffix(')')) {
-        split_arguments(inner)
+        tk::split_arguments(inner)
     } else if let Some(value) = rest.strip_prefix('=') {
-        vec![normalize_whitespace(value)]
+        vec![tk::normalize_whitespace(value)]
     } else {
         Vec::new()
     };
     (path, args)
-}
-
-/// Depth-zero commas split an argument list; string literals are opaque.
-fn split_arguments(text: &str) -> Vec<String> {
-    let mut pieces: Vec<&str> = Vec::new();
-    let mut depth = 0i32;
-    let mut in_str = false;
-    let mut escaped = false;
-    let mut start = 0;
-    for (i, ch) in text.char_indices() {
-        if in_str {
-            if escaped {
-                escaped = false;
-            } else if ch == '\\' {
-                escaped = true;
-            } else if ch == '"' {
-                in_str = false;
-            }
-            continue;
-        }
-        match ch {
-            '"' => in_str = true,
-            '(' | '[' | '{' => depth += 1,
-            ')' | ']' | '}' => depth -= 1,
-            ',' if depth == 0 => {
-                pieces.push(&text[start..i]);
-                start = i + 1;
-            }
-            _ => {}
-        }
-    }
-    pieces.push(&text[start..]);
-    pieces
-        .into_iter()
-        .map(normalize_whitespace)
-        .filter(|a| !a.is_empty())
-        .collect()
-}
-
-/// Trimmed, whitespace runs outside string literals collapsed to one space.
-fn normalize_whitespace(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut in_str = false;
-    let mut escaped = false;
-    let mut pending_space = false;
-    for ch in text.trim().chars() {
-        if in_str {
-            out.push(ch);
-            if escaped {
-                escaped = false;
-            } else if ch == '\\' {
-                escaped = true;
-            } else if ch == '"' {
-                in_str = false;
-            }
-            continue;
-        }
-        if ch.is_whitespace() {
-            pending_space = true;
-            continue;
-        }
-        if pending_space {
-            out.push(' ');
-            pending_space = false;
-        }
-        if ch == '"' {
-            in_str = true;
-        }
-        out.push(ch);
-    }
-    out
 }
 
 /// A `cfg` predicate to its atoms: `all`/`any` are transparent, `not` flips
@@ -955,11 +884,11 @@ fn flatten_cfg(predicate: &str, negated: bool, out: &mut Vec<String>) {
             .and_then(|r| r.strip_suffix(')'))
     };
     if let Some(inner) = call("all").or_else(|| call("any")) {
-        for x in split_arguments(inner) {
+        for x in tk::split_arguments(inner) {
             flatten_cfg(&x, negated, out);
         }
     } else if let Some(inner) = call("not") {
-        for x in split_arguments(inner) {
+        for x in tk::split_arguments(inner) {
             flatten_cfg(&x, !negated, out);
         }
     } else if !p.is_empty() {
