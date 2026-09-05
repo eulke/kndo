@@ -3093,3 +3093,16 @@ it from that unit rather than handing it upward, and a unit entry anchors
 ignores are all in the design and none has a consumer until the scope forest
 and the keepers land — they arrive in the slice that reads them, per the
 capability law, rather than sitting in the contract as unread fields.
+
+## 2026-09-06 — kndo:kotlin (3): a parameter's default value is a use
+
+The binder rule excluded every identifier directly under a `class_parameter`
+or `parameter`, which is right for the name being bound and wrong for
+everything after the `=`: `iterations: Int = DEFAULT_ITERATIONS` reported
+`Int` (it sits inside a `user_type`) and dropped `DEFAULT_ITERATIONS`. Only
+the FIRST identifier child is the binder now; the rest is the default
+expression. Exposed gains 148 references and not one finding changes, because
+the constants this hid were kept anyway by a surface keeper that hands out
+private members — which is the defect the next slice removes, and which would
+have turned all seventeen of Exposed's crypt-hasher constants into false
+accusations the day it did. Every conformance fixture byte-identical.

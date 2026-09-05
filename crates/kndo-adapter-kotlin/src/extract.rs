@@ -414,17 +414,30 @@ fn is_use(n: Node<'_>, parent: Node<'_>) -> bool {
         "class_declaration" | "object_declaration" | "function_declaration" => {
             parent.child_by_field_name("name") != Some(n)
         }
+        // A parameter binds its FIRST identifier and may then USE names in its
+        // default value (`iterations: Int = DEFAULT_ITERATIONS`) — the type
+        // sits inside a `user_type`, so everything else directly here is the
+        // default expression. Excluding the whole node, as this once did, hid
+        // every constant a primary constructor defaults to.
+        "class_parameter" | "parameter" => first_identifier(parent) != Some(n.id()),
         // The identifier inside a variable/parameter binder is the new name.
         "variable_declaration"
         | "multi_variable_declaration"
-        | "class_parameter"
-        | "parameter"
         | "type_parameter"
         | "type_alias"
         | "enum_entry"
         | "label" => false,
         _ => true,
     }
+}
+
+/// The id of a node's first direct `identifier` child — a parameter's binder.
+fn first_identifier(parent: Node<'_>) -> Option<usize> {
+    let mut c = parent.walk();
+    parent
+        .children(&mut c)
+        .find(|ch| ch.kind() == "identifier")
+        .map(|ch| ch.id())
 }
 
 fn classify(n: Node<'_>, parent: Node<'_>) -> RefKind {

@@ -261,3 +261,32 @@ fn a_kdoc_pragma_strips_to_its_text() {
         "the KDoc star belongs to the marker: {c:#?}"
     );
 }
+
+#[test]
+fn a_parameters_default_value_is_a_use() {
+    // `iterations: Int = DEFAULT_ITERATIONS` binds `iterations` and USES
+    // `DEFAULT_ITERATIONS`. Excluding every identifier under a parameter, as
+    // the binder rule once did, hid every constant a primary constructor
+    // defaults to — Exposed's crypt hashers are seventeen of them.
+    let ev = ev(
+        "src/main/kotlin/A.kt",
+        r#"
+class Hasher(
+    saltLength: Int = DEFAULT_SALT_LENGTH,
+    private val name: String = FALLBACK_NAME
+) {
+    fun encode(rounds: Int = DEFAULT_ROUNDS) = 1
+}
+"#,
+    );
+    let refs: Vec<&str> = ev.references.iter().map(|r| r.name.as_str()).collect();
+    for used in ["DEFAULT_SALT_LENGTH", "FALLBACK_NAME", "DEFAULT_ROUNDS"] {
+        assert!(refs.contains(&used), "{used} is a use: {refs:?}");
+    }
+    for bound in ["saltLength", "rounds"] {
+        assert!(
+            !refs.contains(&bound),
+            "{bound} is the binder, not a use: {refs:?}"
+        );
+    }
+}

@@ -32,7 +32,7 @@ pub struct KotlinAdapter {
 impl KotlinAdapter {
     pub fn new() -> Self {
         KotlinAdapter {
-            spec: kndo_toolkit::jvm_manifest::jvm_spec("kndo:kotlin", 2, &["kt"], &["module"]),
+            spec: kndo_toolkit::jvm_manifest::jvm_spec("kndo:kotlin", 3, &["kt"], &["module"]),
         }
     }
 }
