@@ -112,13 +112,7 @@ impl<'a> ResolveContext<'a> {
     pub fn package_of(&self, path: &ProjectPath) -> Option<&PackageEntry> {
         self.packages?
             .values()
-            .filter(|p| {
-                p.dir.is_empty() || {
-                    path.as_str()
-                        .strip_prefix(p.dir.as_str())
-                        .is_some_and(|rest| rest.starts_with('/'))
-                }
-            })
+            .filter(|p| path.is_under(&p.dir))
             .max_by_key(|p| p.dir.len())
     }
 

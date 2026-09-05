@@ -3036,3 +3036,60 @@ defaulting to silence as before: export narrowing, dependency scoping,
 identity, importers and builtins — M8.b's contract reshapes reach and retires
 narrowing, so their toll waits for that shape. No pinned report moves: the
 change is the wire's alone.
+
+## 2026-09-06 — M8.b.1: a manifest states the project, and the engine owns the structure
+
+**The hook.** `Extension::extract_manifest` is the mirror of `extract`: one
+manifest in, `ManifestEvidence` out — units (name, kind, source roots,
+excludes, entries), packages, dependencies, mentions, and the files the
+manifest runs — written through a `ManifestSink` that validates at the call
+site. It replaces four hooks that each re-parsed the same file (`roots`,
+`packages`, `manifest_dependencies`, `manifest_mentions`) and, with them, the
+convention tables nine adapters carried to guess what the manifest already
+said. Until every adapter has moved, the engine reads BOTH and merges: an
+adapter populates one side or the other, never both, so the union is disjoint
+and the bridge retires by deleting four lines beside the hooks it feeds — no
+flag, no capability bit, nothing to get wrong in between.
+
+**The structure.** `kndo-core`'s new `project` module owns what the manifests
+said. `Project::unit_of` answers which unit compiles a file — the deepest
+source root that contains it, excludes honored, the earlier unit breaking a
+tie — and that answer rides the graph as `GraphFile::unit`. A unit's entries
+anchor roots of the color its KIND implies (`UnitKind::color`: library and
+executable are production, test and bench are test, example and tooling are
+tooling), so the nine per-adapter root tables have one home and one rule. A
+unit entry is the manifest's own statement and anchors `Certain`; an adapter
+that merely guesses an entry reports it as a manifest root carrying a
+confidence of its own. Manifests are now read ONCE per run: packages,
+dependencies, mentions, units and roots all come from the same value, where
+five walks over the manifest set used to each re-ask an adapter.
+
+**Measurement.** Every corpus report byte-identical, all nine repositories,
+and every conformance fixture likewise — no adapter emits a unit yet, which is
+exactly what M8.c is for. The one delta the corpus DID surface was a defect
+this slice introduced and the measurement caught: rewriting `Graph::package_of`
+onto the promoted `is_under` flipped its tie-break from first-wins to
+last-wins, and Exposed's `documentation-website/.../pom.xml` — a directory two
+packages name, `com.example:exposed-modules-maven` from the pom and
+`exposed-modules-maven` from the settings file — changed which one owned its
+files. The rule is now explicit in the code and pinned by a test.
+`GRAPH_SEMANTICS_VERSION` 11 → 12: the same evidence assembles into a graph
+that carries a project.
+
+**Promoted.** Directory containment had three hand-rolled spellings (a
+package's ownership, a manifest's reach, and the new unit roots); it is one
+now, `ProjectPath::is_under` / `vocab::is_under`, with the separator rule that
+keeps `src/apple` from owning `src/apples/x.rs` stated once and tested once.
+
+**Conformance.** The kmock language grew a `kmock.pkg` manifest that declares
+units (`unit core library roots=src entries=src/lib.kmock`) and files a
+manifest runs, and `crates/kndo/tests/units.rs` pins the three consequences: a
+test unit's entry colors what only it reaches `test-only` rather than dead, a
+file belongs to the unit whose source root is deepest with an exclude removing
+it from that unit rather than handing it upward, and a unit entry anchors
+`Certain` where a run file carries the adapter's own confidence.
+
+**Deferred, named.** `friends` and `publication` on a unit, path aliases and
+ignores are all in the design and none has a consumer until the scope forest
+and the keepers land — they arrive in the slice that reads them, per the
+capability law, rather than sitting in the contract as unread fields.

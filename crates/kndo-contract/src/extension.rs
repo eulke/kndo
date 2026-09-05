@@ -13,6 +13,7 @@ use crate::evidence::{
     CoverageRecords, Declaration, EvidenceSink, EvidenceStreams, Marker, RootKind, SymbolKind,
 };
 use crate::finding::Severity;
+use crate::manifest::ManifestSink;
 use crate::vocab::{Confidence, ProjectPath};
 use serde::Serialize;
 use smol_str::SmolStr;
@@ -1136,6 +1137,29 @@ pub trait Extension: Send + Sync {
         Resolution::Unresolved
     }
 
+    /// Everything one manifest SAYS about the project: its units with their
+    /// source roots, excludes and entries; the packages it declares; its
+    /// dependencies and the names it mentions; the files it runs. The mirror
+    /// of [`Extension::extract`] — transcription of a project fact, which is
+    /// why claims gate it and activation does not, called for every discovered
+    /// file matching the spec's manifest and launcher globs. Unparseable or
+    /// dangling entries degrade to absence: structure nobody stated is
+    /// structure the engine does not assume.
+    ///
+    /// The four hooks below (`roots`, `packages`, `manifest_dependencies`,
+    /// `manifest_mentions`) are what this one replaces. Until every adapter
+    /// has moved, the engine reads BOTH and merges — an adapter has one or the
+    /// other populated, never both, so the merge is a union of disjoint sets
+    /// and the bridge retires by deletion.
+    fn extract_manifest(
+        &self,
+        manifest: &SourceFile<'_>,
+        cx: &ResolveContext<'_>,
+        out: &mut ManifestSink,
+    ) {
+        let _ = (manifest, cx, out);
+    }
+
     /// The roots one manifest declares — transcription of a project FACT, which
     /// is why claims gate it and activation does not. Called for every discovered
     /// file matching the spec's manifest globs. Unparseable or dangling entries
@@ -1360,6 +1384,17 @@ mod tests {
         let cx = ResolveContext::new(&cx_files);
         let from = ProjectPath::new("a.js");
         assert_eq!(bare.resolve(&from, "./b", &cx), Resolution::Unresolved);
+        let mut manifest = ManifestSink::new();
+        bare.extract_manifest(
+            &SourceFile {
+                path: &from,
+                content: b"{}",
+            },
+            &cx,
+            &mut manifest,
+        );
+        let manifest = manifest.finish();
+        assert!(manifest.units.is_empty() && manifest.packages.is_empty());
         assert!(bare.sees(&from, &cx).is_empty());
         assert_eq!(bare.ingest("coverage/lcov.info", b"TN:"), None);
 

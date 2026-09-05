@@ -27,6 +27,24 @@ impl ProjectPath {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// Is this path inside `dir` — a `/`-separated directory with no trailing
+    /// slash, empty meaning the project root? See [`is_under`].
+    pub fn is_under(&self, dir: &str) -> bool {
+        is_under(dir, self.as_str())
+    }
+}
+
+/// The ONE spelling of directory containment: package ownership, a unit's
+/// source roots and a manifest's reach all ask it, and a `starts_with` that
+/// forgets the separator makes `src/apple` own `src/apples/x.rs`. `dir` is
+/// `/`-separated with no trailing slash; empty is the project root, which
+/// contains everything.
+pub fn is_under(dir: &str, path: &str) -> bool {
+    dir.is_empty()
+        || path
+            .strip_prefix(dir)
+            .is_some_and(|rest| rest.starts_with('/'))
 }
 
 /// A byte range within one file: `start..end`, end-exclusive. Bytes, not line/column —
@@ -204,5 +222,25 @@ impl SubjectKind {
             SubjectKind::Directory => "directory",
             SubjectKind::Suppression => "suppression",
         }
+    }
+}
+
+#[cfg(test)]
+mod path_tests {
+    use super::{ProjectPath, is_under};
+
+    #[test]
+    fn containment_needs_the_separator() {
+        let p = ProjectPath::new("src/apples/x.rs");
+        assert!(p.is_under("src"));
+        assert!(p.is_under("src/apples"));
+        assert!(p.is_under(""), "the empty directory is the project root");
+        assert!(!p.is_under("src/apple"), "a prefix is not a directory");
+        assert!(!p.is_under("srcx"));
+        assert!(
+            !ProjectPath::new("src").is_under("src"),
+            "a directory does not contain itself as a file"
+        );
+        assert!(is_under("a/b", "a/b/c"));
     }
 }

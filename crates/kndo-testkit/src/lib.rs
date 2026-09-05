@@ -19,6 +19,16 @@
 //!
 //! Markers mean nothing until a spec says so: [`MockExtension::dispatching`]
 //! speaks the same language under the dispatch rules a test hands it.
+//!
+//! A `kmock.pkg` manifest states the project's structure, one unit per line:
+//!
+//! ```text
+//! unit name kind roots=a,b excludes=c entries=x.kmock,y.kmock
+//! run path.kmock                    a file this manifest runs (tooling)
+//! ```
+//!
+//! `kind` is one of library, executable, test, bench, example, tooling — the
+//! color a unit's entries anchor follows from it.
 
 pub mod expectations;
 
@@ -32,6 +42,7 @@ use kndo_contract::extension::{
     ConductSink, ContentAccess, DispatchRule, Extension, ExtensionSpec, ExtensionSpecBuilder,
     GraphAccess,
 };
+use kndo_contract::manifest::{ManifestSink, Unit, UnitKind};
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -63,6 +74,7 @@ fn kmock_spec() -> ExtensionSpecBuilder {
             EvidenceStream::Comments,
             EvidenceStream::Markers,
         ]))
+        .manifests(&["**/kmock.pkg"])
 }
 
 impl MockExtension {
@@ -260,6 +272,57 @@ impl Extension for MockExtension {
         }
     }
 
+    fn extract_manifest(
+        &self,
+        manifest: &SourceFile<'_>,
+        _cx: &ResolveContext<'_>,
+        out: &mut ManifestSink,
+    ) {
+        if !self.speaks_kmock {
+            return;
+        }
+        let text = String::from_utf8_lossy(manifest.content);
+        for (line, _) in lines_with_spans(&text) {
+            if let Some(rest) = line.strip_prefix("run ") {
+                out.root(kndo_contract::adapter::ProjectRoot {
+                    file: ProjectPath::new(rest.trim()),
+                    kind: RootKind::Tooling,
+                    confidence: Confidence::Probable,
+                });
+                continue;
+            }
+            let Some(rest) = line.strip_prefix("unit ") else {
+                continue;
+            };
+            let mut words = rest.split_whitespace();
+            let (Some(name), Some(kind)) = (words.next(), words.next()) else {
+                out.diagnostic(
+                    DiagnosticLevel::Warn,
+                    format!("unit line `{line}` names no kind"),
+                );
+                continue;
+            };
+            let Some(kind) = unit_kind(kind) else {
+                out.diagnostic(DiagnosticLevel::Warn, format!("unknown unit kind `{kind}`"));
+                continue;
+            };
+            let list = |key: &str| -> Vec<&str> {
+                words
+                    .clone()
+                    .find_map(|w| w.strip_prefix(key))
+                    .map(|v| v.split(',').filter(|x| !x.is_empty()).collect())
+                    .unwrap_or_default()
+            };
+            out.unit(Unit {
+                name: name.into(),
+                kind,
+                roots: list("roots=").into_iter().map(Into::into).collect(),
+                excludes: list("excludes=").into_iter().map(Into::into).collect(),
+                entries: list("entries=").into_iter().map(ProjectPath::new).collect(),
+            });
+        }
+    }
+
     fn resolve(&self, from: &ProjectPath, specifier: &str, cx: &ResolveContext<'_>) -> Resolution {
         if !self.speaks_kmock {
             return Resolution::Unresolved;
@@ -272,13 +335,41 @@ impl Extension for MockExtension {
             None => String::new(),
         };
         let ext = &self.spec.suffixes()[0];
-        let candidate = ProjectPath::new(format!("{dir}{name}.{ext}"));
+        let candidate = ProjectPath::new(format!("{}.{ext}", normalized(&format!("{dir}{name}"))));
         if cx.contains(&candidate) {
             Resolution::File(candidate)
         } else {
             Resolution::Unresolved
         }
     }
+}
+
+/// A joined `/`-separated path with `.` dropped and `..` popped — what makes
+/// `./../src/lib` from `tests/api.kmock` name `src/lib.kmock`.
+fn normalized(path: &str) -> String {
+    let mut parts: Vec<&str> = Vec::new();
+    for part in path.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                parts.pop();
+            }
+            other => parts.push(other),
+        }
+    }
+    parts.join("/")
+}
+
+fn unit_kind(word: &str) -> Option<UnitKind> {
+    Some(match word {
+        "library" => UnitKind::Library,
+        "executable" => UnitKind::Executable,
+        "test" => UnitKind::Test,
+        "bench" => UnitKind::Bench,
+        "example" => UnitKind::Example,
+        "tooling" => UnitKind::Tooling,
+        _ => return None,
+    })
 }
 
 /// `path a,b` — a marker's path and its comma-separated arguments.

@@ -10,9 +10,9 @@ use crate::cache::EvidenceCache;
 use crate::discover::DiscoveredFile;
 use crate::extract::ClaimedFile;
 use kndo_contract::adapter::{PackageEntry, Resolution, ResolveContext, SourceFile};
-use kndo_contract::evidence::{FileEvidence, ImportTarget, Root, RootTarget};
+use kndo_contract::evidence::{FileEvidence, ImportTarget, Root, RootKind, RootTarget};
 use kndo_contract::extension::Extension;
-use kndo_contract::vocab::ProjectPath;
+use kndo_contract::vocab::{Confidence, ProjectPath};
 use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
 use std::collections::{BTreeMap, BTreeSet};
@@ -20,7 +20,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Bump when the SAME evidence assembles into a DIFFERENT graph — resolution
 /// candidate changes, reachability semantics, new assembled fields. Folded into the
 /// graph cache key beside the contract fingerprint and the adapter set.
-pub const GRAPH_SEMANTICS_VERSION: u32 = 11;
+pub const GRAPH_SEMANTICS_VERSION: u32 = 12;
 
 #[derive(Serialize, Deserialize)]
 pub struct GraphFile {
@@ -60,6 +60,11 @@ pub struct GraphFile {
     /// What dispatch wants the run to say about this file (a blanket
     /// exemption) — reported as diagnostics.
     pub dispatch_notes: Vec<String>,
+    /// The unit compiling this file, as an index into `Graph::project`'s units
+    /// — [`crate::project::Project::unit_of`]. `None` until the claiming
+    /// adapter reports its manifest's units, which is what every consumer
+    /// degrades toward.
+    pub unit: Option<u32>,
     /// Resolved import targets, as indices into `Graph::files`; sorted, deduplicated.
     pub imports: Vec<u32>,
     /// Parallel to `evidence.imports`: the file(s) each import resolved to, so
@@ -92,19 +97,16 @@ impl Graph {
     /// The package owning `path`: the longest package dir that prefixes it —
     /// nearest-boundary ownership, `None` outside every declared package.
     pub fn package_of(&self, path: &str) -> Option<u32> {
-        let mut best: Option<(usize, u32)> = None;
-        for (i, p) in self.packages.iter().enumerate() {
-            let d = p.dir.as_str();
-            let owns =
-                d.is_empty() || path.starts_with(d) && path.as_bytes().get(d.len()) == Some(&b'/');
-            if owns {
-                let depth = d.len();
-                if best.is_none_or(|(b, _)| depth > b) {
-                    best = Some((depth, i as u32));
-                }
-            }
-        }
-        best.map(|(_, i)| i)
+        self.packages
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| kndo_contract::vocab::is_under(&p.dir, path))
+            // Deepest directory owns; on a tie — two packages declared for one
+            // directory, a pom and the settings entry naming the same module —
+            // the earlier package keeps it, so ownership is a function of the
+            // name-sorted list and never of iteration luck.
+            .max_by_key(|(i, p)| (p.dir.len(), std::cmp::Reverse(*i)))
+            .map(|(i, _)| i as u32)
     }
 }
 
@@ -126,8 +128,12 @@ pub struct Graph {
     pub discovered: Vec<ProjectPath>,
     /// Every manifest-declared package, name-sorted — the aggregation unit
     /// health partitions by and package-level analyses judge. Built from the
-    /// same `packages()` pipeline bare-import resolution reads.
+    /// same manifest evidence bare-import resolution reads.
     pub packages: Vec<GraphPackage>,
+    /// What the project's manifests declared about its structure — the units
+    /// that compile its files, and the files they are entered through.
+    #[serde(default)]
+    pub project: crate::project::Project,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -207,7 +213,7 @@ impl ManifestDeclarations {
                     .as_str()
                     .rsplit_once('/')
                     .map_or("", |(d, _)| d);
-                dir.is_empty() || path.strip_prefix(dir).is_some_and(|r| r.starts_with('/'))
+                kndo_contract::vocab::is_under(dir, path)
             }
         }
     }
@@ -225,20 +231,17 @@ impl Graph {
     /// `users` list empty.
     fn judge_dependency_usage(
         &mut self,
-        files: &[DiscoveredFile],
+        reads: &[crate::project::ManifestRead],
         adapters: &[Box<dyn Extension>],
     ) {
         let mut claimant: BTreeMap<ProjectPath, SmolStr> = BTreeMap::new();
         let mut mentions: BTreeMap<ProjectPath, Vec<SmolStr>> = BTreeMap::new();
-        for_each_manifest(files, adapters, |adapter, manifest| {
-            claimant
-                .entry(manifest.path.clone())
-                .or_insert_with(|| SmolStr::new(adapter.spec().coordinate()));
-            mentions
-                .entry(manifest.path.clone())
-                .or_default()
-                .extend(adapter.manifest_mentions(&manifest));
-        });
+        for read in reads {
+            if let Some(first) = read.adapters.first() {
+                claimant.insert(read.manifest.clone(), first.clone());
+            }
+            mentions.insert(read.manifest.clone(), read.evidence.mentions.clone());
+        }
         let owners: Vec<Option<u32>> = self
             .files
             .iter()
@@ -417,7 +420,13 @@ pub fn assemble(
         .map(|c| files[c.file_index].path.clone())
         .collect();
 
-    let packages = package_map(files, adapters, &known);
+    // One read of every manifest, shared by every pass that used to walk them
+    // again: packages, dependencies, mentions, units and roots all come from
+    // the same value, so two passes can never disagree about what a manifest
+    // declared.
+    let reads = crate::project::read_manifests(files, adapters, &known);
+    let project = crate::project::assemble(&reads);
+    let packages = package_map(&reads);
     let cx = ResolveContext::with_packages(&known, &packages);
 
     let mut graph_files: Vec<GraphFile> = claims
@@ -438,6 +447,7 @@ pub fn assemble(
                 dispatched: dispatched.roots,
                 exempt: dispatched.exempt,
                 dispatch_notes: dispatched.notes,
+                unit: project.unit_of(&f.path),
                 imports: Vec::new(),
                 import_targets: Vec::new(),
                 unresolved_imports: 0,
@@ -470,26 +480,26 @@ pub fn assemble(
         );
     }
 
-    anchor_manifest_roots(files, adapters, &cx, &mut graph_files);
+    anchor_manifest_roots(files, adapters, &cx, &project, &reads, &mut graph_files);
 
-    let manifest_declarations = collect_manifest_declarations(files, adapters);
+    let manifest_declarations = collect_manifest_declarations(&reads);
     let mut discovered: Vec<ProjectPath> = files.iter().map(|f| f.path.clone()).collect();
     discovered.sort();
-    let packages = collect_packages(files, adapters, &known, &manifest_declarations);
-    let mut manifests: Vec<ProjectPath> = Vec::new();
-    for_each_manifest(files, adapters, |_, manifest| {
-        manifests.push(manifest.path.clone())
-    });
-    manifests.sort();
-    manifests.dedup();
+    let packages = collect_packages(&reads, &manifest_declarations);
+    let manifests: Vec<ProjectPath> = reads
+        .iter()
+        .filter(|r| !r.adapters.is_empty())
+        .map(|r| r.manifest.clone())
+        .collect();
     let mut graph = Graph {
         files: graph_files,
         manifests,
         manifest_declarations,
         discovered,
         packages,
+        project,
     };
-    graph.judge_dependency_usage(files, adapters);
+    graph.judge_dependency_usage(&reads, adapters);
     graph
 }
 
@@ -497,25 +507,22 @@ pub fn assemble(
 /// wins, like the resolution map): each anchored to the declaring manifest in
 /// its own directory when one exists, else to the manifest that emitted it.
 fn collect_packages(
-    files: &[DiscoveredFile],
-    adapters: &[Box<dyn Extension>],
-    known: &BTreeSet<ProjectPath>,
+    reads: &[crate::project::ManifestRead],
     declarations: &[ManifestDeclarations],
 ) -> Vec<GraphPackage> {
-    let files_cx = ResolveContext::new(known);
     // Keyed by (name, dir): parallel trees legitimately duplicate a package
     // name (guava's android/ mirror), and ownership is directory truth.
     let mut out: BTreeMap<(SmolStr, SmolStr), GraphPackage> = BTreeMap::new();
-    for_each_manifest(files, adapters, |adapter, manifest| {
-        for pkg in adapter.packages(&manifest, &files_cx) {
+    for read in reads {
+        for pkg in &read.evidence.packages {
             out.entry((pkg.name.clone(), pkg.dir.clone()))
                 .or_insert(GraphPackage {
-                    name: pkg.name,
-                    dir: pkg.dir,
-                    manifest: manifest.path.clone(),
+                    name: pkg.name.clone(),
+                    dir: pkg.dir.clone(),
+                    manifest: read.manifest.clone(),
                 });
         }
-    });
+    }
     let mut packages: Vec<GraphPackage> = out.into_values().collect();
     for p in &mut packages {
         let own_manifest = declarations
@@ -532,24 +539,17 @@ fn collect_packages(
 /// One entry per manifest, path-sorted, declarations name-sorted — the
 /// deterministic projection of every adapter's `manifest_dependencies`.
 fn collect_manifest_declarations(
-    files: &[DiscoveredFile],
-    adapters: &[Box<dyn Extension>],
+    reads: &[crate::project::ManifestRead],
 ) -> Vec<ManifestDeclarations> {
-    let mut by_manifest: std::collections::BTreeMap<
-        ProjectPath,
-        Vec<kndo_contract::adapter::DependencyDeclaration>,
-    > = std::collections::BTreeMap::new();
     // Every manifest has an entry, declarations or not: a manifest that declares
-    // nothing is still the one its files' imports answer to.
-    for_each_manifest(files, adapters, |adapter, manifest| {
-        by_manifest
-            .entry(manifest.path.clone())
-            .or_default()
-            .extend(adapter.manifest_dependencies(&manifest));
-    });
-    by_manifest
-        .into_iter()
-        .map(|(manifest, mut declarations)| {
+    // nothing is still the one its files' imports answer to. A launcher is not
+    // a manifest and has none — it declares roots and nothing else.
+    reads
+        .iter()
+        .filter(|r| !r.adapters.is_empty())
+        .map(|read| {
+            let manifest = read.manifest.clone();
+            let mut declarations = read.evidence.dependencies.clone();
             declarations.sort_by(|a, b| {
                 (
                     a.name.as_str(),
@@ -603,18 +603,13 @@ fn adapter_by_id<'a>(adapters: &'a [Box<dyn Extension>], id: &str) -> &'a dyn Ex
 /// The package pass: what each manifest declares becomes queryable by every
 /// adapter's `resolve`. Manifests are consulted in path order; the first manifest to
 /// declare a name keeps it.
-fn package_map(
-    files: &[DiscoveredFile],
-    adapters: &[Box<dyn Extension>],
-    known: &BTreeSet<ProjectPath>,
-) -> BTreeMap<SmolStr, PackageEntry> {
-    let files_cx = ResolveContext::new(known);
+fn package_map(reads: &[crate::project::ManifestRead]) -> BTreeMap<SmolStr, PackageEntry> {
     let mut packages: BTreeMap<SmolStr, PackageEntry> = BTreeMap::new();
-    for_each_manifest(files, adapters, |adapter, manifest| {
-        for pkg in adapter.packages(&manifest, &files_cx) {
-            packages.entry(pkg.name.clone()).or_insert(pkg);
+    for read in reads {
+        for pkg in &read.evidence.packages {
+            packages.entry(pkg.name.clone()).or_insert(pkg.clone());
         }
-    });
+    }
     packages
 }
 
@@ -798,7 +793,7 @@ pub fn patch(
     }
 
     let known: BTreeSet<ProjectPath> = prev.files.iter().map(|g| g.path.clone()).collect();
-    let packages = package_map(files, adapters, &known);
+    let packages = package_map(&crate::project::read_manifests(files, adapters, &known));
     let cx = ResolveContext::with_packages(&known, &packages);
     let sorted_paths: Vec<ProjectPath> = prev.files.iter().map(|g| g.path.clone()).collect();
 
@@ -817,8 +812,9 @@ pub fn patch(
         gf.imports = edges.imports;
         gf.import_targets = edges.import_targets;
         gf.unresolved_imports = edges.unresolved_imports;
-        // `sees` is untouched on purpose: it is a pure function of path and
-        // file set, and this path only runs when both are unchanged.
+        // `sees` and `unit` are untouched on purpose: each is a pure function
+        // of path and (file set, manifests), and this path only runs when all
+        // of those are unchanged.
         debug_assert_eq!(
             gf.import_targets.len(),
             gf.evidence.imports.len(),
@@ -842,7 +838,7 @@ pub(crate) fn for_each_manifest(
 /// Every (adapter, discovered file) pair for the globs `globs_of` reads from
 /// the adapter's spec — manifests for every manifest pass, launchers for the
 /// roots pass alone — in file-path order.
-fn for_each_matching(
+pub(crate) fn for_each_matching(
     files: &[DiscoveredFile],
     adapters: &[Box<dyn Extension>],
     globs_of: impl Fn(&kndo_contract::extension::ExtensionSpec) -> &[SmolStr],
@@ -889,30 +885,47 @@ fn anchor_manifest_roots(
     files: &[DiscoveredFile],
     adapters: &[Box<dyn Extension>],
     cx: &ResolveContext<'_>,
+    project: &crate::project::Project,
+    reads: &[crate::project::ManifestRead],
     graph_files: &mut [GraphFile],
 ) {
     let mut anchors: Vec<(usize, Root)> = Vec::new();
-    let mut anchor = |adapter: &dyn Extension, declaring: SourceFile<'_>| {
-        for root in adapter.roots(&declaring, cx) {
-            let Ok(ix) = graph_files.binary_search_by(|x| x.path.cmp(&root.file)) else {
-                continue;
-            };
-            anchors.push((
-                ix,
-                Root {
-                    target: RootTarget::WholeFile,
-                    kind: root.kind,
-                    confidence: root.confidence,
-                },
-            ));
-        }
+    let mut anchor = |file: &ProjectPath, kind: RootKind, confidence: Confidence| {
+        let Ok(ix) = graph_files.binary_search_by(|x| x.path.cmp(file)) else {
+            return;
+        };
+        anchors.push((
+            ix,
+            Root {
+                target: RootTarget::WholeFile,
+                kind,
+                confidence,
+            },
+        ));
     };
-    for_each_manifest(files, adapters, &mut anchor);
-    // Launchers reach this pass and no other: they declare roots, never a
-    // package ([`ExtensionSpecBuilder::launchers`]).
+    // A unit's entry is the manifest's own statement about how the build is
+    // entered, so it anchors `Certain`; an adapter that only guesses an entry
+    // reports it as a manifest root with a confidence of its own.
+    for (file, kind) in project.entry_roots() {
+        anchor(file, kind, Confidence::Certain);
+    }
+    for read in reads {
+        for root in &read.evidence.roots {
+            anchor(&root.file, root.kind, root.confidence);
+        }
+    }
+    // The bridge: the hook `extract_manifest` replaces. Launchers reach this
+    // pass and no other — they declare roots, never a package
+    // ([`ExtensionSpecBuilder::launchers`]).
     //
     // [`ExtensionSpecBuilder::launchers`]: kndo_contract::extension::ExtensionSpecBuilder::launchers
-    for_each_matching(files, adapters, |spec| spec.launchers(), &mut anchor);
+    let mut legacy = |adapter: &dyn Extension, declaring: SourceFile<'_>| {
+        for root in adapter.roots(&declaring, cx) {
+            anchor(&root.file, root.kind, root.confidence);
+        }
+    };
+    for_each_manifest(files, adapters, &mut legacy);
+    for_each_matching(files, adapters, |spec| spec.launchers(), &mut legacy);
     for (ix, root) in anchors {
         graph_files[ix].anchored.push(root);
     }
@@ -921,5 +934,54 @@ fn anchor_manifest_roots(
             .sort_by_key(|r| (r.kind as u8, std::cmp::Reverse(r.confidence)));
         gf.anchored
             .dedup_by(|a, b| a.kind == b.kind && a.confidence == b.confidence);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn package(name: &str, dir: &str, manifest: &str) -> GraphPackage {
+        GraphPackage {
+            name: SmolStr::new(name),
+            dir: SmolStr::new(dir),
+            manifest: ProjectPath::new(manifest),
+        }
+    }
+
+    #[test]
+    fn ownership_is_the_deepest_directory_and_the_earlier_package_on_a_tie() {
+        // Two packages for ONE directory is real: a `pom.xml` names itself
+        // `group:artifact` while a settings file names the same module bare
+        // (Exposed's `exposed-modules-maven` snippet). Whichever the name sort
+        // puts first owns the files, so a health row's identity is a function
+        // of the package list and never of iteration order.
+        let graph = Graph {
+            files: Vec::new(),
+            manifests: Vec::new(),
+            manifest_declarations: Vec::new(),
+            discovered: Vec::new(),
+            packages: vec![
+                package("root", "", "settings.gradle.kts"),
+                package(
+                    "com.example:snippet",
+                    "docs/snippet",
+                    "docs/snippet/pom.xml",
+                ),
+                package("snippet", "docs/snippet", "docs/snippet/pom.xml"),
+            ],
+            project: Default::default(),
+        };
+        let owner = |p: &str| {
+            graph
+                .package_of(p)
+                .map(|i| graph.packages[i as usize].name.as_str().to_string())
+        };
+        assert_eq!(owner("src/main.kt").as_deref(), Some("root"));
+        assert_eq!(
+            owner("docs/snippet/src/Main.kt").as_deref(),
+            Some("com.example:snippet"),
+            "the deepest directory wins, and the earlier package breaks the tie"
+        );
     }
 }

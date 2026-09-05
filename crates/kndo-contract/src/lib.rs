@@ -15,6 +15,7 @@ pub mod evidence;
 pub mod extension;
 pub mod finding;
 pub mod fingerprint;
+pub mod manifest;
 pub mod subject;
 pub mod vocab;
 
