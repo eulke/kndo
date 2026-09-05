@@ -787,6 +787,13 @@ impl Snapshot {
                     message: d.message.clone(),
                 })
             })
+            .chain(self.graph.files.iter().flat_map(|f| {
+                f.dispatch_notes.iter().map(|note| ReportDiagnostic {
+                    path: f.path.clone(),
+                    level: DiagnosticLevel::Info,
+                    message: note.clone(),
+                })
+            }))
             .chain(self.pragma_problems.iter().map(|p| ReportDiagnostic {
                 path: p.path.clone(),
                 level: p.level,

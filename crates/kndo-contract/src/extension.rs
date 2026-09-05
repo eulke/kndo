@@ -10,7 +10,7 @@ use crate::adapter::{
     DependencyDeclaration, PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile,
 };
 use crate::evidence::{
-    CoverageRecords, Declaration, EvidenceSink, EvidenceStreams, RootKind, SymbolKind,
+    CoverageRecords, Declaration, EvidenceSink, EvidenceStreams, Marker, RootKind, SymbolKind,
 };
 use crate::finding::Severity;
 use crate::vocab::{Confidence, ProjectPath};
@@ -285,6 +285,103 @@ impl DependencyBuiltins {
     }
 }
 
+/// What a [`DispatchRule`] watches for. Grows as the evidence grows — a
+/// relation, a name pattern, a witness — each variant arriving with the
+/// consumer that reads it; an extension can only trigger on evidence its own
+/// files report.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Trigger {
+    /// A marker whose path matches `path` and — when `arg` is given — carrying
+    /// at least one argument matching it. Patterns are literal except `*`,
+    /// which matches any run of characters: `*::test` matches `tokio::test`
+    /// and `rstest::test`, never a bare `test`, which is its own pattern.
+    Marker { path: SmolStr, arg: Option<SmolStr> },
+}
+
+impl Trigger {
+    pub fn marker(path: &'static str) -> Trigger {
+        Trigger::Marker {
+            path: SmolStr::new_static(path),
+            arg: None,
+        }
+    }
+
+    pub fn marker_with(path: &'static str, arg: &'static str) -> Trigger {
+        Trigger::Marker {
+            path: SmolStr::new_static(path),
+            arg: Some(SmolStr::new_static(arg)),
+        }
+    }
+
+    /// Does this trigger fire on `marker`?
+    pub fn matches(&self, marker: &Marker) -> bool {
+        match self {
+            Trigger::Marker { path, arg } => {
+                pattern_matches(path, &marker.path)
+                    && arg
+                        .as_ref()
+                        .is_none_or(|a| marker.args.iter().any(|x| pattern_matches(a, x)))
+            }
+        }
+    }
+}
+
+/// The trigger patterns' one grammar: literal text with `*` matching any run
+/// of characters, empty included.
+fn pattern_matches(pattern: &str, text: &str) -> bool {
+    let (p, t) = (pattern.as_bytes(), text.as_bytes());
+    let (mut pi, mut ti) = (0, 0);
+    let mut star: Option<(usize, usize)> = None;
+    while ti < t.len() {
+        if pi < p.len() && p[pi] == b'*' {
+            star = Some((pi, ti));
+            pi += 1;
+        } else if pi < p.len() && p[pi] == t[ti] {
+            pi += 1;
+            ti += 1;
+        } else if let Some((sp, st)) = star {
+            pi = sp + 1;
+            ti = st + 1;
+            star = Some((sp, st + 1));
+        } else {
+            return false;
+        }
+    }
+    while pi < p.len() && p[pi] == b'*' {
+        pi += 1;
+    }
+    pi == p.len()
+}
+
+/// What a matched [`DispatchRule`] derives.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Effect {
+    /// The marked declaration — or the whole file, for a file marker — is an
+    /// entry of this color: something outside the graph's sight runs it.
+    Root(RootKind),
+    /// The marked declaration is never accused of being unused: the source
+    /// itself asked the dead-code judgment to stand down (`allow(dead_code)`,
+    /// `@SuppressWarnings("unused")`). Lexically scoped, as such markers are:
+    /// the declaration and every declaration within its extent; on a file
+    /// marker, every declaration in the file — and the run says so.
+    Exempt,
+}
+
+/// One rule of a language or a framework, as data: when this evidence
+/// appears, derive that. The engine matches every file's markers against the
+/// claiming extension's rules and derives roots and exemptions from the
+/// matches — the one place a marker acquires meaning, for every language
+/// alike. `confidence` is the derived root's: an attribute is the code's own
+/// statement (`Certain`); a convention is weaker.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DispatchRule {
+    pub when: Trigger,
+    pub then: Effect,
+    pub confidence: Confidence,
+}
+
 /// What an extension IS, as data — the one manifest for every capability. Fields
 /// come in three clusters with one gate each: extraction (gated by `claims`),
 /// conduct (gated by `activation` + `mutates_graph`), ingestion (gated by
@@ -302,6 +399,7 @@ pub struct ExtensionSpec {
     dependency_importers: Vec<SmolStr>,
     dependency_builtins: DependencyBuiltins,
     import_cycles: CycleTolerance,
+    dispatch: Vec<DispatchRule>,
     claims: Vec<SmolStr>,
     emits: EvidenceStreams,
     manifests: Vec<SmolStr>,
@@ -340,6 +438,7 @@ impl ExtensionSpec {
                 dependency_importers: Vec::new(),
                 dependency_builtins: DependencyBuiltins::None,
                 import_cycles: CycleTolerance::Tolerated,
+                dispatch: Vec::new(),
                 claims: Vec::new(),
                 emits: EvidenceStreams::none(),
                 manifests: Vec::new(),
@@ -423,6 +522,12 @@ impl ExtensionSpec {
         self.import_cycles
     }
 
+    /// See [`DispatchRule`]; the engine's dispatch is the consumer, and an
+    /// empty list (the default) derives nothing — markers stay evidence.
+    pub fn dispatch_rules(&self) -> &[DispatchRule] {
+        &self.dispatch
+    }
+
     pub fn claims(&self) -> &[SmolStr] {
         &self.claims
     }
@@ -503,6 +608,9 @@ pub struct ExtensionSpecParts {
     /// Wire components cannot declare `Hazard` yet — the world speaks no cycle
     /// vocabulary; defaults to `Tolerated` (silence) like every other absence.
     pub import_cycles: CycleTolerance,
+    /// Wire components cannot declare rules yet; defaults to none — their
+    /// markers, once the wire carries them, derive nothing.
+    pub dispatch: Vec<DispatchRule>,
     pub claims: Vec<SmolStr>,
     pub emits: EvidenceStreams,
     pub manifests: Vec<SmolStr>,
@@ -543,6 +651,7 @@ impl From<ExtensionSpecParts> for ExtensionSpec {
             dependency_importers: parts.dependency_importers,
             dependency_builtins: parts.dependency_builtins,
             import_cycles: parts.import_cycles,
+            dispatch: parts.dispatch,
             claims: parts.claims,
             emits: parts.emits,
             manifests: parts.manifests,
@@ -640,6 +749,15 @@ impl ExtensionSpecBuilder {
     /// silent for this adapter's files.
     pub fn import_cycles(mut self, tolerance: CycleTolerance) -> Self {
         self.spec.import_cycles = tolerance;
+        self
+    }
+
+    /// Declare what the language's markers mean (see [`DispatchRule`]), in
+    /// the order the engine tries them. Omitted ⇒ none — the
+    /// default-compatibility rule: markers are carried as evidence and derive
+    /// nothing.
+    pub fn dispatch(mut self, rules: Vec<DispatchRule>) -> Self {
+        self.spec.dispatch = rules;
         self
     }
 
@@ -1171,6 +1289,35 @@ mod tests {
             ingester.reads_reports(),
             ["coverage/lcov.info", "lcov.info"]
         );
+    }
+
+    #[test]
+    fn trigger_patterns_are_literal_but_for_the_star() {
+        use crate::evidence::MarkerTarget;
+        use crate::vocab::Span;
+        let marker = |path: &str, args: &[&str]| Marker {
+            on: MarkerTarget::File,
+            path: SmolStr::new(path),
+            args: args.iter().map(SmolStr::new).collect(),
+            span: Span::new(0, 1),
+        };
+        assert!(Trigger::marker("test").matches(&marker("test", &[])));
+        assert!(!Trigger::marker("test").matches(&marker("tokio::test", &[])));
+        assert!(Trigger::marker("*::test").matches(&marker("tokio::test", &[])));
+        assert!(Trigger::marker("*::test").matches(&marker("a::b::test", &[])));
+        assert!(!Trigger::marker("*::test").matches(&marker("test", &[])));
+        assert!(!Trigger::marker("*::test").matches(&marker("tokio::tests", &[])));
+        assert!(Trigger::marker("*").matches(&marker("anything", &[])));
+        let cfg_test = Trigger::marker_with("cfg", "test");
+        assert!(cfg_test.matches(&marker("cfg", &["test"])));
+        assert!(cfg_test.matches(&marker("cfg", &["unix", "test"])));
+        assert!(!cfg_test.matches(&marker("cfg", &["!test"])));
+        assert!(!cfg_test.matches(&marker("cfg", &["feature = \"test\""])));
+        assert!(!cfg_test.matches(&marker("cfg", &[])));
+        assert!(pattern_matches("a*c", "abbbc"));
+        assert!(pattern_matches("a*", "a"));
+        assert!(pattern_matches("**", ""));
+        assert!(!pattern_matches("a*c", "ab"));
     }
 
     #[test]

@@ -640,6 +640,15 @@ fn edge_ref(cx: &QueryContext<'_>, keeper: &Keeper) -> EdgeRef {
             },
             None,
         ),
+        Keeper::Dispatch { kind } => (
+            match kind {
+                kndo_contract::evidence::RootKind::Production => "dispatch:production",
+                kndo_contract::evidence::RootKind::Test => "dispatch:test",
+                kndo_contract::evidence::RootKind::Tooling => "dispatch:tooling",
+            },
+            None,
+        ),
+        Keeper::Exempt => ("exempt", None),
         Keeper::EntrySurface => ("entry-surface", None),
         Keeper::SurfaceImport { site } => ("surface-import", Some(*site)),
         Keeper::OwnerBinding { site } => ("owner-binding", Some(*site)),
@@ -968,14 +977,18 @@ fn used_by(cx: &QueryContext<'_>, selector: Selector, limit: usize) -> Answer {
                     }
                 }
             }
-            for r in cx.graph.files[file]
-                .evidence
-                .roots
-                .iter()
-                .chain(&cx.graph.files[file].anchored)
-            {
-                if matches!(r.target, kndo_contract::evidence::RootTarget::WholeFile) {
+            let whole_file = |r: &kndo_contract::evidence::Root| {
+                matches!(r.target, kndo_contract::evidence::RootTarget::WholeFile)
+            };
+            let f = &cx.graph.files[file];
+            for r in f.evidence.roots.iter().chain(&f.anchored) {
+                if whole_file(r) {
                     kept_by.push(edge_ref(cx, &Keeper::Root { kind: r.kind }));
+                }
+            }
+            for r in &f.dispatched {
+                if whole_file(r) {
+                    kept_by.push(edge_ref(cx, &Keeper::Dispatch { kind: r.kind }));
                 }
             }
             let mut by_color: BTreeMap<&'static str, u32> = BTreeMap::new();
@@ -1006,7 +1019,9 @@ fn keeper_site(keeper: &Keeper) -> Option<navigate::Site> {
         | Keeper::Binding { site }
         | Keeper::SurfaceImport { site }
         | Keeper::OwnerBinding { site } => Some(*site),
-        Keeper::Root { .. } | Keeper::EntrySurface => None,
+        Keeper::Root { .. } | Keeper::Dispatch { .. } | Keeper::Exempt | Keeper::EntrySurface => {
+            None
+        }
     }
 }
 
@@ -1092,13 +1107,7 @@ fn rooted_files(graph: &Graph, kind: kndo_contract::evidence::RootKind) -> Vec<u
         .files
         .iter()
         .enumerate()
-        .filter(|(_, f)| {
-            f.evidence
-                .roots
-                .iter()
-                .chain(&f.anchored)
-                .any(|r| r.kind == kind)
-        })
+        .filter(|(_, f)| f.roots().any(|r| r.kind == kind))
         .map(|(i, _)| i as u32)
         .collect()
 }
@@ -1242,12 +1251,7 @@ fn impact(cx: &QueryContext<'_>, selector: Selector, if_deleted: bool, limit: us
         *by_color
             .entry(ReachColor::of(cx.reach, i).as_str())
             .or_insert(0) += 1;
-        for r in cx.graph.files[i]
-            .evidence
-            .roots
-            .iter()
-            .chain(&cx.graph.files[i].anchored)
-        {
+        for r in cx.graph.files[i].roots() {
             let set = match r.kind {
                 RootKind::Production => RootSet::Production,
                 RootKind::Test => RootSet::Test,
@@ -1292,13 +1296,7 @@ fn simulate_deletion(
                 let mut alive = vec![false; n];
                 let mut frontier: Vec<u32> = Vec::new();
                 for (i, f) in cx.graph.files.iter().enumerate() {
-                    if i != file
-                        && f.evidence
-                            .roots
-                            .iter()
-                            .chain(&f.anchored)
-                            .any(|r| r.kind == kind)
-                    {
+                    if i != file && f.roots().any(|r| r.kind == kind) {
                         alive[i] = true;
                         frontier.push(i as u32);
                     }

@@ -127,17 +127,9 @@ impl Analysis for InternalOnly {
             // An entry, test, or tooling file: its exports ARE an outside
             // surface (a manifest's consumers, a runner), so the Exported rung
             // stays silent for the whole file.
-            let whole_file_rooted = f
-                .evidence
-                .roots
-                .iter()
-                .chain(&f.anchored)
-                .any(|r| matches!(r.target, RootTarget::WholeFile));
+            let whole_file_rooted = f.roots().any(|r| matches!(r.target, RootTarget::WholeFile));
             let rooted: BTreeSet<usize> = f
-                .evidence
-                .roots
-                .iter()
-                .chain(&f.anchored)
+                .roots()
                 .filter_map(|r| match &r.target {
                     RootTarget::Declaration(id) => Some(id.index()),
                     _ => None,

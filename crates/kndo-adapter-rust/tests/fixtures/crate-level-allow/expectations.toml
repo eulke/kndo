@@ -1,0 +1,12 @@
+# crate-level-allow: a crate root's `#![allow(dead_code)]` speaks for the whole crate, every module file included — today the file-level marker covers only the file that carries it.
+
+[[alive]]
+subject = "src/lib.rs#api"
+why = "the crate root is a manifest entry; its exported surface is the crate's"
+
+[[known_gap]]
+subject = "src/inner.rs#stale"
+expect = "alive"
+category = "unused"
+why = "rustc's lint scope for a crate-root inner attribute is the crate; the marker sits on src/lib.rs and dispatch exempts that file's declarations only"
+fix = "M8.b units: a unit root's file-level markers dispatch over the unit"

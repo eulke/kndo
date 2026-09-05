@@ -1,10 +1,10 @@
 //! Extraction against inline sources: reach, module edges, every `use` shape,
-//! qualified-path imports, attribute roots, impl/trait members, reference
+//! qualified-path imports, attributes as markers, impl/trait members, reference
 //! exclusions, and comment spans.
 
 use kndo_adapter_rust::RustAdapter;
 use kndo_contract::evidence::{
-    FileEvidence, ImportShape, ImportTarget, Reach, RootKind, RootTarget, SymbolKind,
+    FileEvidence, ImportShape, ImportTarget, MarkerTarget, Reach, RootTarget, SymbolKind,
 };
 
 fn extract(path: &str, source: &str) -> FileEvidence {
@@ -171,25 +171,24 @@ mod tests {
     // `use super::*` inside the inline mod names THIS file, not its parent.
     let glob = import(&ev, "self");
     assert!(matches!(&glob.shape, ImportShape::Glob));
-    // The cfg(test) mod and the #[test] fn are both test-rooted declarations.
-    let tests_ix = ev
+    // The cfg(test) mod and the #[test] fn each carry their attribute as a
+    // marker; the spec's rules make both Test roots in the engine.
+    assert_eq!(markers_on(&ev, "tests"), [("cfg", vec!["test"])]);
+    assert_eq!(markers_on(&ev, "works"), [("test", vec![])]);
+}
+
+/// `(path, args)` of every marker on the declaration `name`, in source order.
+fn markers_on<'e>(ev: &'e FileEvidence, name: &str) -> Vec<(&'e str, Vec<&'e str>)> {
+    let ix = ev
         .declarations
         .iter()
-        .position(|d| d.name == "tests")
-        .unwrap();
-    let works_ix = ev
-        .declarations
+        .position(|d| d.name == name)
+        .unwrap_or_else(|| panic!("declaration {name} missing: {:#?}", ev.declarations));
+    ev.markers
         .iter()
-        .position(|d| d.name == "works")
-        .unwrap();
-    for ix in [tests_ix, works_ix] {
-        assert!(
-            ev.roots.iter().any(|r| r.kind == RootKind::Test
-                && matches!(r.target, RootTarget::Declaration(id) if id.index() == ix)),
-            "declaration {ix} carries a Test root: {:#?}",
-            ev.roots
-        );
-    }
+        .filter(|m| matches!(m.on, MarkerTarget::Declaration(id) if id.index() == ix))
+        .map(|m| (m.path.as_str(), m.args.iter().map(|a| a.as_str()).collect()))
+        .collect()
 }
 
 #[test]
@@ -234,33 +233,111 @@ fn main() {
 }
 
 #[test]
-fn attribute_roots() {
+fn attributes_are_markers_as_written() {
     let ev = extract(
         "src/lib.rs",
         r#"
+#![allow(dead_code)]
+
 #[test]
 fn unit() {}
 
-#[tokio::test]
+/// Doc comments may sit between an attribute and its item.
+#[tokio::test(flavor = "multi_thread",  worker_threads = 2)]
 async fn integration() {}
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn entry() {}
+
+#[unsafe(export_name = "renamed")]
+pub extern "C" fn aliased() {}
+
+#[cfg(all(test, not(feature = "slow")))]
+#[allow(dead_code, unused_variables)]
+fn gated() {}
+
+#[cfg(not(any(unix, windows)))]
+fn exotic() {}
+
+#[derive(Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+#[doc = "hi"]
+struct Config;
+
+#[cfg(test)]
+impl Config {
+    #[inline]
+    fn stub() {}
+}
+
+trait Runner {
+    #[must_use]
+    fn run(&self);
+}
 
 fn plain() {}
 "#,
     );
-    let rooted_kind = |name: &str| {
-        let ix = ev.declarations.iter().position(|d| d.name == name).unwrap();
-        ev.roots
+    // Roots are the engine's to derive; extraction states no attribute root.
+    assert!(
+        !ev.roots
             .iter()
-            .find(|r| matches!(r.target, RootTarget::Declaration(id) if id.index() == ix))
-            .map(|r| r.kind)
-    };
-    assert_eq!(rooted_kind("unit"), Some(RootKind::Test));
-    assert_eq!(rooted_kind("integration"), Some(RootKind::Test));
-    assert_eq!(rooted_kind("entry"), Some(RootKind::Production));
-    assert_eq!(rooted_kind("plain"), None);
+            .any(|r| matches!(r.target, RootTarget::Declaration(_))),
+        "{:?}",
+        ev.roots
+    );
+    // An inner attribute at the top of the file marks the file.
+    let file_markers: Vec<(&str, Vec<&str>)> = ev
+        .markers
+        .iter()
+        .filter(|m| m.on == MarkerTarget::File)
+        .map(|m| (m.path.as_str(), m.args.iter().map(|a| a.as_str()).collect()))
+        .collect();
+    assert_eq!(file_markers, [("allow", vec!["dead_code"])]);
+    assert_eq!(markers_on(&ev, "unit"), [("test", vec![])]);
+    // Arguments come as written, whitespace runs collapsed, split at the
+    // top-level commas only.
+    assert_eq!(
+        markers_on(&ev, "integration"),
+        [(
+            "tokio::test",
+            vec!["flavor = \"multi_thread\"", "worker_threads = 2"]
+        )]
+    );
+    // `unsafe(…)` unwraps to the attribute inside, arguments and all.
+    assert_eq!(markers_on(&ev, "entry"), [("no_mangle", vec![])]);
+    assert_eq!(
+        markers_on(&ev, "aliased"),
+        [("export_name", vec!["\"renamed\""])]
+    );
+    // A cfg predicate flattens to its atoms: `all`/`any` transparent, `not`
+    // a `!` prefix.
+    assert_eq!(
+        markers_on(&ev, "gated"),
+        [
+            ("cfg", vec!["test", "!feature = \"slow\""]),
+            ("allow", vec!["dead_code", "unused_variables"]),
+        ]
+    );
+    assert_eq!(
+        markers_on(&ev, "exotic"),
+        [("cfg", vec!["!unix", "!windows"])]
+    );
+    assert_eq!(
+        markers_on(&ev, "Config"),
+        [
+            ("derive", vec!["Debug", "Clone"]),
+            ("serde", vec!["rename_all = \"camelCase\""]),
+            ("doc", vec!["\"hi\""]),
+        ]
+    );
+    // An attribute on an `impl` block rides every member, before its own.
+    assert_eq!(
+        markers_on(&ev, "stub"),
+        [("cfg", vec!["test"]), ("inline", vec![])]
+    );
+    assert_eq!(markers_on(&ev, "run"), [("must_use", vec![])]);
+    assert!(markers_on(&ev, "plain").is_empty());
 }
 
 #[test]

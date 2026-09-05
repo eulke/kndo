@@ -74,25 +74,18 @@ impl Reachability {
     }
 }
 
-/// Does this file itself carry a root of `kind` (its own evidence or an anchor)?
+/// Does this file itself carry a root of `kind` — its own evidence, dispatch
+/// or an anchor?
 pub fn has_root_of(graph: &Graph, file: usize, kind: RootKind) -> bool {
-    let f = &graph.files[file];
-    f.evidence
-        .roots
-        .iter()
-        .chain(&f.anchored)
-        .any(|r| r.kind == kind)
+    graph.files[file].roots().any(|r| r.kind == kind)
 }
 
-/// Is this file a test as a whole — a whole-file Test root, its own or anchored?
+/// Is this file a test as a whole — a whole-file Test root, whoever said it?
 /// A production file with an inline test module carries a declaration-targeted
 /// Test root and is NOT one: its imports serve production.
 pub fn is_test_file(graph: &Graph, file: usize) -> bool {
-    let f = &graph.files[file];
-    f.evidence
-        .roots
-        .iter()
-        .chain(&f.anchored)
+    graph.files[file]
+        .roots()
         .any(|r| r.kind == RootKind::Test && matches!(r.target, RootTarget::WholeFile))
 }
 

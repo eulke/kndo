@@ -20,7 +20,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Bump when the SAME evidence assembles into a DIFFERENT graph — resolution
 /// candidate changes, reachability semantics, new assembled fields. Folded into the
 /// graph cache key beside the contract fingerprint and the adapter set.
-pub const GRAPH_SEMANTICS_VERSION: u32 = 10;
+pub const GRAPH_SEMANTICS_VERSION: u32 = 11;
 
 #[derive(Serialize, Deserialize)]
 pub struct GraphFile {
@@ -49,6 +49,17 @@ pub struct GraphFile {
     /// hash — a manifest change must not invalidate it. Plugin anchors never reach
     /// the persisted graph: an active graph-mutating plugin bypasses that cache.
     pub anchored: Vec<Root>,
+    /// Roots the engine's dispatch derived from this file's markers under the
+    /// claiming extension's rules ([`crate::dispatch`]) — apart from
+    /// `evidence.roots` (the adapter's own statements, cached by content) so a
+    /// rule change re-dispatches without re-extracting; sorted, deduplicated.
+    pub dispatched: Vec<Root>,
+    /// Declarations the source itself exempts from the unused judgment (an
+    /// `allow(dead_code)`-class marker, dispatched), by index; sorted.
+    pub exempt: Vec<u32>,
+    /// What dispatch wants the run to say about this file (a blanket
+    /// exemption) — reported as diagnostics.
+    pub dispatch_notes: Vec<String>,
     /// Resolved import targets, as indices into `Graph::files`; sorted, deduplicated.
     pub imports: Vec<u32>,
     /// Parallel to `evidence.imports`: the file(s) each import resolved to, so
@@ -60,10 +71,20 @@ pub struct GraphFile {
 }
 
 impl GraphFile {
-    /// The one spelling of "something anchors this file" — extraction evidence and
-    /// manifest anchors alike.
+    /// Every root on this file, whatever said it: the adapter's evidence, the
+    /// engine's dispatch, the manifests' and plugins' anchors — the one
+    /// iteration every color judgment reads.
+    pub fn roots(&self) -> impl Iterator<Item = &Root> {
+        self.evidence
+            .roots
+            .iter()
+            .chain(&self.dispatched)
+            .chain(&self.anchored)
+    }
+
+    /// The one spelling of "something anchors this file".
     pub fn is_rooted(&self) -> bool {
-        !self.evidence.roots.is_empty() || !self.anchored.is_empty()
+        self.roots().next().is_some()
     }
 }
 
@@ -404,14 +425,19 @@ pub fn assemble(
         .zip(evidence)
         .map(|(c, ev)| {
             let f = &files[c.file_index];
+            let spec = adapters[c.adapter_index].spec();
+            let dispatched = crate::dispatch::apply(&ev, spec.dispatch_rules());
             GraphFile {
                 path: f.path.clone(),
-                adapter: SmolStr::new(adapters[c.adapter_index].spec().coordinate()),
+                adapter: SmolStr::new(spec.coordinate()),
                 hash_hex: f.hash.iter().map(|b| format!("{b:02x}")).collect(),
                 evidence: ev,
                 sees: Vec::new(),
                 scoped_regions: Vec::new(),
                 anchored: Vec::new(),
+                dispatched: dispatched.roots,
+                exempt: dispatched.exempt,
+                dispatch_notes: dispatched.notes,
                 imports: Vec::new(),
                 import_targets: Vec::new(),
                 unresolved_imports: 0,
@@ -781,9 +807,13 @@ pub fn patch(
         let adapter = adapter_by_id(adapters, &prev.files[ix].adapter);
         let evidence = crate::extract::extract_one(file, adapter, cache);
         let edges = resolve_file(&file.path, &evidence, adapter, &cx, &sorted_paths);
+        let dispatched = crate::dispatch::apply(&evidence, adapter.spec().dispatch_rules());
         let gf = &mut prev.files[ix];
         gf.scoped_regions = regions_of(&file.path, &evidence, adapter, &cx, &sorted_paths);
         gf.evidence = evidence;
+        gf.dispatched = dispatched.roots;
+        gf.exempt = dispatched.exempt;
+        gf.dispatch_notes = dispatched.notes;
         gf.imports = edges.imports;
         gf.import_targets = edges.import_targets;
         gf.unresolved_imports = edges.unresolved_imports;

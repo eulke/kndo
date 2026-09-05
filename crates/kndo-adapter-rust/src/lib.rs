@@ -1,8 +1,9 @@
 //! Rust, through the tree-sitter-rust grammar. The adapter reports evidence only —
 //! declarations with binary reach (`pub` in any form is nameable beyond its file),
 //! module edges (`mod foo;`, `use` trees, qualified paths), keep-alive-biased
-//! references, comment spans, function metrics — and resolves module paths against
-//! the file tree; judgment stays in the engine.
+//! references, attributes as markers, comment spans, function metrics — and
+//! resolves module paths against the file tree; judgment stays in the engine, and
+//! what an attribute means is the spec's dispatch rules.
 //!
 //! Precision posture: a `use` of one item keeps its target file's whole exported
 //! surface (`Namespace`), because Rust's alias scopes cannot be re-derived from one
@@ -20,21 +21,69 @@ mod resolve;
 use kndo_contract::adapter::{
     DependencyDeclaration, PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile,
 };
-use kndo_contract::evidence::EvidenceSink;
-use kndo_contract::extension::{Extension, ExtensionSpec};
-use kndo_contract::vocab::ProjectPath;
+use kndo_contract::evidence::{EvidenceSink, EvidenceStream, EvidenceStreams, RootKind};
+use kndo_contract::extension::{DispatchRule, Effect, Extension, ExtensionSpec, Trigger};
+use kndo_contract::vocab::{Confidence, ProjectPath};
 
 pub struct RustAdapter {
     spec: ExtensionSpec,
 }
 
+/// What Rust's attributes mean, as data — the language's own statements about
+/// liveness, matched by the engine against the markers extraction reports.
+/// Test-runner attributes (`#[test]`, `#[tokio::test]`, `#[bench]`) and a
+/// `cfg(test)` gate root Test; an entry attribute (`#[tokio::main]`) and the
+/// linkage and runtime attributes (`#[no_mangle]`, `#[global_allocator]`, …)
+/// root Production — something outside the graph calls them. The dead-code
+/// lint's own escape hatches (`allow`/`expect` of `dead_code`, its `unused`
+/// and `warnings` groups) exempt: the source already answered the question.
+/// Certain throughout: an attribute is the code's own statement.
+fn dispatch_rules() -> Vec<DispatchRule> {
+    let rule = |when: Trigger, then: Effect| DispatchRule {
+        when,
+        then,
+        confidence: Confidence::Certain,
+    };
+    let mut rules: Vec<DispatchRule> = ["test", "*::test", "bench", "*::bench"]
+        .into_iter()
+        .map(|path| rule(Trigger::marker(path), Effect::Root(RootKind::Test)))
+        .collect();
+    rules.push(rule(
+        Trigger::marker_with("cfg", "test"),
+        Effect::Root(RootKind::Test),
+    ));
+    rules.extend(
+        [
+            "*::main",
+            "no_mangle",
+            "export_name",
+            "global_allocator",
+            "panic_handler",
+            "alloc_error_handler",
+            "used",
+            "proc_macro",
+            "proc_macro_derive",
+            "proc_macro_attribute",
+            "start",
+        ]
+        .into_iter()
+        .map(|path| rule(Trigger::marker(path), Effect::Root(RootKind::Production))),
+    );
+    for lint in ["allow", "expect"] {
+        for group in ["dead_code", "unused", "warnings"] {
+            rules.push(rule(Trigger::marker_with(lint, group), Effect::Exempt));
+        }
+    }
+    rules
+}
+
 impl RustAdapter {
     pub fn new() -> Self {
         RustAdapter {
-            // 6: a `use` headed by another `use`'s local is that path, not a crate.
+            // 7: attributes are markers; their meaning is the spec's dispatch rules.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:rust",
-                6,
+                7,
                 &["rs"],
                 &["**/Cargo.toml"],
                 &["crate"],
@@ -42,6 +91,12 @@ impl RustAdapter {
                 // routine structure, never an initialization hazard.
                 kndo_contract::extension::CycleTolerance::Tolerated,
             )
+            .emits(EvidenceStreams::of(&[
+                EvidenceStream::Comments,
+                EvidenceStream::Metrics,
+                EvidenceStream::Markers,
+            ]))
+            .dispatch(dispatch_rules())
             // `serde_json::Value` names `serde-json`: the crate root segment,
             // hyphens spelled as underscores.
             .dependency_identity(kndo_contract::extension::DependencyIdentity::CrateRoot)

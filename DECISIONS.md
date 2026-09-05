@@ -2935,3 +2935,71 @@ example's function-scoped loop gone, and the `__init__.py → app.py` loop
 `Certain` instead of `Possible`. Every other repo byte-identical; every
 existing fixture byte-identical (the fingerprint moved for the field; the
 reports did not). The contract fingerprint is regenerated once for the slice.
+
+## 2026-09-05 — M8.a: markers are evidence, dispatch rules are their meaning
+
+**The shape.** `FileEvidence` gains `markers` — an attribute, annotation,
+decorator or pragma on a declaration (by id) or on the whole file, with its
+path and top-level arguments as written — behind the declared
+`EvidenceStream::Markers` and the sink's `marker`. What a marker MEANS is no
+longer an adapter's branch: the spec declares `dispatch` rules — a trigger
+(a marker path pattern, `*` matching any run, optionally with an argument
+pattern) and an effect (a root of a color, or an exemption from `unused`)
+with a confidence — and the engine's `dispatch` module derives roots and
+exemptions from every file's markers under its claiming extension's rules.
+Dispatched roots live on the graph beside the manifest anchors (never in the
+evidence cache, so a rule change re-dispatches without re-extracting), and
+`GraphFile::roots()` is the one iteration every color judgment reads:
+`GRAPH_SEMANTICS_VERSION` 10 → 11. `used-by` shows a dispatched root as
+`dispatch:<color>` and an exemption as `exempt`; an exemption is listed first
+and alone it keeps. Exemptions are lexically scoped, as lint attributes are —
+the marked declaration and everything declared within its extent — and a
+file-level one covers the file's every declaration and lands in the report's
+diagnostics, so the silence is visible. The contract fingerprint is
+regenerated for the field; the report schema is regenerated because the
+stream enum grew.
+
+**The first language.** kndo:rust (version 7) reports every attribute as a
+marker: the path as written, arguments split at top-level commas with
+whitespace collapsed, `#[unsafe(no_mangle)]` unwrapped to the attribute
+inside, a `cfg` predicate flattened to its atoms (`all`/`any` transparent,
+`not` as a `!` prefix), inner attributes on the file or the inline module they
+sit in, an `impl` block's attributes riding every member. Its rules replace
+the adapter's root table: `test`, `*::test`, `bench`, `*::bench` and
+`cfg(test)` root Test; `*::main`, `no_mangle`, `export_name`,
+`global_allocator`, `panic_handler`, `alloc_error_handler`, `used`,
+`proc_macro`, `proc_macro_derive`, `proc_macro_attribute`, `start` root
+Production; `allow`/`expect` of `dead_code`, `unused` or `warnings` exempt —
+the owner's 2026-09-05 decision, honored as a visible exemption rather than a
+second suppression channel. Every existing rust fixture stays byte-identical:
+the roots the table used to state are the roots the rules now derive. Two
+fixtures land: `attribute-dispatch` (rust) pins a linkage root through the
+unsafe spelling, two exemptions, a dead control and the file-level blanket
+with its diagnostic; `crate-level-allow` (rust) holds the one gap this slice
+knows as a `known_gap` with teeth — rustc scopes a crate root's inner
+attribute over the whole crate, and today the marker covers only the file
+that carries it; M8.b's units will dispatch a unit root's file-level markers
+over the unit, and the gap fails the day that lands.
+
+**Measurement.** ripgrep 155 → 154: `unused` 4 → 3, the const
+`SHERLOCK_CRLF` in `crates/printer/src/standard.rs` exempt by its own
+`#[allow(dead_code)]`. Of the three that remain, two —
+`Handle.read_write` and `Handle.read_write_mut` in `crates/index/src/index.rs`
+— sit under the crate root's `#![allow(warnings)]` in `crates/index/src/lib.rs`:
+exactly the crate-level gap above, measured. No new diagnostics: that crate
+root declares nothing itself, so no blanket note fires. Every other repo
+byte-identical; every existing conformance fixture in every corpus
+byte-identical.
+
+**Deferred, named.** Relations and witnesses (the other half of the design's
+dispatch triggers) wait for the JVM adapter migration in M8.c, where their
+first consumer lives; the wire carries neither markers nor timing until the
+ABI's next version, one toll at M8.a's close — the SDK omits the stream from
+a guest's declaration so host-side pairing stays truthful. The report's
+`extensions` rows do not list dispatch rules: a count says nothing, the rules
+themselves belong to an extension listing verb, M8.g's docs decide where. The
+dogfood gained one self-retiring allow: the engine tests' shared helpers in
+`crates/kndo/tests/common/mod.rs` are a module of a test target, and the
+`test-only` analysis reads a file only tests reach as production code until
+M8.b's file roles land — the allow turns `stale` that day and the dogfood
+gate says so.

@@ -1,0 +1,113 @@
+{
+  "run": {
+    "schema": "kndo-v2/m6",
+    "mode": "full",
+    "files_discovered": 4,
+    "files_claimed": 3,
+    "extensions": [
+      {
+        "id": "kndo:rust",
+        "files": 3,
+        "narrowable_scopes": [
+          "crate"
+        ],
+        "export_narrowing": "none",
+        "import_cycles": "tolerated",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "crate-root"
+      }
+    ]
+  },
+  "health": {
+    "implicated": 1,
+    "subjects": 13,
+    "by_category": [
+      {
+        "category": "unused",
+        "findings": 1
+      }
+    ],
+    "by_package": [
+      {
+        "name": "attrdispatch",
+        "manifest": "Cargo.toml",
+        "implicated": 1,
+        "subjects": 13
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "kndo-0a941e1bf1bd",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "src/ffi.rs",
+        "selector": {
+          "Free": "truly_dead"
+        },
+        "span": {
+          "start": 168,
+          "end": 186
+        }
+      },
+      "lines": {
+        "start": 12,
+        "end": 12
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    }
+  ],
+  "fixed": [],
+  "baselined": 0,
+  "abstained": [
+    {
+      "category": "crap",
+      "reason": "no-coverage-ingested",
+      "scope": "whole-run"
+    }
+  ],
+  "suppressed": {
+    "total": 0,
+    "by_category": []
+  },
+  "plugins": [
+    {
+      "coordinate": "kndo:coverage-lcov",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-cobertura",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-jacoco",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-go",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    }
+  ],
+  "diagnostics": [
+    {
+      "path": "src/scratch.rs",
+      "level": "info",
+      "message": "`allow(dead_code)` at file level exempts every declaration here (2) from the unused judgment"
+    }
+  ]
+}

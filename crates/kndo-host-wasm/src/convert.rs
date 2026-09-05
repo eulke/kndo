@@ -58,6 +58,7 @@ pub(crate) fn extension_spec(spec: awire::ExtensionSpec) -> ExtensionSpec {
         // The wire world speaks no cycle or narrowing vocabulary; absence
         // defaults to silence, like every other undeclared capability.
         import_cycles: Default::default(),
+        dispatch: Vec::new(),
         export_narrowing: Default::default(),
         dependency_scoping: Default::default(),
         dependency_identity: Default::default(),

@@ -67,6 +67,8 @@ impl DeclarationId {
 pub enum EvidenceStream {
     Comments,
     Metrics,
+    /// Attributes, annotations, decorators, pragmas — see [`Marker`].
+    Markers,
 }
 
 /// The set of optional streams an adapter DECLARES it produces — the pairing rule.
@@ -337,6 +339,37 @@ pub struct Root {
     pub confidence: Confidence,
 }
 
+/// What a marker sits on. Grows if a language attaches markers to something
+/// else (a parameter, a statement); an unknown target marks nothing dispatch
+/// can act on — silence, never an accusation.
+#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ContractFingerprint)]
+#[serde(rename_all = "kebab-case")]
+pub enum MarkerTarget {
+    /// The whole file — an inner attribute (`#![…]`), a module-level pragma.
+    File,
+    Declaration(DeclarationId),
+}
+
+/// A marker: an attribute, annotation, decorator or pragma the source attaches
+/// to a declaration or to the whole file — the SYNTAX as data, never its
+/// meaning. `path` is the marker's name as written, segments joined in the
+/// language's own spelling (`test`, `tokio::test`, `org.junit.Test`); `args`
+/// holds its top-level arguments as written, each trimmed with inner
+/// whitespace runs collapsed to one space (`dead_code`, `feature = "x"`,
+/// `rename_all = "camelCase"`). What a marker MEANS is a
+/// [`crate::extension::DispatchRule`] on the claiming extension's spec: the
+/// engine matches the rules against the markers and derives roots and
+/// exemptions, so a framework's test attribute is one line of data and never
+/// a branch in an adapter.
+#[derive(Debug, Clone, Serialize, Deserialize, ContractFingerprint)]
+pub struct Marker {
+    pub on: MarkerTarget,
+    pub path: SmolStr,
+    pub args: Vec<SmolStr>,
+    pub span: Span,
+}
+
 /// A comment's extent plus the extent of its text (delimiters stripped). Adapters
 /// report where comments ARE; the engine owns what a `kndo:` pragma inside one means —
 /// so every adapter, WASM included, gets suppression for free and the grammar has one
@@ -385,6 +418,7 @@ pub struct FileEvidence {
     pub references: Vec<Reference>,
     pub imports: Vec<Import>,
     pub roots: Vec<Root>,
+    pub markers: Vec<Marker>,
     pub comments: Vec<CommentSpan>,
     pub metrics: Vec<(DeclarationId, FunctionMetrics)>,
     pub diagnostics: Vec<AdapterDiagnostic>,
@@ -426,6 +460,7 @@ impl EvidenceSink {
                 references: Vec::new(),
                 imports: Vec::new(),
                 roots: Vec::new(),
+                markers: Vec::new(),
                 comments: Vec::new(),
                 metrics: Vec::new(),
                 diagnostics: Vec::new(),
@@ -613,6 +648,33 @@ impl EvidenceSink {
             target,
             kind,
             confidence,
+        });
+    }
+
+    /// A marker on a declaration (by id) or on the whole file — see [`Marker`].
+    /// An optional stream: declare [`EvidenceStream::Markers`] or the write
+    /// drops with a diagnostic.
+    pub fn marker(
+        &mut self,
+        on: MarkerTarget,
+        path: impl Into<SmolStr>,
+        args: Vec<SmolStr>,
+        span: Span,
+    ) {
+        if let MarkerTarget::Declaration(id) = on
+            && !self.valid_id(id, "marker")
+        {
+            return;
+        }
+        if !self.declared(EvidenceStream::Markers) {
+            return;
+        }
+        let span = self.clamp(span, "marker");
+        self.out.markers.push(Marker {
+            on,
+            path: path.into(),
+            args,
+            span,
         });
     }
 

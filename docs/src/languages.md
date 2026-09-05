@@ -10,7 +10,7 @@ consumer in the engine.
 | Adapter | Suffixes | Manifests and launchers | Roots |
 |---|---|---|---|
 | `kndo:js-ts` | `ts` `tsx` `js` `jsx` `mjs` `cjs` `mts` `cts` | `package.json`; `.github/workflows/*.yml`, `action.yml` | manifest entries (`main`, `module`, `browser`, `bin`, `exports`, `imports`), files handed to a runtime by npm scripts and by workflow or action steps (`node`, `tsx`, `ts-node`, `bun`, `deno`), test files, config files, shebangs |
-| `kndo:rust` | `rs` | `Cargo.toml` | crate roots (`main.rs`, `lib.rs`, bins, examples, tests, benches), `#[cfg(test)]` |
+| `kndo:rust` | `rs` | `Cargo.toml` | crate roots (`main.rs`, `lib.rs`, bins, examples, tests, benches); by dispatch rule: `#[test]`, `#[bench]`, `#[cfg(test)]`, `#[no_mangle]` and the other linkage attributes, `#[tokio::main]`-style entries; `#[allow(dead_code)]` and kin exempt |
 | `kndo:go` | `go` | `go.mod` | `package main`, `_test.go`; a package is one unit |
 | `kndo:java` | `java` | `pom.xml`, `build.gradle`, `build.gradle.kts`, `settings.gradle`, `settings.gradle.kts` | `main` methods, test sources, framework annotations through extensions |
 | `kndo:kotlin` | `kt` | the same JVM manifests | `main` functions, test sources |
@@ -49,9 +49,20 @@ adapter says nothing:
   imports without being its source — `.vue`, `.svelte`, `.astro`, `.mdx`,
   `.html`, `.css`, … for JavaScript — so a dependency judgment abstains when
   such files exist and no adapter reads them, rather than accuse.
-- **Evidence streams**: comments (for `kndo:allow`) and per-function metrics
-  (for `duplicate` and `crap`), each declared so their absence is typed and an
-  analysis abstains instead of guessing.
+- **Dispatch rules**: what the language's markers — attributes, annotations,
+  decorators, pragmas — mean. An adapter reports every marker as evidence,
+  path and arguments as written; its spec's rules say which ones root an entry
+  of which color and which exempt a declaration from `unused`. Rust's rules
+  make `#[test]`, `#[tokio::test]`, `#[bench]` and a `cfg(test)` gate Test
+  roots, `#[no_mangle]`, `#[global_allocator]` and their kin Production roots,
+  and honor `#[allow(dead_code)]`, `#[expect(dead_code)]` and the `unused` and
+  `warnings` groups as exemptions — lexically scoped, and a file-level
+  `#![allow(dead_code)]` is reported as a diagnostic so the silence is visible.
+  `used-by` shows a dispatched root as `dispatch:<color>` and an exemption as
+  `exempt`.
+- **Evidence streams**: comments (for `kndo:allow`), per-function metrics
+  (for `duplicate` and `crap`) and markers (for dispatch), each declared so
+  their absence is typed and an analysis abstains instead of guessing.
 
 ## Cross-language reach
 

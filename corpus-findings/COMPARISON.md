@@ -1054,3 +1054,28 @@ files in `files_discovered` and nothing in findings. Surface v1 never had: a
 composite action's own file through `$GITHUB_ACTION_PATH` — the dogfood's
 `action/render.mjs`, the finding that started this — and a JavaScript action's
 `main`/`pre`/`post` entries.
+
+## M8.a — markers and dispatch: the attribute becomes evidence (2026-09-05)
+
+ripgrep 155 → 154: `unused` 4 → 3. The const `SHERLOCK_CRLF` in
+`crates/printer/src/standard.rs` carries its own `#[allow(dead_code)]`; the
+rust adapter now reports the attribute as a marker and the spec's rule reads
+it as an exemption, so the accusation the source had already disclaimed is
+gone — `used-by` answers `exempt`. v1 accused it too (its allow handling was
+`kndo:allow` pragmas only), so this is the second contract vice retired on
+ripgrep: an attribute is the code's own statement, and a judgment that ignores
+it is not reading the code.
+
+Of the three `unused` that remain, `Handle.read_write` and
+`Handle.read_write_mut` in `crates/index/src/index.rs` sit under the crate
+root's `#![allow(warnings)]` in `crates/index/src/lib.rs`. rustc scopes a
+crate root's inner attribute over the whole crate; the marker sits on the file
+that carries it and dispatch exempts that file's declarations only, so the two
+stay accused — the `crate-level-allow` fixture holds this as a known gap with
+its fix named (M8.b units: a unit root's file-level markers dispatch over the
+unit). The third, `crates/index/src/index.rs` aside, is the grep-verified true
+positive of M4.
+
+Every other repository byte-identical — the change is rust's alone, and every
+root the adapter's attribute table used to state is the root the rules derive:
+all 27 existing rust conformance fixtures re-pin to the same bytes.

@@ -12,18 +12,26 @@
 //! import ./x { a, b }  binding import
 //! root name            production root anchored on the declaration `name`
 //! root-file            whole-file production root
+//! mark name path a,b   a marker `path(a, b)` on the declaration `name`
+//! mark-file path a,b   a marker on the whole file
 //! # text               a comment (the Comments stream, declared)
 //! ```
+//!
+//! Markers mean nothing until a spec says so: [`MockExtension::dispatching`]
+//! speaks the same language under the dispatch rules a test hands it.
 
 pub mod expectations;
 
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{
     CoverageRecords, DeclarationId, DiagnosticLevel, EvidenceSink, EvidenceStream, EvidenceStreams,
-    ImportBinding, ImportShape, ImportTarget, Reach, RefKind, RootKind, RootTarget, SymbolKind,
-    Timing,
+    ImportBinding, ImportShape, ImportTarget, MarkerTarget, Reach, RefKind, RootKind, RootTarget,
+    SymbolKind, Timing,
 };
-use kndo_contract::extension::{ConductSink, ContentAccess, Extension, ExtensionSpec, GraphAccess};
+use kndo_contract::extension::{
+    ConductSink, ContentAccess, DispatchRule, Extension, ExtensionSpec, ExtensionSpecBuilder,
+    GraphAccess,
+};
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -47,30 +55,46 @@ pub struct MockExtension {
 /// The kmock-speaking mock under its historical name.
 pub type MockAdapter = MockExtension;
 
+/// The kmock language's spec, before the capability a test adds to it.
+fn kmock_spec() -> ExtensionSpecBuilder {
+    ExtensionSpec::builder("kmock", 1)
+        .suffixes(&["kmock"])
+        .emits(EvidenceStreams::of(&[
+            EvidenceStream::Comments,
+            EvidenceStream::Markers,
+        ]))
+}
+
 impl MockExtension {
     pub fn new() -> Self {
-        MockExtension {
-            spec: ExtensionSpec::builder("kmock", 1)
-                .suffixes(&["kmock"])
-                .emits(EvidenceStreams::of(&[EvidenceStream::Comments]))
-                .build(),
-            speaks_kmock: true,
-            on_contribute: None,
-            on_report: None,
-            on_ingest: None,
-        }
+        MockExtension::speaking(kmock_spec().build())
     }
 
     /// The kmock language declaring import cycles a hazard — what a test of the
     /// `cyclic` analysis speaks, since the plain mock tolerates them.
     pub fn hazardous() -> Self {
-        let mut mock = MockExtension::new();
-        mock.spec = ExtensionSpec::builder("kmock", 1)
-            .suffixes(&["kmock"])
-            .emits(EvidenceStreams::of(&[EvidenceStream::Comments]))
-            .import_cycles(kndo_contract::extension::CycleTolerance::Hazard)
-            .build();
-        mock
+        MockExtension::speaking(
+            kmock_spec()
+                .import_cycles(kndo_contract::extension::CycleTolerance::Hazard)
+                .build(),
+        )
+    }
+
+    /// The kmock language under dispatch rules — what a test of the engine's
+    /// dispatch speaks: `mark` lines become markers, and these rules say what
+    /// they mean.
+    pub fn dispatching(rules: Vec<DispatchRule>) -> Self {
+        MockExtension::speaking(kmock_spec().dispatch(rules).build())
+    }
+
+    fn speaking(spec: ExtensionSpec) -> Self {
+        MockExtension {
+            spec,
+            speaks_kmock: true,
+            on_contribute: None,
+            on_report: None,
+            on_ingest: None,
+        }
     }
 
     /// A conduct/ingestion mock: no language, the given spec, and whatever the
@@ -191,6 +215,20 @@ impl Extension for MockExtension {
                         Some(span),
                     ),
                 }
+            } else if let Some(rest) = line.strip_prefix("mark-file ") {
+                let (path, args) = marker_parts(rest);
+                out.marker(MarkerTarget::File, path, args, span);
+            } else if let Some(rest) = line.strip_prefix("mark ") {
+                let (name, rest) = rest.trim().split_once(' ').unwrap_or((rest.trim(), ""));
+                let (path, args) = marker_parts(rest);
+                match decls.get(name) {
+                    Some(id) => out.marker(MarkerTarget::Declaration(*id), path, args, span),
+                    None => out.diagnostic(
+                        DiagnosticLevel::Warn,
+                        format!("mark names undeclared `{name}`"),
+                        Some(span),
+                    ),
+                }
             } else if let Some((timing, rest)) = timed_import(line) {
                 let (specifier, shape) = match rest.split_once('{') {
                     Some((spec, names)) => {
@@ -241,6 +279,19 @@ impl Extension for MockExtension {
             Resolution::Unresolved
         }
     }
+}
+
+/// `path a,b` — a marker's path and its comma-separated arguments.
+fn marker_parts(rest: &str) -> (&str, Vec<smol_str::SmolStr>) {
+    let rest = rest.trim();
+    let (path, args) = rest.split_once(' ').unwrap_or((rest, ""));
+    let args = args
+        .split(',')
+        .map(str::trim)
+        .filter(|a| !a.is_empty())
+        .map(smol_str::SmolStr::new)
+        .collect();
+    (path, args)
 }
 
 /// `import ./x`, `lazy-import ./x`, `erased-import ./x` — the three moments an

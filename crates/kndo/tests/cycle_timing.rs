@@ -2,33 +2,14 @@
 //! the code around it does, or never (types), cannot take part in an
 //! initialization hazard — while reachability keeps every timing.
 
-use kndo::{CacheLocation, Category, Config, RunMode, Session, Threads};
+mod common;
+
+use common::reported as categories;
+use kndo::Category;
 use kndo_testkit::{MockExtension, TempProject};
 
 fn run(project: &TempProject) -> kndo::Snapshot {
-    let session = Session::open(
-        project.root(),
-        Config {
-            threads: Threads::Auto,
-            cache: CacheLocation::Off,
-            ..Config::default()
-        },
-        vec![Box::new(MockExtension::hazardous())],
-    )
-    .expect("open");
-    session.analyze(RunMode::Full).expect("analyze")
-}
-
-fn categories(snap: &kndo::Snapshot, category: &Category) -> Vec<String> {
-    let mut out: Vec<String> = snap
-        .report()
-        .findings
-        .iter()
-        .filter(|f| &f.category == category)
-        .map(|f| f.subject.render())
-        .collect();
-    out.sort();
-    out
+    common::analyze(project, vec![Box::new(MockExtension::hazardous())])
 }
 
 #[test]

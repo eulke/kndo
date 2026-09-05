@@ -19,12 +19,12 @@
     ]
   },
   "health": {
-    "implicated": 4,
+    "implicated": 3,
     "subjects": 2618,
     "by_category": [
       {
         "category": "unused",
-        "findings": 4
+        "findings": 3
       }
     ],
     "by_package": [
@@ -73,7 +73,7 @@
       {
         "name": "grep_printer",
         "manifest": "crates/printer/Cargo.toml",
-        "implicated": 1,
+        "implicated": 0,
         "subjects": 452
       },
       {
@@ -162,28 +162,6 @@
       "lines": {
         "start": 191,
         "end": 198
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-72d6a4af68ff",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "crates/printer/src/standard.rs",
-        "selector": {
-          "Free": "SHERLOCK_CRLF"
-        },
-        "span": {
-          "start": 64018,
-          "end": 64437
-        }
-      },
-      "lines": {
-        "start": 1763,
-        "end": 1770
       },
       "message": "nothing references, roots, or imports this declaration"
     },

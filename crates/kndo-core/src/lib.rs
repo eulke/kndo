@@ -8,6 +8,7 @@ mod cache;
 pub mod conduct;
 pub mod coverage;
 mod discover;
+mod dispatch;
 mod extract;
 mod graph;
 mod health;

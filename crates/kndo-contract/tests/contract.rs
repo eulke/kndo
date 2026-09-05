@@ -1,6 +1,6 @@
 use kndo_contract::evidence::{
-    DiagnosticLevel, EvidenceSink, EvidenceStream, EvidenceStreams, FunctionMetrics, Reach,
-    RefKind, RootKind, RootTarget, SymbolKind,
+    DiagnosticLevel, EvidenceSink, EvidenceStream, EvidenceStreams, FunctionMetrics, MarkerTarget,
+    Reach, RefKind, RootKind, RootTarget, SymbolKind,
 };
 use kndo_contract::subject::{FindingId, Subject, SymbolSelector};
 use kndo_contract::vocab::{Category, ProjectPath, Span, SubjectKind};
@@ -163,4 +163,43 @@ fn as_str_spellings_are_the_serde_spellings() {
         let json = serde_json::to_string(&c).unwrap();
         assert_eq!(json, format!("\"{}\"", c.as_str()));
     }
+}
+
+#[test]
+fn markers_ride_their_declared_stream() {
+    // Declared: a marker on a declaration or the file lands as written.
+    let mut sink = EvidenceSink::new(80, EvidenceStreams::of(&[EvidenceStream::Markers]));
+    let f = sink.declaration("f", SymbolKind::Function, Span::new(10, 30), Reach::Private);
+    sink.marker(
+        MarkerTarget::Declaration(f),
+        "tokio::test",
+        vec!["flavor = \"multi_thread\"".into()],
+        Span::new(0, 9),
+    );
+    sink.marker(
+        MarkerTarget::File,
+        "allow",
+        vec!["dead_code".into()],
+        Span::new(40, 60),
+    );
+    let ev = sink.finish();
+    assert_eq!(ev.markers.len(), 2);
+    assert_eq!(ev.markers[0].path, "tokio::test");
+    assert_eq!(ev.markers[0].args, ["flavor = \"multi_thread\""]);
+    assert_eq!(ev.markers[0].on, MarkerTarget::Declaration(f));
+    assert_eq!(ev.markers[1].on, MarkerTarget::File);
+    assert!(ev.diagnostics.is_empty());
+
+    // Undeclared: the write drops with a diagnostic, the pairing rule's teeth.
+    let mut sink = EvidenceSink::new(80, EvidenceStreams::none());
+    sink.marker(MarkerTarget::File, "allow", vec![], Span::new(0, 5));
+    let ev = sink.finish();
+    assert!(ev.markers.is_empty());
+    assert!(
+        ev.diagnostics
+            .iter()
+            .any(|d| d.message.contains("undeclared stream Markers")),
+        "{:?}",
+        ev.diagnostics
+    );
 }

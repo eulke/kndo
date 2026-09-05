@@ -403,10 +403,19 @@
     },
     "EvidenceStream": {
       "description": "An optional evidence stream — one whose absence would be ambiguous without a\ndeclaration. Grows a variant whenever a language teaches us a new stream\n(test spans, units, …); the default for every adapter is not-declared.",
-      "type": "string",
-      "enum": [
-        "comments",
-        "metrics"
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "comments",
+            "metrics"
+          ]
+        },
+        {
+          "description": "Attributes, annotations, decorators, pragmas — see [`Marker`].",
+          "type": "string",
+          "const": "markers"
+        }
       ]
     },
     "ExportNarrowing": {

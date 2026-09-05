@@ -88,6 +88,12 @@ pub enum Keeper {
     Binding { site: Site },
     /// A root anchoring the declaration itself (or its owner).
     Root { kind: RootKind },
+    /// A root the engine's dispatch derived from a marker on the declaration
+    /// (or its owner), under the language's rules.
+    Dispatch { kind: RootKind },
+    /// The source itself exempts the declaration from the unused judgment (an
+    /// `allow(dead_code)`-class marker, dispatched).
+    Exempt,
     /// A whole-file entry hands out the exported surface this rides.
     EntrySurface,
     /// An importer takes the file's whole surface (namespace/side-effect).
@@ -202,6 +208,8 @@ impl Capped {
 ///   public class) or they are `Private` (never handed out).
 /// - An import binding the module-system name (or exported alias) keeps a free
 ///   declaration whatever its reach — the adapter resolved that edge as legal.
+/// - An exemption the source asked for outranks every question: it is listed
+///   first, and alone it keeps.
 pub fn keepers(
     graph: &Graph,
     index: &Index,
@@ -230,22 +238,25 @@ pub fn keepers(
         },
         Reach::Private => (false, None),
     };
-    let entry_surface = f
-        .evidence
-        .roots
-        .iter()
-        .chain(&f.anchored)
-        .any(|r| matches!(r.target, RootTarget::WholeFile));
+    if f.exempt.binary_search(&(decl as u32)).is_ok() && kept.push(Keeper::Exempt) {
+        return kept.out;
+    }
+    let entry_surface = f.roots().any(|r| matches!(r.target, RootTarget::WholeFile));
 
     // Roots anchoring the declaration itself, or its owner.
+    let anchors = |r: &kndo_contract::evidence::Root| match &r.target {
+        RootTarget::Declaration(id) => {
+            id.index() == decl || d.owner.is_some_and(|o| o.index() == id.index())
+        }
+        _ => false,
+    };
     for r in f.evidence.roots.iter().chain(&f.anchored) {
-        let anchors = match &r.target {
-            RootTarget::Declaration(id) => {
-                id.index() == decl || d.owner.is_some_and(|o| o.index() == id.index())
-            }
-            _ => false,
-        };
-        if anchors && kept.push(Keeper::Root { kind: r.kind }) {
+        if anchors(r) && kept.push(Keeper::Root { kind: r.kind }) {
+            return kept.out;
+        }
+    }
+    for r in &f.dispatched {
+        if anchors(r) && kept.push(Keeper::Dispatch { kind: r.kind }) {
             return kept.out;
         }
     }

@@ -1,0 +1,30 @@
+# attribute-dispatch: attributes are markers, and the spec's dispatch rules say what they mean — a linkage attribute roots Production, the dead-code lint's escape hatches exempt, a file-level blanket exempts everything and is reported.
+
+[[dead]]
+subject = "src/ffi.rs#truly_dead"
+category = "unused"
+why = "nothing calls it and no attribute speaks for it"
+
+[[alive]]
+subject = "src/ffi.rs#exported_symbol"
+why = "#[unsafe(no_mangle)] unwraps to no_mangle: the linker exports it — a dispatched Production root"
+
+[[alive]]
+subject = "src/ffi.rs#kept_on_purpose"
+why = "#[allow(dead_code)] exempts it: the source already answered the question"
+
+[[alive]]
+subject = "src/ffi.rs#expected_unused"
+why = "#[expect(unused)] exempts it: the author asked the compiler for exactly this lint"
+
+[[alive]]
+subject = "src/ffi.rs#touches"
+why = "#[test] roots it Test — a dispatched root, inside the cfg(test)-rooted inline module"
+
+[[alive]]
+subject = "src/scratch.rs#draft_one"
+why = "#![allow(dead_code)] at file level exempts every declaration in the file; the run reports the blanket as a diagnostic"
+
+[[alive]]
+subject = "src/scratch.rs#draft_two"
+why = "the same file-level blanket"

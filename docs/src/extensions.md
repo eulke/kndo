@@ -117,10 +117,11 @@ The spec is the whole declaration. What a builder chain can state:
 |---|---|
 | `builder(coordinate, version)` | the extension's identity and the version of the evidence it emits — bump it when the same source yields different evidence, and every cache keyed on it invalidates |
 | `suffixes`, `claims` | which files it claims (a suffix list, and extra globs) |
-| `emits` | the optional evidence streams it produces (`Comments`, `Metrics`); an undeclared stream is typed absence, and analyses that need it abstain on its files |
+| `emits` | the optional evidence streams it produces (`Comments`, `Metrics`, `Markers`); an undeclared stream is typed absence, and analyses that need it abstain on its files |
 | `manifests` | globs of the manifests it reads for roots, packages and dependency declarations |
 | `launchers` | globs of files it reads for roots alone — a CI workflow, a task runner's file — which declare no package and own no files |
 | `narrowable`, `export_narrowing`, `import_cycles`, `dependency_scoping`, `dependency_identity`, `dependency_builtins`, `dependency_importers` | the language facts the engine's judgments consume (see [Languages](languages.md)) |
+| `dispatch` | what the language's markers mean: rules pairing a trigger (a marker path pattern, optionally with an argument pattern) with an effect — a root of a color, or an exemption from `unused` — and a confidence; the engine derives roots and exemptions from every file's markers, so an attribute is a line of data, never a branch in an adapter |
 | `conduct(activation, mutates_graph)` | the two gates of a plugin: when it runs (`Always`, or any of a set of rules — a manifest dependency by name, a file glob existing), and whether its contributions change reachability (`Yes` turns the persisted graph cache off for projects it activates on; `No` is a promise the engine holds you to) |
 | `rule(name, description)` | a finding category this extension may report, published as `ext:<coordinate>/<name>` |
 | `dependencies` | other extensions whose activation implies this one — the path to a plugin whose framework is an indirect dependency |

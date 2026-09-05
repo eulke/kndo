@@ -7,8 +7,8 @@
 //! invisibly) — never accusing what the grammar alone cannot prove dead.
 
 use kndo_contract::evidence::{
-    DeclarationId, EvidenceSink, ImportBinding, ImportShape, ImportTarget, Reach, RefKind,
-    RootKind, RootTarget, SymbolKind,
+    DeclarationId, EvidenceSink, ImportBinding, ImportShape, ImportTarget, MarkerTarget, Reach,
+    RefKind, RootKind, RootTarget, SymbolKind,
 };
 use kndo_contract::vocab::Confidence;
 use kndo_toolkit as tk;
@@ -50,7 +50,7 @@ pub fn extract(
         stack: Vec::new(),
         out,
     };
-    cx.items(root);
+    cx.items(root, MarkerTarget::File);
     cx.nested_uses(root);
     let impls = std::mem::take(&mut cx.impls);
     for node in impls {
@@ -181,11 +181,39 @@ struct ItemPass<'a, 'o> {
 }
 
 impl<'a> ItemPass<'a, '_> {
-    fn items(&mut self, container: Node<'a>) {
+    /// The items of a module body — the file's, or an inline `mod`'s, which is
+    /// what `on` names: an inner attribute (`#![…]`) speaks for its container.
+    fn items(&mut self, container: Node<'a>, on: MarkerTarget) {
         let mut cursor = container.walk();
         let children: Vec<Node<'a>> = container.named_children(&mut cursor).collect();
         for item in children {
+            if item.kind() == "inner_attribute_item" {
+                self.marker(item, on.clone());
+                continue;
+            }
             self.item(item);
+        }
+    }
+
+    /// One `#[…]`/`#![…]` as marker evidence — see [`attribute_parts`].
+    fn marker(&mut self, attr_item: Node<'a>, on: MarkerTarget) {
+        let Some(attr) = attr_item.named_child(0) else {
+            return;
+        };
+        let Some((path, args)) = attribute_parts(attr, self.source) else {
+            return;
+        };
+        self.out.marker(
+            on,
+            path,
+            args.into_iter().map(SmolStr::from).collect(),
+            tk::span(attr_item),
+        );
+    }
+
+    fn markers(&mut self, attrs: &[Node<'a>], id: DeclarationId) {
+        for attr in attrs {
+            self.marker(*attr, MarkerTarget::Declaration(id));
         }
     }
 
@@ -198,7 +226,7 @@ impl<'a> ItemPass<'a, '_> {
         {
             return;
         }
-        let attrs = attributes_of(item, self.source);
+        let attrs = attribute_items(item);
         let reach = reach_of(item, self.source);
         match item.kind() {
             "function_item" => {
@@ -209,7 +237,7 @@ impl<'a> ItemPass<'a, '_> {
                             .declaration(name, SymbolKind::Function, tk::span(item), reach);
                     self.free_declarations.entry(name.to_string()).or_insert(id);
                     self.out.metrics(id, function_metrics(item, self.source));
-                    root_for_attrs(&attrs, id, self.out);
+                    self.markers(&attrs, id);
                     // A top-level `fn main` is the language's entry convention: in
                     // any target the runtime calls it, and extraction cannot see
                     // the manifest that would say which files are targets. Probable
@@ -233,7 +261,7 @@ impl<'a> ItemPass<'a, '_> {
                             .declaration(name, SymbolKind::Type, tk::span(item), reach.clone());
                     self.types.entry(name.to_string()).or_insert(id);
                     self.free_declarations.entry(name.to_string()).or_insert(id);
-                    root_for_attrs(&attrs, id, self.out);
+                    self.markers(&attrs, id);
                     if item.kind() == "trait_item" {
                         self.trait_members(item, id, reach);
                     }
@@ -249,7 +277,7 @@ impl<'a> ItemPass<'a, '_> {
                     let name = tk::text(n, self.source);
                     let id = self.out.declaration(name, kind, tk::span(item), reach);
                     self.free_declarations.entry(name.to_string()).or_insert(id);
-                    root_for_attrs(&attrs, id, self.out);
+                    self.markers(&attrs, id);
                 }
             }
             "mod_item" => {
@@ -264,9 +292,9 @@ impl<'a> ItemPass<'a, '_> {
                                 reach,
                             );
                             self.free_declarations.entry(name.to_string()).or_insert(id);
-                            root_for_attrs(&attrs, id, self.out);
+                            self.markers(&attrs, id);
                             self.stack.push(name.to_string());
-                            self.items(body);
+                            self.items(body, MarkerTarget::Declaration(id));
                             self.stack.pop();
                         }
                         // `mod foo;` is module-system plumbing, not an accusable
@@ -282,7 +310,7 @@ impl<'a> ItemPass<'a, '_> {
                         None => {
                             let mut segments = vec!["self".to_string()];
                             segments.extend(self.stack.iter().cloned());
-                            match attrs.iter().find_map(|a| path_attribute(a)) {
+                            match attrs.iter().find_map(|a| path_attribute(*a, self.source)) {
                                 Some(redirect) => {
                                     self.redirects
                                         .entry(name.to_string())
@@ -356,6 +384,7 @@ impl<'a> ItemPass<'a, '_> {
             if m.child_by_field_name("body").is_some() {
                 self.out.metrics(id, function_metrics(m, self.source));
             }
+            self.markers(&attribute_items(m), id);
         }
     }
 
@@ -378,6 +407,10 @@ impl<'a> ItemPass<'a, '_> {
         let Some(body) = impl_item.child_by_field_name("body") else {
             return;
         };
+        // Attributes on the `impl` block gate or exempt every member lexically
+        // (`#[cfg(test)] impl X { … }`); the block declares nothing itself, so
+        // each member carries them beside its own.
+        let impl_attrs = attribute_items(impl_item);
         let mut c = body.walk();
         let members: Vec<Node<'a>> = body.named_children(&mut c).collect();
         for m in members {
@@ -399,8 +432,9 @@ impl<'a> ItemPass<'a, '_> {
             if has_metrics {
                 self.out.metrics(id, function_metrics(m, self.source));
             }
-            let attrs = attributes_of(m, self.source);
-            root_for_attrs(&attrs, id, self.out);
+            let mut attrs = impl_attrs.clone();
+            attrs.extend(attribute_items(m));
+            self.markers(&attrs, id);
         }
     }
 
@@ -743,82 +777,197 @@ fn reach_of(item: Node<'_>, source: &[u8]) -> Reach {
     }
 }
 
-/// `path = "foo/bar.rs"` from a `#[path]` attribute, as module-path segments
-/// (`["foo", "bar"]`) relative to the declaring module's directory.
-fn path_attribute(attr: &str) -> Option<Vec<String>> {
-    let rest = attr.strip_prefix("path")?.trim_start().strip_prefix('=')?;
-    let quoted = rest.trim().strip_prefix('"')?.strip_suffix('"')?;
+/// `path = "foo/bar.rs"` from a `#[path]` attribute item, as module-path
+/// segments (`["foo", "bar"]`) relative to the declaring module's directory.
+fn path_attribute(attr_item: Node<'_>, source: &[u8]) -> Option<Vec<String>> {
+    let (path, args) = attribute_parts(attr_item.named_child(0)?, source)?;
+    if path != "path" || args.len() != 1 {
+        return None;
+    }
+    let quoted = args[0].strip_prefix('"')?.strip_suffix('"')?;
     let stem = quoted.strip_suffix(".rs").unwrap_or(quoted);
     Some(stem.split('/').map(str::to_string).collect())
 }
 
-/// Outer `#[...]` attribute paths of an item (`test`, `tokio::test`, `cfg`, ...),
-/// argument lists included as written.
-fn attributes_of(item: Node<'_>, source: &[u8]) -> Vec<String> {
+/// The outer `#[…]` attribute items of an item, in source order. Doc comments
+/// may sit between an item and its attributes.
+fn attribute_items(item: Node<'_>) -> Vec<Node<'_>> {
     let mut out = Vec::new();
     let mut prev = item.prev_named_sibling();
     while let Some(p) = prev {
         match p.kind() {
-            "attribute_item" => {
-                if let Some(attr) = p.named_child(0) {
-                    out.push(tk::text(attr, source).to_string());
-                }
-            }
-            // Doc comments may sit between an item and its attributes.
+            "attribute_item" => out.push(p),
             "line_comment" | "block_comment" => {}
             _ => break,
         }
         prev = p.prev_named_sibling();
     }
+    out.reverse();
     out
 }
 
-/// Attribute-declared liveness. Test-runner attributes (`#[test]`, `#[tokio::test]`,
-/// `#[bench]`) and `#[cfg(test)]` gates root a declaration as Test; linkage and
-/// runtime attributes (`#[no_mangle]`, `#[global_allocator]`, ...) mean something
-/// outside the graph calls it — a Production root. Certain either way: the attribute
-/// is the code's own statement.
-fn root_for_attrs(attrs: &[String], id: DeclarationId, out: &mut EvidenceSink) {
-    const PRODUCTION: [&str; 10] = [
-        "no_mangle",
-        "export_name",
-        "global_allocator",
-        "panic_handler",
-        "alloc_error_handler",
-        "used",
-        "proc_macro",
-        "proc_macro_derive",
-        "proc_macro_attribute",
-        "start",
-    ];
-    for attr in attrs {
-        let path = attr.split('(').next().unwrap_or(attr).trim();
-        let last = path.rsplit("::").next().unwrap_or(path);
-        if last == "test" || last == "bench" {
-            out.root(
-                RootTarget::Declaration(id),
-                RootKind::Test,
-                Confidence::Certain,
-            );
-            return;
+/// The marker an `attribute` node spells: its path as written (whitespace
+/// dropped) and its top-level arguments — the parenthesized list split at
+/// depth-zero commas, or the one `= value` — each trimmed, inner whitespace
+/// runs collapsed to one space. Two of the language's own normalizations, so
+/// a rule reads one spelling: `#[unsafe(no_mangle)]` (the 2024 edition's
+/// unsafe attributes) unwraps to the attribute inside, and a `cfg` predicate
+/// flattens to its atoms — `all`/`any` transparently, `not` as a `!` prefix —
+/// so `cfg(test)` and `cfg(all(test, unix))` both carry `test` while
+/// `cfg(not(test))` carries `!test`. Meaning stays with the spec's dispatch
+/// rules.
+fn attribute_parts(attr: Node<'_>, source: &[u8]) -> Option<(String, Vec<String>)> {
+    let path_node = attr.named_child(0)?;
+    let path: String = tk::text(path_node, source)
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect();
+    let args = match (
+        attr.child_by_field_name("arguments"),
+        attr.child_by_field_name("value"),
+    ) {
+        (Some(tt), _) => {
+            let text = tk::text(tt, source);
+            let inner = text
+                .strip_prefix('(')
+                .and_then(|t| t.strip_suffix(')'))
+                .unwrap_or(text);
+            split_arguments(inner)
         }
-        // `#[tokio::main]`-style attributes mark an entry point.
-        if last == "main" || PRODUCTION.contains(&path) {
-            out.root(
-                RootTarget::Declaration(id),
-                RootKind::Production,
-                Confidence::Certain,
-            );
-            return;
+        (None, Some(value)) => vec![normalize_whitespace(tk::text(value, source))],
+        (None, None) => Vec::new(),
+    };
+    Some(normalize_attribute(path, args))
+}
+
+fn normalize_attribute(path: String, args: Vec<String>) -> (String, Vec<String>) {
+    if path == "unsafe" && args.len() == 1 {
+        let (inner_path, inner_args) = split_attribute_text(&args[0]);
+        return normalize_attribute(inner_path, inner_args);
+    }
+    if path == "cfg" {
+        let mut atoms = Vec::new();
+        for arg in &args {
+            flatten_cfg(arg, false, &mut atoms);
         }
-        if path == "cfg" && cfg_names_bare_test(attr) {
-            out.root(
-                RootTarget::Declaration(id),
-                RootKind::Test,
-                Confidence::Certain,
-            );
-            return;
+        return (path, atoms);
+    }
+    (path, args)
+}
+
+/// `no_mangle`, `tokio::test(flavor = "x")`, `path = "x"` as text — the shape
+/// inside `unsafe(…)` — split into a path and its arguments like a node is.
+fn split_attribute_text(text: &str) -> (String, Vec<String>) {
+    let text = text.trim();
+    let end = text
+        .find(|c: char| !(c.is_alphanumeric() || c == '_' || c == ':' || c == '$'))
+        .unwrap_or(text.len());
+    let path = text[..end].to_string();
+    let rest = text[end..].trim();
+    let args = if let Some(inner) = rest.strip_prefix('(').and_then(|r| r.strip_suffix(')')) {
+        split_arguments(inner)
+    } else if let Some(value) = rest.strip_prefix('=') {
+        vec![normalize_whitespace(value)]
+    } else {
+        Vec::new()
+    };
+    (path, args)
+}
+
+/// Depth-zero commas split an argument list; string literals are opaque.
+fn split_arguments(text: &str) -> Vec<String> {
+    let mut pieces: Vec<&str> = Vec::new();
+    let mut depth = 0i32;
+    let mut in_str = false;
+    let mut escaped = false;
+    let mut start = 0;
+    for (i, ch) in text.char_indices() {
+        if in_str {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                in_str = false;
+            }
+            continue;
         }
+        match ch {
+            '"' => in_str = true,
+            '(' | '[' | '{' => depth += 1,
+            ')' | ']' | '}' => depth -= 1,
+            ',' if depth == 0 => {
+                pieces.push(&text[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    pieces.push(&text[start..]);
+    pieces
+        .into_iter()
+        .map(normalize_whitespace)
+        .filter(|a| !a.is_empty())
+        .collect()
+}
+
+/// Trimmed, whitespace runs outside string literals collapsed to one space.
+fn normalize_whitespace(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut in_str = false;
+    let mut escaped = false;
+    let mut pending_space = false;
+    for ch in text.trim().chars() {
+        if in_str {
+            out.push(ch);
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                in_str = false;
+            }
+            continue;
+        }
+        if ch.is_whitespace() {
+            pending_space = true;
+            continue;
+        }
+        if pending_space {
+            out.push(' ');
+            pending_space = false;
+        }
+        if ch == '"' {
+            in_str = true;
+        }
+        out.push(ch);
+    }
+    out
+}
+
+/// A `cfg` predicate to its atoms: `all`/`any` are transparent, `not` flips
+/// the `!` prefix — presence is what a rule reads, never the truth table.
+fn flatten_cfg(predicate: &str, negated: bool, out: &mut Vec<String>) {
+    let p = predicate.trim();
+    let call = |name: &str| {
+        p.strip_prefix(name)
+            .and_then(|r| r.trim_start().strip_prefix('('))
+            .and_then(|r| r.strip_suffix(')'))
+    };
+    if let Some(inner) = call("all").or_else(|| call("any")) {
+        for x in split_arguments(inner) {
+            flatten_cfg(&x, negated, out);
+        }
+    } else if let Some(inner) = call("not") {
+        for x in split_arguments(inner) {
+            flatten_cfg(&x, !negated, out);
+        }
+    } else if !p.is_empty() {
+        out.push(if negated {
+            format!("!{p}")
+        } else {
+            p.to_string()
+        });
     }
 }
 
@@ -1173,25 +1322,3 @@ const COMMENT_MARKERS: tk::CommentMarkers<'static> = tk::CommentMarkers {
     line_doc: b"/!",
     block_doc: b"*!",
 };
-
-/// True when a `cfg(...)` argument names the bare `test` predicate — the token,
-/// not a substring: `feature = "integration-tests"` and a feature literally
-/// named "test" (string contents are stripped first) must not color production
-/// items as Certain tests. `not(test)` still refuses.
-fn cfg_names_bare_test(attr: &str) -> bool {
-    let mut stripped = String::with_capacity(attr.len());
-    let mut in_str = false;
-    for ch in attr.chars() {
-        match ch {
-            '"' => in_str = !in_str,
-            c if !in_str => stripped.push(c),
-            _ => {}
-        }
-    }
-    if stripped.contains("not(test)") {
-        return false;
-    }
-    stripped
-        .split(|c: char| !(c.is_alphanumeric() || c == '_'))
-        .any(|tok| tok == "test")
-}
