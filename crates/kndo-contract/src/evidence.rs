@@ -187,10 +187,21 @@ impl SymbolKind {
 /// scope SHAPE.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ContractFingerprint)]
 #[serde(rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum Reach {
     Private,
+    /// Nameable within the file's own namespace — the node it declares itself
+    /// into ([`FileEvidence::namespace`]) — or an ancestor `up` levels above
+    /// it. Java's package-private is `Namespace { up: 0 }`; Rust's
+    /// `pub(super)` is `up: 1`. The pool is the namespace's files, so a test
+    /// laid out anywhere at all still shares the package it declares.
+    Namespace {
+        up: u32,
+    },
     /// Nameable beyond its file, only within a region the declaring adapter can
-    /// enumerate from paths and manifests — never from contents.
+    /// enumerate from paths and manifests — never from contents. The
+    /// path-derived predecessor of `Namespace`, retired as each adapter
+    /// declares its namespaces.
     Scoped {
         scope: SmolStr,
     },
@@ -450,6 +461,14 @@ pub struct FileEvidence {
     /// The pairing rule's carrier: which optional streams the claiming adapter
     /// declared. Analyses read it to abstain over what was never reported.
     pub declared: EvidenceStreams,
+    /// The namespace this file declares itself into, as SEGMENTS — `package
+    /// com.foo;` is `["com", "foo"]`. Segments, not a joined name, so the
+    /// engine can walk the tree without knowing the language's separator.
+    /// Empty means the file declares none, and every namespace-reaching
+    /// declaration in it pools nothing beyond itself. What identifies a
+    /// namespace is the adapter's to say: Java's clause, a Go package's
+    /// directory-qualified name, a Rust module's mount chain.
+    pub namespace: Vec<SmolStr>,
     pub declarations: Vec<Declaration>,
     pub references: Vec<Reference>,
     pub imports: Vec<Import>,
@@ -493,6 +512,7 @@ impl EvidenceSink {
             file_len,
             out: FileEvidence {
                 declared: declares,
+                namespace: Vec::new(),
                 declarations: Vec::new(),
                 references: Vec::new(),
                 imports: Vec::new(),
@@ -631,6 +651,12 @@ impl EvidenceSink {
         if self.declared(EvidenceStream::Metrics) {
             self.out.metrics.push((of, m));
         }
+    }
+
+    /// The namespace this file declares itself into — see
+    /// [`FileEvidence::namespace`]. Last write wins: a file declares one.
+    pub fn namespace(&mut self, segments: impl IntoIterator<Item = SmolStr>) {
+        self.out.namespace = segments.into_iter().collect();
     }
 
     pub fn reference(&mut self, name: impl Into<SmolStr>, kind: RefKind, span: Span) {

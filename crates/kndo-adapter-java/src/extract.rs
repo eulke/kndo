@@ -85,6 +85,22 @@ pub fn extract(
     let children: Vec<Node<'_>> = root.named_children(&mut cursor).collect();
     for item in children {
         match item.kind() {
+            // `package com.foo;` — the namespace this file declares itself
+            // into, as segments. It is the file's own statement, so two files
+            // share a package however far apart their directories sit: guava's
+            // sources live in `guava/src/…` and its tests in
+            // `guava-tests/test/…`, and both say `package com.google.common.io`.
+            "package_declaration" => {
+                if let Some(name) = item.named_child(0) {
+                    out.namespace(
+                        tk::text(name, source)
+                            .split('.')
+                            .map(str::trim)
+                            .filter(|seg| !seg.is_empty())
+                            .map(SmolStr::new),
+                    );
+                }
+            }
             "import_declaration" => import(item, source, out),
             "class_declaration"
             | "interface_declaration"
@@ -123,10 +139,10 @@ fn is_generated(source: &[u8]) -> bool {
 /// set (dir + standard-layout mirrors), which made this migration a measured
 /// no-op on findings. `implicit_public` (interface bodies) overrides absence.
 fn reach_of(item: Node<'_>, ctx: &Ctx) -> Reach {
+    // No modifier is package-private: nameable inside the package this file
+    // declares, and the engine pools it from that declaration.
     fn package_scoped() -> Reach {
-        Reach::Scoped {
-            scope: smol_str::SmolStr::new_static("package"),
-        }
+        Reach::Namespace { up: 0 }
     }
     let Some(modifiers) = modifiers_node(item) else {
         return if ctx.implicit_public {

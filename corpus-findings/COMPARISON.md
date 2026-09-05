@@ -1117,3 +1117,34 @@ the android mirror), vapor 2 (`insertOrReturn`, `checkBodyStorage`, each
 declared once and never called). Net across the corpus: guava −71, Exposed −5,
 vapor +2. Every other repository byte-identical, and every conformance fixture
 in every corpus byte-identical.
+
+### The namespace pool, and the one that was rejected (2026-09-06)
+
+Java's package region stopped being an adapter convention and became a scope
+node the engine derives. Before shipping it, the LOOSE version was measured:
+a namespace keyed by its segments alone, so every file spelling
+`com.google.common.collect` shares one pool wherever it sits.
+
+| pool | guava findings | delta |
+|---|---|---|
+| segments alone | 6,626 | `+0 -2994` — `internal-only` 2,961, `unused` 33 |
+| `(source root, segments)` — shipped | 9,361 | identical to the previous run in every field |
+
+The 2,961 silenced advisories, decomposed by where the sibling that silenced
+each one lives:
+
+| the disqualifying use sits in | count | is it real? |
+|---|---|---|
+| a different source root | 2,653 | no — guava's `android/` mirror is a separate compilation |
+| the same build's test tree | 263 | yes — needs units (M8.d), not a looser scope |
+| the same source root | 45 | yes — already recovered by the shipped pool |
+
+Eighty-nine percent of what the loose pool "fixed" was guava's Android mirror
+pretending to be the same program. The oracle's name-fuzzy resolution makes
+exactly this mistake; buying 263 true fixes with 2,653 false silences is the
+trade v2 exists to refuse. The 263 return when Maven and Gradle say which files
+one compilation contains.
+
+The report's extension row now carries the ladder — `private`/`package`/`public`
+for java — in place of the single `narrowable_scopes` token, so the row still
+answers "why does `internal-only` fire here", and now also says what to type.

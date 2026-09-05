@@ -11,6 +11,7 @@
 //! pub type Name        exported type declaration
 //! member Owner.name    private member of `Owner`
 //! pub member Owner.name   exported member of `Owner`
+//! package a.b          the namespace this file declares itself into
 //! extends Sub Base     `Sub` extends the type named `Base`
 //! implements Impl Face `Impl` implements the type named `Face`
 //! call name            a Call reference to `name`
@@ -235,6 +236,12 @@ impl Extension for MockExtension {
             }
         }
 
+        for (line, _) in lines_with_spans(&text) {
+            if let Some(rest) = line.strip_prefix("package ") {
+                out.namespace(rest.trim().split('.').map(smol_str::SmolStr::new));
+            }
+        }
+
         // Pass 2b: supertype links, by name, after every type is declared.
         for (line, span) in lines_with_spans(&text) {
             let Some((kind, rest)) = line
@@ -422,6 +429,12 @@ fn declaration_line(line: &str) -> Option<(Reach, SymbolKind, &str)> {
     let (reach, rest) = match line.strip_prefix("pub ") {
         Some(rest) => (Reach::Exported, rest),
         None => (Reach::Private, line),
+    };
+    let (reach, rest) = match rest.strip_prefix("ns ") {
+        // `ns` is the namespace rung: nameable inside the namespace the file
+        // declares, and nowhere else.
+        Some(rest) => (Reach::Namespace { up: 0 }, rest),
+        None => (reach, rest),
     };
     let (kind, rest) = [
         ("fn ", SymbolKind::Function),

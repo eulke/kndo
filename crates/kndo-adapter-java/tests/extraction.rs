@@ -26,9 +26,7 @@ fn visibility_folds_to_binary_reach() {
     assert_eq!(declaration_named(&ev, "b").reach, Reach::Exported);
     assert_eq!(
         declaration_named(&ev, "c").reach,
-        Reach::Scoped {
-            scope: "package".into()
-        }
+        Reach::Namespace { up: 0 }
     );
     assert_eq!(declaration_named(&ev, "d").reach, Reach::Private);
 }
@@ -41,9 +39,7 @@ fn interface_members_are_implicitly_public_and_members_are_owned() {
     );
     assert_eq!(
         declaration_named(&ev, "Api").reach,
-        Reach::Scoped {
-            scope: "package".into()
-        }
+        Reach::Namespace { up: 0 }
     );
     assert_eq!(declaration_named(&ev, "call").reach, Reach::Exported);
     assert_eq!(declaration_named(&ev, "limit").reach, Reach::Exported);

@@ -225,7 +225,10 @@ pub fn evidence_to_wire(evidence: &FileEvidence) -> wire::FileEvidence {
                 reach: match &d.reach {
                     ev::Reach::Private => wire::Reach::Private,
                     ev::Reach::Scoped { scope } => wire::Reach::Scoped(scope.to_string()),
-                    ev::Reach::Exported => wire::Reach::Exported,
+                    // A rung this wire has no word for crosses as the widest
+                    // one: a guest can never accuse through a narrowness the
+                    // host would have to guess at.
+                    _ => wire::Reach::Exported,
                 },
                 owner: d.owner.map(|id| id.index() as u32),
                 exported_as: d.exported_as.as_ref().map(|s| s.to_string()),

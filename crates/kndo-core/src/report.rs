@@ -38,6 +38,12 @@ pub struct ExtensionRun {
     /// How this extension's import specifiers name a declared dependency —
     /// `underivable` is why no dependency finding can exist for its manifests.
     pub dependency_identity: kndo_contract::extension::DependencyIdentity,
+    /// The reaches this language can spell, narrowest first, each under the
+    /// word this language uses for it (`internal-only` reads both: the rungs
+    /// to know a narrower one exists, the word to say so). Empty means the
+    /// language states no ladder and that analysis stays silent for its files.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ladder: Vec<kndo_contract::extension::Step>,
 }
 
 /// What this report's `findings`/`fixed` split was computed against. `full` is a

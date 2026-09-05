@@ -8,13 +8,24 @@
       {
         "id": "kndo:java",
         "files": 4,
-        "narrowable_scopes": [
-          "package"
-        ],
         "export_narrowing": "none",
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
-        "dependency_identity": "underivable"
+        "dependency_identity": "underivable",
+        "ladder": [
+          {
+            "rung": "owner",
+            "word": "private"
+          },
+          {
+            "rung": "namespace",
+            "word": "package"
+          },
+          {
+            "rung": "exported",
+            "word": "public"
+          }
+        ]
       }
     ]
   },

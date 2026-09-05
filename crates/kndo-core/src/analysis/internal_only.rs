@@ -109,15 +109,36 @@ impl Analysis for InternalOnly {
             if !cx.measured[i] || !reachable(i) {
                 continue;
             }
-            let narrowable: &[smol_str::SmolStr] = cx
-                .run
-                .narrowables
-                .iter()
-                .find(|(coord, _)| *coord == f.adapter)
-                .map(|(_, tokens)| tokens.as_slice())
-                .unwrap_or(&[]);
-            let export_narrowable = cx.run.export_narrowables.contains(&f.adapter);
-            if narrowable.is_empty() && !export_narrowable {
+            let caps = cx.run.capabilities_of(&f.adapter);
+            let narrowable: &[smol_str::SmolStr] =
+                caps.map(|c| c.narrowable_scopes.as_slice()).unwrap_or(&[]);
+            let export_narrowable = caps.is_some_and(|c| {
+                c.export_narrowing == kndo_contract::extension::ExportNarrowing::Expressible
+            });
+            // The ladder's one question: can this language spell a rung below
+            // its namespace? It replaces `narrowable_scopes` rung by rung as
+            // each adapter declares it.
+            let namespace_narrowable = caps.is_some_and(|c| {
+                c.ladder
+                    .iter()
+                    .any(|s| s.rung < kndo_contract::extension::Rung::Namespace)
+            });
+            // What this language calls the namespace rung — `package` in Java,
+            // and the engine's own word when no adapter has said otherwise.
+            let namespace_word = caps
+                .and_then(|c| {
+                    c.ladder
+                        .iter()
+                        .find(|s| s.rung == kndo_contract::extension::Rung::Namespace)
+                })
+                .cloned()
+                .unwrap_or_else(|| {
+                    // The reach was spelled but the rung is missing from the
+                    // ladder: the engine's own word, never an empty one.
+                    kndo_contract::extension::Step::from(kndo_contract::extension::Rung::Namespace)
+                })
+                .word;
+            if narrowable.is_empty() && !export_narrowable && !namespace_narrowable {
                 continue;
             }
             // The whole file was namespace-imported: anything here may be used.
@@ -142,7 +163,25 @@ impl Analysis for InternalOnly {
                     .map(|ix| f.scoped_regions[ix].1.as_slice())
             };
             for (d_ix, d) in f.evidence.declarations.iter().enumerate() {
+                // The pool an unqualified use must fall inside for this
+                // declaration to be reachable at all. `Some(files)` bounds it;
+                // `None` is the published-surface rung, judged by total
+                // absence instead.
+                let pool: Option<&[u32]> = match &d.reach {
+                    Reach::Namespace { up } => {
+                        if !scoped_open || !namespace_narrowable {
+                            continue;
+                        }
+                        match cx.run.index.namespace_pool(i, *up) {
+                            // Unbounded ⇒ not judgeable on this rung.
+                            None => continue,
+                            pool => pool,
+                        }
+                    }
+                    _ => None,
+                };
                 let scope = match &d.reach {
+                    Reach::Namespace { .. } => None,
                     Reach::Scoped { scope } => {
                         if !scoped_open || !narrowable.iter().any(|t| t == scope) {
                             continue;
@@ -167,6 +206,11 @@ impl Analysis for InternalOnly {
                     }
                     _ => continue,
                 };
+                // One rung, two spellings while the adapters migrate: the
+                // enumerated region an adapter computed, or the namespace a
+                // file declares. Both answer "which files could name this".
+                let region_or_pool: Option<&[u32]> =
+                    pool.or_else(|| scope.and_then(|s| region_ids(s)));
                 // A rooted declaration is used from outside the graph's sight.
                 if rooted.contains(&d_ix) || d.owner.is_some_and(|o| rooted.contains(&o.index())) {
                     continue;
@@ -193,7 +237,8 @@ impl Analysis for InternalOnly {
                 if !own_use {
                     continue;
                 }
-                let used_beyond = match scope {
+                let bounded = pool.is_some() || scope.is_some();
+                let used_beyond = match bounded.then_some(region_or_pool).flatten() {
                     // Any use beyond the file disqualifies: a binding importer,
                     // or a reference in another file of the REGION — the only
                     // files that can legally resolve the name. Same-named
@@ -201,17 +246,15 @@ impl Analysis for InternalOnly {
                     // they neither keep nor disqualify. (A scoped method
                     // reached through a public supertype stays exported by its
                     // own modifiers, so it never sits here.)
-                    Some(scope) => {
+                    Some(region) => {
                         bound_names.contains(&(i as u32, d.name.as_str()))
                             || d.exported_as
                                 .as_ref()
                                 .is_some_and(|a| bound_names.contains(&(i as u32, a.as_str())))
-                            || region_ids(scope).is_some_and(|r| {
-                                r.iter().any(|&j| {
-                                    j as usize != i
-                                        && reachable(j as usize)
-                                        && per_file_refs[j as usize].contains(d.name.as_str())
-                                })
+                            || region.iter().any(|&j| {
+                                j as usize != i
+                                    && reachable(j as usize)
+                                    && per_file_refs[j as usize].contains(d.name.as_str())
                             })
                     }
                     // Total absence for the Exported rung: any binding importer
@@ -240,7 +283,10 @@ impl Analysis for InternalOnly {
                     SymbolKind::Type => "type",
                     _ => "declaration",
                 };
-                let message = match scope {
+                let message = match scope
+                    .map(|s| s.to_string())
+                    .or_else(|| pool.map(|_| namespace_word.to_string()))
+                {
                     Some(scope) => format!(
                         "declared `{scope}`-scoped, but every use is within its own file — \
                          the narrower rung would suffice for this {noun}"

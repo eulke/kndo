@@ -17,6 +17,7 @@ pub mod project;
 pub mod query;
 mod render;
 mod report;
+mod scopes;
 mod session;
 mod suppress;
 

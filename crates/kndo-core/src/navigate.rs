@@ -86,6 +86,9 @@ pub struct Index {
     members_of: BTreeMap<SmolStr, BTreeSet<SmolStr>>,
     supertypes_of: BTreeMap<SmolStr, BTreeSet<SmolStr>>,
     subtypes_of: BTreeMap<SmolStr, BTreeSet<SmolStr>>,
+    /// Where a name may legally be used, as structure — see
+    /// [`crate::scopes::Scopes`].
+    scopes: crate::scopes::Scopes,
 }
 
 /// Why a declaration is alive — each variant carries the evidence a navigator
@@ -186,6 +189,7 @@ impl Index {
             members_of,
             supertypes_of,
             subtypes_of,
+            scopes: crate::scopes::Scopes::build(graph),
         }
     }
 
@@ -253,6 +257,12 @@ impl Index {
             .unwrap_or(&[])
     }
 
+    /// The files a namespace-reaching declaration in `file` pools over — see
+    /// [`crate::scopes::Scopes::namespace_pool`].
+    pub fn namespace_pool(&self, file: usize, up: u32) -> Option<&[u32]> {
+        self.scopes.namespace_pool(file, up)
+    }
+
     /// Importing sites binding `name` from `target`'s surface.
     pub fn binding_sites(&self, target: u32, name: &str) -> &[Site] {
         self.bound
@@ -313,13 +323,21 @@ pub fn keepers(
             .ok()
             .map(|ix| f.scoped_regions[ix].1.as_slice())
     };
+    // The pool a bounded reach names, or `None` for published surface. An
+    // unbounded region and a reach this build does not know both read as
+    // published: the keep-alive direction, so a new rung can never accuse.
     let (exported, region) = match &d.reach {
         Reach::Exported => (true, None),
+        Reach::Namespace { up } => match index.namespace_pool(file, *up) {
+            Some(r) => (false, Some(r)),
+            None => (true, None),
+        },
         Reach::Scoped { scope } => match region_of(scope) {
             Some(r) => (false, Some(r)),
             None => (true, None),
         },
         Reach::Private => (false, None),
+        _ => (true, None),
     };
     if f.exempt.binary_search(&(decl as u32)).is_ok() && kept.push(Keeper::Exempt) {
         return kept.out;

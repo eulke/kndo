@@ -17,7 +17,7 @@ mod resolve;
 
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::EvidenceSink;
-use kndo_contract::extension::{Extension, ExtensionSpec};
+use kndo_contract::extension::{Extension, ExtensionSpec, Rung, Step};
 use kndo_contract::vocab::ProjectPath;
 
 pub struct JavaAdapter {
@@ -46,9 +46,18 @@ fn dispatch_rules() -> Vec<kndo_contract::extension::DispatchRule> {
 impl JavaAdapter {
     pub fn new() -> Self {
         JavaAdapter {
-            // 5: annotations are markers, supertypes are relations, and what
-            // either MEANS is the engine's — dispatch data and witnesses.
-            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:java", 5, &["java"], &["package"])
+            // 6: the package clause IS the namespace — a file declares it, so
+            // two files share one however far apart they sit — and the ladder
+            // replaces the narrowable-scope token.
+            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:java", 6, &["java"], &[])
+                .ladder(&[
+                    // `private` is class-private, `public` is published, and
+                    // no modifier is the package between them — the rung Java
+                    // has no keyword for, which is why it needs the word.
+                    Step::new(Rung::Owner, "private"),
+                    Step::new(Rung::Namespace, "package"),
+                    Step::new(Rung::Exported, "public"),
+                ])
                 .emits(kndo_contract::evidence::EvidenceStreams::of(&[
                     kndo_contract::evidence::EvidenceStream::Comments,
                     kndo_contract::evidence::EvidenceStream::Metrics,
@@ -100,14 +109,5 @@ impl Extension for JavaAdapter {
 
     fn sees(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
         resolve::sees(path, cx)
-    }
-
-    fn seen_from(
-        &self,
-        path: &ProjectPath,
-        scope: &str,
-        cx: &ResolveContext<'_>,
-    ) -> Option<Vec<ProjectPath>> {
-        (scope == "package").then(|| resolve::package_region(path, cx))
     }
 }

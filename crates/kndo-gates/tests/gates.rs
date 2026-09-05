@@ -1373,6 +1373,7 @@ fn agent_format_matches_its_committed_golden() {
                     import_cycles: Default::default(),
                     dependency_scoping: Default::default(),
                     dependency_identity: Default::default(),
+                    ladder: Vec::new(),
                 },
                 ExtensionRun {
                     id: SmolStr::new("kndo:swift"),
@@ -1382,6 +1383,7 @@ fn agent_format_matches_its_committed_golden() {
                     import_cycles: Default::default(),
                     dependency_scoping: Default::default(),
                     dependency_identity: Default::default(),
+                    ladder: Vec::new(),
                 },
             ],
         },

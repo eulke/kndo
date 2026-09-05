@@ -1,5 +1,3 @@
-// kndo:allow-file duplicate -- parallel per-language conformance: the java twin
-// asserts the same intents; each language keeps its own literals.
 //! Extraction facts: Kotlin's public-by-default reach, promoted constructor
 //! properties, dispatch roots, import shapes, and the never-declare postures.
 

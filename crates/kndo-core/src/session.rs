@@ -4,6 +4,7 @@
 //! `Result<Snapshot, Refusal>`: the run either happened or was refused, and the
 //! refusal reappears inside [`RunOutcome`] so `exit_code` covers that path too.
 
+use crate::analysis::DeclaredCapabilities;
 use crate::analysis::{
     Abstention, Crap, Cyclic, Duplicate, InternalOnly, PrivateTypeLeak, TestOnly, Undeclared,
     Unresolved, Untested, Unused, VersionSkew, run_all,
@@ -150,16 +151,6 @@ impl PhaseTimings {
     pub fn total(&self) -> Duration {
         self.discover + self.claim + self.extract + self.assemble + self.analyze
     }
-}
-
-/// The judgment capabilities one extension declared, carried spec → report.
-#[derive(Debug, Clone)]
-pub struct DeclaredCapabilities {
-    pub narrowable_scopes: Vec<SmolStr>,
-    pub export_narrowing: kndo_contract::extension::ExportNarrowing,
-    pub import_cycles: kndo_contract::extension::CycleTolerance,
-    pub dependency_scoping: kndo_contract::extension::DependencyScoping,
-    pub dependency_identity: kndo_contract::extension::DependencyIdentity,
 }
 
 pub struct Snapshot {
@@ -586,33 +577,6 @@ impl Session {
             .collect();
         let round =
             crate::conduct::run_round(&self.extensions, &active, &mut graph, &self.root, &contents);
-        let narrowables: Vec<(SmolStr, Vec<SmolStr>)> = self
-            .extensions
-            .iter()
-            .map(|e| {
-                (
-                    SmolStr::new(e.spec().coordinate()),
-                    e.spec().narrowable_scopes().to_vec(),
-                )
-            })
-            .collect();
-        let cycle_hazards: Vec<SmolStr> = self
-            .extensions
-            .iter()
-            .filter(|e| {
-                e.spec().import_cycles() == kndo_contract::extension::CycleTolerance::Hazard
-            })
-            .map(|e| SmolStr::new(e.spec().coordinate()))
-            .collect();
-        let export_narrowables: Vec<SmolStr> = self
-            .extensions
-            .iter()
-            .filter(|e| {
-                e.spec().export_narrowing()
-                    == kndo_contract::extension::ExportNarrowing::Expressible
-            })
-            .map(|e| SmolStr::new(e.spec().coordinate()))
-            .collect();
         let crap = Crap {
             threshold: self.config.crap_threshold,
         };
@@ -633,14 +597,7 @@ impl Session {
             .into_iter()
             .filter(|a| self.config.categories.includes(&a.category()))
             .collect();
-        let mut outcome = run_all(
-            &graph,
-            round.coverage,
-            &narrowables,
-            &export_narrowables,
-            &cycle_hazards,
-            &selected,
-        );
+        let mut outcome = run_all(&graph, round.coverage, &self.capabilities(), &selected);
         // Plugin findings ride the same suppression pass — a `kndo:allow
         // ext:<coordinate>/<rule>` pragma reaches them like any category — and
         // `apply` owns the canonical final sort. The selection reaches them by
@@ -671,23 +628,7 @@ impl Session {
 
         let mut composition = self.composition_diagnostics.clone();
         let baseline = self.read_baseline(&mut composition);
-        let capabilities = self
-            .extensions
-            .iter()
-            .map(|e| {
-                let s = e.spec();
-                (
-                    SmolStr::new(s.coordinate()),
-                    DeclaredCapabilities {
-                        narrowable_scopes: s.narrowable_scopes().to_vec(),
-                        export_narrowing: s.export_narrowing(),
-                        import_cycles: s.import_cycles(),
-                        dependency_scoping: s.dependency_scoping(),
-                        dependency_identity: s.dependency_identity(),
-                    },
-                )
-            })
-            .collect();
+        let capabilities = self.capabilities();
         Snapshot {
             graph,
             findings,
@@ -708,6 +649,29 @@ impl Session {
             files_discovered: files.len() as u32,
             navigation: std::sync::OnceLock::new(),
         }
+    }
+
+    /// What every registered extension declared about its language — the ONE
+    /// per-adapter input the analyses and the report both read, so a new
+    /// capability reaches them without touching a signature.
+    fn capabilities(&self) -> Vec<(SmolStr, DeclaredCapabilities)> {
+        self.extensions
+            .iter()
+            .map(|e| {
+                let s = e.spec();
+                (
+                    SmolStr::new(s.coordinate()),
+                    DeclaredCapabilities {
+                        narrowable_scopes: s.narrowable_scopes().to_vec(),
+                        export_narrowing: s.export_narrowing(),
+                        import_cycles: s.import_cycles(),
+                        dependency_scoping: s.dependency_scoping(),
+                        dependency_identity: s.dependency_identity(),
+                        ladder: s.ladder().to_vec(),
+                    },
+                )
+            })
+            .collect()
     }
 
     fn baseline_path(&self) -> PathBuf {
@@ -854,6 +818,7 @@ impl Snapshot {
                             dependency_identity: caps
                                 .map(|c| c.dependency_identity)
                                 .unwrap_or_default(),
+                            ladder: caps.map(|c| c.ladder.clone()).unwrap_or_default(),
                         }
                     })
                     .collect(),

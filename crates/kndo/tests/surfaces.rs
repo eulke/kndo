@@ -80,3 +80,42 @@ fn a_member_on_a_promised_surface_is_kept_by_the_promise() {
         "the promise alone keeps it — no reference names it anywhere"
     );
 }
+
+#[test]
+fn a_namespace_pools_by_what_a_file_declares_under_its_own_root() {
+    // Two files of one package under one source root: the sibling's use is a
+    // use, whatever the directory depth.
+    let p = TempProject::new();
+    p.file(
+        "kmock.pkg",
+        "unit core library roots=src entries=src/com/foo/lib.kmock,src/com/foo/other.kmock\n",
+    )
+    .file(
+        "src/com/foo/lib.kmock",
+        "package com.foo\nns fn internals\n",
+    )
+    .file(
+        "src/com/foo/other.kmock",
+        "package com.foo\ncall internals\n",
+    );
+    let snap = common::analyze(&p, vec![Box::new(MockExtension::new())]);
+    assert!(
+        reported(&snap, &Category::UNUSED).is_empty(),
+        "a sibling of the package names it: {:?}",
+        reported(&snap, &Category::UNUSED)
+    );
+
+    // The same package name under ANOTHER source root is another compilation
+    // — a mirrored flavor of a library, not more of the first one.
+    let p = TempProject::new();
+    p.file("kmock.pkg", "unit core library roots=src,mirror entries=src/com/foo/lib.kmock,mirror/com/foo/other.kmock\n")
+        .file("src/com/foo/lib.kmock", "package com.foo\nns fn internals\n")
+        .file("mirror/com/foo/other.kmock", "package com.foo\ncall internals\n");
+    let snap = common::analyze(&p, vec![Box::new(MockExtension::new())]);
+    assert!(
+        reported(&snap, &Category::UNUSED)
+            .contains(&"src/com/foo/lib.kmock — internals".to_string()),
+        "another compilation cannot name it: {:?}",
+        reported(&snap, &Category::UNUSED)
+    );
+}

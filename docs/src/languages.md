@@ -31,10 +31,15 @@ Beyond suffixes and manifests, an adapter declares the facts the engine's
 judgments depend on — with a default that keeps the judgment silent where the
 adapter says nothing:
 
-- **Visibility rungs** for `internal-only`: which scope tokens have a narrower
-  rung to demote to (`crate` in Rust, `package` in Java, `module` in Kotlin
-  and Swift, `export` in TypeScript — where dropping the keyword is checked by
-  the compiler).
+- **The visibility ladder** for `internal-only`: the reaches a language can
+  spell, narrowest first, each under that language's own word for it — Java
+  declares `private`/`package`/`public`, so a package-scoped name used only in
+  its own file has a rung to fall to. The engine judges by the rung and reports
+  by the word, which is why the advice says "declared `package`-scoped" rather
+  than naming the engine's own vocabulary. An adapter still on the older
+  spelling declares the scope tokens that have somewhere narrower to go
+  (`crate` in Rust, `module` in Kotlin and Swift, `export` in TypeScript —
+  where dropping the keyword is checked by the compiler).
 - **Cycle tolerance** for `cyclic`: a hazard in JavaScript, TypeScript and
   Python (initialization order bites at run time), tolerated in Rust, Go, Java,
   Kotlin and Swift (the compiler or the package model makes cycles benign).

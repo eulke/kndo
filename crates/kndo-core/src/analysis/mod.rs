@@ -74,6 +74,16 @@ impl Reachability {
     }
 }
 
+impl RunContext<'_> {
+    /// What the extension claiming `coordinate` declared about its language.
+    pub fn capabilities_of(&self, coordinate: &smol_str::SmolStr) -> Option<&DeclaredCapabilities> {
+        self.capabilities
+            .iter()
+            .find(|(c, _)| c == coordinate)
+            .map(|(_, caps)| caps)
+    }
+}
+
 /// Does this file itself carry a root of `kind` — its own evidence, dispatch
 /// or an anchor?
 pub fn has_root_of(graph: &Graph, file: usize, kind: RootKind) -> bool {
@@ -119,18 +129,12 @@ pub struct RunContext<'a> {
     /// `unused` judgment and the query verbs.
     pub index: crate::navigate::Index,
     pub coverage: Option<crate::coverage::Coverage>,
-    /// Per adapter coordinate: the scope tokens its language can demote to a
-    /// strictly narrower rung (`ExtensionSpec::narrowable_scopes`) — the fact
-    /// `internal-only` reads before advising anything.
-    pub narrowables: &'a [(smol_str::SmolStr, Vec<smol_str::SmolStr>)],
-    /// Adapter coordinates whose language can stop exporting a declaration by
-    /// editing only it (`ExtensionSpec::export_narrowing`) — the fact
-    /// `internal-only`'s Exported branch reads before advising anything.
-    pub export_narrowables: &'a [smol_str::SmolStr],
-    /// Adapter coordinates whose language declared import cycles a hazard
-    /// (`ExtensionSpec::import_cycles`) — the fact `cyclic` reads before
-    /// accusing anything.
-    pub cycle_hazards: &'a [smol_str::SmolStr],
+    /// What each extension declared about its language, by coordinate — the
+    /// ONE per-adapter input. An analysis asks it the question it needs
+    /// ([`RunContext::capabilities_of`]) rather than receiving a list per
+    /// capability, so a new language fact reaches every analysis without
+    /// moving a signature.
+    pub capabilities: &'a [(smol_str::SmolStr, DeclaredCapabilities)],
     /// Parallel to `Graph::manifest_declarations`: why each manifest's
     /// dependency usage goes unjudged this run, `None` where it is judged —
     /// derived once, read by every dependency-subject verdict.
@@ -294,12 +298,25 @@ pub struct AnalysisOutcome {
     pub dependency_universe: BTreeMap<ProjectPath, BTreeSet<SmolStr>>,
 }
 
+/// The judgment capabilities one extension declared, carried spec → analyses →
+/// report. One shape, so "why does kndo (not) report X for this language" has
+/// one answer in the run and the same one in the envelope.
+#[derive(Debug, Clone)]
+pub struct DeclaredCapabilities {
+    pub narrowable_scopes: Vec<smol_str::SmolStr>,
+    pub export_narrowing: kndo_contract::extension::ExportNarrowing,
+    pub import_cycles: kndo_contract::extension::CycleTolerance,
+    pub dependency_scoping: kndo_contract::extension::DependencyScoping,
+    pub dependency_identity: kndo_contract::extension::DependencyIdentity,
+    /// The reaches this language can spell, narrowest first, each under this
+    /// language's own word for it — see [`kndo_contract::extension::Step`].
+    pub ladder: Vec<kndo_contract::extension::Step>,
+}
+
 pub fn run_all(
     graph: &Graph,
     coverage: Option<crate::coverage::Coverage>,
-    narrowables: &[(smol_str::SmolStr, Vec<smol_str::SmolStr>)],
-    export_narrowables: &[smol_str::SmolStr],
-    cycle_hazards: &[smol_str::SmolStr],
+    capabilities: &[(smol_str::SmolStr, DeclaredCapabilities)],
     analyses: &[&dyn Analysis],
 ) -> AnalysisOutcome {
     let reach = Reachability::compute(graph);
@@ -310,9 +327,7 @@ pub fn run_all(
         reach,
         index,
         coverage,
-        narrowables,
-        export_narrowables,
-        cycle_hazards,
+        capabilities,
         manifests,
     };
     let mut findings = Vec::new();

@@ -768,10 +768,20 @@ fn describe(cx: &QueryContext<'_>, selector: Selector) -> Answer {
                 declaration: Some(DeclarationFacts {
                     reach: match &d.reach {
                         kndo_contract::evidence::Reach::Private => "private".to_string(),
+                        kndo_contract::evidence::Reach::Namespace { up: 0 } => {
+                            "namespace".to_string()
+                        }
+                        kndo_contract::evidence::Reach::Namespace { up } => {
+                            format!("namespace+{up}")
+                        }
                         kndo_contract::evidence::Reach::Scoped { scope } => {
                             format!("scoped:{scope}")
                         }
                         kndo_contract::evidence::Reach::Exported => "exported".to_string(),
+                        // A rung this build does not know reads as the widest
+                        // one: `describe` never claims a narrowness it cannot
+                        // name.
+                        _ => "exported".to_string(),
                     },
                     exported_as: d.exported_as.clone(),
                     owner: d.owner.map(|o| {

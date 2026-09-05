@@ -458,6 +458,13 @@
           "description": "Whether the language calls import cycles a hazard (`cyclic` reads it);\n`tolerated` is why a cycle-free-by-compiler language reports none.",
           "$ref": "#/$defs/CycleTolerance"
         },
+        "ladder": {
+          "description": "The reaches this language can spell, narrowest first, each under the\nword this language uses for it (`internal-only` reads both: the rungs\nto know a narrower one exists, the word to say so). Empty means the\nlanguage states no ladder and that analysis stays silent for its files.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Step"
+          }
+        },
         "narrowable_scopes": {
           "description": "The judgment capabilities this extension declared — the one-row answer\nto \"why does kndo (not) report X for this language\". Scope tokens its\nladder can demote (`internal-only`'s Scoped rung reads it); empty means\nthat rung never fires here.",
           "type": "array",
@@ -695,6 +702,37 @@
         "extensions"
       ]
     },
+    "Rung": {
+      "description": "One reach a language can spell with a keyword, narrowest first — the\nLADDER. `internal-only` reads it to ask whether a declaration could stand\non a narrower rung than the one it declares: Java spells\n`[Owner, Namespace, Exported]` (private, package-private, public), so a\npackage-private name used only in its own file has somewhere to go, while\nGo spells `[Namespace, Exported]` and the same evidence is noise. Grows as\nlanguages teach us rungs; a rung this build does not know sorts above every\none it does, so an unknown rung never makes a narrower one appear.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "exported"
+          ]
+        },
+        {
+          "description": "Nameable only inside the declaration that owns it (Java's `private`).",
+          "type": "string",
+          "const": "owner"
+        },
+        {
+          "description": "Nameable only inside its own file.",
+          "type": "string",
+          "const": "file"
+        },
+        {
+          "description": "Nameable inside its namespace (a Java package, a Go package).",
+          "type": "string",
+          "const": "namespace"
+        },
+        {
+          "description": "Nameable inside its build unit (Kotlin's `internal`, Rust's\n`pub(crate)`).",
+          "type": "string",
+          "const": "unit"
+        }
+      ]
+    },
     "Severity": {
       "description": "Declared worst-first so `Ord` is display order; gates compare via\n[`Severity::at_least`], the one place the inversion lives.",
       "type": "string",
@@ -722,6 +760,22 @@
       "required": [
         "start",
         "end"
+      ]
+    },
+    "Step": {
+      "description": "One rung as one language spells it. Every judgment and every ordering reads\n`rung`; `word` is what a report says out loud, because a Java developer\nnarrows a `package`-scoped member, not a `namespace`-scoped one. One type,\nso the rung and the word for it can never name different things.",
+      "type": "object",
+      "properties": {
+        "rung": {
+          "$ref": "#/$defs/Rung"
+        },
+        "word": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "rung",
+        "word"
       ]
     },
     "Subject": {

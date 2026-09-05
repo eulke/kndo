@@ -41,7 +41,11 @@ impl Analysis for Cyclic {
         let hazard: Vec<bool> = g
             .files
             .iter()
-            .map(|f| cx.run.cycle_hazards.contains(&f.adapter))
+            .map(|f| {
+                cx.run.capabilities_of(&f.adapter).is_some_and(|caps| {
+                    caps.import_cycles == kndo_contract::extension::CycleTolerance::Hazard
+                })
+            })
             .collect();
         // Self-edges out: a file importing itself (Python's `from . import x`
         // inside `__init__.py` resolves to the package's own file) is not a

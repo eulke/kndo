@@ -3226,3 +3226,48 @@ is accused. The java fixture `overridden-package-member` pins the other
 direction end to end: `Shape.area` and its override `Square.area` both silent,
 `Shape.onlyHere` — package-private, used only in its own file, overridden by
 nothing — still advised.
+
+## 2026-09-06 — M8.b.5: a namespace is its name UNDER its source root, and a rung carries its language's word
+
+**The scope forest gets its first layer.** `Reach::Namespace { up }` replaces
+the adapter-computed region token for java: a file declares the segments it
+lives in (`package com.foo;` → `["com", "foo"]`, segments and not a joined
+name, so the engine never learns a language's separator), and `Scopes` keys a
+namespace node by `(source_root, segments)` — the file's directory minus the
+suffix its own segments spell. Java's convention falls out of the arithmetic
+instead of being written down: a file at `src/main/java/com/foo/A.java`
+declaring `com.foo` has source root `src/main/java`, and a layout the
+convention does not fit roots at its own directory rather than guessing.
+
+**The wide pool was tried first, and its number killed it.** A namespace keyed
+by segments ALONE — every file spelling `com.google.common.collect` in one
+pool, wherever it sits — took guava from 9,620 to 6,626: `+0 -2994`,
+`Counter({'internal-only': 2961, 'unused': 33})`. Decomposing the 2,961
+silenced advisories by WHERE the disqualifying sibling lives: **2,653 in a
+different source root**, **263 in the same build's test tree**, **45 in the
+same source root**. The 2,653 are guava's `android/` mirror — a SEPARATE
+compilation of the same sources, whose files can no more see each other's
+package-private members than any two unrelated projects can. Buying 263 true
+fixes by silencing 2,653 correct advisories is the trade the oracle would have
+made; v2 does not. The 263 need units — which files one compilation actually
+contains, from Maven and Gradle — and arrive with M8.d, not with a looser
+scope.
+
+**Measurement of what shipped.** Source-root-scoped, guava's 9,361 findings
+are identical to the previous run in every field: same ids, same messages, same
+spans. The structure changed underneath and the numbers did not, which is the
+result a refactor of this kind should produce.
+
+**A rung carries its language's word.** The ladder was `Vec<Rung>`, and
+retiring `narrowable_scopes` would have moved 3,018 java messages from
+"declared `package`-scoped" to "declared `namespace`-scoped" — the engine's
+vocabulary leaking into a report a Java developer reads. The ladder is now
+`Vec<Step>`, one type pairing the rung every judgment reads with the word only
+reports say, so the two can never name different things; java declares
+`private`/`package`/`public`. `From<Rung>` supplies the engine's own word for
+a component that declares rungs alone, and the match is exhaustive on purpose:
+a new rung will not compile until it has one. The report's extension row
+carries the ladder, restoring the answer to "why does `internal-only` fire for
+this language" that the retired capability used to give — and giving more, since
+the word tells the reader what to type. Report schema, contract fingerprint and
+the eight java conformance fixtures move for that row; no finding moves.

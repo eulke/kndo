@@ -286,6 +286,70 @@ impl DependencyBuiltins {
     }
 }
 
+/// One reach a language can spell with a keyword, narrowest first — the
+/// LADDER. `internal-only` reads it to ask whether a declaration could stand
+/// on a narrower rung than the one it declares: Java spells
+/// `[Owner, Namespace, Exported]` (private, package-private, public), so a
+/// package-private name used only in its own file has somewhere to go, while
+/// Go spells `[Namespace, Exported]` and the same evidence is noise. Grows as
+/// languages teach us rungs; a rung this build does not know sorts above every
+/// one it does, so an unknown rung never makes a narrower one appear.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub enum Rung {
+    /// Nameable only inside the declaration that owns it (Java's `private`).
+    Owner,
+    /// Nameable only inside its own file.
+    File,
+    /// Nameable inside its namespace (a Java package, a Go package).
+    Namespace,
+    /// Nameable inside its build unit (Kotlin's `internal`, Rust's
+    /// `pub(crate)`).
+    Unit,
+    Exported,
+}
+
+/// One rung as one language spells it. Every judgment and every ordering reads
+/// `rung`; `word` is what a report says out loud, because a Java developer
+/// narrows a `package`-scoped member, not a `namespace`-scoped one. One type,
+/// so the rung and the word for it can never name different things.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct Step {
+    pub rung: Rung,
+    pub word: SmolStr,
+}
+
+impl Step {
+    /// A rung under the language's own word for it.
+    pub fn new(rung: Rung, word: &'static str) -> Step {
+        Step {
+            rung,
+            word: SmolStr::new_static(word),
+        }
+    }
+}
+
+impl From<Rung> for Step {
+    /// A rung with no language word — the engine's own, which is what a wire
+    /// component that declares rungs alone gets.
+    fn from(rung: Rung) -> Step {
+        let word = match rung {
+            Rung::Owner => "owner",
+            Rung::File => "file",
+            Rung::Namespace => "namespace",
+            Rung::Unit => "unit",
+            Rung::Exported => "exported",
+        };
+        Step {
+            rung,
+            word: SmolStr::new_static(word),
+        }
+    }
+}
+
 /// What a [`DispatchRule`] watches for. Grows as the evidence grows — a
 /// relation, a name pattern, a witness — each variant arriving with the
 /// consumer that reads it; an extension can only trigger on evidence its own
@@ -400,6 +464,7 @@ pub struct ExtensionSpec {
     dependency_importers: Vec<SmolStr>,
     dependency_builtins: DependencyBuiltins,
     import_cycles: CycleTolerance,
+    ladder: Vec<Step>,
     dispatch: Vec<DispatchRule>,
     claims: Vec<SmolStr>,
     emits: EvidenceStreams,
@@ -439,6 +504,7 @@ impl ExtensionSpec {
                 dependency_importers: Vec::new(),
                 dependency_builtins: DependencyBuiltins::None,
                 import_cycles: CycleTolerance::Tolerated,
+                ladder: Vec::new(),
                 dispatch: Vec::new(),
                 claims: Vec::new(),
                 emits: EvidenceStreams::none(),
@@ -529,6 +595,19 @@ impl ExtensionSpec {
         &self.dispatch
     }
 
+    /// See [`Step`]; `internal-only` is the consumer — for the judgment and
+    /// for the word its message uses. Empty (the default) means the language
+    /// states no ladder and the analysis stays silent for its files.
+    pub fn ladder(&self) -> &[Step] {
+        &self.ladder
+    }
+
+    /// Is there a rung strictly narrower than `rung` this language can spell?
+    /// The one question `internal-only` asks of the ladder.
+    pub fn narrower_than(&self, rung: Rung) -> bool {
+        self.ladder.iter().any(|s| s.rung < rung)
+    }
+
     pub fn claims(&self) -> &[SmolStr] {
         &self.claims
     }
@@ -607,6 +686,10 @@ pub struct ExtensionSpecParts {
     /// Wire components cannot declare builtins yet; defaults to none.
     pub dependency_builtins: DependencyBuiltins,
     pub import_cycles: CycleTolerance,
+    /// Wire components cannot declare a ladder yet; defaults to none, under
+    /// which `internal-only` stays silent — the same absence every other
+    /// undeclared capability degrades to.
+    pub ladder: Vec<Step>,
     pub dispatch: Vec<DispatchRule>,
     pub claims: Vec<SmolStr>,
     pub emits: EvidenceStreams,
@@ -648,6 +731,7 @@ impl From<ExtensionSpecParts> for ExtensionSpec {
             dependency_importers: parts.dependency_importers,
             dependency_builtins: parts.dependency_builtins,
             import_cycles: parts.import_cycles,
+            ladder: parts.ladder,
             dispatch: parts.dispatch,
             claims: parts.claims,
             emits: parts.emits,
@@ -746,6 +830,14 @@ impl ExtensionSpecBuilder {
     /// silent for this adapter's files.
     pub fn import_cycles(mut self, tolerance: CycleTolerance) -> Self {
         self.spec.import_cycles = tolerance;
+        self
+    }
+
+    /// Declare the reaches this language can spell (see [`Step`]), narrowest
+    /// first, each under the word this language uses for it. Omitted ⇒ none:
+    /// `internal-only` never advises for its files.
+    pub fn ladder(mut self, rungs: &[Step]) -> Self {
+        self.spec.ladder = rungs.to_vec();
         self
     }
 

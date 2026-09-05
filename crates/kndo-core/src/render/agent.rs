@@ -511,6 +511,7 @@ mod tests {
             import_cycles: Default::default(),
             dependency_scoping: Default::default(),
             dependency_identity: Default::default(),
+            ladder: Vec::new(),
         });
         report.findings.push(symbol_finding("_ghost"));
         report.fixed.push(symbol_finding("_gone"));
