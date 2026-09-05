@@ -1,0 +1,6 @@
+# generated-file: a @generated marker roots the file Tooling — nothing imports it, and in an authored file that would be an unused:file finding.
+
+[[alive]]
+subject = "schema.generated.ts"
+category = "unused"
+why = "nothing imports this file, and in an authored file that would be an unused:file finding; the @generated marker roots it Tooling"

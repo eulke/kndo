@@ -1,0 +1,10 @@
+# manifest-dependency-skip: a pyproject dependency whose import identity is underivable — the dependency verdicts abstain instead of accusing.
+
+[[alive]]
+subject = "dep:pyproject.toml:flask"
+category = "unused"
+why = "declared by pyproject.toml and imported by src/app.py; specifier identity is underivable, so the verdict abstains rather than accuses"
+
+[[alive]]
+subject = "src/app.py#serve"
+why = "a public def on a production module — published surface"

@@ -1,0 +1,10 @@
+# machinery-display-impl: `impl fmt::Display for LoadError` is machinery — its `fmt` is never a declaration, so nothing here can name or accuse it; the type stays alive.
+
+[[alive]]
+subject = "src/lib.rs#LoadError"
+why = "tests/spec.rs constructs it and reads its path field"
+
+[[alive]]
+subject = "src/lib.rs"
+category = "untested"
+why = "tests/spec.rs imports errors::LoadError"

@@ -1,0 +1,42 @@
+# coverage-jacoco: a JaCoCo report at its conventional path marks the methods no test ran; the JUnit 5 class that ran the others is accused for want of a runner root.
+
+[[dead]]
+subject = "src/main/java/demo/Classify.java#Classify.neverRan"
+category = "untested"
+why = "jacoco.xml counts every instruction of neverRan as missed"
+
+[[dead]]
+subject = "src/main/java/demo/Dark.java#Dark.untouched"
+category = "untested"
+why = "jacoco.xml counts every instruction of untouched as missed"
+
+[[alive]]
+subject = "src/main/java/demo/Classify.java#Classify.grade"
+category = "untested"
+why = "gradesTheTop runs it and jacoco.xml records its covered lines"
+
+[[alive]]
+subject = "src/main/java/demo/Classify.java#Classify.dark"
+category = "untested"
+why = "darkness runs it and jacoco.xml records its covered line"
+
+[[known_gap]]
+subject = "src/test/java/demo/ClassifyTest.java#ClassifyTest"
+expect = "alive"
+category = "unused"
+why = "a JUnit 5 test class the runner instantiates"
+fix = "M8.e kndo:junit (J1)"
+
+[[known_gap]]
+subject = "src/test/java/demo/ClassifyTest.java#ClassifyTest.gradesTheTop"
+expect = "alive"
+category = "unused"
+why = "a @Test method the JUnit 5 runner invokes by annotation, never by name"
+fix = "M8.e kndo:junit (J1)"
+
+[[known_gap]]
+subject = "src/test/java/demo/ClassifyTest.java#ClassifyTest.darkness"
+expect = "alive"
+category = "unused"
+why = "a @Test method the JUnit 5 runner invokes by annotation, never by name"
+fix = "M8.e kndo:junit (J1)"

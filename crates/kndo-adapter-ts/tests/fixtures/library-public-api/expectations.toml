@@ -1,0 +1,16 @@
+# library-public-api: a library's public API counts as reachable even when nothing in the package calls it; a non-exported helper in the same root file is still dead.
+
+[[dead]]
+subject = "src/index.ts#unusedHelper"
+category = "unused"
+why = "not exported — must still be reported unused despite living in the root file"
+
+[[alive]]
+subject = "src/index.ts#first"
+category = "unused"
+why = "a library's public API must count as reachable even when nothing in the package's own code calls it"
+
+[[alive]]
+subject = "src/index.ts#second"
+category = "unused"
+why = "a library's public API must count as reachable even when nothing in the package's own code calls it"

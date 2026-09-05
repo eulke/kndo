@@ -1,0 +1,39 @@
+# apple-bundles: classes an app names only as strings — storyboard `customClass` and outlet connections, Info.plist delegate keys — are rooted by kndo:interface-builder and kndo:info-plist.
+
+[[alive]]
+subject = "Example/Source/MasterViewController.swift#MasterViewController"
+why = "instantiated by Main.storyboard (customClass) — no Swift source names it"
+
+[[alive]]
+subject = "Example/Source/MasterViewController.swift#MasterViewController.titleImageView"
+why = "an @IBOutlet Main.storyboard connects by name — making it private would break the connection"
+
+[[alive]]
+subject = "Example/Source/DetailViewController.swift#DetailViewController"
+why = "instantiated by Main.storyboard (customClass) and named by MasterViewController's segue handling"
+
+[[alive]]
+subject = "watchOS Example/watchOS Example WatchKit Extension/HostingController.swift#HostingController"
+why = "instantiated by the WatchKit app's Interface.storyboard (customClass) — no Swift source names it"
+
+[[alive]]
+subject = "watchOS Example/watchOS Example WatchKit Extension/ExtensionDelegate.swift#ExtensionDelegate"
+why = "named by the extension's Info.plist under WKExtensionDelegateClassName — no Swift source names it"
+
+[[alive]]
+subject = "Example/Source/AppDelegate.swift#AppDelegate"
+why = "the @main type is the executable's entry root"
+
+[[known_gap]]
+subject = "watchOS Example/watchOS Example WatchKit Extension/ContentView.swift#ContentView_Previews"
+expect = "alive"
+category = "unused"
+why = "a PreviewProvider is instantiated by Xcode, never by code"
+fix = "M8.b/M8.e swift (S8, kndo:swiftui)"
+
+[[known_gap]]
+subject = "watchOS Example/watchOS Example WatchKit Extension/ContentView.swift#ContentView_Previews.previews"
+expect = "alive"
+category = "unused"
+why = "the protocol's property requirement is the witness Xcode reads"
+fix = "M8.b/M8.e swift (S8, kndo:swiftui)"

@@ -1,0 +1,19 @@
+# duplicate-structural: a Type-2 clone — identifiers and literals renamed, structure untouched — is reported on the clone, while both functions stay alive.
+
+[[dead]]
+subject = "orders.ts#sumWithFee"
+category = "duplicate"
+why = "a Type-2 clone of billing.ts's totalWithTax: every identifier and literal renamed, the structure untouched — the winnowing fingerprints must still match"
+
+[[alive]]
+subject = "billing.ts#totalWithTax"
+category = "duplicate"
+why = "the clone carries the finding; the original it copies is not itself accused"
+
+[[alive]]
+subject = "billing.ts#totalWithTax"
+why = "called from main.ts alongside its clone — duplicated, not dead"
+
+[[alive]]
+subject = "orders.ts#sumWithFee"
+why = "called from main.ts — a clone is a duplicate finding, not dead code"

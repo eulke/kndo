@@ -1,0 +1,24 @@
+# cjs-interop: a CJS entry requiring an ESM file and that ESM file importing a CJS one — both directions of the interop pair stay alive; the exports nobody binds are dead.
+# cjs-side.js's `exports.deadUtil = function () {}` is dead by the same comment, but an `exports.x` assignment is not a declaration the adapter emits, so that claim has no spellable subject yet (M8.c js-ts (T10)).
+
+[[alive]]
+subject = "esm-side.mjs"
+category = "unused"
+why = "the CJS entry point requires this ESM file — one direction of the interop pair"
+
+[[alive]]
+subject = "cjs-side.js"
+category = "unused"
+why = "the ESM side imports `util` from this CJS file — the other direction of the interop pair"
+
+[[alive]]
+subject = "esm-side.mjs#helper"
+category = "unused"
+why = "bound by the entry's `const { helper } = require('./esm-side.mjs')`"
+
+[[known_gap]]
+subject = "esm-side.mjs#deadHelper"
+expect = "dead"
+category = "unused"
+why = "exported, the file is not a manifest root, and nothing imports this name — dead; today the destructuring require is a side-effect import that keeps the whole surface"
+fix = "M8.c js-ts (T10)"

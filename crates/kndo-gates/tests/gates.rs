@@ -401,15 +401,11 @@ fn threads_one_and_many_are_byte_identical() {
     assert_eq!(one, many);
 }
 
-#[test]
-fn adapter_conformance_fixtures_are_byte_identical() {
-    // The harvested regression floor: v1's fixture corpora (every false-positive
-    // hunt they encode) replayed through the v2 engine, each report pinned byte-for-
-    // byte. A diff is either your bug or a deliberate, documented contract change —
-    // regenerate with KNDO_CONFORMANCE=overwrite and justify the diff in the PR;
-    // the pinned reports GROW as analyses land, which is the point of pinning them.
+/// The harvested fixture corpora and the floor each must hold — one list, read by
+/// every gate that replays fixtures.
+fn fixture_corpora() -> Vec<(std::path::PathBuf, usize)> {
     let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-    let corpora = [
+    vec![
         (manifest.join("../kndo-adapter-ts/tests/fixtures"), 25),
         (manifest.join("../kndo-adapter-rust/tests/fixtures"), 26),
         (manifest.join("../kndo-adapter-go/tests/fixtures"), 8),
@@ -420,10 +416,13 @@ fn adapter_conformance_fixtures_are_byte_identical() {
         (manifest.join("../kndo-adapter-html/tests/fixtures"), 1),
         (manifest.join("../kndo-adapter-css/tests/fixtures"), 4),
         (manifest.join("../kndo-apple/tests/fixtures"), 1),
-    ];
-    let overwrite = std::env::var_os("KNDO_CONFORMANCE").is_some_and(|v| v == "overwrite");
-    let mut failures = Vec::new();
-    for (fixtures, floor) in corpora {
+    ]
+}
+
+/// Every fixture directory, sorted, with its corpus floor asserted; `f` gets the
+/// fixture's name, its directory and the snapshot of one uncached run.
+fn for_each_fixture(mut f: impl FnMut(&str, &std::path::Path, &kndo::Snapshot)) {
+    for (fixtures, floor) in fixture_corpora() {
         let mut names: Vec<_> = std::fs::read_dir(&fixtures)
             .expect("fixture corpus exists")
             .filter_map(|e| e.ok())
@@ -432,7 +431,6 @@ fn adapter_conformance_fixtures_are_byte_identical() {
             .collect();
         names.sort();
         assert!(names.len() >= floor, "the harvested corpus is present");
-
         for name in &names {
             let dir = fixtures.join(name);
             let session = kndo::open(
@@ -444,28 +442,178 @@ fn adapter_conformance_fixtures_are_byte_identical() {
                 },
             )
             .expect("open fixture project");
-            let report = session
-                .analyze(RunMode::Full)
-                .expect("analyze fixture")
-                .report()
-                .to_json();
-            let expected_path = dir.join("expected.json");
-            if overwrite {
-                std::fs::write(&expected_path, &report).expect("write expected");
-                continue;
-            }
-            let expected = std::fs::read_to_string(&expected_path).unwrap_or_else(|_| {
-                panic!("{name}/expected.json exists — regenerate deliberately")
-            });
-            if report != expected {
-                failures.push(name.clone());
-            }
+            let snapshot = session.analyze(RunMode::Full).expect("analyze fixture");
+            f(name, &dir, &snapshot);
         }
     }
+}
+
+#[test]
+fn adapter_conformance_fixtures_are_byte_identical() {
+    // The harvested regression floor: v1's fixture corpora (every false-positive
+    // hunt they encode) replayed through the v2 engine, each report pinned byte-for-
+    // byte. A diff is either your bug or a deliberate, documented contract change —
+    // regenerate with KNDO_CONFORMANCE=overwrite and justify the diff in the PR;
+    // the pinned reports GROW as analyses land, which is the point of pinning them.
+    let overwrite = std::env::var_os("KNDO_CONFORMANCE").is_some_and(|v| v == "overwrite");
+    let mut failures = Vec::new();
+    for_each_fixture(|name, dir, snapshot| {
+        let report = snapshot.report().to_json();
+        let expected_path = dir.join("expected.json");
+        if overwrite {
+            std::fs::write(&expected_path, &report).expect("write expected");
+            return;
+        }
+        let expected = std::fs::read_to_string(&expected_path)
+            .unwrap_or_else(|_| panic!("{name}/expected.json exists — regenerate deliberately"));
+        if report != expected {
+            failures.push(name.to_string());
+        }
+    });
     assert!(
         failures.is_empty(),
         "conformance fixtures diverged: {failures:?} — a bug, or a deliberate \
          contract change to regenerate (KNDO_CONFORMANCE=overwrite) and document"
+    );
+}
+
+#[test]
+fn fixture_expectations_hold() {
+    // A fixture's claims are data (`expectations.toml`, see kndo_testkit::expectations):
+    // what must be reported, what must stay alive, and the gaps the tree cannot close
+    // yet. Checked beside the byte pin, so a comment can never contradict a pin — and
+    // a known gap fails the day it closes, so the ledger cannot rot.
+    use kndo_testkit::expectations::{Expectations, Reported};
+    let mut failures: Vec<String> = Vec::new();
+    for_each_fixture(|name, dir, snapshot| {
+        let path = dir.join("expectations.toml");
+        let text = match std::fs::read_to_string(&path) {
+            Ok(t) => t,
+            Err(_) => {
+                failures.push(format!("{name}: expectations.toml is missing"));
+                return;
+            }
+        };
+        let expectations = match Expectations::parse(&text) {
+            Ok(e) => e,
+            Err(e) => {
+                failures.push(format!("{name}: expectations.toml does not parse: {e}"));
+                return;
+            }
+        };
+        if expectations.dead.is_empty()
+            && expectations.alive.is_empty()
+            && expectations.known_gap.is_empty()
+        {
+            failures.push(format!("{name}: expectations.toml claims nothing"));
+            return;
+        }
+        let report = snapshot.report();
+        let reported: Vec<Reported> = report.findings.iter().map(Reported::of).collect();
+        let exists = |raw: &str| kndo::query::selector_exists(&snapshot.graph, raw);
+        for v in expectations.check(&reported, &exists) {
+            failures.push(format!("{name}: {v}"));
+        }
+    });
+    assert!(
+        failures.is_empty(),
+        "fixture expectations violated:\n  {}",
+        failures.join("\n  ")
+    );
+}
+
+#[test]
+fn contract_changes_are_loud() {
+    // A change to a pinned report, to the contract fingerprint or to the graph
+    // semantics version is a contract change, and a contract change is loud: the
+    // same range of commits appends to DECISIONS.md and names what it moved. The
+    // range comes from CI (KNDO_LOUD_RANGE, the pull request's base..head) or is
+    // the last commit; a checkout too shallow to diff cannot vouch and says so.
+    let range = std::env::var("KNDO_LOUD_RANGE").unwrap_or_else(|_| "HEAD~1..HEAD".to_string());
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let git = |args: &[&str]| -> Option<String> {
+        let out = std::process::Command::new("git")
+            .args(args)
+            .current_dir(&root)
+            .output()
+            .ok()?;
+        out.status
+            .success()
+            .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
+    };
+    if git(&["rev-parse", "--verify", "--quiet", "HEAD~1"]).is_none()
+        && !std::env::var_os("KNDO_LOUD_RANGE").is_some()
+    {
+        // A single-commit history (a fresh shallow clone) has no range to judge.
+        return;
+    }
+    let changed = git(&["diff", "--name-only", &range])
+        .unwrap_or_else(|| panic!("git diff over {range} — the checkout must hold the range"));
+    let changed: Vec<&str> = changed.lines().collect();
+    let fixture_of = |path: &str| -> Option<(String, String)> {
+        // crates/<crate>/tests/fixtures/<name>/expected.json
+        let parts: Vec<&str> = path.split('/').collect();
+        (parts.len() == 6
+            && parts[0] == "crates"
+            && parts[2] == "tests"
+            && parts[3] == "fixtures"
+            && parts[5] == "expected.json")
+            .then(|| (parts[1].to_string(), parts[4].to_string()))
+    };
+    let mut loud: Vec<(String, Vec<String>)> = Vec::new();
+    for path in &changed {
+        if let Some((krate, name)) = fixture_of(path) {
+            loud.push((
+                format!("{krate}/{name}"),
+                vec![
+                    name.clone(),
+                    format!("{krate} fixtures"),
+                    "every conformance fixture".into(),
+                ],
+            ));
+        }
+        if *path == "crates/kndo-contract/fingerprint.txt" {
+            loud.push((
+                "the contract fingerprint".into(),
+                vec!["fingerprint".into()],
+            ));
+        }
+    }
+    let semantics =
+        git(&["diff", &range, "--", "crates/kndo-core/src/graph.rs"]).unwrap_or_default();
+    if semantics
+        .lines()
+        .any(|l| l.starts_with(['+', '-']) && l.contains("pub const GRAPH_SEMANTICS_VERSION"))
+    {
+        loud.push((
+            "GRAPH_SEMANTICS_VERSION".into(),
+            vec!["GRAPH_SEMANTICS_VERSION".into(), "graph semantics".into()],
+        ));
+    }
+    if loud.is_empty() {
+        return;
+    }
+    let added: String = git(&["diff", &range, "--", "DECISIONS.md"])
+        .unwrap_or_default()
+        .lines()
+        .filter(|l| l.starts_with('+') && !l.starts_with("+++"))
+        .map(|l| l[1..].to_ascii_lowercase())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let unspoken: Vec<&str> = loud
+        .iter()
+        .filter(|(_, mentions)| {
+            !mentions
+                .iter()
+                .any(|m| added.contains(&m.to_ascii_lowercase()))
+        })
+        .map(|(what, _)| what.as_str())
+        .collect();
+    assert!(
+        unspoken.is_empty(),
+        "contract changes in {range} that DECISIONS.md does not name: {unspoken:?} — a \
+         pinned report, the fingerprint or the graph semantics moved; append the entry \
+         (name each fixture, or `<crate> fixtures`, or `every conformance fixture`)"
     );
 }
 

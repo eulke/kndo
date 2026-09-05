@@ -1,0 +1,31 @@
+# workflow-launched-scripts: GitHub workflow steps and composite actions launch scripts (working-directory and $GITHUB_ACTION_PATH honored) — those roots keep their imports alive; a script nothing launches is unused.
+
+[[dead]]
+subject = "scripts/orphan.ts"
+category = "unused"
+why = "no workflow step, action or package script launches it and nothing imports it"
+
+[[alive]]
+subject = "scripts/detect-release.ts"
+category = "unused"
+why = "launched by the publish workflow's `node scripts/detect-release.ts` step"
+
+[[alive]]
+subject = "scripts/releaseUtils.ts"
+category = "unused"
+why = "imported by the workflow-launched detect-release.ts"
+
+[[alive]]
+subject = "tools/render-notes.mjs"
+category = "unused"
+why = "launched by `node render-notes.mjs` under the step's working-directory: tools"
+
+[[alive]]
+subject = ".github/actions/report/render.mjs"
+category = "unused"
+why = "launched by the composite action's `node $GITHUB_ACTION_PATH/render.mjs`"
+
+[[alive]]
+subject = ".github/actions/report/table.mjs"
+category = "unused"
+why = "imported by the action-launched render.mjs"

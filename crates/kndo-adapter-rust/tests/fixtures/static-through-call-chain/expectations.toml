@@ -1,0 +1,17 @@
+# static-through-call-chain: main -> Logger::init -> set(LOGGER) keeps a private const and a private fn alive through an associated-fn call.
+
+[[alive]]
+subject = "src/logger.rs#Logger.init"
+why = "main calls logger::Logger::init()"
+
+[[alive]]
+subject = "src/logger.rs#LOGGER"
+why = "Logger::init passes it to set"
+
+[[alive]]
+subject = "src/logger.rs#set"
+why = "Logger::init calls it"
+
+[[alive]]
+subject = "src/logger.rs#Logger"
+why = "the const's type and the owner of init"

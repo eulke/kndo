@@ -1,0 +1,15 @@
+# self-crate-test-calls: the bin and an integration test both call the lib by its crate name (`selfy::top_api`).
+
+[[alive]]
+subject = "src/lib.rs#top_api"
+why = "main.rs and tests/it.rs call selfy::top_api()"
+
+[[alive]]
+subject = "src/lib.rs"
+category = "untested"
+why = "tests/it.rs reaches it through the selfy:: path"
+
+[[alive]]
+subject = "src/lib.rs"
+category = "test-only"
+why = "main.rs reaches it too, so tests are not its only caller"

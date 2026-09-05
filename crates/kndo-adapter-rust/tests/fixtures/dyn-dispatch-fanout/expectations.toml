@@ -1,0 +1,26 @@
+# dyn-dispatch-fanout: methods called on a `&dyn Flag` receiver reach the trait's members, and the impl listed in FLAGS stays alive.
+
+[[alive]]
+subject = "src/lib.rs#Flag.doc_short"
+why = "render calls flag.doc_short() on a &dyn Flag"
+
+[[alive]]
+subject = "src/lib.rs#Flag.update"
+why = "render calls flag.update() on a &dyn Flag"
+
+[[alive]]
+subject = "src/lib.rs#AfterContext"
+why = "listed in FLAGS as a &dyn Flag"
+
+[[alive]]
+subject = "src/lib.rs#FLAGS"
+why = "tests/spec.rs iterates it"
+
+[[alive]]
+subject = "src/lib.rs#render"
+why = "tests/spec.rs calls it for every flag"
+
+[[alive]]
+subject = "src/lib.rs"
+category = "untested"
+why = "tests/spec.rs imports FLAGS and render"

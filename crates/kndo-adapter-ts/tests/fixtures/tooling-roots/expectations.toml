@@ -1,0 +1,21 @@
+# tooling-roots: package.json scripts and *.config.* files are tooling roots — what they launch or import stays alive; what neither names is still caught.
+
+[[dead]]
+subject = "dead.ts"
+category = "unused"
+why = "not a script target, not a config, not imported — still caught"
+
+[[alive]]
+subject = "scripts/build.mjs"
+category = "unused"
+why = "rooted by the package.json build script referencing this file"
+
+[[alive]]
+subject = "scripts/bundle-helper.mjs"
+category = "unused"
+why = "imported by the script-rooted build.mjs — its own imports stay alive through it"
+
+[[alive]]
+subject = "vite.config.ts"
+category = "unused"
+why = "tooling-role by name convention (*.config.*) — a role-derived tooling root"

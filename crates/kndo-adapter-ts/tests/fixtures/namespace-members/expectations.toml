@@ -1,0 +1,23 @@
+# namespace-members: a static namespace member access resolves precisely (helpers.dead is still caught); a computed access is opaque (everything in registry stays alive).
+
+[[alive]]
+subject = "src/helpers.ts#used"
+category = "unused"
+why = "consumed via `helpers.used()` — a statically-tracked member access"
+
+[[alive]]
+subject = "src/registry.ts#alpha"
+category = "unused"
+why = "consumed via `registry[name]` — a computed member access, so every export here is plausibly used and none may be flagged"
+
+[[alive]]
+subject = "src/registry.ts#beta"
+category = "unused"
+why = "consumed via `registry[name]` — a computed member access, so every export here is plausibly used and none may be flagged"
+
+[[known_gap]]
+subject = "src/helpers.ts#dead"
+expect = "dead"
+category = "unused"
+why = "a static member access is precise, so `dead` is still caught — but today the namespace import keeps the whole exported surface and member references pool by bare name"
+fix = "M8.b engine (E1); M8.c js-ts"

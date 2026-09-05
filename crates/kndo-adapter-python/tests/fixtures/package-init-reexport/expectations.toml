@@ -1,0 +1,19 @@
+# package-init-reexport: the package `__init__.py` re-exports (a named import and a star import) keep the implementation alive; the private leftover is `unused`.
+
+[[dead]]
+subject = "src/pkg/impl.py#_stranded"
+category = "unused"
+why = "underscore-private and named by nothing — not even the package's re-exports"
+
+[[alive]]
+subject = "src/pkg/impl.py#thing"
+why = "re-exported by the package __init__ through `from .impl import thing`"
+
+[[alive]]
+subject = "src/pkg/wide.py#anything"
+why = "published by the package __init__ through `from .wide import *`"
+
+[[alive]]
+subject = "src/pkg/impl.py#untouched"
+category = "unused"
+why = "public and not re-exported, but a public def is published surface by design"

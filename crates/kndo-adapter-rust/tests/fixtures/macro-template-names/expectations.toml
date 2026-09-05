@@ -1,0 +1,19 @@
+# macro-template-names: paths inside a `macro_rules!` template are uses; a pub(crate) fn used only in its own file is internal-only, not unused.
+
+[[alive]]
+subject = "src/messages.rs#set_flag"
+why = "named as crate::messages::set_flag inside the log_err! template that lib.rs expands"
+
+[[dead]]
+subject = "src/messages.rs#local_only"
+category = "internal-only"
+why = "declared pub(crate), but every use is within its own file"
+
+[[alive]]
+subject = "src/messages.rs#local_only"
+category = "unused"
+why = "caller calls it, so it is narrowable, not dead"
+
+[[alive]]
+subject = "src/messages.rs#caller"
+why = "lib.rs calls messages::caller()"

@@ -15,11 +15,13 @@
 //! # text               a comment (the Comments stream, declared)
 //! ```
 
+pub mod expectations;
+
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{
     CoverageRecords, DeclarationId, DiagnosticLevel, EvidenceSink, EvidenceStream, EvidenceStreams,
     ImportBinding, ImportShape, ImportTarget, Reach, RefKind, RootKind, RootTarget, SymbolKind,
-};
+    };
 use kndo_contract::extension::{ConductSink, ContentAccess, Extension, ExtensionSpec, GraphAccess};
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use std::collections::BTreeMap;

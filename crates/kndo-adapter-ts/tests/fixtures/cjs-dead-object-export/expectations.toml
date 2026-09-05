@@ -1,0 +1,13 @@
+# cjs-dead-object-export: two functions exported through one module.exports object — only the one an importer binds is alive.
+
+[[alive]]
+subject = "lib.js#helper"
+category = "unused"
+why = "index.js binds it through `const { helper } = require('./lib.js')` — only helper has an importer"
+
+[[known_gap]]
+subject = "lib.js#legacy"
+expect = "dead"
+category = "unused"
+why = "the export site itself must not count as a use — with no importer binding this name it is dead, but today the module.exports shorthand is a Read reference that keeps it"
+fix = "M8.c js-ts (T10)"

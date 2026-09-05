@@ -1,0 +1,30 @@
+# test-only-and-cycle: a ping/pong module cycle is tolerated in Rust (never a finding); the lib's published fixture_helper is not test-only; ping and pong are untested.
+
+[[dead]]
+subject = "src/ping.rs"
+category = "untested"
+why = "main reaches it, but tests/smoke.rs only calls fixture_helper"
+
+[[dead]]
+subject = "src/pong.rs"
+category = "untested"
+why = "reached from ping, but no test reaches it"
+
+[[alive]]
+subject = "src/ping.rs"
+category = "cyclic"
+why = "ping and pong import each other, and Rust tolerates module cycles"
+
+[[alive]]
+subject = "src/pong.rs"
+category = "cyclic"
+why = "the other half of the tolerated cycle"
+
+[[alive]]
+subject = "src/fixture_helper.rs"
+category = "test-only"
+why = "only tests/smoke.rs calls build_fixture, but `pub mod fixture_helper;` publishes it as lib surface"
+
+[[alive]]
+subject = "src/pong.rs#rally"
+why = "published through `pub mod pong;`; it exists to close the ping/pong cycle"

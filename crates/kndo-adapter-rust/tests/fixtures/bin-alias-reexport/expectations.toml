@@ -1,0 +1,9 @@
+# bin-alias-reexport: a bin's `pub(crate) use help::{generate_long as generate_help_long}` alias keeps the aliased fn alive.
+
+[[alive]]
+subject = "src/flags/help.rs#generate_long"
+why = "main calls it as flags::generate_help_long, the alias flags/mod.rs re-exports"
+
+[[alive]]
+subject = "src/flags/help.rs"
+why = "anchored by `mod help;` in flags/mod.rs"

@@ -1,0 +1,11 @@
+# jsx-component-tree: a component used only as a JSX element is used.
+
+[[alive]]
+subject = "src/App.tsx#App"
+category = "unused"
+why = "rendered as the JSX element `<App title=... />` by the entry src/index.tsx"
+
+[[alive]]
+subject = "src/App.tsx"
+category = "unused"
+why = "imported by the entry src/index.tsx"

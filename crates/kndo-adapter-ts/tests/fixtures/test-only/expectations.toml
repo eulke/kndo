@@ -1,0 +1,21 @@
+# test-only: a production-role file whose every incoming edge comes from test roots is test-only; the test file itself is exempt, and what production reaches is not.
+
+[[dead]]
+subject = "src/fixtures.ts"
+category = "test-only"
+why = "imported only by core.test.ts — never by production code: a whole test-only file"
+
+[[alive]]
+subject = "src/core.test.ts"
+category = "test-only"
+why = "the test file itself is exempt from test-only — reporting a test as test-only would be trivially true, not a finding"
+
+[[alive]]
+subject = "src/core.ts#core"
+category = "unused"
+why = "production-reachable: called from index.ts, the root"
+
+[[alive]]
+subject = "src/core.ts#helper"
+category = "unused"
+why = "only ever called from the test — a symbol enshrined by tests, which that test root keeps alive"

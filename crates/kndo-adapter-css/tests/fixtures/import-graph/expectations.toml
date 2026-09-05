@@ -1,0 +1,11 @@
+# import-graph: a sheet reached only through another sheet's @import is alive; css declares no symbols, so the unused custom property pins silence and has no subject here.
+
+[[alive]]
+subject = "tokens.css"
+category = "unused"
+why = "reached through main.css's `@import './tokens.css'`"
+
+[[alive]]
+subject = "main.css"
+category = "unused"
+why = "imported by main.ts"

@@ -1,0 +1,9 @@
+# dispatch-and-cross-package: an override lives through its supertype's dispatch, and a wildcard import reaches another package.
+
+[[alive]]
+subject = "src/main/kotlin/com/foo/Impl.kt#Impl.go"
+why = "an override reached only through the Greeter supertype; the override dispatch root keeps it, no call site spells Impl.go"
+
+[[alive]]
+subject = "src/main/kotlin/com/util/Helper.kt#Helper.assist"
+why = "main calls it across packages through the import com.util.*"

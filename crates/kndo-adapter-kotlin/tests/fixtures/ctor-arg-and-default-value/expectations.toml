@@ -1,0 +1,11 @@
+# ctor-arg-and-default-value: a superclass-constructor argument and a constructor default value are the only references keeping two declarations alive.
+
+[[alive]]
+subject = "src/main/kotlin/demo/Demo.kt#MyProvider"
+category = "unused"
+why = "referenced only as an argument to a superclass constructor call; internal, so no library-surface root can keep it alive — the reference has to"
+
+[[alive]]
+subject = "src/main/kotlin/demo/Demo.kt#Hasher.DEFAULT_COST"
+category = "unused"
+why = "referenced only as a default parameter value in its own class's constructor, and private, so nothing but that reference can keep it alive"

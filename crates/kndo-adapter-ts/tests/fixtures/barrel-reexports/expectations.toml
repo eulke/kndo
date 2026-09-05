@@ -1,0 +1,16 @@
+# barrel-reexports: a pure barrel entry — named and star re-exports extend the published surface; what the barrel skips is dead.
+
+[[dead]]
+subject = "src/orphan.ts"
+category = "unused"
+why = "not re-exported by the barrel and never imported anywhere — must still be reported unused"
+
+[[alive]]
+subject = "src/foo.ts#Foo"
+category = "unused"
+why = "re-exported by name through the barrel entry's `export { Foo } from './foo'`"
+
+[[alive]]
+subject = "src/bar.ts#Bar"
+category = "unused"
+why = "reached only through the barrel's `export * from './bar'` — Bar IS public API and is deliberately not expected as unused"

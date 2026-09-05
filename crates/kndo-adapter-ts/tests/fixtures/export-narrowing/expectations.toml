@@ -1,0 +1,23 @@
+# export-narrowing: an export every use of which is in its own file gets the narrowing advice; one named by any other file, even an unreached one, or through a namespace import, does not.
+
+[[dead]]
+subject = "lib.js#local"
+category = "internal-only"
+why = "declared exported, but every use is within its own file"
+
+[[dead]]
+subject = "dead.js"
+category = "unused"
+why = "no root anchors it and no reachable file imports it"
+
+[[alive]]
+subject = "lib.js#used"
+why = "imported by the entry main.js"
+
+[[alive]]
+subject = "lib.js#spelled"
+why = "named by an import in dead.js — an outside mention, even from an unreached file, forbids the narrowing advice"
+
+[[alive]]
+subject = "ns.js#viaNs"
+why = "reached through the namespace import `everything.viaNs()` from the entry"

@@ -1,0 +1,21 @@
+# esm-dead-code: the ESM baseline — a dead export, an orphan file and a never-imported dependency, next to what the entry uses.
+
+[[dead]]
+subject = "src/lib.ts#dead"
+category = "unused"
+why = "exported, but nothing references, roots or imports it"
+
+[[dead]]
+subject = "src/orphan.ts"
+category = "unused"
+why = "never imported by anything — the file-level unused case"
+
+[[dead]]
+subject = "dep:package.json:left-pad"
+category = "unused"
+why = "declared as a production dependency, but no file imports it and the manifest never names it"
+
+[[alive]]
+subject = "src/lib.ts#used"
+category = "unused"
+why = "imported and called from the entry src/index.ts"

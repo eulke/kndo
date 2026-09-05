@@ -1,0 +1,6 @@
+# named-default-export: a declaration keeps its own name while the consumer's default import binds `default` — the alias links the two.
+
+[[alive]]
+subject = "lib/merge.js#mergeConfig"
+category = "unused"
+why = "a named default export: the consumer's default import binds `default`, and without the alias linking the two this reads unused"

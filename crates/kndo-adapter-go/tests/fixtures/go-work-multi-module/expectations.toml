@@ -1,0 +1,19 @@
+# go-work-multi-module: two modules under one go.work — the cross-module call resolves, and the unexported orphan in module a is still caught.
+
+[[dead]]
+subject = "moda/api.go#deadHelper"
+category = "unused"
+why = "unexported with no caller anywhere in the workspace — the deliberate finding proving multi-module analysis stays precise"
+
+[[alive]]
+subject = "moda/api.go#Hello"
+why = "module a's public API — library-promoted, and genuinely called from the sibling module b through the go.work workspace"
+
+[[alive]]
+subject = "moda/api.go#hi"
+why = "called by Hello in the same package"
+
+[[alive]]
+subject = "dep:modb/go.mod:example.com/a"
+category = "undeclared"
+why = "declared by the require line in modb/go.mod and imported by modb/main.go"

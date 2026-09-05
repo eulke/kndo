@@ -1,0 +1,25 @@
+# cfg-alternate-mods: two `#[cfg]`-alternate `#[path]` twins both named `mod imp`; neither twin is accused.
+
+[[alive]]
+subject = "src/index/disabled.rs"
+why = "the #[path = \"disabled.rs\"] twin of mod imp under cfg(not(feature))"
+
+[[alive]]
+subject = "src/index/enabled.rs"
+why = "the #[path = \"enabled.rs\"] twin of mod imp under cfg(feature)"
+
+[[alive]]
+subject = "src/index/disabled.rs#write"
+why = "main calls index::write through `pub(crate) use self::imp::*`"
+
+[[alive]]
+subject = "src/index/disabled.rs#read"
+why = "main calls index::read through the glob re-export of imp"
+
+[[alive]]
+subject = "src/index/enabled.rs#write"
+why = "main calls index::write through the glob re-export of imp"
+
+[[alive]]
+subject = "src/index/enabled.rs#read"
+why = "main calls index::read through the glob re-export of imp"

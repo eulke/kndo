@@ -15,6 +15,11 @@ docs/book/
 # repo root or coverage/ at check time; the report itself is a build artifact.
 lcov.info
 coverage/
+# …except a conformance fixture's captured report: its pin depends on it, so it IS
+# repo content — exactly the "green locally, absent from CI" trap the note above names,
+# which three fixtures fell into before this line existed.
+!crates/*/tests/fixtures/**/coverage/
+!crates/*/tests/fixtures/**/lcov.info
 
 # `cargo xtask package` output — release artifacts are built by CI, never committed.
 dist/

@@ -1,0 +1,18 @@
+# cfg-test-impl-members: a `#[cfg(test)]` impl member is a test root of its own, reached by the inline tests module; the production members stay alive through main.
+
+[[alive]]
+subject = "src/lib.rs#Widget.stub"
+why = "declared under #[cfg(test)] and called by the inline tests module's stub_has_zero_size"
+
+[[alive]]
+subject = "src/lib.rs#Widget.new"
+why = "main calls cfgimpl::Widget::new(7)"
+
+[[alive]]
+subject = "src/lib.rs#Widget.size"
+why = "main calls w.size()"
+
+[[alive]]
+subject = "src/lib.rs"
+category = "untested"
+why = "the inline #[test] fns reach Widget::new and Widget::size"

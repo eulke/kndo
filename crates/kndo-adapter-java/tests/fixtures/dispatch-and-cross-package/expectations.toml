@@ -1,0 +1,13 @@
+# dispatch-and-cross-package: an @Override implementation lives through dispatch, and a wildcard import reaches another package.
+
+[[alive]]
+subject = "src/main/java/com/foo/Impl.java#Impl.go"
+why = "called only through dispatch (Runner never names go directly) — the @Override rooting rule keeps it alive, not a duck-typed fallback hit"
+
+[[alive]]
+subject = "src/main/java/com/util/Helper.java#Helper"
+why = "Runner names it across packages through the on-demand import com.util.*"
+
+[[alive]]
+subject = "src/main/java/com/util/Helper.java#Helper.assist"
+why = "Runner.main calls it across packages through the wildcard import"

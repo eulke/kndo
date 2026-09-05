@@ -1,0 +1,41 @@
+# npm-workspace-monorepo: two workspace packages — a workspace:* binding is a clean cross-package edge, an undeclared sibling import is a phantom dependency, and the pair's mutual imports form a cycle; a broken relative import is unresolved and leaves its host file unreached.
+
+[[dead]]
+subject = "dep:packages/b/package.json:@demo/a"
+category = "undeclared"
+why = "phantom internal dependency: resolves into sibling @demo/a but @demo/b's own manifest never declares it"
+
+[[dead]]
+subject = "dep:packages/a/package.json:left-pad"
+category = "undeclared"
+why = "imported by packages/a/src/index.ts but declared by no manifest from there up"
+
+[[dead]]
+subject = "packages/a/src/index.ts"
+category = "cyclic"
+why = "@demo/a's entry imports @demo/b's entry, which imports @demo/a's back — a cross-package import cycle"
+
+[[dead]]
+subject = "dep:packages/a/package.json:chalk"
+category = "version-skew"
+why = "declared ^5.0.0 in packages/a and ^4.0.0 in packages/b"
+
+[[dead]]
+subject = "packages/a/src/broken.ts"
+category = "unused"
+why = "no root anchors it and nothing imports it — the host of the broken `./gone.js` import"
+
+[[alive]]
+subject = "packages/b/src/index.ts#util"
+category = "unused"
+why = "kept alive through the workspace:* binding — @demo/a imports it from @demo/b"
+
+[[alive]]
+subject = "dep:packages/a/package.json:@demo/b"
+category = "undeclared"
+why = "declared as workspace:* — a clean cross-package edge"
+
+[[dead]]
+subject = "import:packages/a/src/broken.ts:./gone.js"
+category = "unresolved"
+why = "the import of `./gone.js` resolves to no file — a broken path or a rename that missed this call site"

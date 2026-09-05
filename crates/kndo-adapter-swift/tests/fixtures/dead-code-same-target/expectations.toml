@@ -1,0 +1,14 @@
+# dead-code-same-target: files of one target see each other without imports — the called member stays alive, the never-called one is `unused`.
+
+[[dead]]
+subject = "Sources/App/Helper.swift#Helper.dead"
+category = "unused"
+why = "never called from anywhere — genuinely dead"
+
+[[alive]]
+subject = "Sources/App/Helper.swift#Helper.live"
+why = "no import needed — same-target unit resolution finds this from main.swift"
+
+[[alive]]
+subject = "Sources/App/Helper.swift#Helper"
+why = "instantiated by main.swift"

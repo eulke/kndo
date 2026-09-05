@@ -1,0 +1,10 @@
+# private-type-leak: an exported function whose signature names a private type — consumers can call it and never name that type.
+
+[[dead]]
+subject = "index.ts#make"
+category = "private-type-leak"
+why = "exported, but its signature references `Secret`, which is private"
+
+[[alive]]
+subject = "index.ts#Secret"
+why = "private and used by make's signature and body — the leak is make's finding, not Secret's"

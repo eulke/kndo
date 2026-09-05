@@ -1,0 +1,21 @@
+# crap: complexity crossed with ingested coverage — a wholly unexecuted function is untested's subject, a fully executed one scores its complexity alone.
+
+[[dead]]
+subject = "risky.ts#classifyInput"
+category = "untested"
+why = "every instrumented line of risky.ts has zero executions in lcov — no test executes this function"
+
+[[alive]]
+subject = "risky.ts#classifyInput"
+category = "crap"
+why = "wholly unexecuted, so it is untested's subject and never crap's — one verdict per fact"
+
+[[alive]]
+subject = "safe.ts#scoreLabel"
+category = "crap"
+why = "every line executed: it scores its complexity alone, under the threshold"
+
+[[alive]]
+subject = "safe.ts#scoreLabel"
+category = "untested"
+why = "every line of safe.ts is executed in lcov"

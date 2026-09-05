@@ -1,0 +1,16 @@
+# deep-import: main.ts imports @org/ui/secret past the sibling's declared exports surface — the dependency is declared, so undeclared has nothing to say; the deep-import analysis itself is deferred (DECISIONS 2026-08-31), so no finding is pinned here.
+
+[[alive]]
+subject = "dep:package.json:@org/ui"
+category = "undeclared"
+why = "the dependency itself is declared, so this is deep-import's finding alone, not undeclared's"
+
+[[alive]]
+subject = "packages/ui/secret.ts"
+category = "unused"
+why = "reached by main.ts's deep import `@org/ui/secret`"
+
+[[alive]]
+subject = "packages/ui/lib.ts#publicFn"
+category = "unused"
+why = "re-exported through packages/ui/index.ts, the sibling's declared exports entry"

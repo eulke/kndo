@@ -1,0 +1,11 @@
+# orphaned-css-file-is-unused: a sheet nothing imports or links is the file-level unused case.
+
+[[dead]]
+subject = "unused.css"
+category = "unused"
+why = "never imported by anything — the file-level unused case"
+
+[[alive]]
+subject = "main.css"
+category = "unused"
+why = "imported by main.ts"

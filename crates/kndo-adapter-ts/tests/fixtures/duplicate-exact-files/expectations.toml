@@ -1,0 +1,6 @@
+# duplicate-exact-files: two byte-identical json configs beside a one-file package — json is unclaimed by decision (a config's consumer is a tool, never an import), so the pair draws no duplicate finding and only the entry is in the graph.
+
+[[alive]]
+subject = "src/index.ts"
+category = "unused"
+why = "the manifest's main entry roots it"

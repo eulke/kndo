@@ -1,0 +1,6 @@
+# package-swift-dependency-skip: a `.package(url:)` dependency nothing imports — with SwiftPM identity underivable, the dependency verdicts abstain instead of accusing.
+
+[[alive]]
+subject = "dep:Package.swift:swift-algorithms"
+category = "unused"
+why = "declared by Package.swift and imported by nothing, yet specifier identity is underivable, so the verdict abstains rather than accuses"

@@ -1,0 +1,12 @@
+# go-work-phantom-dep: modb imports example.com/a with no `require` line — only go.work's `use` supplies the module.
+
+[[known_gap]]
+subject = "dep:modb/go.mod:example.com/a"
+expect = "alive"
+category = "undeclared"
+why = "the pin accuses `undeclared`, but in workspace mode the go toolchain builds modb without the require — go.work's `use` supplies the module"
+fix = "M8.d go (G18)"
+
+[[alive]]
+subject = "moda/api.go#Hello"
+why = "called from modb/main.go through the go.work workspace"

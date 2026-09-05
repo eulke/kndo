@@ -428,6 +428,13 @@ enum Resolve {
     Ambiguous(Vec<String>),
 }
 
+/// Whether `raw` — a path, `path#name` or `path#Owner.member` in the query
+/// contract's spelling — names one thing the graph holds. What a fixture's
+/// expectations use to refuse a subject nothing declares.
+pub fn selector_exists(graph: &Graph, raw: &str) -> bool {
+    matches!(resolve(graph, raw), Resolve::Hit(_))
+}
+
 fn resolve(graph: &Graph, raw: &str) -> Resolve {
     let (path, symbol) = match raw.split_once('#') {
         None => (raw, None),
@@ -820,9 +827,9 @@ fn uses(cx: &QueryContext<'_>, selector: Selector, limit: usize) -> Answer {
         for &t in targets {
             use kndo_contract::evidence::ImportShape;
             let names = match &import.shape {
-                ImportShape::Bindings(bs)
-                | ImportShape::Reexport(bs)
-                | ImportShape::TypeOnly(bs) => bs.iter().map(|b| b.imported.clone()).collect(),
+                ImportShape::Bindings(bs) | ImportShape::Reexport(bs) => {
+                    bs.iter().map(|b| b.imported.clone()).collect()
+                }
                 _ => Vec::new(),
             };
             imports.push(ImportUse {
@@ -875,7 +882,7 @@ fn resolve_name(cx: &QueryContext<'_>, file: usize, name: &SmolStr) -> Option<No
     {
         use kndo_contract::evidence::ImportShape;
         let binds = match &import.shape {
-            ImportShape::Bindings(bs) | ImportShape::Reexport(bs) | ImportShape::TypeOnly(bs) => {
+            ImportShape::Bindings(bs) | ImportShape::Reexport(bs) => {
                 bs.iter().any(|b| &b.imported == name)
             }
             _ => true,
@@ -945,9 +952,7 @@ fn used_by(cx: &QueryContext<'_>, selector: Selector, limit: usize) -> Answer {
                         if targets.contains(&(file as u32))
                             && matches!(
                                 import.shape,
-                                ImportShape::Bindings(_)
-                                    | ImportShape::Reexport(_)
-                                    | ImportShape::TypeOnly(_)
+                                ImportShape::Bindings(_) | ImportShape::Reexport(_)
                             )
                         {
                             kept_by.push(edge_ref(

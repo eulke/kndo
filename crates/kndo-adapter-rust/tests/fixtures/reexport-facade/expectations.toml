@@ -1,0 +1,14 @@
+# reexport-facade: `pub use crate::inner::Api;` publishes one item of a private mod; the mod's other pub fn is not re-exported and dies.
+
+[[alive]]
+subject = "src/inner.rs#Api"
+why = "re-exported by the facade's `pub use crate::inner::Api`"
+
+[[dead]]
+subject = "src/inner.rs#helper"
+category = "unused"
+why = "pub inside a private mod, never re-exported and never called"
+
+[[alive]]
+subject = "src/inner.rs"
+why = "anchored by `mod inner;` in lib.rs"

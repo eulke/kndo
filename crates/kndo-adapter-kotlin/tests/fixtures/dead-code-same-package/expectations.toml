@@ -1,0 +1,12 @@
+# dead-code-same-package: a same-package call needs no import; the public method nothing calls is published surface under the library-mode root.
+
+[[alive]]
+subject = "src/main/kotlin/com/foo/Helper.kt#Helper.live"
+why = "main calls it on a Helper instance with no import — same package"
+
+[[known_gap]]
+subject = "src/main/kotlin/com/foo/Helper.kt#Helper.dead"
+expect = "dead"
+category = "unused"
+why = "nothing calls it, but Kotlin's public default makes it library-mode surface and the pom's war packaging (an application, not a library) is never read"
+fix = "M8.c kotlin"

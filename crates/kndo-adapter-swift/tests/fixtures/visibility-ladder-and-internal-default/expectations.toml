@@ -1,0 +1,35 @@
+# visibility-ladder-and-internal-default: each rung of Swift's access ladder against the same target-only evidence — the tightest-sufficient rungs (and the no-modifier internal default) stay quiet.
+
+[[alive]]
+subject = "Sources/App/Widget.swift#Widget.a"
+category = "internal-only"
+why = "private, used only within this file — already the tightest rung for its level"
+
+[[alive]]
+subject = "Sources/App/Widget.swift#Widget.b"
+category = "internal-only"
+why = "fileprivate, used only within this file — maps to the same File scope as private, so neither accuses the other"
+
+[[alive]]
+subject = "Sources/App/Widget.swift#Widget.c"
+category = "internal-only"
+why = "internal, used from Sibling.swift — the required scope is Unit, which the ladder covers at the internal rung: already tightest"
+
+[[alive]]
+subject = "Sources/App/Widget.swift#Widget.useOwn"
+category = "internal-only"
+why = "no modifier at all — Swift's default is internal, and the same target-only evidence as c computes the same tightest-sufficient check"
+
+[[known_gap]]
+subject = "Sources/App/Widget.swift#Widget.d"
+expect = "dead"
+category = "internal-only"
+why = "same evidence as c but declared public — wider than the target-only usage requires; today the Exported rung is exempt under export_narrowing none"
+fix = "M8.c swift"
+
+[[known_gap]]
+subject = "Sources/App/Widget.swift#Widget.e"
+expect = "dead"
+category = "internal-only"
+why = "same evidence as c but declared open — wider than the target-only usage requires; today the Exported rung is exempt under export_narrowing none"
+fix = "M8.c swift"

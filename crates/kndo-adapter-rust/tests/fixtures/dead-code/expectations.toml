@@ -1,0 +1,15 @@
+# dead-code: an orphan file no `mod` declares and a pub fn nothing calls are both unused; the called fn stays.
+
+[[dead]]
+subject = "src/orphan.rs"
+category = "unused"
+why = "nobody declares this module: no `mod orphan;` anchors the file"
+
+[[dead]]
+subject = "src/util.rs#abandoned"
+category = "unused"
+why = "pub, but nothing in the bin calls it"
+
+[[alive]]
+subject = "src/util.rs#used"
+why = "main calls util::used()"

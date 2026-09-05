@@ -1,0 +1,13 @@
+# receiver-typing: a method called on a typed parameter (`args: &HiArgs`, then `args.matcher()`) resolves through the receiver's declared type.
+
+[[alive]]
+subject = "src/hiargs.rs#HiArgs.matcher"
+why = "search::run calls args.matcher() on its &HiArgs parameter"
+
+[[alive]]
+subject = "src/hiargs.rs#HiArgs.parse"
+why = "main calls crate::hiargs::HiArgs::parse()"
+
+[[alive]]
+subject = "src/search.rs#run"
+why = "main calls search::run(&args)"

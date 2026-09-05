@@ -1,0 +1,13 @@
+# trait-impl-members: `impl std::ops::Add for Stats` bodies are the trait's shape — their `add` fns are never declarations, so nothing here can name them; inherent members stay alive through main.
+
+[[alive]]
+subject = "src/stats.rs#Stats.new"
+why = "main calls Stats::new() twice"
+
+[[alive]]
+subject = "src/stats.rs#Stats.combine"
+why = "main calls a.combine(b)"
+
+[[alive]]
+subject = "src/stats.rs#Stats"
+why = "main imports crate::stats::Stats"

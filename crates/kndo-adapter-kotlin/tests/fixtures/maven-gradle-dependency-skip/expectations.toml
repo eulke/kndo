@@ -1,0 +1,16 @@
+# maven-gradle-dependency-skip: a JVM coordinate names no importable package, so declared dependencies (a kapt processor included) are abstained on, never accused.
+
+[[alive]]
+subject = "dep:module-maven/pom.xml:lib"
+category = "unused"
+why = "dependency identity is underivable for a JVM coordinate, so the engine abstains (specifier-identity-underivable) instead of accusing"
+
+[[alive]]
+subject = "dep:module-gradle/build.gradle:lib"
+category = "unused"
+why = "the same abstention for the Gradle spelling of the coordinate"
+
+[[alive]]
+subject = "dep:module-gradle/build.gradle:processor"
+category = "unused"
+why = "a kapt annotation processor is a build-configuration dependency no source file could import"

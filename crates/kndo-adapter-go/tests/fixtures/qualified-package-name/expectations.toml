@@ -1,0 +1,10 @@
+# qualified-package-name: a package whose declared name (yaml) differs from its directory (v2) — `yaml.Run()` resolves only if the qualifier is derived from the declared name.
+
+[[alive]]
+subject = "internal/v2/yaml.go#Run"
+category = "unused"
+why = "named by main.go's yaml.Run() and kept by its import of the package — a last-segment guess (v2) would leave Run unreferenced and falsely unused"
+
+[[alive]]
+subject = "internal/v2/yaml.go"
+why = "imported by main.go as example.com/app/internal/v2 — the import, resolved through the declared package name, keeps the file"

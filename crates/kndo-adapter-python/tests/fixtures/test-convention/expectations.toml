@@ -1,0 +1,23 @@
+# test-convention: `test_*.py` and `conftest.py` are test roots by naming convention — the tested def stays alive, the pytest fixture survives by parameter injection, the private leftover is `unused`.
+
+[[dead]]
+subject = "src/logic.py#_stale"
+category = "unused"
+why = "underscore-private and referenced by nothing"
+
+[[alive]]
+subject = "src/logic.py#add"
+why = "imported and called by tests/test_logic.py"
+
+[[alive]]
+subject = "tests/conftest.py#client"
+why = "a pytest fixture injected by parameter name — conftest.py is entry surface, no source line imports it"
+
+[[alive]]
+subject = "tests/test_logic.py#test_add"
+why = "a test by naming convention — rooted, never accused"
+
+[[alive]]
+subject = "src/logic.py#orphan"
+category = "unused"
+why = "public and uncalled, but a public def is published surface by design"

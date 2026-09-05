@@ -1,0 +1,19 @@
+# workspace-deps: in a workspace member, a declared-but-unimported dependency is unused, an imported-but-undeclared crate is undeclared, and the used path dependency stays.
+
+[[dead]]
+subject = "dep:app/Cargo.toml:serde"
+category = "unused"
+why = "declared in app's [dependencies], but no file imports it"
+
+[[dead]]
+subject = "dep:app/Cargo.toml:rand_chacha"
+category = "undeclared"
+why = "app/src/main.rs calls rand_chacha::rand_core(), but no manifest from there up declares it"
+
+[[alive]]
+subject = "dep:app/Cargo.toml:base"
+why = "app/src/main.rs imports base::greet"
+
+[[alive]]
+subject = "base/src/lib.rs#greet"
+why = "app's main imports and calls it"

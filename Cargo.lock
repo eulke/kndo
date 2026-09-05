@@ -1203,8 +1203,10 @@ name = "kndo-testkit"
 version = "0.0.0"
 dependencies = [
  "kndo-contract",
+ "serde",
  "smol_str",
  "tempfile",
+ "toml",
 ]
 
 [[package]]

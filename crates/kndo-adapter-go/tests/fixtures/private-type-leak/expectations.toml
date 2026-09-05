@@ -1,0 +1,9 @@
+# private-type-leak: an exported signature naming an unexported type — the leak comment is not a claim here: silence is by decision (DECISIONS 2026-08-31, the go adapter emits no signature span).
+
+[[alive]]
+subject = "lib.go#Exported"
+why = "a library-promoted export; the signature-leak verdict is deferred by decision, and the body's use of secret is ordinary encapsulation"
+
+[[alive]]
+subject = "lib.go#secret"
+why = "named by Exported's signature and body"

@@ -1,0 +1,25 @@
+# visibility-ladder-and-internal: each rung of Kotlin's visibility ladder, internal members included, stays alive and at its tightest rung when used from a sibling file.
+
+[[alive]]
+subject = "src/main/kotlin/com/foo/Widget.kt#Widget.a"
+why = "private, called from useOwn in its own class — already the tightest rung"
+
+[[alive]]
+subject = "src/main/kotlin/com/foo/Widget.kt#Widget.b"
+why = "internal, called from Sibling.kt in the same module — module scope is required, so internal is the tightest rung"
+
+[[alive]]
+subject = "src/main/kotlin/com/foo/Widget.kt#Widget.c"
+why = "protected, called from Sibling.kt; protected folds to Exported"
+
+[[alive]]
+subject = "src/main/kotlin/com/foo/Widget.kt#Widget.d"
+why = "public, called from Sibling.kt"
+
+[[alive]]
+subject = "src/main/kotlin/com/foo/Widget.kt#Widget.factory"
+why = "an internal companion member addressed as Widget.factory() from Sibling.kt, attributed to the enclosing class"
+
+[[alive]]
+subject = "src/main/kotlin/com/foo/Widget.kt#Inner.go"
+why = "a nested class member reached as Widget.Inner().go() from Sibling.kt"

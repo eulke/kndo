@@ -1,0 +1,17 @@
+# field-type-chain: a method called on a struct field (`low.context_separator.into_bytes()`) resolves through the field's declared type.
+
+[[alive]]
+subject = "src/lowargs.rs#ContextSeparator.into_bytes"
+why = "hiargs::finish calls it on the context_separator field of its &LowArgs"
+
+[[alive]]
+subject = "src/lowargs.rs#ContextSeparator"
+why = "the field's type, constructed in LowArgs::parse"
+
+[[alive]]
+subject = "src/lowargs.rs#LowArgs.parse"
+why = "main calls crate::lowargs::LowArgs::parse()"
+
+[[alive]]
+subject = "src/hiargs.rs#finish"
+why = "main calls hiargs::finish(&low)"

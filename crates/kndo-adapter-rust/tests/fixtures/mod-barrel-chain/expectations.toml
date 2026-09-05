@@ -1,0 +1,17 @@
+# mod-barrel-chain: a `pub(crate) use crate::flags::{hiargs::HiArgs, parse::parse}` barrel forwards both leaves to main.
+
+[[alive]]
+subject = "src/flags/hiargs.rs#HiArgs"
+why = "main imports crate::flags::HiArgs through the barrel"
+
+[[alive]]
+subject = "src/flags/parse.rs#parse"
+why = "main calls flags::parse() through the barrel"
+
+[[alive]]
+subject = "src/flags/hiargs.rs"
+why = "anchored by `mod hiargs;` in the barrel"
+
+[[alive]]
+subject = "src/flags/parse.rs"
+why = "anchored by `mod parse;` in the barrel"

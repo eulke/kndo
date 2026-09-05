@@ -1,0 +1,16 @@
+# coverage-lcov: an lcov report from a real run colors functions — the one no test executed is untested.
+
+[[dead]]
+subject = "src/calc.js#neverRan"
+category = "untested"
+why = "the lcov record executes it zero times (FNDA:0,neverRan) — no test executes this function"
+
+[[alive]]
+subject = "src/calc.js#add"
+category = "untested"
+why = "executed by test/calc.test.js (FNDA:1,add)"
+
+[[alive]]
+subject = "src/calc.js#clamp"
+category = "untested"
+why = "executed by test/calc.test.js (FNDA:3,clamp)"

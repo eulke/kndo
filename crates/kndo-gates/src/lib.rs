@@ -55,6 +55,14 @@ pub const GATES: &[Gate] = &[
         invariant: "the harvested fixture corpus replays to its pinned reports",
     },
     Gate {
+        name: "fixture_expectations_hold",
+        invariant: "every fixture's expectations.toml holds: dead reported, alive unreported, known gaps still open",
+    },
+    Gate {
+        name: "contract_changes_are_loud",
+        invariant: "a changed pinned report, fingerprint or graph semantics version is named in DECISIONS.md by the same commits",
+    },
+    Gate {
         name: "dogfood_zero_means_measured",
         invariant: "every dogfood abstention is accepted in writing — zero cannot cheapen",
     },
@@ -172,8 +180,14 @@ jobs:
   gates:
     name: named gates
     runs-on: ubuntu-latest
+    env:
+      # The loud-change gate diffs the range this run judges: a pull request's
+      # base..head, or the pushed commit against its parent.
+      KNDO_LOUD_RANGE: ${{ github.event.pull_request.base.sha && format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || 'HEAD~1..HEAD' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: @TOOLCHAIN@

@@ -1,0 +1,15 @@
+# internal-scope: internal declarations are judged over the module region — a fully-qualified use with no import keeps one, and silence condemns another.
+
+[[alive]]
+subject = "src/main/kotlin/com/pkga/Util.kt#helper"
+why = "used from pkgb by fully-qualified name with no import — only the module region's reference pool can keep it"
+
+[[dead]]
+subject = "src/main/kotlin/com/pkga/Util.kt#lonely"
+category = "unused"
+why = "nothing in the module names it; the region is bounded, so it is judgeable"
+
+[[dead]]
+subject = "src/main/kotlin/com/pkga/Util.kt#fileGhost"
+category = "unused"
+why = "a private top-level function nothing in its file names"

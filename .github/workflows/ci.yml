@@ -67,8 +67,14 @@ jobs:
   gates:
     name: named gates
     runs-on: ubuntu-latest
+    env:
+      # The loud-change gate diffs the range this run judges: a pull request's
+      # base..head, or the pushed commit against its parent.
+      KNDO_LOUD_RANGE: ${{ github.event.pull_request.base.sha && format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || 'HEAD~1..HEAD' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.98.0
@@ -78,7 +84,7 @@ jobs:
           set -eu
           cargo test -p kndo-gates --test gates -- --list > /tmp/gate-list.txt
           missing=""
-          for name in generated_ci_is_current contract_fingerprint_is_intentional dogfood_kndo_reports_nothing_on_itself warm_and_cold_runs_are_byte_identical threads_one_and_many_are_byte_identical incremental_and_full_assembly_are_byte_identical a_shared_cache_is_read_and_warmed_across_trees a_pinned_base_side_reports_the_bytes_of_a_fresh_one adapter_conformance_fixtures_are_byte_identical dogfood_zero_means_measured report_schema_is_generated_and_valid agent_format_matches_its_committed_golden query_contract_is_generated_and_pinned frontends_import_only_the_facade builtin_conduct_proofs extension_dependency_implication abi_compat_matrix every_relative_markdown_link_resolves; do
+          for name in generated_ci_is_current contract_fingerprint_is_intentional dogfood_kndo_reports_nothing_on_itself warm_and_cold_runs_are_byte_identical threads_one_and_many_are_byte_identical incremental_and_full_assembly_are_byte_identical a_shared_cache_is_read_and_warmed_across_trees a_pinned_base_side_reports_the_bytes_of_a_fresh_one adapter_conformance_fixtures_are_byte_identical fixture_expectations_hold contract_changes_are_loud dogfood_zero_means_measured report_schema_is_generated_and_valid agent_format_matches_its_committed_golden query_contract_is_generated_and_pinned frontends_import_only_the_facade builtin_conduct_proofs extension_dependency_implication abi_compat_matrix every_relative_markdown_link_resolves; do
             grep -q "$name" /tmp/gate-list.txt || missing="$missing $name"
           done
           [ -z "$missing" ] || { echo "named gates missing from the harness:$missing"; exit 1; }
@@ -100,6 +106,10 @@ jobs:
         run: cargo test -p kndo-gates --test gates -- --exact a_pinned_base_side_reports_the_bytes_of_a_fresh_one
       - name: gate — adapter_conformance_fixtures_are_byte_identical (the harvested fixture corpus replays to its pinned reports)
         run: cargo test -p kndo-gates --test gates -- --exact adapter_conformance_fixtures_are_byte_identical
+      - name: gate — fixture_expectations_hold (every fixture's expectations.toml holds: dead reported, alive unreported, known gaps still open)
+        run: cargo test -p kndo-gates --test gates -- --exact fixture_expectations_hold
+      - name: gate — contract_changes_are_loud (a changed pinned report, fingerprint or graph semantics version is named in DECISIONS.md by the same commits)
+        run: cargo test -p kndo-gates --test gates -- --exact contract_changes_are_loud
       - name: gate — dogfood_zero_means_measured (every dogfood abstention is accepted in writing — zero cannot cheapen)
         run: cargo test -p kndo-gates --test gates -- --exact dogfood_zero_means_measured
       - name: gate — report_schema_is_generated_and_valid (the committed schema is derived from the types and validates real reports)

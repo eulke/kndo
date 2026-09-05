@@ -1,0 +1,10 @@
+# crate-scoped: `pub(crate)` is a bounded, enumerable region — nothing in the crate names crate_ghost, so it is judgeable; the `pub` api is published surface.
+
+[[dead]]
+subject = "src/util.rs#crate_ghost"
+category = "unused"
+why = "the crate boundary is enumerable: nothing in the crate names this, so it is judgeable"
+
+[[alive]]
+subject = "src/lib.rs#api"
+why = "published surface: kept by library mode whatever this crate does"

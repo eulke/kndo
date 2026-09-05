@@ -1,0 +1,26 @@
+# crap-partial-coverage: an lcov report maps onto functions — a complex function only partially covered is `crap`, a function no test executes is `untested`.
+
+[[dead]]
+subject = "src/classify.py#classify"
+category = "crap"
+why = "complexity 10 with only its first branch executed (lcov.info hits lines 1-3 of 16) — a CRAP score of 75"
+
+[[dead]]
+subject = "src/dark.py#never_run"
+category = "untested"
+why = "lcov.info records FNDA:0 and zero hits on every line of never_run"
+
+[[alive]]
+subject = "src/classify.py#classify"
+category = "untested"
+why = "test_negative executes its first branch — partially covered, not untested"
+
+[[alive]]
+subject = "src/classify.py#label"
+category = "untested"
+why = "test_label executes both branches"
+
+[[alive]]
+subject = "src/classify.py#label"
+category = "crap"
+why = "complexity 2 and fully covered — far below the CRAP threshold"

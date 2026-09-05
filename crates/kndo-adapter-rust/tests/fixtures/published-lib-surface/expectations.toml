@@ -1,0 +1,18 @@
+# published-lib-surface: `pub mod api;` publishes a lib's pub fns (kept by library mode); a private fn nothing calls is unused.
+
+[[alive]]
+subject = "src/api.rs#public_entry"
+why = "published through `pub mod api;` — library mode keeps the surface"
+
+[[alive]]
+subject = "src/api.rs#also_public_surface"
+why = "published through `pub mod api;` even though nothing in the crate calls it"
+
+[[alive]]
+subject = "src/api.rs#calc"
+why = "public_entry calls it"
+
+[[dead]]
+subject = "src/api.rs#private_dead"
+category = "unused"
+why = "private and nothing in the file calls it"

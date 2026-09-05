@@ -1,0 +1,16 @@
+# cli-only-dependency: a manifest whose devDependencies are tools named only by its scripts — with no owned file reached, the dependency verdicts abstain instead of accusing.
+
+[[alive]]
+subject = "dep:package.json:xo"
+category = "unused"
+why = "named by the lint script"
+
+[[alive]]
+subject = "dep:package.json:ava"
+category = "unused"
+why = "named by the test script"
+
+[[alive]]
+subject = "dep:package.json:tsd"
+category = "unused"
+why = "named by the test script"

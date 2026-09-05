@@ -1,0 +1,11 @@
+# scss-use-and-partials: `@use "tokens"` resolves to the underscore partial _tokens.scss; css declares no symbols, so the unused $unused-token pins silence and has no subject here.
+
+[[alive]]
+subject = "_tokens.scss"
+category = "unused"
+why = "main.scss's `@use 'tokens'` resolves to the underscore partial"
+
+[[alive]]
+subject = "main.scss"
+category = "unused"
+why = "imported by main.ts"

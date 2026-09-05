@@ -1,0 +1,17 @@
+# internal-only-unit: an export under internal/ whose only caller is a same-package sibling file — the ladder's Unit rung, where unexported would suffice.
+
+[[known_gap]]
+subject = "internal/util/helper.go#Helper"
+expect = "dead"
+category = "internal-only"
+why = "exported but its only caller is a same-package sibling file: unexported would suffice, and under internal/ the export is not root-promoted"
+fix = "M8.b/M8.c go (G21)"
+
+[[alive]]
+subject = "internal/util/helper.go#Helper"
+category = "unused"
+why = "called by Entry in the sibling file — the evidence is purely the in-graph use"
+
+[[alive]]
+subject = "internal/util/entry.go#Entry"
+why = "consumed cross-package from main.go — Public is genuinely required"

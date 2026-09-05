@@ -1,0 +1,11 @@
+# dependency-hygiene: a test-role file is a test root, never unused — and its chai import still drives the test-only dependency verdict.
+
+[[dead]]
+subject = "dep:package.json:chai"
+category = "test-only"
+why = "declared as a production dependency, but its only importer is the test file src/index.test.ts"
+
+[[alive]]
+subject = "src/index.test.ts"
+category = "unused"
+why = "a Test-role file is a test root (role detection seeds test roots) — never unused, even though nothing imports it"

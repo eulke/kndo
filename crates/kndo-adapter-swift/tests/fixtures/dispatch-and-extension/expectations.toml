@@ -1,0 +1,21 @@
+# dispatch-and-extension: a member reached only by dispatch (the `override` root), a member an extension adds from another file, and a base member whose only reference is the by-name fallback.
+
+[[known_gap]]
+subject = "Sources/App/Base.swift#Base.go"
+expect = "dead"
+category = "internal-only"
+why = "reached only through the duck-typed member fallback — not a strong enough reference to justify its declared width, so this reads internal-only rather than unused"
+fix = "M8.c swift"
+
+[[alive]]
+subject = "Sources/App/Base.swift#Base.go"
+category = "unused"
+why = "Runner's by-name go() call keeps it out of unused"
+
+[[alive]]
+subject = "Sources/App/Impl.swift#Impl.go"
+why = "called only through dispatch — the override rooting rule is what keeps this alive"
+
+[[alive]]
+subject = "Sources/App/BaseExtensions.swift#extra"
+why = "added to Base from a different file (its member_of is Base's bare name) and called by Runner as impl1.extra()"

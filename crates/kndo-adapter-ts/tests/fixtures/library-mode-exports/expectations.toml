@@ -1,0 +1,16 @@
+# library-mode-exports: a package with an exports map — every leaf is a root, and a file the map does not name is still unused.
+
+[[dead]]
+subject = "src/internal.ts"
+category = "unused"
+why = "not named in exports and never imported — must still be reported unused despite living in a library-mode package"
+
+[[alive]]
+subject = "src/index.ts"
+category = "unused"
+why = "the manifest's `.` export leaf"
+
+[[alive]]
+subject = "src/extra.ts"
+category = "unused"
+why = "the manifest's `./extra` export leaf"

@@ -1,0 +1,10 @@
+# bin-e2e-invoke: an integration test spawns the binary through CARGO_BIN_EXE_tool, so the bin is test-reached end to end.
+
+[[alive]]
+subject = "src/main.rs"
+category = "untested"
+why = "tests/e2e.rs runs the binary via env!(\"CARGO_BIN_EXE_tool\") and asserts its exit status"
+
+[[alive]]
+subject = "src/main.rs#run"
+why = "main calls run() for its exit code"

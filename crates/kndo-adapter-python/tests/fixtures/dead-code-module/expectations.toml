@@ -1,0 +1,19 @@
+# dead-code-module: a package module reached from a `__main__` script — the private orphan is `unused`, the public one stays published surface.
+
+[[dead]]
+subject = "src/pkg/util.py#_ghost"
+category = "unused"
+why = "module-private by convention and referenced by nothing"
+
+[[alive]]
+subject = "src/pkg/util.py#live"
+why = "imported by main.py and called under its __main__ guard"
+
+[[alive]]
+subject = "src/pkg/util.py#_shared"
+why = "called by live in the same module"
+
+[[alive]]
+subject = "src/pkg/util.py#dead"
+category = "unused"
+why = "a public def is published surface by design — only the underscore rung is judged"

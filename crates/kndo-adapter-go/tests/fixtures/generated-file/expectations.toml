@@ -1,0 +1,6 @@
+# generated-file: a `// Code generated … DO NOT EDIT.` file declares nothing accusable — the whole-file `unused` an authored file would earn is exempted.
+
+[[alive]]
+subject = "api.pb.go"
+category = "unused"
+why = "in an authored file this whole file would be flagged; the content-derived Generated origin exempts it"

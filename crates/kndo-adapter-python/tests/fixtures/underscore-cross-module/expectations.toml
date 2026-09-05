@@ -1,0 +1,10 @@
+# underscore-cross-module: an underscore name bound by a sibling module's `from .inner import _reached` stays alive; the unbound one is `unused`.
+
+[[dead]]
+subject = "src/pkg/inner.py#_lost"
+category = "unused"
+why = "underscore-private and imported by nothing"
+
+[[alive]]
+subject = "src/pkg/inner.py#_reached"
+why = "bound by caller.py's `from .inner import _reached` and called by run"

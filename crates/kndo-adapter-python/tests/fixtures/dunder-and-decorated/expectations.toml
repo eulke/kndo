@@ -1,0 +1,22 @@
+# dunder-and-decorated: roots the language supplies — a dunder the runtime protocol calls and a def handed to its decorator — beside the one private orphan.
+
+[[dead]]
+subject = "src/app.py#_forgotten"
+category = "unused"
+why = "module-private by convention and referenced by nothing: the one rung Python can bound, judged"
+
+[[alive]]
+subject = "src/app.py#Money.__eq__"
+why = "the runtime protocol calls this (a == b) — no source line ever will"
+
+[[alive]]
+subject = "src/app.py#handler"
+why = "`@d def f` IS `f = d(f)`: handed to its decorator by the language"
+
+[[alive]]
+subject = "src/app.py#route"
+why = "named by the @route decorator on handler"
+
+[[alive]]
+subject = "src/app.py#Money"
+why = "instantiated by handler"

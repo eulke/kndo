@@ -1,0 +1,13 @@
+# type-qualified-member: `Thing::from_low_args(1)` through a `use` import resolves the associated fn, and `t.consume()` the method on its result.
+
+[[alive]]
+subject = "src/thing.rs#Thing.from_low_args"
+why = "main calls Thing::from_low_args(1) through `use crate::thing::Thing`"
+
+[[alive]]
+subject = "src/thing.rs#Thing.consume"
+why = "main calls t.consume() on the Thing that from_low_args returns"
+
+[[alive]]
+subject = "src/thing.rs#Thing"
+why = "imported by main"

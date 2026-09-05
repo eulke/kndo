@@ -1,0 +1,9 @@
+# global-allocator: a `#[global_allocator]` static is a runtime root even under a target `#[cfg]`, and its type lives with it.
+
+[[alive]]
+subject = "src/main.rs#ALLOC"
+why = "#[global_allocator] makes the static a runtime root, cfg or not"
+
+[[alive]]
+subject = "src/main.rs#MyAlloc"
+why = "the allocator static's type"

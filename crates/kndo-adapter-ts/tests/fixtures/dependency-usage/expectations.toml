@@ -1,0 +1,56 @@
+# dependency-usage: one manifest exercising every dependency verdict — imported, spelled, script-named, browser-aliased, test-only, idle, phantom — and a sibling package that abstains because its importer is an unclaimed .vue file.
+
+[[dead]]
+subject = "dep:package.json:phantom-dep"
+category = "undeclared"
+why = "imported by src/main.js but declared by no manifest from there up"
+
+[[dead]]
+subject = "dep:package.json:idle-dep"
+category = "unused"
+why = "declared as a production dependency, but no file imports it and the manifest never names it"
+
+[[dead]]
+subject = "dep:package.json:test-dep"
+category = "test-only"
+why = "declared as a production dependency, but only src/main.test.js imports it"
+
+[[alive]]
+subject = "dep:package.json:used-dep"
+category = "unused"
+why = "imported by src/main.js"
+
+[[alive]]
+subject = "dep:package.json:spelled-dep"
+category = "unused"
+why = "src/main.js spells `spelled-dep/plugin` as a string literal — a mention"
+
+[[alive]]
+subject = "dep:package.json:bundle-tool"
+category = "unused"
+why = "named by the manifest's build script"
+
+[[alive]]
+subject = "dep:package.json:aliased-shim"
+category = "unused"
+why = "named by the manifest's browser field"
+
+[[alive]]
+subject = "dep:package.json:idle-dev-dep"
+category = "unused"
+why = "a devDependencies declaration is outside the production scope unused judges"
+
+[[alive]]
+subject = "dep:package.json:idle-peer"
+category = "unused"
+why = "a peerDependencies declaration is outside the production scope unused judges"
+
+[[alive]]
+subject = "dep:package.json:idle-optional"
+category = "unused"
+why = "an optionalDependencies declaration is outside the production scope unused judges"
+
+[[alive]]
+subject = "dep:packages/widgets/package.json:widget-dep"
+category = "unused"
+why = "its only importer is an unclaimed .vue file, so the widgets manifest abstains rather than accuses"

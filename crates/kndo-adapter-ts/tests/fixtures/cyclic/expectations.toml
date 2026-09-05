@@ -1,0 +1,14 @@
+# cyclic: a.ts and b.ts import each other — everything is alive and used, the only defect is the loop itself.
+
+[[dead]]
+subject = "a.ts"
+category = "cyclic"
+why = "a.ts and b.ts import each other — a real, mutually-recursive module cycle"
+
+[[alive]]
+subject = "a.ts#ping"
+why = "everything is alive and used, the only defect is the loop itself"
+
+[[alive]]
+subject = "b.ts#pong"
+why = "everything is alive and used, the only defect is the loop itself"

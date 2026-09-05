@@ -1,0 +1,21 @@
+# try-unwrap-chain: `self.config.build_many(1)?` unwraps the Result so `chir.line_terminator()` resolves on the Ok type.
+
+[[alive]]
+subject = "src/config.rs#ConfiguredHir.line_terminator"
+why = "Builder::finish calls it on the value `?` unwraps from build_many"
+
+[[alive]]
+subject = "src/config.rs#Config.build_many"
+why = "Builder::finish calls it on its config field"
+
+[[alive]]
+subject = "src/config.rs#ConfiguredHir"
+why = "build_many's Ok type"
+
+[[alive]]
+subject = "src/matcher.rs#Builder.finish"
+why = "build calls b.finish()"
+
+[[alive]]
+subject = "src/matcher.rs#build"
+why = "main calls matcher::build()"

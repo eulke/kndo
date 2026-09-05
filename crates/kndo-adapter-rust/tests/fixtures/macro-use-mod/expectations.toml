@@ -1,0 +1,17 @@
+# macro-use-mod: `#[macro_use] mod messages;` lends its macros to the crate; a path inside a macro body keeps its target alive.
+
+[[alive]]
+subject = "src/messages.rs"
+why = "anchored by `#[macro_use] mod messages;` in main.rs"
+
+[[alive]]
+subject = "src/messages.rs#set_errored"
+why = "named as crate::messages::set_errored inside the err_message! body that main.rs expands"
+
+[[alive]]
+subject = "src/messages.rs#ERRORED"
+why = "set_errored stores into it"
+
+[[alive]]
+subject = "src/worker.rs#work"
+why = "main calls worker::work()"

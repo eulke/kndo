@@ -1,0 +1,20 @@
+# dynamic-import-scan: a template import whose static prefix narrows the wildcard to src/handlers — everything there stays alive, nothing outside gets a free pass.
+
+[[dead]]
+subject = "src/outside/dead.ts"
+category = "unused"
+why = "outside the narrowed directory and never imported — the wildcard must not keep this alive"
+
+[[known_gap]]
+subject = "src/handlers/alpha.ts"
+expect = "alive"
+category = "unused"
+why = "alive only through the narrowed dynamic import — but a template-literal import() is not read today, so the file is accused"
+fix = "M8.c js-ts (T3)"
+
+[[known_gap]]
+subject = "src/handlers/beta.ts"
+expect = "alive"
+category = "unused"
+why = "alive only through the narrowed dynamic import — but a template-literal import() is not read today, so the file is accused"
+fix = "M8.c js-ts (T3)"

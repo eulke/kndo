@@ -1,0 +1,21 @@
+# coverage-gocover: a `go test -coverprofile` report maps onto functions — executed ones stay quiet, the never-executed one is `untested`.
+
+[[dead]]
+subject = "calc.go#NeverRan"
+category = "untested"
+why = "NeverRan is reachable and never executed — coverage.out records zero hits on every block"
+
+[[alive]]
+subject = "calc.go#NeverRan"
+category = "unused"
+why = "NeverRan is reachable: a library-promoted export whose defect is coverage, not reach"
+
+[[alive]]
+subject = "calc.go#Add"
+category = "untested"
+why = "Add is exercised by the test (TestAdd)"
+
+[[alive]]
+subject = "calc.go#Sub"
+category = "untested"
+why = "Sub is exercised too (TestSub)"

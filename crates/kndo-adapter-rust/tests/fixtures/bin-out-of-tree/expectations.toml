@@ -1,0 +1,21 @@
+# bin-out-of-tree: a `[[bin]] path = "crates/core/main.rs"` root outside src/ anchors its whole mod tree.
+
+[[alive]]
+subject = "crates/core/main.rs"
+why = "the manifest's [[bin]] path names it the entry point"
+
+[[alive]]
+subject = "crates/core/flags/parse.rs#parse"
+why = "main calls flags::parse() through the flags barrel"
+
+[[alive]]
+subject = "crates/core/flags/hiargs.rs#HiArgs"
+why = "main names it through the barrel and parse returns it"
+
+[[alive]]
+subject = "crates/core/logger.rs#Logger.init"
+why = "parse calls crate::logger::Logger::init()"
+
+[[alive]]
+subject = "crates/core/logger.rs#set"
+why = "Logger::init calls set(LOGGER)"

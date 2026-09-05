@@ -1,0 +1,61 @@
+# document-entries: HTML pages are roots — script src and link href (stylesheet, modulepreload) with query suffixes stripped and commented-out tags ignored; a test page is a test root; a script src that resolves to no file is unresolved.
+
+[[dead]]
+subject = "orphan.css"
+category = "unused"
+why = "no page links it and no sheet imports it"
+
+[[dead]]
+subject = "src/dead.ts"
+category = "unused"
+why = "no page's script reaches it"
+
+[[dead]]
+subject = "vendor/lib.js"
+category = "test-only"
+why = "only test/index.html, a test page, loads it — no production or tooling root does"
+
+[[dead]]
+subject = "src/util.ts"
+category = "untested"
+why = "production-reachable from index.html, but no test page reaches it"
+
+[[alive]]
+subject = "src/main.ts"
+category = "unused"
+why = "rooted by index.html's module script `/src/main.ts?v=2` — the query suffix is stripped"
+
+[[alive]]
+subject = "src/util.ts"
+category = "unused"
+why = "preloaded by index.html's `<link rel=modulepreload>` and imported by main.ts"
+
+[[alive]]
+subject = "style.css"
+category = "unused"
+why = "linked by index.html's `<link rel=stylesheet>`"
+
+[[alive]]
+subject = "tokens.css"
+category = "unused"
+why = "imported by style.css's `@import`"
+
+[[alive]]
+subject = "pages/about.js"
+category = "unused"
+why = "loaded by pages/about.html's `<script src=about.js>`"
+
+[[alive]]
+subject = "test/cases.js"
+category = "unused"
+why = "loaded by the test page test/index.html"
+
+[[dead]]
+subject = "import:pages/about.html:./gone.js"
+category = "unresolved"
+why = "pages/about.html's `<script src=./gone.js>` resolves to no file — a broken path"
+
+[[alive]]
+subject = "import:index.html:./retired.js"
+category = "unresolved"
+why = "the `<script src=./retired.js>` tag in index.html is commented out — a commented tag references nothing"

@@ -1,0 +1,14 @@
+# multi-file-package: files of one package see each other without imports — the sibling-file call keeps `format` alive, and the uncalled helper is the one finding.
+
+[[dead]]
+subject = "sub/format.go#deadHelper"
+category = "unused"
+why = "never called from anywhere — the one real finding this fixture pins"
+
+[[alive]]
+subject = "sub/format.go#format"
+why = "Greeting calls format from the sibling file — no import needed, same package"
+
+[[alive]]
+subject = "sub/greet.go#Greeting"
+why = "called from main.go as sub.Greeting()"

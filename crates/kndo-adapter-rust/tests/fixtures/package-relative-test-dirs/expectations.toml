@@ -1,0 +1,18 @@
+# package-relative-test-dirs: `tests/` belongs to the package beside it — hostcrate's it.rs is a test root that reaches nothing in work.rs, and the nested guest package keeps its own surface.
+
+[[dead]]
+subject = "src/work.rs"
+category = "untested"
+why = "production-reachable from main, but tests/it.rs only asserts true and reaches nothing"
+
+[[alive]]
+subject = "src/work.rs#api"
+why = "main calls work::api() for its exit code"
+
+[[alive]]
+subject = "examples/guest/src/lib.rs#guest_entry"
+why = "published surface of the nested guest package"
+
+[[alive]]
+subject = "examples/guest/src/lib.rs"
+why = "the guest package's own lib root"

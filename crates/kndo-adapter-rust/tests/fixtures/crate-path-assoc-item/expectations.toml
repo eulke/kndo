@@ -1,0 +1,21 @@
+# crate-path-assoc-item: a crate-qualified path to an associated fn (`crate::logger::Logger::init()`) resolves to the member.
+
+[[alive]]
+subject = "src/logger.rs#Logger.init"
+why = "app::run calls it as crate::logger::Logger::init()"
+
+[[alive]]
+subject = "src/logger.rs#Logger"
+why = "named by that qualified path and the owner of init"
+
+[[alive]]
+subject = "src/logger.rs#set"
+why = "Logger::init calls set(LOGGER)"
+
+[[alive]]
+subject = "src/logger.rs#LOGGER"
+why = "Logger::init passes it to set"
+
+[[alive]]
+subject = "src/app.rs#run"
+why = "main calls app::run()"
