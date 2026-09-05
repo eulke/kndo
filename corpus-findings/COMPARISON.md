@@ -1079,3 +1079,41 @@ positive of M4.
 Every other repository byte-identical — the change is rust's alone, and every
 root the adapter's attribute table used to state is the root the rules derive:
 all 27 existing rust conformance fixtures re-pin to the same bytes.
+
+## M8.b — the engine stops guessing generously (2026-09-06)
+
+Three adapter under-reports and one engine over-keep, measured against each
+other. The engine's surface keepers used to hand out private members: an entry
+point's exported API and a namespace importer kept every member of a file,
+whatever the language exported. Removing that keep is a lens — it shows which
+adapters were being carried by it.
+
+**First attempt: 47 new `unused`, 27 of them false.** Exposed 17, guava 28,
+vapor 2. Reading the sources: Exposed's seventeen were all names USED in their
+own file (`iterations: Int = DEFAULT_ITERATIONS`, `"DEFAULT CHARSET=$charset"`)
+that the Kotlin adapter never reported; ten of guava's were declarations
+carrying `@SuppressWarnings("unused")`, whose own comment reads "many methods
+tested reflectively". The rule was reverted rather than shipped at 43%
+precision.
+
+**Three root fixes, each measured alone.**
+
+| fix | what it recovers | corpus effect |
+|---|---|---|
+| kotlin: a parameter's default value is a use | every constant a primary constructor defaults to | Exposed +148 references, 0 findings |
+| java: annotations are markers, `@SuppressWarnings("unused")` exempts | what the author already declared | guava 9,925 → 9,837 (−88 `unused`, all suppressed at the source) |
+| kotlin: `$name` in a string template is a use | the properties SQL builders read | Exposed −5 `unused` |
+
+The Kotlin fixes changed no finding on their own (the surface keep was already
+hiding those declarations) and 148 references + 5 findings once measured
+against it — the shape of a masked defect.
+
+**Shipped: 19 new `unused`, zero false.** guava 17 (private test helpers whose
+name appears exactly once in the file: `ForwardingCacheTest.OnlyGet`,
+`Fingerprint2011Test.LENGTH_FINGERPRINTS`/`MAX_BYTES`,
+`HashingTest.MAX_PERCENT_SPREAD`, `ImmutableSetTest.HASH_FLOODING_FPP`,
+`FuturesTest.MapperFunction`/`constantAsyncCallable`/`TestException`, ×2 for
+the android mirror), vapor 2 (`insertOrReturn`, `checkBodyStorage`, each
+declared once and never called). Net across the corpus: guava −71, Exposed −5,
+vapor +2. Every other repository byte-identical, and every conformance fixture
+in every corpus byte-identical.
