@@ -130,6 +130,7 @@ fn stream_to_wire(stream: EvidenceStream) -> Option<wire::EvidenceStream> {
         EvidenceStream::Comments => Some(wire::EvidenceStream::Comments),
         EvidenceStream::Metrics => Some(wire::EvidenceStream::Metrics),
         EvidenceStream::Markers => Some(wire::EvidenceStream::Markers),
+        EvidenceStream::Relations => Some(wire::EvidenceStream::Relations),
         // A stream this SDK build predates cannot cross this wire: omitted from
         // the declaration, so host-side pairing stays truthful (writes to it
         // would drop with a diagnostic rather than lie).
@@ -273,6 +274,22 @@ pub fn evidence_to_wire(evidence: &FileEvidence) -> wire::FileEvidence {
                 path: m.path.to_string(),
                 args: m.args.iter().map(|a| a.to_string()).collect(),
                 span: span_to_wire(m.span),
+            })
+            .collect(),
+        relations: evidence
+            .relations
+            .iter()
+            .map(|r| wire::Relation {
+                from: r.from.index() as u32,
+                kind: match r.kind {
+                    ev::RelationKind::Implements => wire::RelationKind::Implements,
+                    // Extends, and any link this SDK build predates: the
+                    // weaker promise crosses, which keeps a witness alive
+                    // without claiming an interface the guest never named.
+                    _ => wire::RelationKind::Extends,
+                },
+                to: r.to.to_string(),
+                span: span_to_wire(r.span),
             })
             .collect(),
         comments: evidence

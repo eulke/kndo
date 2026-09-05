@@ -171,6 +171,23 @@ impl Analysis for InternalOnly {
                 if rooted.contains(&d_ix) || d.owner.is_some_and(|o| rooted.contains(&o.index())) {
                     continue;
                 }
+                // A member that sits on a promised surface cannot narrow: an
+                // overrider needs it at least this visible, and a member that
+                // itself overrides is fixed by what it overrides. Both
+                // directions of the same fact, which is why one relation
+                // stream answers both.
+                if let Some(owner) = d.owner {
+                    let owner = f.evidence.declarations[owner.index()].name.as_str();
+                    if cx.run.index.is_overridden(owner, d.name.as_str())
+                        || cx
+                            .run
+                            .index
+                            .witnessed_type(owner, d.name.as_str())
+                            .is_some()
+                    {
+                        continue;
+                    }
+                }
                 // Used INSIDE its own file at all? If not, `unused` owns it.
                 let own_use = per_file_refs[i].contains(d.name.as_str());
                 if !own_use {

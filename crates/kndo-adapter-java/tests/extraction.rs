@@ -323,3 +323,53 @@ fn generic_and_qualified_supertypes_classify_as_extend() {
     assert_eq!(kind_of("String"), Some(RefKind::TypeUse));
     assert_eq!(kind_of("Long"), Some(RefKind::TypeUse));
 }
+
+#[test]
+fn supertypes_are_relations_by_bare_name() {
+    let ev = ev(
+        "src/main/java/com/foo/Impl.java",
+        "package com.foo;\n\
+         class Impl<E> extends com.foo.Abstract<E> implements Runnable, Iface<E> {\n\
+           void run() {}\n\
+         }\n\
+         interface Iface<E> extends Base {}\n",
+    );
+    let relations: Vec<(String, String, String)> = ev
+        .relations
+        .iter()
+        .map(|r| {
+            (
+                ev.declarations[r.from.index()].name.to_string(),
+                format!("{:?}", r.kind),
+                r.to.to_string(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        relations,
+        [
+            // Qualification and generic arguments are stripped: the promise is
+            // the type's own name, spelled as a reference to it would be.
+            (
+                "Impl".to_string(),
+                "Extends".to_string(),
+                "Abstract".to_string()
+            ),
+            (
+                "Impl".to_string(),
+                "Implements".to_string(),
+                "Runnable".to_string()
+            ),
+            (
+                "Impl".to_string(),
+                "Implements".to_string(),
+                "Iface".to_string()
+            ),
+            (
+                "Iface".to_string(),
+                "Implements".to_string(),
+                "Base".to_string()
+            ),
+        ]
+    );
+}

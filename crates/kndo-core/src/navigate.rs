@@ -17,7 +17,7 @@ use crate::graph::Graph;
 use kndo_contract::evidence::{ImportShape, Reach, RootKind, RootTarget, SymbolKind};
 use kndo_contract::vocab::Span;
 use smol_str::SmolStr;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// The one projection of the three reachability floods into the color a
 /// navigator speaks: `production` wins, then `test-only`, then `tooling-only`,
@@ -76,11 +76,21 @@ pub struct Index {
     /// Reverse of `sees`: reachable viewers only, ascending.
     seen_by: Vec<Vec<u32>>,
     reachable: Vec<bool>,
+    /// The type surfaces, by NAME and over EVERY file: what each type declares,
+    /// and which types relate to which. A supertype in a file no root reaches
+    /// still shapes what its subtypes must declare, so reachability is not a
+    /// filter here. Same-named types union their surfaces — an
+    /// over-approximation, which is the keep-alive direction for both
+    /// consumers (a witness keeps its member alive; an overridden member is
+    /// not advised to narrow).
+    members_of: BTreeMap<SmolStr, BTreeSet<SmolStr>>,
+    supertypes_of: BTreeMap<SmolStr, BTreeSet<SmolStr>>,
+    subtypes_of: BTreeMap<SmolStr, BTreeSet<SmolStr>>,
 }
 
 /// Why a declaration is alive — each variant carries the evidence a navigator
 /// shows and the judge counts.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Keeper {
     /// A reference to its name from inside its legal pool.
     Reference { site: Site },
@@ -100,6 +110,11 @@ pub enum Keeper {
     SurfaceImport { site: Site },
     /// A member riding its owner: an importer binds the owner's name.
     OwnerBinding { site: Site },
+    /// The member satisfies a surface its owner promised: an override, an
+    /// interface method, a protocol requirement. Alive while its owner is —
+    /// no call site can be required to exist, because the caller holds the
+    /// SUPERTYPE.
+    Witness { of: SmolStr },
 }
 
 impl Index {
@@ -140,13 +155,81 @@ impl Index {
                 }
             }
         }
+        // The type surfaces: every file, reachable or not.
+        let mut members_of: BTreeMap<SmolStr, BTreeSet<SmolStr>> = BTreeMap::new();
+        let mut supertypes_of: BTreeMap<SmolStr, BTreeSet<SmolStr>> = BTreeMap::new();
+        let mut subtypes_of: BTreeMap<SmolStr, BTreeSet<SmolStr>> = BTreeMap::new();
+        for f in &graph.files {
+            for d in &f.evidence.declarations {
+                if let Some(owner) = d.owner {
+                    members_of
+                        .entry(f.evidence.declarations[owner.index()].name.clone())
+                        .or_default()
+                        .insert(d.name.clone());
+                }
+            }
+            for r in &f.evidence.relations {
+                let from = f.evidence.declarations[r.from.index()].name.clone();
+                supertypes_of
+                    .entry(from.clone())
+                    .or_default()
+                    .insert(r.to.clone());
+                subtypes_of.entry(r.to.clone()).or_default().insert(from);
+            }
+        }
         Index {
             sites_by_name,
             bound,
             surface_importers,
             seen_by,
             reachable,
+            members_of,
+            supertypes_of,
+            subtypes_of,
         }
+    }
+
+    /// The type this member's owner promised it to, if any: a supertype —
+    /// transitively — that declares a member of the same name. `None` when the
+    /// owner promised nothing carrying it.
+    pub fn witnessed_type(&self, owner: &str, member: &str) -> Option<SmolStr> {
+        self.walk(&self.supertypes_of, owner)
+            .into_iter()
+            .find(|t| self.declares(t, member))
+    }
+
+    /// Does some SUBtype — transitively — declare a member of this name? Then
+    /// the member is overridden, and narrowing it below what its overriders
+    /// need is not advice, it is a compile error.
+    pub fn is_overridden(&self, owner: &str, member: &str) -> bool {
+        self.walk(&self.subtypes_of, owner)
+            .iter()
+            .any(|t| self.declares(t, member))
+    }
+
+    fn declares(&self, type_name: &SmolStr, member: &str) -> bool {
+        self.members_of
+            .get(type_name)
+            .is_some_and(|m| m.contains(member))
+    }
+
+    /// Every type reachable from `start` through `edges`, excluding `start`
+    /// itself — a plain closure over a name graph small enough to walk whole,
+    /// and cycle-safe (a language's type graph should be acyclic; a malformed
+    /// one must not hang the run).
+    fn walk(&self, edges: &BTreeMap<SmolStr, BTreeSet<SmolStr>>, start: &str) -> Vec<SmolStr> {
+        let mut seen: BTreeSet<&SmolStr> = BTreeSet::new();
+        let mut out: Vec<SmolStr> = Vec::new();
+        let mut frontier: Vec<&SmolStr> = edges.get(start).into_iter().flatten().collect();
+        while let Some(next) = frontier.pop() {
+            if next.as_str() == start || !seen.insert(next) {
+                continue;
+            }
+            out.push(next.clone());
+            frontier.extend(edges.get(next).into_iter().flatten());
+        }
+        out.sort();
+        out
     }
 
     pub fn reachable(&self, file: u32) -> bool {
@@ -263,6 +346,17 @@ pub fn keepers(
 
     let member = d.owner.is_some() || d.kind == SymbolKind::Method;
     if member {
+        // A surface its owner promised: no call site can be required to exist,
+        // because every caller holds the SUPERTYPE and dispatches through it.
+        if let Some(owner) = d.owner
+            && let Some(of) = index.witnessed_type(
+                f.evidence.declarations[owner.index()].name.as_str(),
+                d.name.as_str(),
+            )
+            && kept.push(Keeper::Witness { of })
+        {
+            return kept.out;
+        }
         // Dispatch is not lexical: any reachable reference to the name.
         for &site in index.reference_sites(d.name.as_str()) {
             if kept.push(Keeper::Reference { site }) {

@@ -69,6 +69,8 @@ pub enum EvidenceStream {
     Metrics,
     /// Attributes, annotations, decorators, pragmas — see [`Marker`].
     Markers,
+    /// Supertype links — see [`Relation`].
+    Relations,
 }
 
 /// The set of optional streams an adapter DECLARES it produces — the pairing rule.
@@ -407,6 +409,40 @@ pub struct AdapterDiagnostic {
     pub span: Option<Span>,
 }
 
+/// How a declaration relates to a named type. Grows as languages teach us
+/// links; an unknown kind relates nothing, which keeps the pair independent —
+/// silence, never an accusation.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ContractFingerprint)]
+#[serde(rename_all = "lowercase")]
+pub enum RelationKind {
+    /// A class extends a base class; an interface extends another.
+    Extends,
+    /// A type implements an interface, conforms to a protocol, satisfies a
+    /// trait bound — one word for "promises another type's surface".
+    Implements,
+}
+
+/// A typed link from a declaration to a NAMED type, as the file writes it:
+/// `class A extends B implements C`. The name is unresolved on purpose — the
+/// engine resolves it the way it resolves a reference, and an adapter that
+/// tried to resolve would be re-deriving the project.
+///
+/// What the engine reads from it: a member whose owner relates to a type
+/// declaring the same name is a WITNESS of that type's surface — an override,
+/// an interface method, a protocol requirement. A witness is alive while its
+/// owner is, and the member it witnesses can never narrow below it.
+#[derive(Debug, Clone, Serialize, Deserialize, ContractFingerprint)]
+pub struct Relation {
+    pub from: DeclarationId,
+    pub kind: RelationKind,
+    /// The supertype's name as the language spells it at the use site, with
+    /// generics and qualification stripped — the same spelling a reference to
+    /// that type carries, so the two resolve alike.
+    pub to: SmolStr,
+    pub span: Span,
+}
+
 /// The finished evidence for one file. Built through [`EvidenceSink`]; read
 /// everywhere.
 #[derive(Debug, Clone, Serialize, Deserialize, ContractFingerprint)]
@@ -419,6 +455,7 @@ pub struct FileEvidence {
     pub imports: Vec<Import>,
     pub roots: Vec<Root>,
     pub markers: Vec<Marker>,
+    pub relations: Vec<Relation>,
     pub comments: Vec<CommentSpan>,
     pub metrics: Vec<(DeclarationId, FunctionMetrics)>,
     pub diagnostics: Vec<AdapterDiagnostic>,
@@ -461,6 +498,7 @@ impl EvidenceSink {
                 imports: Vec::new(),
                 roots: Vec::new(),
                 markers: Vec::new(),
+                relations: Vec::new(),
                 comments: Vec::new(),
                 metrics: Vec::new(),
                 diagnostics: Vec::new(),
@@ -674,6 +712,30 @@ impl EvidenceSink {
             on,
             path: path.into(),
             args,
+            span,
+        });
+    }
+
+    /// A supertype link — see [`Relation`]. An optional stream: declare
+    /// [`EvidenceStream::Relations`] or the write drops with a diagnostic.
+    pub fn relation(
+        &mut self,
+        from: DeclarationId,
+        kind: RelationKind,
+        to: impl Into<SmolStr>,
+        span: Span,
+    ) {
+        if !self.valid_id(from, "relation") {
+            return;
+        }
+        if !self.declared(EvidenceStream::Relations) {
+            return;
+        }
+        let span = self.clamp(span, "relation");
+        self.out.relations.push(Relation {
+            from,
+            kind,
+            to: to.into(),
             span,
         });
     }

@@ -74,6 +74,7 @@ pub(crate) fn extension_spec(spec: awire::ExtensionSpec) -> ExtensionSpec {
                     awire::EvidenceStream::Comments => EvidenceStream::Comments,
                     awire::EvidenceStream::Metrics => EvidenceStream::Metrics,
                     awire::EvidenceStream::Markers => EvidenceStream::Markers,
+                    awire::EvidenceStream::Relations => EvidenceStream::Relations,
                 })
                 .collect::<Vec<_>>(),
         ),
@@ -344,6 +345,27 @@ pub(crate) fn replay_evidence(evidence: awire::FileEvidence, sink: &mut Evidence
             m.args.into_iter().map(SmolStr::new).collect(),
             span(m.span),
         );
+    }
+    for r in evidence.relations {
+        match ids.get(r.from as usize) {
+            Some(id) => sink.relation(
+                *id,
+                match r.kind {
+                    awire::RelationKind::Extends => ev::RelationKind::Extends,
+                    awire::RelationKind::Implements => ev::RelationKind::Implements,
+                },
+                SmolStr::new(r.to),
+                span(r.span),
+            ),
+            None => sink.diagnostic(
+                DiagnosticLevel::Warn,
+                format!(
+                    "relation declaration index {} out of range (component defect)",
+                    r.from
+                ),
+                None,
+            ),
+        }
     }
     for c in evidence.comments {
         sink.comment(span(c.span), span(c.text));

@@ -649,6 +649,7 @@ fn edge_ref(cx: &QueryContext<'_>, keeper: &Keeper) -> EdgeRef {
             None,
         ),
         Keeper::Exempt => ("exempt", None),
+        Keeper::Witness { .. } => ("witness", None),
         Keeper::EntrySurface => ("entry-surface", None),
         Keeper::SurfaceImport { site } => ("surface-import", Some(*site)),
         Keeper::OwnerBinding { site } => ("owner-binding", Some(*site)),
@@ -1019,9 +1020,11 @@ fn keeper_site(keeper: &Keeper) -> Option<navigate::Site> {
         | Keeper::Binding { site }
         | Keeper::SurfaceImport { site }
         | Keeper::OwnerBinding { site } => Some(*site),
-        Keeper::Root { .. } | Keeper::Dispatch { .. } | Keeper::Exempt | Keeper::EntrySurface => {
-            None
-        }
+        Keeper::Root { .. }
+        | Keeper::Dispatch { .. }
+        | Keeper::Exempt
+        | Keeper::Witness { .. }
+        | Keeper::EntrySurface => None,
     }
 }
 

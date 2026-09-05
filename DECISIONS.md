@@ -3177,3 +3177,52 @@ language can express the case its rule is about, and
 `crates/kndo/tests/surfaces.rs` pins both halves: a private member accused
 beside an exported sibling kept by both surfaces, and the same private member
 kept the moment any reachable file references its name.
+
+## 2026-09-06 — M8.b.4: a supertype is a promise, and a member on it is a witness
+
+**The evidence.** `FileEvidence` gains `relations` behind the declared
+`EvidenceStream::Relations`: a typed link from a declaration to a NAMED type,
+`Extends` or `Implements`, with generics and qualification stripped so it
+resolves the way a reference to that type resolves. The name stays unresolved
+on purpose — an adapter that resolved it would be re-deriving the project.
+kndo:java (5) emits them from `extends`/`implements` clauses. The wire carries
+them in the same shape (`relation`, `relation-kind`, `file-evidence.relations`),
+pins rebuilt in this commit, so the ABI keeps mirroring the contract rather
+than owing a second toll.
+
+**What the engine reads.** The navigation index gains three name-keyed maps,
+built over EVERY file (a supertype in a file no root reaches still shapes what
+its subtypes must declare) and walked transitively:
+
+- A member whose owner promised a type declaring the same name is a
+  **witness** — an override, an interface method, a protocol requirement — and
+  is kept, because no call site can be required to exist: every caller holds
+  the SUPERTYPE and dispatches through it. `used-by` says `witness`.
+- A member some subtype declares is **overridden**, and `internal-only` says
+  nothing about it: narrowing it below what its overriders need is a compile
+  error, not advice. Both directions of one fact, which is why one stream
+  answers both.
+
+Same-named types union their surfaces — an over-approximation, and in the
+keep-alive direction for both consumers.
+
+**Measurement.** guava 9,854 → 9,620: **234 `internal-only` advisories gone**,
+zero findings added, nothing moved on any other repository. The measurement
+that ordered this work: of guava's 3,305 advisories, 1,855 name a symbol
+appearing only in its own file (true advice), and the largest false class was
+package-private members a same-package sibling OVERRIDES —
+`AbstractMultisetSetCountTester.setCountCheckReturnValue` overridden by
+`MultisetSetCountConditionallyTester`, and 233 like it. A textual estimate put
+that class at 326; the engine's precise answer, with relations resolved and
+the type graph walked transitively, is 234 — the difference being unrelated
+same-named methods the text could not tell apart. The contract fingerprint and
+the report schema move for the new stream; every conformance fixture is
+byte-identical.
+
+**Conformance.** kmock speaks `extends`/`implements`, and
+`crates/kndo/tests/surfaces.rs` pins the keeper: a member with no reference
+anywhere, kept by the promise alone, beside a sibling promising nothing that
+is accused. The java fixture `overridden-package-member` pins the other
+direction end to end: `Shape.area` and its override `Square.area` both silent,
+`Shape.onlyHere` — package-private, used only in its own file, overridden by
+nothing — still advised.

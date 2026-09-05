@@ -55,6 +55,7 @@ impl bindings::Guest for RudeProbe {
             imports: Vec::new(),
             roots: Vec::new(),
             markers: Vec::new(),
+            relations: Vec::new(),
             comments: Vec::new(),
             metrics: Vec::new(),
             diagnostics: Vec::new(),

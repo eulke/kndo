@@ -52,3 +52,31 @@ fn a_reference_anywhere_still_keeps_a_private_member() {
         ["reference"]
     );
 }
+
+#[test]
+fn a_member_on_a_promised_surface_is_kept_by_the_promise() {
+    // `Impl` promises `Base`'s surface, and `Base` declares `handle`. No call
+    // site can be required to exist for `Impl.handle`: every caller holds a
+    // `Base` and dispatches through it.
+    let p = TempProject::new();
+    p.file(
+        "base.kmock",
+        "root-file\npub type Base\npub member Base.handle\n",
+    )
+    .file(
+        "impl.kmock",
+        "root-file\npub type Impl\nextends Impl Base\nmember Impl.handle\nmember Impl.helper\n",
+    );
+    let snap = common::analyze(&p, vec![Box::new(MockExtension::new())]);
+
+    // The witness is kept; its sibling, promising nothing, is not.
+    assert_eq!(
+        reported(&snap, &Category::UNUSED),
+        ["impl.kmock — Impl.helper"]
+    );
+    assert_eq!(
+        keeper_kinds(&snap, "impl.kmock#Impl.handle"),
+        ["witness"],
+        "the promise alone keeps it — no reference names it anywhere"
+    );
+}

@@ -415,6 +415,11 @@
           "description": "Attributes, annotations, decorators, pragmas — see [`Marker`].",
           "type": "string",
           "const": "markers"
+        },
+        {
+          "description": "Supertype links — see [`Relation`].",
+          "type": "string",
+          "const": "relations"
         }
       ]
     },

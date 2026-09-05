@@ -46,12 +46,14 @@ fn dispatch_rules() -> Vec<kndo_contract::extension::DispatchRule> {
 impl JavaAdapter {
     pub fn new() -> Self {
         JavaAdapter {
-            // 4: annotations are markers, and what they mean is dispatch data.
-            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:java", 4, &["java"], &["package"])
+            // 5: annotations are markers, supertypes are relations, and what
+            // either MEANS is the engine's — dispatch data and witnesses.
+            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:java", 5, &["java"], &["package"])
                 .emits(kndo_contract::evidence::EvidenceStreams::of(&[
                     kndo_contract::evidence::EvidenceStream::Comments,
                     kndo_contract::evidence::EvidenceStream::Metrics,
                     kndo_contract::evidence::EvidenceStream::Markers,
+                    kndo_contract::evidence::EvidenceStream::Relations,
                 ]))
                 .dispatch(dispatch_rules())
                 .build(),

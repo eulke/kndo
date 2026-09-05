@@ -27,7 +27,7 @@
 
 use kndo_contract::evidence::{
     DeclarationId, EvidenceSink, ImportBinding, ImportShape, ImportTarget, MarkerTarget, Reach,
-    RefKind, RootKind, RootTarget, SymbolKind,
+    RefKind, RelationKind, RootKind, RootTarget, SymbolKind,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use kndo_toolkit as tk;
@@ -204,6 +204,56 @@ fn markers_of(item: Node<'_>, source: &[u8], id: DeclarationId, out: &mut Eviden
     }
 }
 
+/// The types this one promises to be: its superclass and every interface it
+/// implements, by NAME with generics and qualification stripped — the spelling
+/// a reference to that type carries, so the engine resolves both alike. The
+/// engine reads them as surfaces: a member of this type whose name a supertype
+/// declares is a witness, and a member some subtype declares is overridden.
+fn relations_of(item: Node<'_>, source: &[u8], id: DeclarationId, out: &mut EvidenceSink) {
+    let mut c = item.walk();
+    for child in item.children(&mut c) {
+        let kind = match child.kind() {
+            "superclass" => RelationKind::Extends,
+            // A class implements; an interface extends another interface —
+            // one promise either way, told apart only by the grammar's word.
+            "super_interfaces" | "extends_interfaces" => RelationKind::Implements,
+            _ => continue,
+        };
+        let mut names = child.walk();
+        for named in child.named_children(&mut names) {
+            for name in supertype_names(named, source) {
+                out.relation(id, kind, name, tk::span(child));
+            }
+        }
+    }
+}
+
+/// The bare type names inside a supertype clause: `Base<E>` is `Base`,
+/// `a.b.Base` is `Base`, and a `type_list` holds several.
+fn supertype_names(node: Node<'_>, source: &[u8]) -> Vec<SmolStr> {
+    match node.kind() {
+        "type_identifier" => vec![SmolStr::new(tk::text(node, source))],
+        "generic_type" | "scoped_type_identifier" | "type_list" | "annotated_type" => {
+            let mut c = node.walk();
+            let mut out: Vec<SmolStr> = Vec::new();
+            for child in node.named_children(&mut c) {
+                // A generic type's ARGUMENTS are not supertypes: `Foo<Bar>`
+                // promises Foo, and says nothing about Bar.
+                if child.kind() == "type_arguments" {
+                    continue;
+                }
+                out.extend(supertype_names(child, source));
+            }
+            // `a.b.Base` nests scopes leftward; the promise is the last name.
+            if matches!(node.kind(), "scoped_type_identifier") {
+                out.drain(..out.len().saturating_sub(1));
+            }
+            out
+        }
+        _ => Vec::new(),
+    }
+}
+
 /// One type declaration (top-level or nested): the declaration, its owner link,
 /// and every member of its body.
 fn handle_type(item: Node<'_>, source: &[u8], ctx: &Ctx, out: &mut EvidenceSink) {
@@ -216,6 +266,7 @@ fn handle_type(item: Node<'_>, source: &[u8], ctx: &Ctx, out: &mut EvidenceSink)
         out.member_of(id, owner);
     }
     markers_of(item, source, id, out);
+    relations_of(item, source, id, out);
 
     let body_ctx = |implicit_public| Ctx {
         owner: Some(id),

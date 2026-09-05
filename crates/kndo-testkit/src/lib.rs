@@ -11,6 +11,8 @@
 //! pub type Name        exported type declaration
 //! member Owner.name    private member of `Owner`
 //! pub member Owner.name   exported member of `Owner`
+//! extends Sub Base     `Sub` extends the type named `Base`
+//! implements Impl Face `Impl` implements the type named `Face`
 //! call name            a Call reference to `name`
 //! import ./x           side-effect import of x.kmock in the same directory
 //! import ./x { a, b }  binding import
@@ -39,8 +41,8 @@ pub mod expectations;
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{
     CoverageRecords, DeclarationId, DiagnosticLevel, EvidenceSink, EvidenceStream, EvidenceStreams,
-    ImportBinding, ImportShape, ImportTarget, MarkerTarget, Reach, RefKind, RootKind, RootTarget,
-    SymbolKind, Timing,
+    ImportBinding, ImportShape, ImportTarget, MarkerTarget, Reach, RefKind, RelationKind, RootKind,
+    RootTarget, SymbolKind, Timing,
 };
 use kndo_contract::extension::{
     ConductSink, ContentAccess, DispatchRule, Extension, ExtensionSpec, ExtensionSpecBuilder,
@@ -77,6 +79,7 @@ fn kmock_spec() -> ExtensionSpecBuilder {
         .emits(EvidenceStreams::of(&[
             EvidenceStream::Comments,
             EvidenceStream::Markers,
+            EvidenceStream::Relations,
         ]))
         .manifests(&["**/kmock.pkg"])
 }
@@ -229,6 +232,31 @@ impl Extension for MockExtension {
                     Some(span),
                 ),
                 None => {}
+            }
+        }
+
+        // Pass 2b: supertype links, by name, after every type is declared.
+        for (line, span) in lines_with_spans(&text) {
+            let Some((kind, rest)) = line
+                .strip_prefix("extends ")
+                .map(|r| (RelationKind::Extends, r))
+                .or_else(|| {
+                    line.strip_prefix("implements ")
+                        .map(|r| (RelationKind::Implements, r))
+                })
+            else {
+                continue;
+            };
+            let Some((from, to)) = rest.trim().split_once(' ') else {
+                continue;
+            };
+            match decls.get(from) {
+                Some(id) => out.relation(*id, kind, to.trim(), span),
+                None => out.diagnostic(
+                    DiagnosticLevel::Warn,
+                    format!("relation names undeclared `{from}`"),
+                    Some(span),
+                ),
             }
         }
 

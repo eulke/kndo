@@ -32,6 +32,7 @@ interface types {
         comments,
         metrics,
         markers,
+        relations,
     }
 
     /// Mirrors `SymbolKind`; `other` carries the adapter's own word verbatim.
@@ -154,6 +155,23 @@ interface types {
         span: span,
     }
 
+    /// Mirrors `RelationKind`.
+    enum relation-kind {
+        extends,
+        implements,
+    }
+
+    /// Mirrors `Relation`: a typed link from a declaration (by the same index
+    /// spelling as `owner`) to a NAMED type, generics and qualification
+    /// stripped. The host resolves the name; a member whose owner promised a
+    /// type declaring the same name is a witness of it.
+    record relation {
+        %from: u32,
+        kind: relation-kind,
+        to: string,
+        span: span,
+    }
+
     /// Mirrors `CommentSpan`: where a comment is, and where its text is. The engine
     /// owns what a `kndo:` pragma inside one means — suppression is free and
     /// identical for a WASM adapter.
@@ -197,6 +215,7 @@ interface types {
         imports: list<%import>,
         roots: list<root>,
         markers: list<marker>,
+        relations: list<relation>,
         comments: list<comment-span>,
         metrics: list<metric-entry>,
         diagnostics: list<diagnostic>,
