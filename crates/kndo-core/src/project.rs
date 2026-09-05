@@ -21,7 +21,7 @@ use kndo_contract::manifest::{ManifestEvidence, ManifestSink, UnitKind};
 use kndo_contract::vocab::ProjectPath;
 use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// One manifest as its claiming adapters read it. Path-ordered, one entry per
 /// discovered manifest — a manifest that declares nothing still has an entry,
@@ -49,6 +49,11 @@ pub struct ProjectUnit {
     pub roots: Vec<SmolStr>,
     pub excludes: Vec<SmolStr>,
     pub entries: Vec<ProjectPath>,
+    /// Every unit of this project this one compiles against, transitively,
+    /// ascending — the resolution of what the manifest NAMED. Ascending so a
+    /// membership test is a binary search and the order is a function of the
+    /// unit list alone.
+    pub compiles_against: Vec<u32>,
 }
 
 impl ProjectUnit {
@@ -94,6 +99,23 @@ impl Project {
             .map(|(_, i)| i as u32)
     }
 
+    /// Can a file compiled in `viewer` name a namespace-scoped declaration of
+    /// `target`? True for the unit itself, and for every unit it compiles
+    /// against: a test module on the classpath of the library it exercises
+    /// reads that library's namespace as its own.
+    ///
+    /// The engine asks this only where a language has said its namespaces
+    /// span a compilation ([`kndo_contract::extension::NamespaceSpan`]) — the
+    /// relation is about who is BUILT together, and what that implies about
+    /// naming is the language's to state.
+    pub fn sees_into(&self, viewer: u32, target: u32) -> bool {
+        viewer == target
+            || self.units[viewer as usize]
+                .compiles_against
+                .binary_search(&target)
+                .is_ok()
+    }
+
     /// Every unit's entries, as (file, color) — what assembly anchors. A unit's
     /// entry is the manifest's own statement, so it anchors `Certain`; an
     /// adapter that only GUESSES an entry reports it through
@@ -130,6 +152,7 @@ pub fn read_manifests(
         }
         claimants.push(SmolStr::new(adapter.spec().coordinate()));
         merged.units.extend(read.units);
+        merged.members.extend(read.members);
         merged.packages.extend(read.packages);
         merged.dependencies.extend(read.dependencies);
         merged.mentions.extend(read.mentions);
@@ -160,9 +183,11 @@ pub fn read_manifests(
         .collect()
 }
 
-/// The units every manifest declared, normalized and ordered.
+/// The units every manifest declared, normalized, ordered, and with every
+/// named dependency resolved to the unit it means.
 pub fn assemble(reads: &[ManifestRead]) -> Project {
     let mut units: Vec<ProjectUnit> = Vec::new();
+    let mut named: Vec<Vec<SmolStr>> = Vec::new();
     for read in reads {
         let dir = read
             .manifest
@@ -192,11 +217,125 @@ pub fn assemble(reads: &[ManifestRead]) -> Project {
                 roots,
                 excludes,
                 entries,
+                compiles_against: Vec::new(),
             });
+            named.push(unit.depends_on.clone());
         }
     }
-    units.sort_by(|a, b| (&a.manifest, &a.name, a.kind).cmp(&(&b.manifest, &b.name, b.kind)));
-    Project { units }
+    let mut order: Vec<usize> = (0..units.len()).collect();
+    order.sort_by_key(|&i| {
+        let u = &units[i];
+        (u.manifest.clone(), u.name.clone(), u.kind)
+    });
+    let rank: Vec<u32> = {
+        let mut r = vec![0u32; units.len()];
+        for (position, &i) in order.iter().enumerate() {
+            r[i] = position as u32;
+        }
+        r
+    };
+    let direct: Vec<Vec<u32>> = {
+        let aggregators = Aggregators::of(reads);
+        let by_manifest_and_name: BTreeMap<(&ProjectPath, &SmolStr), u32> = units
+            .iter()
+            .enumerate()
+            .map(|(i, u)| ((&u.manifest, &u.name), rank[i]))
+            .collect();
+        (0..units.len())
+            .map(|i| {
+                let mut out: Vec<u32> = named[i]
+                    .iter()
+                    .filter_map(|n| {
+                        aggregators.resolve(&units[i].manifest, n, &by_manifest_and_name)
+                    })
+                    .filter(|&d| d != rank[i])
+                    .collect();
+                out.sort_unstable();
+                out.dedup();
+                out
+            })
+            .collect()
+    };
+    let mut sorted: Vec<ProjectUnit> = order.iter().map(|&i| units[i].clone()).collect();
+    let by_rank: Vec<Vec<u32>> = order.iter().map(|&i| direct[i].clone()).collect();
+    for (i, unit) in sorted.iter_mut().enumerate() {
+        unit.compiles_against = closure(i as u32, &by_rank);
+    }
+    Project { units: sorted }
+}
+
+/// Everything `start` compiles against, transitively, ascending. A cycle in
+/// the declarations — illegal in every build system that has a reactor, and
+/// still possible in a file — terminates on the visited set rather than
+/// recursing.
+fn closure(start: u32, direct: &[Vec<u32>]) -> Vec<u32> {
+    let mut seen: BTreeSet<u32> = BTreeSet::new();
+    let mut queue: Vec<u32> = direct[start as usize].clone();
+    while let Some(u) = queue.pop() {
+        if u == start || !seen.insert(u) {
+            continue;
+        }
+        queue.extend_from_slice(&direct[u as usize]);
+    }
+    seen.into_iter().collect()
+}
+
+/// Which manifest aggregates which — Maven's `<modules>`, Cargo's
+/// `workspace.members` — and the resolution that needs it.
+struct Aggregators {
+    /// manifest → the manifest that lists it as a member.
+    parent: BTreeMap<ProjectPath, ProjectPath>,
+    /// manifest → the manifests it lists, in declaration order.
+    members: BTreeMap<ProjectPath, Vec<ProjectPath>>,
+}
+
+impl Aggregators {
+    fn of(reads: &[ManifestRead]) -> Aggregators {
+        let mut parent = BTreeMap::new();
+        let mut members = BTreeMap::new();
+        for read in reads {
+            if read.evidence.members.is_empty() {
+                continue;
+            }
+            for m in &read.evidence.members {
+                // The first aggregator to claim a manifest keeps it: reads are
+                // path-ordered, so this is a function of the manifest set.
+                parent.entry(m.clone()).or_insert(read.manifest.clone());
+            }
+            members.insert(read.manifest.clone(), read.evidence.members.clone());
+        }
+        Aggregators { parent, members }
+    }
+
+    /// The unit `name` means, seen FROM the manifest that named it: its own
+    /// manifest first — one manifest declaring several units lets them name
+    /// each other, which is how a Cargo target names its library or a
+    /// SwiftPM test target names what it exercises — and then the nearest
+    /// aggregator above it that lists a manifest declaring that name. Walking
+    /// up and not merely across is what makes a nested reactor's dependency
+    /// land in its own reactor: guava's `android/guava-tests` means
+    /// `android/guava`, and the root `guava-tests` means `guava`, from the
+    /// same word.
+    fn resolve(
+        &self,
+        from: &ProjectPath,
+        name: &SmolStr,
+        units: &BTreeMap<(&ProjectPath, &SmolStr), u32>,
+    ) -> Option<u32> {
+        if let Some(&u) = units.get(&(from, name)) {
+            return Some(u);
+        }
+        let mut cur = from;
+        while let Some(aggregator) = self.parent.get(cur) {
+            for sibling in self.members.get(aggregator).into_iter().flatten() {
+                if let Some(&u) = units.get(&(sibling, name)) {
+                    return Some(u);
+                }
+            }
+            cur = aggregator;
+        }
+        None
+    }
 }
 
 #[cfg(test)]
@@ -215,6 +354,132 @@ mod tests {
         }
     }
 
+    /// An aggregator: a manifest that declares no unit of its own, only the
+    /// manifests it lists — Maven's `<packaging>pom</packaging>`.
+    fn aggregator(manifest: &str, members: &[&str]) -> ManifestRead {
+        ManifestRead {
+            manifest: ProjectPath::new(manifest),
+            evidence: ManifestEvidence {
+                members: members.iter().map(|m| ProjectPath::new(*m)).collect(),
+                ..ManifestEvidence::default()
+            },
+            adapters: Vec::new(),
+        }
+    }
+
+    fn needing(mut unit: Unit, names: &[&str]) -> Unit {
+        unit.depends_on = names.iter().map(|n| SmolStr::new(*n)).collect();
+        unit
+    }
+
+    fn index_of(project: &Project, manifest: &str) -> u32 {
+        project
+            .units
+            .iter()
+            .position(|u| u.manifest.as_str() == manifest)
+            .expect("unit declared by that manifest") as u32
+    }
+
+    #[test]
+    fn a_dependency_name_resolves_inside_its_own_reactor() {
+        // guava's shape: two reactors, each with a `guava` and a `guava-tests`.
+        // The word `guava` in each tests module means ITS sibling, and the two
+        // compilations never meet.
+        let project = assemble(&[
+            aggregator("pom.xml", &["guava/pom.xml", "guava-tests/pom.xml"]),
+            aggregator(
+                "android/pom.xml",
+                &["android/guava/pom.xml", "android/guava-tests/pom.xml"],
+            ),
+            read(
+                "guava/pom.xml",
+                vec![unit("guava", UnitKind::Library, &["guava"], &[])],
+            ),
+            read(
+                "guava-tests/pom.xml",
+                vec![needing(
+                    unit("guava-tests", UnitKind::Test, &["guava-tests"], &[]),
+                    &["guava"],
+                )],
+            ),
+            read(
+                "android/guava/pom.xml",
+                vec![unit("guava", UnitKind::Library, &["android/guava"], &[])],
+            ),
+            read(
+                "android/guava-tests/pom.xml",
+                vec![needing(
+                    unit("guava-tests", UnitKind::Test, &["android/guava-tests"], &[]),
+                    &["guava"],
+                )],
+            ),
+        ]);
+        let main = index_of(&project, "guava/pom.xml");
+        let tests = index_of(&project, "guava-tests/pom.xml");
+        let android_main = index_of(&project, "android/guava/pom.xml");
+        let android_tests = index_of(&project, "android/guava-tests/pom.xml");
+
+        assert!(project.sees_into(tests, main));
+        assert!(project.sees_into(android_tests, android_main));
+        assert!(
+            !project.sees_into(tests, android_main),
+            "the mirror is another reactor, however identical its names"
+        );
+        assert!(!project.sees_into(android_tests, main));
+        assert!(
+            !project.sees_into(main, tests),
+            "seeing is directional: the library never reads its tests"
+        );
+        assert!(project.sees_into(main, main), "a unit sees itself");
+    }
+
+    #[test]
+    fn compiling_against_is_transitive_and_survives_a_cycle() {
+        let project = assemble(&[
+            aggregator("pom.xml", &["a/pom.xml", "b/pom.xml", "c/pom.xml"]),
+            read(
+                "a/pom.xml",
+                vec![needing(unit("a", UnitKind::Test, &["a"], &[]), &["b"])],
+            ),
+            read(
+                "b/pom.xml",
+                vec![needing(unit("b", UnitKind::Library, &["b"], &[]), &["c"])],
+            ),
+            read(
+                "c/pom.xml",
+                // A declaration cycle no build system would accept; the
+                // closure still terminates and stays a set.
+                vec![needing(unit("c", UnitKind::Library, &["c"], &[]), &["a"])],
+            ),
+        ]);
+        let (a, b, c) = (
+            index_of(&project, "a/pom.xml"),
+            index_of(&project, "b/pom.xml"),
+            index_of(&project, "c/pom.xml"),
+        );
+        assert!(project.sees_into(a, c), "through b");
+        assert_eq!(project.units[a as usize].compiles_against, vec![b, c]);
+    }
+
+    #[test]
+    fn a_dependency_on_something_no_aggregator_lists_resolves_to_nothing() {
+        let project = assemble(&[
+            aggregator("pom.xml", &["app/pom.xml"]),
+            read(
+                "app/pom.xml",
+                vec![needing(
+                    unit("app", UnitKind::Executable, &["app"], &[]),
+                    &["junit", "app"],
+                )],
+            ),
+        ]);
+        let app = index_of(&project, "app/pom.xml");
+        assert!(
+            project.units[app as usize].compiles_against.is_empty(),
+            "an external artifact is not a unit, and a unit is not its own dependency"
+        );
+    }
+
     fn unit(name: &str, kind: UnitKind, roots: &[&str], excludes: &[&str]) -> Unit {
         Unit {
             name: name.into(),
@@ -222,6 +487,7 @@ mod tests {
             roots: roots.iter().map(|r| SmolStr::new(*r)).collect(),
             excludes: excludes.iter().map(|e| SmolStr::new(*e)).collect(),
             entries: Vec::new(),
+            depends_on: Vec::new(),
         }
     }
 

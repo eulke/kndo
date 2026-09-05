@@ -286,6 +286,138 @@ pub mod jvm_manifest {
         "**/settings.gradle.kts",
     ];
 
+    /// The project structure one JVM manifest STATES: the unit it compiles,
+    /// what that unit compiles against, and the manifests it aggregates.
+    ///
+    /// Maven only, for now. A `pom.xml` names itself (`<artifactId>`), lists
+    /// the modules of its reactor (`<modules>`) and the artifacts its unit is
+    /// built against (`<dependencies>`), which is exactly what the engine
+    /// needs to tell two identically-named units apart — guava declares
+    /// `guava` twice, once per reactor. A `<packaging>pom</packaging>` module
+    /// compiles nothing: it contributes its member list and no unit. Gradle
+    /// says nothing here yet, and that absence is typed: no unit means the
+    /// engine falls back to what each file's own declaration implies.
+    ///
+    /// The unit names no source root, so it compiles its manifest's own
+    /// directory minus any deeper manifest's — which is right for a layout
+    /// like guava's, whose real `<sourceDirectory>` sits in an inherited
+    /// parent pom this shallow read does not follow.
+    pub fn structure(manifest: &SourceFile<'_>, out: &mut kndo_contract::manifest::ManifestSink) {
+        let path = manifest.path.as_str();
+        if !path.ends_with("pom.xml") {
+            return;
+        }
+        let Ok(text) = std::str::from_utf8(manifest.content) else {
+            return;
+        };
+        let Some(project) = children(text, "project").into_iter().next() else {
+            return;
+        };
+        let dir = path.rsplit_once('/').map_or("", |(d, _)| d);
+        let join = |rel: &str| -> String {
+            if dir.is_empty() {
+                rel.to_string()
+            } else {
+                format!("{dir}/{rel}")
+            }
+        };
+        for module in children(project, "modules")
+            .into_iter()
+            .flat_map(|m| children(m, "module"))
+        {
+            let module = module.trim();
+            if module.is_empty() {
+                continue;
+            }
+            let rel = if module.ends_with(".xml") {
+                module.to_string()
+            } else {
+                format!("{module}/pom.xml")
+            };
+            // A transcription, not a claim that the file is there: a reactor
+            // may list a module nobody checked out, and resolution matches
+            // against the units that actually exist anyway.
+            out.member(kndo_contract::vocab::ProjectPath::new(join(&rel)));
+        }
+        let packaging = children(project, "packaging")
+            .into_iter()
+            .next()
+            .map_or("jar", str::trim);
+        if packaging == "pom" {
+            // An aggregator: it lists modules and compiles none of them.
+            return;
+        }
+        let Some(name) = children(project, "artifactId")
+            .into_iter()
+            .next()
+            .map(str::trim)
+            .filter(|n| !n.is_empty())
+        else {
+            return;
+        };
+        let mut depends_on: Vec<SmolStr> = children(project, "dependencies")
+            .into_iter()
+            .flat_map(|d| children(d, "dependency"))
+            .filter_map(|d| children(d, "artifactId").into_iter().next())
+            .map(|a| SmolStr::new(a.trim()))
+            .filter(|a| !a.is_empty())
+            .collect();
+        depends_on.sort_unstable();
+        depends_on.dedup();
+        out.unit(kndo_contract::manifest::Unit {
+            name: SmolStr::new(name),
+            kind: kndo_contract::manifest::UnitKind::Library,
+            roots: Vec::new(),
+            excludes: Vec::new(),
+            entries: Vec::new(),
+            depends_on,
+        });
+    }
+
+    /// The inner text of every DIRECT child of `body` named `name`, in
+    /// document order. A shallow reader and not an XML parser: comments are
+    /// skipped, attributes ignored, and depth is all it tracks — which is
+    /// what keeps `<parent>`'s own `<artifactId>` and
+    /// `<dependencyManagement>`'s `<dependencies>` out of a project's
+    /// direct children, where reading them would be a bug.
+    fn children<'a>(body: &'a str, name: &str) -> Vec<&'a str> {
+        let mut out = Vec::new();
+        let mut depth = 0usize;
+        let mut start: Option<usize> = None;
+        let mut i = 0usize;
+        while let Some(lt) = body[i..].find('<') {
+            let at = i + lt;
+            if body[at..].starts_with("<!--") {
+                i = body[at..].find("-->").map_or(body.len(), |e| at + e + 3);
+                continue;
+            }
+            let Some(gt) = body[at..].find('>') else {
+                break;
+            };
+            let end = at + gt;
+            let tag = &body[at + 1..end];
+            i = end + 1;
+            if tag.starts_with('?') || tag.starts_with('!') || tag.ends_with('/') {
+                continue;
+            }
+            if let Some(closing) = tag.strip_prefix('/') {
+                depth = depth.saturating_sub(1);
+                if depth == 0
+                    && closing.trim() == name
+                    && let Some(s) = start.take()
+                {
+                    out.push(&body[s..at]);
+                }
+                continue;
+            }
+            if depth == 0 && tag.split_whitespace().next().unwrap_or(tag) == name {
+                start = Some(i);
+            }
+            depth += 1;
+        }
+        out
+    }
+
     /// Dependency declarations from one manifest, dispatched by file name —
     /// the whole activation read (names) plus each line's scope where the
     /// build file states one, shared verbatim by the JVM adapters. Version

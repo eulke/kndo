@@ -1,0 +1,165 @@
+{
+  "run": {
+    "schema": "kndo-v2/m6",
+    "mode": "full",
+    "files_discovered": 5,
+    "files_claimed": 2,
+    "extensions": [
+      {
+        "id": "kndo:java",
+        "files": 2,
+        "export_narrowing": "none",
+        "import_cycles": "tolerated",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "underivable",
+        "ladder": [
+          {
+            "rung": "owner",
+            "word": "private"
+          },
+          {
+            "rung": "namespace",
+            "word": "package"
+          },
+          {
+            "rung": "exported",
+            "word": "public"
+          }
+        ]
+      }
+    ]
+  },
+  "health": {
+    "implicated": 1,
+    "subjects": 8,
+    "by_category": [
+      {
+        "category": "unused",
+        "findings": 1
+      }
+    ],
+    "by_package": [
+      {
+        "name": "widget",
+        "manifest": "lib/pom.xml",
+        "implicated": 1,
+        "subjects": 5
+      },
+      {
+        "name": "widget-tests",
+        "manifest": "tests/pom.xml",
+        "implicated": 0,
+        "subjects": 3
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "kndo-a2de5633ab5f",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "lib/src/main/java/com/foo/Widget.java",
+        "selector": {
+          "Member": {
+            "owner": "Widget",
+            "name": "forgotten"
+          }
+        },
+        "span": {
+          "start": 318,
+          "end": 353
+        }
+      },
+      "lines": {
+        "start": 15,
+        "end": 17
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-d2367df875f3",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "lib/src/main/java/com/foo/Widget.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    }
+  ],
+  "fixed": [],
+  "baselined": 0,
+  "abstained": [
+    {
+      "category": "unused",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 3
+        }
+      }
+    },
+    {
+      "category": "test-only",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 3
+        }
+      }
+    },
+    {
+      "category": "undeclared",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 3
+        }
+      }
+    },
+    {
+      "category": "crap",
+      "reason": "no-coverage-ingested",
+      "scope": "whole-run"
+    }
+  ],
+  "suppressed": {
+    "total": 0,
+    "by_category": []
+  },
+  "plugins": [
+    {
+      "coordinate": "kndo:coverage-lcov",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-cobertura",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-jacoco",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-go",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    }
+  ],
+  "diagnostics": []
+}

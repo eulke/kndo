@@ -3271,3 +3271,70 @@ carries the ladder, restoring the answer to "why does `internal-only` fire for
 this language" that the retired capability used to give — and giving more, since
 the word tells the reader what to type. Report schema, contract fingerprint and
 the eight java conformance fixtures move for that row; no finding moves.
+
+## 2026-09-06 — M8.b.6: a unit is what a manifest compiles, and a package spans the classpath
+
+**The prize this was measured for.** guava's tests are not in `src/test/java`;
+they are a SEPARATE Maven artifact, `guava-tests`, that declares a dependency
+on `guava`. Java's package-private access does not stop at an artifact
+boundary — two jars contributing to `com.google.common.math` on one classpath
+see each other's package-private members — so
+`LongMath.FLOOR_SQRT_MAX_LONG`, used as exactly that from `LongMathTest`, was
+being advised to narrow. Following that advice breaks the build. No
+`src/main` ↔ `src/test` mirror rule reaches this: the two live in different
+modules.
+
+**What the manifests now say.** `Unit` gains `depends_on` — the units it
+compiles against, NAMED as the manifest spells them, because the manifest
+declaring a dependency has not read the manifest declaring the unit and cannot
+spell a path it never saw. `ManifestEvidence` gains `members`: the manifests
+one aggregates (Maven's `<modules>`, Cargo's `workspace.members`, Gradle's
+`include`). The engine resolves each name — its own manifest first, so units of
+one manifest can name each other, then the nearest aggregator above it — and
+`Project::sees_into` answers who may name whom over the transitive closure.
+Members are what make this resolvable at all: guava declares `guava` TWICE,
+once per reactor, and `guava-tests` means the sibling its own aggregator lists.
+`kndo:java` reads it from `pom.xml` through a shallow depth-tracking element
+walk, which is what keeps `<parent>`'s artifact id and
+`<dependencyManagement>`'s dependencies out of a project's direct children.
+
+**The capability, because core cannot know.** `NamespaceSpan` says how far one
+namespace reaches: `Compilation` for Java's package, `Unit` (the default, and
+the narrower answer) for Go's package and Rust's module tree, where two units
+spelling one name hold two unrelated namespaces. Consumer: `Scopes`, which
+keys a namespace node by `(compilation, segments)` and unions the nodes whose
+unit compiles against this one's. Conformance:
+`crates/kndo/tests/surfaces.rs` pins both directions on kmock, and the
+`kndo-adapter-java` fixture `package-private-across-modules` pins it on two
+real Maven modules.
+
+**Measurement, and the half of it that is debt.** guava 9,620 → 9,011; every
+other repository byte-identical (Exposed is Gradle, which states no units yet,
+so its files fall back to what each declaration implies). Of the 589 findings
+retired — 577 `internal-only`, 12 `unused`, none added — 321 are corroborated:
+the file whose use silences the advisory also names the member's owner, and the
+three sampled by hand (`LongMath.FLOOR_SQRT_MAX_LONG`,
+`BloomFilter.optimalNumOfHashFunctions`, `TreeRangeSet.rangesByLowerBound`) are
+real cross-artifact uses that the advisory was wrong about. The other 268 are
+silenced by a BARE NAME: `internal-only` disqualifies on a name occurring in a
+pool file, with no owner, so `GcFinalizationTest`'s local `CountDownLatch
+latch` silences `FinalizableReference.latch`. Ten of ten sampled from that
+class are coincidences — locals, parameters, doc comments.
+
+Shipped anyway, and the reason is the direction of the error. A wrong
+accusation tells a developer to narrow a member their own test module uses;
+a wrong silence loses an advisory. Precision over recall is this project's
+standing choice, and the widening is never in the accusing direction: zero
+findings added, on any repository. The 268 are the name-only reference test's
+bill, not the scope model's — the scope model is now what javac does — and
+qualified references is the next slice, which will be measured against exactly
+this number.
+
+`GRAPH_SEMANTICS_VERSION` 12 → 13: manifest evidence moves the graph knob and
+not the contract fingerprint, which is why the fingerprint and the report
+schema are unchanged here. `kndo:java` 6 → 7 for the manifest evidence it now
+emits. One fixture is added, `package-private-across-modules`, and no existing
+fixture moves — so the kndo-adapter-java fixtures this range touches are that
+one plus the eight the previous entry moved for the ladder row. That entry
+called them "java conformance fixtures", which is not the vocabulary the
+loudness gate reads; naming them here closes the range.

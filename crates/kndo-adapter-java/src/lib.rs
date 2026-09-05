@@ -49,7 +49,7 @@ impl JavaAdapter {
             // 6: the package clause IS the namespace — a file declares it, so
             // two files share one however far apart they sit — and the ladder
             // replaces the narrowable-scope token.
-            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:java", 6, &["java"], &[])
+            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:java", 7, &["java"], &[])
                 .ladder(&[
                     // `private` is class-private, `public` is published, and
                     // no modifier is the package between them — the rung Java
@@ -58,6 +58,15 @@ impl JavaAdapter {
                     Step::new(Rung::Namespace, "package"),
                     Step::new(Rung::Exported, "public"),
                 ])
+                // A package is a NAME, not a place: two artifacts on one
+                // classpath contributing to `com.google.common.io` see each
+                // other's package-private members, which is how a test module
+                // exercises the library it is compiled against.
+                // A package is a NAME, not a place: two artifacts on one
+                // classpath contributing to `com.google.common.io` see each
+                // other's package-private members, which is how a test module
+                // exercises the library it is compiled against.
+                .namespace_span(kndo_contract::extension::NamespaceSpan::Compilation)
                 .emits(kndo_contract::evidence::EvidenceStreams::of(&[
                     kndo_contract::evidence::EvidenceStream::Comments,
                     kndo_contract::evidence::EvidenceStream::Metrics,
@@ -90,6 +99,15 @@ impl Extension for JavaAdapter {
 
     fn resolve(&self, from: &ProjectPath, specifier: &str, cx: &ResolveContext<'_>) -> Resolution {
         resolve::resolve(from, specifier, cx)
+    }
+
+    fn extract_manifest(
+        &self,
+        manifest: &SourceFile<'_>,
+        _cx: &ResolveContext<'_>,
+        out: &mut kndo_contract::manifest::ManifestSink,
+    ) {
+        kndo_toolkit::jvm_manifest::structure(manifest, out);
     }
 
     fn packages(

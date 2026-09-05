@@ -20,7 +20,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Bump when the SAME evidence assembles into a DIFFERENT graph — resolution
 /// candidate changes, reachability semantics, new assembled fields. Folded into the
 /// graph cache key beside the contract fingerprint and the adapter set.
-pub const GRAPH_SEMANTICS_VERSION: u32 = 12;
+pub const GRAPH_SEMANTICS_VERSION: u32 = 13;
 
 #[derive(Serialize, Deserialize)]
 pub struct GraphFile {
@@ -812,9 +812,9 @@ pub fn patch(
         gf.imports = edges.imports;
         gf.import_targets = edges.import_targets;
         gf.unresolved_imports = edges.unresolved_imports;
-        // `sees` and `unit` are untouched on purpose: each is a pure function
-        // of path and (file set, manifests), and this path only runs when all
-        // of those are unchanged.
+        // `sees` and `unit` are untouched on purpose, and so is the graph's
+        // `project`: each is a pure function of path and (file set,
+        // manifests), and this path only runs when all of those are unchanged.
         debug_assert_eq!(
             gf.import_targets.len(),
             gf.evidence.imports.len(),

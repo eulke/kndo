@@ -82,40 +82,93 @@ fn a_member_on_a_promised_surface_is_kept_by_the_promise() {
 }
 
 #[test]
-fn a_namespace_pools_by_what_a_file_declares_under_its_own_root() {
-    // Two files of one package under one source root: the sibling's use is a
-    // use, whatever the directory depth.
+fn a_namespace_pools_over_the_unit_that_compiles_it() {
+    // Two source roots, ONE unit: the build compiles them together, so the
+    // sibling's use is a use — a directory mirror rule could not say this,
+    // and guava's `benchmark`/`test` pair is exactly this shape.
     let p = TempProject::new();
     p.file(
         "kmock.pkg",
-        "unit core library roots=src entries=src/com/foo/lib.kmock,src/com/foo/other.kmock\n",
+        "unit core library roots=src,bench entries=src/com/foo/lib.kmock,bench/com/foo/other.kmock\n",
     )
     .file(
         "src/com/foo/lib.kmock",
         "package com.foo\nns fn internals\n",
     )
     .file(
-        "src/com/foo/other.kmock",
+        "bench/com/foo/other.kmock",
         "package com.foo\ncall internals\n",
     );
     let snap = common::analyze(&p, vec![Box::new(MockExtension::new())]);
     assert!(
         reported(&snap, &Category::UNUSED).is_empty(),
-        "a sibling of the package names it: {:?}",
+        "one unit is one compilation, however many roots it names: {:?}",
         reported(&snap, &Category::UNUSED)
     );
 
-    // The same package name under ANOTHER source root is another compilation
-    // — a mirrored flavor of a library, not more of the first one.
+    // Two UNITS with nothing between them: the same package name twice, and
+    // neither may name the other — a mirrored flavor of a library.
     let p = TempProject::new();
-    p.file("kmock.pkg", "unit core library roots=src,mirror entries=src/com/foo/lib.kmock,mirror/com/foo/other.kmock\n")
-        .file("src/com/foo/lib.kmock", "package com.foo\nns fn internals\n")
-        .file("mirror/com/foo/other.kmock", "package com.foo\ncall internals\n");
+    p.file(
+        "kmock.pkg",
+        "unit core library roots=src entries=src/com/foo/lib.kmock\n\
+         unit mirror library roots=mirror entries=mirror/com/foo/other.kmock\n",
+    )
+    .file(
+        "src/com/foo/lib.kmock",
+        "package com.foo\nns fn internals\n",
+    )
+    .file(
+        "mirror/com/foo/other.kmock",
+        "package com.foo\ncall internals\n",
+    );
     let snap = common::analyze(&p, vec![Box::new(MockExtension::new())]);
     assert!(
         reported(&snap, &Category::UNUSED)
             .contains(&"src/com/foo/lib.kmock — internals".to_string()),
         "another compilation cannot name it: {:?}",
+        reported(&snap, &Category::UNUSED)
+    );
+}
+
+#[test]
+fn a_namespace_spans_the_unit_compiled_against_it_when_the_language_says_so() {
+    // A separate test artifact that compiles against the library and declares
+    // the same namespace: on one classpath, so it may name what the namespace
+    // holds. guava's `guava-tests` against `guava` is this, and no `src/main`
+    // ↔ `src/test` mirror rule reaches it.
+    let project = || {
+        let p = TempProject::new();
+        p.file(
+            "kmock.pkg",
+            "unit core library roots=src entries=src/com/foo/lib.kmock\n\
+             unit suite test roots=tests needs=core entries=tests/com/foo/spec.kmock\n",
+        )
+        .file(
+            "src/com/foo/lib.kmock",
+            "package com.foo\nns fn internals\n",
+        )
+        .file(
+            "tests/com/foo/spec.kmock",
+            "package com.foo\ncall internals\n",
+        );
+        p
+    };
+
+    let snap = common::analyze(&project(), vec![Box::new(MockExtension::spanning())]);
+    assert!(
+        reported(&snap, &Category::UNUSED).is_empty(),
+        "the suite compiles against the library, so its call is a use: {:?}",
+        reported(&snap, &Category::UNUSED)
+    );
+
+    // The default span keeps every namespace inside its own unit, so the same
+    // project accuses — the capability, not the manifest, is what decides.
+    let snap = common::analyze(&project(), vec![Box::new(MockExtension::new())]);
+    assert!(
+        reported(&snap, &Category::UNUSED)
+            .contains(&"src/com/foo/lib.kmock — internals".to_string()),
+        "an undeclared span pools nothing across units: {:?}",
         reported(&snap, &Category::UNUSED)
     );
 }

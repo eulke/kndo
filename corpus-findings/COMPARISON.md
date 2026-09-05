@@ -1148,3 +1148,35 @@ one compilation contains.
 The report's extension row now carries the ladder — `private`/`package`/`public`
 for java — in place of the single `narrowable_scopes` token, so the row still
 answers "why does `internal-only` fire here", and now also says what to type.
+
+### Units: a package spans the classpath (2026-09-06)
+
+Maven's reactor entered the model, and guava's separate test artifact stopped
+looking like a stranger to the library it exercises.
+
+| guava | findings | internal-only |
+|---|---|---|
+| namespace keyed by source root | 9,620 | 3,051 |
+| keyed by unit, span declared | 9,011 | 2,474 |
+
+589 findings retired, none added, every other repository byte-identical.
+Decomposed by whether the use that silenced each one can be corroborated — the
+file naming the member also names its owner type:
+
+| class | count | verdict |
+|---|---|---|
+| corroborated | 321 | real cross-artifact uses; the advisory was wrong |
+| bare name only | 268 | the name-only reference test, not the scope model |
+
+Three corroborated ones read by hand — `LongMath.FLOOR_SQRT_MAX_LONG`,
+`BloomFilter.optimalNumOfHashFunctions`, `TreeRangeSet.rangesByLowerBound` —
+are all used under exactly that spelling from `guava-tests`. Ten sampled from
+the bare-name class are all coincidences: a local `CountDownLatch latch`
+silencing `FinalizableReference.latch`, a parameter named `encoding` silencing
+`EncodingOption.encoding`, a doc comment saying "head".
+
+The trade is deliberate and one-directional: every change is a silence, so the
+tool stops telling developers to narrow members their own test module uses, and
+loses 268 advisories to a coincidence it already had. Qualified references is
+the slice that takes those back, and 268 is the number it will be measured
+against.

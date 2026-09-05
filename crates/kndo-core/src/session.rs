@@ -174,7 +174,7 @@ pub struct Snapshot {
     /// Per extension coordinate, the judgment capabilities its spec declared —
     /// carried from composition to the report's `extensions` rows, where they
     /// answer "why does kndo (not) report X for this language".
-    capabilities: Vec<(SmolStr, DeclaredCapabilities)>,
+    pub(crate) capabilities: Vec<(SmolStr, DeclaredCapabilities)>,
     baseline: Option<Vec<Finding>>,
     mode: crate::report::Mode,
     base_health: Option<crate::health::Health>,
@@ -184,7 +184,8 @@ pub struct Snapshot {
     composition_diagnostics: Vec<ReportDiagnostic>,
     files_discovered: u32,
     /// Reachability + navigation index, built on the first query and held for
-    /// the snapshot's lifetime — a pure function of the graph, so a holder
+    /// the snapshot's lifetime — a pure function of the graph and the declared
+    /// capabilities, both fixed for the snapshot's lifetime, so a holder
     /// answering many queries (serve) pays the build once, and a single-query
     /// holder (the CLI) pays exactly what it always did.
     pub(crate) navigation:
@@ -668,6 +669,7 @@ impl Session {
                         dependency_scoping: s.dependency_scoping(),
                         dependency_identity: s.dependency_identity(),
                         ladder: s.ladder().to_vec(),
+                        namespace_span: s.namespace_span(),
                     },
                 )
             })

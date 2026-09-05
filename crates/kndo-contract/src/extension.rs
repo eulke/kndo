@@ -311,6 +311,30 @@ pub enum Rung {
     Exported,
 }
 
+/// How far one namespace reaches across the project's units — the fact that
+/// decides who can name a namespace-scoped declaration.
+///
+/// Java's package is a NAME units contribute to: `guava-tests` compiles
+/// `com.google.common.io` classes against `guava`'s on one classpath, and each
+/// sees the other's package-private members. Go's package and Rust's module
+/// tree are the opposite: the unit owns the namespace, and two units spelling
+/// the same name hold two unrelated ones. Core cannot tell which without being
+/// told, so it is told.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub enum NamespaceSpan {
+    /// The unit owns its namespaces; two units spelling one name hold two.
+    /// The default, and the narrower answer: a declaration stays accused where
+    /// a language has not said otherwise.
+    #[default]
+    Unit,
+    /// A namespace is a name units contribute to, so a unit and every unit
+    /// compiled against it share one.
+    Compilation,
+}
+
 /// One rung as one language spells it. Every judgment and every ordering reads
 /// `rung`; `word` is what a report says out loud, because a Java developer
 /// narrows a `package`-scoped member, not a `namespace`-scoped one. One type,
@@ -465,6 +489,7 @@ pub struct ExtensionSpec {
     dependency_builtins: DependencyBuiltins,
     import_cycles: CycleTolerance,
     ladder: Vec<Step>,
+    namespace_span: NamespaceSpan,
     dispatch: Vec<DispatchRule>,
     claims: Vec<SmolStr>,
     emits: EvidenceStreams,
@@ -505,6 +530,7 @@ impl ExtensionSpec {
                 dependency_builtins: DependencyBuiltins::None,
                 import_cycles: CycleTolerance::Tolerated,
                 ladder: Vec::new(),
+                namespace_span: NamespaceSpan::Unit,
                 dispatch: Vec::new(),
                 claims: Vec::new(),
                 emits: EvidenceStreams::none(),
@@ -602,6 +628,12 @@ impl ExtensionSpec {
         &self.ladder
     }
 
+    /// See [`NamespaceSpan`]; `Scopes` is the consumer. `Unit` (the default)
+    /// keeps every namespace inside the unit that compiles it.
+    pub fn namespace_span(&self) -> NamespaceSpan {
+        self.namespace_span
+    }
+
     /// Is there a rung strictly narrower than `rung` this language can spell?
     /// The one question `internal-only` asks of the ladder.
     pub fn narrower_than(&self, rung: Rung) -> bool {
@@ -690,6 +722,9 @@ pub struct ExtensionSpecParts {
     /// which `internal-only` stays silent — the same absence every other
     /// undeclared capability degrades to.
     pub ladder: Vec<Step>,
+    /// Wire components cannot declare a span yet; defaults to `Unit`, the
+    /// narrower answer.
+    pub namespace_span: NamespaceSpan,
     pub dispatch: Vec<DispatchRule>,
     pub claims: Vec<SmolStr>,
     pub emits: EvidenceStreams,
@@ -732,6 +767,7 @@ impl From<ExtensionSpecParts> for ExtensionSpec {
             dependency_builtins: parts.dependency_builtins,
             import_cycles: parts.import_cycles,
             ladder: parts.ladder,
+            namespace_span: parts.namespace_span,
             dispatch: parts.dispatch,
             claims: parts.claims,
             emits: parts.emits,
@@ -838,6 +874,14 @@ impl ExtensionSpecBuilder {
     /// `internal-only` never advises for its files.
     pub fn ladder(mut self, rungs: &[Step]) -> Self {
         self.spec.ladder = rungs.to_vec();
+        self
+    }
+
+    /// Declare how far a namespace reaches across units (see
+    /// [`NamespaceSpan`]). Omitted ⇒ `Unit`: a namespace stops at the unit
+    /// that compiles it, which keeps every advisory a wider span would silence.
+    pub fn namespace_span(mut self, span: NamespaceSpan) -> Self {
+        self.spec.namespace_span = span;
         self
     }
 

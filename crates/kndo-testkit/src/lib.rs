@@ -30,12 +30,16 @@
 //! A `kmock.pkg` manifest states the project's structure, one unit per line:
 //!
 //! ```text
-//! unit name kind roots=a,b excludes=c entries=x.kmock,y.kmock
+//! unit name kind roots=a,b excludes=c entries=x.kmock,y.kmock needs=other
+//! member sub/kmock.pkg              a manifest this one aggregates
 //! run path.kmock                    a file this manifest runs (tooling)
 //! ```
 //!
 //! `kind` is one of library, executable, test, bench, example, tooling — the
-//! color a unit's entries anchor follows from it.
+//! color a unit's entries anchor follows from it. `needs=` names units this
+//! one compiles against; the engine resolves each name among the manifests
+//! this one's aggregator lists, which is how two units of one name stay
+//! apart.
 
 pub mod expectations;
 
@@ -96,6 +100,17 @@ impl MockExtension {
         MockExtension::speaking(
             kmock_spec()
                 .import_cycles(kndo_contract::extension::CycleTolerance::Hazard)
+                .build(),
+        )
+    }
+
+    /// The kmock language whose namespaces span the compilation — what a test
+    /// of unit friendship speaks, since the plain mock keeps each namespace
+    /// inside the unit that compiles it.
+    pub fn spanning() -> Self {
+        MockExtension::speaking(
+            kmock_spec()
+                .namespace_span(kndo_contract::extension::NamespaceSpan::Compilation)
                 .build(),
         )
     }
@@ -354,6 +369,10 @@ impl Extension for MockExtension {
                 });
                 continue;
             }
+            if let Some(rest) = line.strip_prefix("member ") {
+                out.member(ProjectPath::new(rest.trim()));
+                continue;
+            }
             let Some(rest) = line.strip_prefix("unit ") else {
                 continue;
             };
@@ -382,6 +401,7 @@ impl Extension for MockExtension {
                 roots: list("roots=").into_iter().map(Into::into).collect(),
                 excludes: list("excludes=").into_iter().map(Into::into).collect(),
                 entries: list("entries=").into_iter().map(ProjectPath::new).collect(),
+                depends_on: list("needs=").into_iter().map(Into::into).collect(),
             });
         }
     }

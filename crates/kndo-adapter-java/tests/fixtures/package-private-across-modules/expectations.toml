@@ -1,0 +1,13 @@
+# package-private-across-modules: two Maven modules, one package name. The
+# tests artifact declares a dependency on the library, so on one classpath
+# they see each other's package-private members — a fact no `src/main` ↔
+# `src/test` mirror rule can reach, since these are separate modules.
+
+[[alive]]
+subject = "lib/src/main/java/com/foo/Widget.java#Widget.internals"
+why = "the tests module compiles against the library and calls it"
+
+[[dead]]
+subject = "lib/src/main/java/com/foo/Widget.java#Widget.forgotten"
+category = "unused"
+why = "package-private and named nowhere in either module"

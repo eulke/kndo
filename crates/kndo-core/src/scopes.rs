@@ -7,12 +7,16 @@
 //! guava is the case that proves the difference: its tests sit in
 //! `guava-tests/test/...` while its sources sit in `guava/src/...`, so no
 //! `src/main` ↔ `src/test` mirror rule can pair them, yet both files declare
-//! `package com.google.common.io` and therefore share one namespace.
+//! `package com.google.common.io` — and their manifests say `guava-tests`
+//! compiles against `guava`, which is what makes the two one namespace while
+//! the identically-named Android mirror stays another.
 //!
-//! The units, friends and owners of the full forest land with the consumers
+//! The owners and embedded regions of the full forest land with the consumers
 //! that read them; a layer with nobody asking is a field, not a structure.
 
+use crate::analysis::DeclaredCapabilities;
 use crate::graph::Graph;
+use kndo_contract::extension::NamespaceSpan;
 use smol_str::SmolStr;
 use std::collections::BTreeMap;
 
@@ -21,30 +25,69 @@ pub struct Scopes {
     /// a file declaring no namespace is a node of its own, so a
     /// namespace-reaching declaration there pools nothing beyond its file.
     of_file: Vec<u32>,
-    /// namespace node → its files, ascending.
+    /// namespace node → the files of THIS node, ascending: one name inside one
+    /// compilation.
     files: Vec<Vec<u32>>,
+    /// namespace node → those files plus every file spelling the same name in
+    /// a unit that compiles against this node's, ascending. Equal to `files`
+    /// wherever no manifest said otherwise.
+    spanned: Vec<Vec<u32>>,
+    /// file → whether the language that claims it says a namespace spans the
+    /// compilation. Per file, because the DECLARATION's language decides who
+    /// may name it, and one namespace can hold two languages' files.
+    spans: Vec<bool>,
 }
 
 impl Scopes {
-    pub fn build(graph: &Graph) -> Scopes {
-        let mut nodes: BTreeMap<(SmolStr, Vec<SmolStr>), u32> = BTreeMap::new();
+    pub fn build(graph: &Graph, capabilities: &[(SmolStr, DeclaredCapabilities)]) -> Scopes {
+        // A node is one namespace inside one COMPILATION: the unit that
+        // compiles the file when a manifest named one, and otherwise the
+        // source root its own declaration implies.
+        let mut nodes: BTreeMap<(Compilation, Vec<SmolStr>), u32> = BTreeMap::new();
         let mut of_file: Vec<u32> = Vec::with_capacity(graph.files.len());
         let mut files: Vec<Vec<u32>> = Vec::new();
+        let mut unit_of_node: Vec<Option<u32>> = Vec::new();
+        let mut segments_of_node: Vec<Vec<SmolStr>> = Vec::new();
         for (i, f) in graph.files.iter().enumerate() {
             let key = if f.evidence.namespace.is_empty() {
                 // Its own node, named by nothing another file can spell.
-                (SmolStr::new(f.path.as_str()), Vec::new())
+                (
+                    Compilation::Alone(SmolStr::new(f.path.as_str())),
+                    Vec::new(),
+                )
             } else {
-                (source_root(f), f.evidence.namespace.clone())
+                let compilation = match f.unit {
+                    Some(u) => Compilation::Unit(u),
+                    None => Compilation::Root(source_root(f)),
+                };
+                (compilation, f.evidence.namespace.clone())
             };
             let node = *nodes.entry(key).or_insert_with(|| {
                 files.push(Vec::new());
+                unit_of_node.push(f.unit);
+                segments_of_node.push(f.evidence.namespace.clone());
                 (files.len() - 1) as u32
             });
             files[node as usize].push(i as u32);
             of_file.push(node);
         }
-        Scopes { of_file, files }
+        let spanned = span_nodes(graph, &files, &unit_of_node, &segments_of_node);
+        let spans = graph
+            .files
+            .iter()
+            .map(|f| {
+                capabilities
+                    .iter()
+                    .find(|(c, _)| *c == f.adapter)
+                    .is_some_and(|(_, caps)| caps.namespace_span == NamespaceSpan::Compilation)
+            })
+            .collect();
+        Scopes {
+            of_file,
+            files,
+            spanned,
+            spans,
+        }
     }
 
     /// The files a `Reach::Namespace { up }` declaration in `file` pools over.
@@ -58,8 +101,62 @@ impl Scopes {
         if up > 0 {
             return None;
         }
-        Some(&self.files[self.of_file[file] as usize])
+        let node = self.of_file[file] as usize;
+        Some(if self.spans[file] {
+            &self.spanned[node]
+        } else {
+            &self.files[node]
+        })
     }
+}
+
+/// Which compilation a namespace node belongs to. Three cases and no fallback
+/// chain: a unit when a manifest declared one, the source root the file's own
+/// declaration implies when none did, and the file itself when it declares no
+/// namespace at all.
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+enum Compilation {
+    Unit(u32),
+    Root(SmolStr),
+    Alone(SmolStr),
+}
+
+/// Each node's files, plus the files of every same-named node whose unit
+/// compiles against this one's — what a language spanning the compilation
+/// pools over. Nodes with no unit span nothing: without a manifest there is no
+/// statement that two compilations meet.
+fn span_nodes(
+    graph: &Graph,
+    files: &[Vec<u32>],
+    unit_of_node: &[Option<u32>],
+    segments_of_node: &[Vec<SmolStr>],
+) -> Vec<Vec<u32>> {
+    let mut by_segments: BTreeMap<&[SmolStr], Vec<usize>> = BTreeMap::new();
+    for (n, segments) in segments_of_node.iter().enumerate() {
+        if unit_of_node[n].is_some() {
+            by_segments.entry(segments).or_default().push(n);
+        }
+    }
+    (0..files.len())
+        .map(|n| {
+            let Some(mine) = unit_of_node[n] else {
+                return files[n].clone();
+            };
+            let mut out = files[n].clone();
+            for &other in by_segments
+                .get(segments_of_node[n].as_slice())
+                .into_iter()
+                .flatten()
+            {
+                let theirs = unit_of_node[other].expect("grouped only units");
+                if other != n && graph.project.sees_into(theirs, mine) {
+                    out.extend_from_slice(&files[other]);
+                }
+            }
+            out.sort_unstable();
+            out
+        })
+        .collect()
 }
 
 /// Where this file's namespace hangs off the tree: its directory with the
@@ -89,6 +186,59 @@ mod tests {
     use super::*;
     use kndo_contract::evidence::{EvidenceSink, EvidenceStreams};
     use kndo_contract::vocab::ProjectPath;
+
+    /// A graph whose files each carry a unit, under a project assembled from
+    /// the manifests the test spells: `(manifest, unit name, roots, needs)`.
+    fn graph_with_units(
+        manifests: &[(&str, &str, &[&str], &[&str])],
+        aggregator: (&str, &[&str]),
+        files: &[(&str, &[&str])],
+    ) -> Graph {
+        use kndo_contract::manifest::{ManifestEvidence, Unit, UnitKind};
+        let mut reads = vec![crate::project::ManifestRead {
+            manifest: ProjectPath::new(aggregator.0),
+            evidence: ManifestEvidence {
+                members: aggregator.1.iter().map(|m| ProjectPath::new(*m)).collect(),
+                ..ManifestEvidence::default()
+            },
+            adapters: Vec::new(),
+        }];
+        for (manifest, name, roots, needs) in manifests {
+            reads.push(crate::project::ManifestRead {
+                manifest: ProjectPath::new(*manifest),
+                evidence: ManifestEvidence {
+                    units: vec![Unit {
+                        name: SmolStr::new(*name),
+                        kind: UnitKind::Library,
+                        roots: roots.iter().map(|r| SmolStr::new(*r)).collect(),
+                        excludes: Vec::new(),
+                        entries: Vec::new(),
+                        depends_on: needs.iter().map(|n| SmolStr::new(*n)).collect(),
+                    }],
+                    ..ManifestEvidence::default()
+                },
+                adapters: Vec::new(),
+            });
+        }
+        let project = crate::project::assemble(&reads);
+        let mut graph = graph_of(files);
+        for f in &mut graph.files {
+            f.unit = project.unit_of(&f.path);
+        }
+        graph.project = project;
+        graph
+    }
+
+    /// The one adapter of these tests, saying a namespace spans a compilation.
+    fn spanning() -> Vec<(SmolStr, DeclaredCapabilities)> {
+        vec![(
+            SmolStr::new_static("test"),
+            DeclaredCapabilities {
+                namespace_span: NamespaceSpan::Compilation,
+                ..Default::default()
+            },
+        )]
+    }
 
     fn graph_of(files: &[(&str, &[&str])]) -> Graph {
         let mut out: Vec<crate::graph::GraphFile> = Vec::new();
@@ -143,7 +293,7 @@ mod tests {
                 &["com", "google", "io"],
             ),
         ]);
-        let scopes = Scopes::build(&graph);
+        let scopes = Scopes::build(&graph, &[]);
         assert_eq!(
             scopes.namespace_pool(0, 0),
             Some([0u32, 1].as_slice()),
@@ -170,7 +320,7 @@ mod tests {
             ("sources/Even.java", &["com", "google", "io"]),
             ("elsewhere/Third.java", &["com", "google", "io"]),
         ]);
-        let scopes = Scopes::build(&graph);
+        let scopes = Scopes::build(&graph, &[]);
         assert_eq!(scopes.namespace_pool(0, 0), Some([0u32, 1].as_slice()));
         assert_eq!(scopes.namespace_pool(2, 0), Some([2u32].as_slice()));
     }
@@ -178,7 +328,96 @@ mod tests {
     #[test]
     fn a_file_declaring_no_namespace_pools_only_itself() {
         let graph = graph_of(&[("a.js", &[]), ("b.js", &[])]);
-        let scopes = Scopes::build(&graph);
+        let scopes = Scopes::build(&graph, &[]);
+        assert_eq!(scopes.namespace_pool(0, 0), Some([0u32].as_slice()));
+        assert_eq!(scopes.namespace_pool(1, 0), Some([1u32].as_slice()));
+    }
+
+    #[test]
+    fn a_namespace_spans_the_units_compiled_against_it_when_the_language_says_so() {
+        // guava's shape: the tests module is a SEPARATE artifact whose classes
+        // declare the same package, and the two are compiled together. Its
+        // Android twin declares the same names and is never on that classpath.
+        let graph = graph_with_units(
+            &[
+                ("guava/pom.xml", "guava", &["guava"], &[]),
+                (
+                    "guava-tests/pom.xml",
+                    "guava-tests",
+                    &["guava-tests"],
+                    &["guava"],
+                ),
+                ("android/guava/pom.xml", "guava", &["android/guava"], &[]),
+            ],
+            (
+                "pom.xml",
+                &[
+                    "guava/pom.xml",
+                    "guava-tests/pom.xml",
+                    "android/guava/pom.xml",
+                ],
+            ),
+            &[
+                (
+                    "guava/src/com/google/io/Files.java",
+                    &["com", "google", "io"],
+                ),
+                (
+                    "guava-tests/test/com/google/io/FilesTest.java",
+                    &["com", "google", "io"],
+                ),
+                (
+                    "android/guava/src/com/google/io/Files.java",
+                    &["com", "google", "io"],
+                ),
+            ],
+        );
+        let scopes = Scopes::build(&graph, &spanning());
+        assert_eq!(
+            scopes.namespace_pool(0, 0),
+            Some([0u32, 1].as_slice()),
+            "the test module compiles against this one, so it may name it — \
+             and no directory convention could have paired `src/` with `test/`"
+        );
+        assert_eq!(
+            scopes.namespace_pool(2, 0),
+            Some([2u32].as_slice()),
+            "the mirror's compilation is entered by nothing here"
+        );
+        assert_eq!(
+            scopes.namespace_pool(1, 0),
+            Some([1u32].as_slice()),
+            "seeing is directional: the library does not name its tests"
+        );
+    }
+
+    #[test]
+    fn a_namespace_stops_at_its_unit_where_a_language_has_not_spoken() {
+        let graph = graph_with_units(
+            &[
+                ("guava/pom.xml", "guava", &["guava"], &[]),
+                (
+                    "guava-tests/pom.xml",
+                    "guava-tests",
+                    &["guava-tests"],
+                    &["guava"],
+                ),
+            ],
+            ("pom.xml", &["guava/pom.xml", "guava-tests/pom.xml"]),
+            &[
+                (
+                    "guava/src/com/google/io/Files.java",
+                    &["com", "google", "io"],
+                ),
+                (
+                    "guava-tests/test/com/google/io/FilesTest.java",
+                    &["com", "google", "io"],
+                ),
+            ],
+        );
+        // No capability declared: the default keeps the namespace inside its
+        // unit, so the advisory the wider span would silence survives.
+        let scopes = Scopes::build(&graph, &[]);
         assert_eq!(scopes.namespace_pool(0, 0), Some([0u32].as_slice()));
         assert_eq!(scopes.namespace_pool(1, 0), Some([1u32].as_slice()));
     }
@@ -186,7 +425,7 @@ mod tests {
     #[test]
     fn an_ancestor_namespace_is_unbounded_until_a_language_declares_its_nesting() {
         let graph = graph_of(&[("A.java", &["com", "foo"])]);
-        let scopes = Scopes::build(&graph);
+        let scopes = Scopes::build(&graph, &[]);
         assert_eq!(scopes.namespace_pool(0, 1), None);
     }
 }

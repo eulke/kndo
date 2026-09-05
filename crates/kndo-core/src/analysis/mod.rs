@@ -301,7 +301,11 @@ pub struct AnalysisOutcome {
 /// The judgment capabilities one extension declared, carried spec → analyses →
 /// report. One shape, so "why does kndo (not) report X for this language" has
 /// one answer in the run and the same one in the envelope.
-#[derive(Debug, Clone)]
+///
+/// The default is an extension that declared NOTHING, and every field's own
+/// default is silence — which is what an unregistered coordinate degrades to
+/// wherever a lookup misses.
+#[derive(Debug, Clone, Default)]
 pub struct DeclaredCapabilities {
     pub narrowable_scopes: Vec<smol_str::SmolStr>,
     pub export_narrowing: kndo_contract::extension::ExportNarrowing,
@@ -311,6 +315,9 @@ pub struct DeclaredCapabilities {
     /// The reaches this language can spell, narrowest first, each under this
     /// language's own word for it — see [`kndo_contract::extension::Step`].
     pub ladder: Vec<kndo_contract::extension::Step>,
+    /// How far one of this language's namespaces reaches across the project's
+    /// units — see [`kndo_contract::extension::NamespaceSpan`].
+    pub namespace_span: kndo_contract::extension::NamespaceSpan,
 }
 
 pub fn run_all(
@@ -320,7 +327,7 @@ pub fn run_all(
     analyses: &[&dyn Analysis],
 ) -> AnalysisOutcome {
     let reach = Reachability::compute(graph);
-    let index = crate::navigate::Index::build(graph, &reach);
+    let index = crate::navigate::Index::build(graph, &reach, capabilities);
     let manifests = dependency::eligibility(graph, &reach);
     let run = RunContext {
         graph,

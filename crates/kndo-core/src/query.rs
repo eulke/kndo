@@ -525,7 +525,7 @@ impl Snapshot {
     pub fn query(&self, request: &Request) -> Response {
         let (reach, index) = self.navigation.get_or_init(|| {
             let reach = Reachability::compute(&self.graph);
-            let index = Index::build(&self.graph, &reach);
+            let index = Index::build(&self.graph, &reach, &self.capabilities);
             (reach, index)
         });
         let cx = QueryContext {

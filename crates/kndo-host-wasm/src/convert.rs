@@ -60,6 +60,7 @@ pub(crate) fn extension_spec(spec: awire::ExtensionSpec) -> ExtensionSpec {
         },
         dispatch: spec.dispatch.into_iter().map(dispatch_rule).collect(),
         ladder: Vec::new(),
+        namespace_span: Default::default(),
         // The wire world speaks no narrowing or dependency vocabulary yet;
         // absence defaults to silence, like every other undeclared capability.
         export_narrowing: Default::default(),

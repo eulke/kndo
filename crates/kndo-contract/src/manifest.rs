@@ -77,6 +77,12 @@ pub struct Unit {
     /// Files the build enters this unit through, already resolved. Each
     /// anchors a root of the unit's color.
     pub entries: Vec<ProjectPath>,
+    /// The units this one compiles against, NAMED as the manifest spells them
+    /// — the engine resolves each to a unit of this project (or to nothing,
+    /// for an external artifact). A name alone is deliberate: the manifest
+    /// declaring a dependency has not read the manifest declaring the unit,
+    /// so it cannot spell a path it never saw.
+    pub depends_on: Vec<SmolStr>,
 }
 
 /// The finished evidence for one manifest. Built through [`ManifestSink`].
@@ -94,6 +100,12 @@ pub struct ManifestEvidence {
     /// CI workflow's step, an action's `main`. A unit's own entries are on the
     /// unit, where their color comes from its kind.
     pub roots: Vec<ProjectRoot>,
+    /// The manifests this one aggregates: Maven's `<modules>`, Cargo's
+    /// `workspace.members`, Gradle's `include`. It is what makes a unit
+    /// dependency resolvable when two units share a name — guava declares
+    /// `guava` twice, once per reactor, and a sibling's dependency on it means
+    /// the one its OWN aggregator lists.
+    pub members: Vec<ProjectPath>,
     pub diagnostics: Vec<AdapterDiagnostic>,
 }
 
@@ -137,6 +149,11 @@ impl ManifestSink {
         self.out.mentions.push(name.into());
     }
 
+    /// A manifest this one aggregates — see [`ManifestEvidence::members`].
+    pub fn member(&mut self, manifest: ProjectPath) {
+        self.out.members.push(manifest);
+    }
+
     /// A file this manifest runs — see [`ManifestEvidence::roots`].
     pub fn root(&mut self, root: ProjectRoot) {
         self.out.roots.push(root);
@@ -178,6 +195,7 @@ mod tests {
             roots: Vec::new(),
             excludes: Vec::new(),
             entries: Vec::new(),
+            depends_on: Vec::new(),
         });
         sink.unit(Unit {
             name: "core".into(),
@@ -185,6 +203,7 @@ mod tests {
             roots: vec!["src".into()],
             excludes: Vec::new(),
             entries: vec![ProjectPath::new("src/lib.rs")],
+            depends_on: Vec::new(),
         });
         let ev = sink.finish();
         assert_eq!(ev.units.len(), 1);
