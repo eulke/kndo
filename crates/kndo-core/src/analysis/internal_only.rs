@@ -24,7 +24,7 @@
 //! nothing uses at all is dead, not demotable.
 
 use super::{Analysis, AnalysisContext, RunContext};
-use kndo_contract::evidence::{ImportShape, Reach, RootTarget, SymbolKind};
+use kndo_contract::evidence::{EvidenceStream, ImportShape, Reach, RootTarget, SymbolKind};
 use kndo_contract::finding::{Finding, Severity};
 use kndo_contract::subject::{Subject, SymbolSelector};
 use kndo_contract::vocab::{Category, Confidence};
@@ -60,6 +60,13 @@ impl Analysis for InternalOnly {
         let mut bound_names: BTreeSet<(u32, &str)> = BTreeSet::new();
         let mut bound_all: BTreeSet<(u32, &str)> = BTreeSet::new();
         let mut per_file_refs: Vec<BTreeSet<&str>> = Vec::with_capacity(g.files.len());
+        // The same names, narrowed to those read FROM something — a member
+        // access. A file whose adapter does not declare the stream reports
+        // none, and `qualifies` below is what keeps that absence from reading
+        // as "this file accesses no members".
+        let mut per_file_accesses: Vec<BTreeSet<&str>> = Vec::with_capacity(g.files.len());
+        let mut per_file_types: Vec<BTreeSet<&str>> = Vec::with_capacity(g.files.len());
+        let mut qualifies: Vec<bool> = Vec::with_capacity(g.files.len());
         for f in &g.files {
             per_file_refs.push(
                 f.evidence
@@ -68,6 +75,23 @@ impl Analysis for InternalOnly {
                     .map(|r| r.name.as_str())
                     .collect(),
             );
+            per_file_accesses.push(
+                f.evidence
+                    .references
+                    .iter()
+                    .filter(|r| r.on.is_some())
+                    .map(|r| r.name.as_str())
+                    .collect(),
+            );
+            per_file_types.push(
+                f.evidence
+                    .declarations
+                    .iter()
+                    .filter(|d| matches!(d.kind, SymbolKind::Type))
+                    .map(|d| d.name.as_str())
+                    .collect(),
+            );
+            qualifies.push(f.evidence.declared.contains(EvidenceStream::Qualifiers));
         }
         // How many claimed files spell each name at all — the Exported rung's
         // total-absence check: given a use in its own file, a count of two or
@@ -247,14 +271,41 @@ impl Analysis for InternalOnly {
                     // reached through a public supertype stays exported by its
                     // own modifiers, so it never sits here.)
                     Some(region) => {
+                        // A MEMBER is reached from a stranger's file through an
+                        // access (`queue.head`), an import binding, or the
+                        // inheritance that puts it in that file's own scopes.
+                        // A bare name there is a different declaration — a
+                        // local, a parameter, a same-named member of something
+                        // else — and reading it as a use is how a package with
+                        // a common word in it silences every advisory. A
+                        // nested TYPE is exempt: it is named bare, after an
+                        // import or from its own package.
+                        let owner = d
+                            .owner
+                            .map(|o| f.evidence.declarations[o.index()].name.as_str());
+                        let heirs = match owner {
+                            Some(owner) if !matches!(d.kind, SymbolKind::Type) => {
+                                Some(cx.run.index.subtypes(owner))
+                            }
+                            _ => None,
+                        };
+                        let names_it = |j: usize| -> bool {
+                            if !per_file_refs[j].contains(d.name.as_str()) {
+                                return false;
+                            }
+                            let Some(heirs) = &heirs else { return true };
+                            // The stream is the referencing file's to declare;
+                            // without it, that file's bare names still count.
+                            !qualifies[j]
+                                || per_file_accesses[j].contains(d.name.as_str())
+                                || heirs.iter().any(|t| per_file_types[j].contains(t.as_str()))
+                        };
                         bound_names.contains(&(i as u32, d.name.as_str()))
                             || d.exported_as
                                 .as_ref()
                                 .is_some_and(|a| bound_names.contains(&(i as u32, a.as_str())))
                             || region.iter().any(|&j| {
-                                j as usize != i
-                                    && reachable(j as usize)
-                                    && per_file_refs[j as usize].contains(d.name.as_str())
+                                j as usize != i && reachable(j as usize) && names_it(j as usize)
                             })
                     }
                     // Total absence for the Exported rung: any binding importer

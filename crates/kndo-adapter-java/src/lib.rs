@@ -49,7 +49,7 @@ impl JavaAdapter {
             // 6: the package clause IS the namespace — a file declares it, so
             // two files share one however far apart they sit — and the ladder
             // replaces the narrowable-scope token.
-            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:java", 7, &["java"], &[])
+            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:java", 8, &["java"], &[])
                 .ladder(&[
                     // `private` is class-private, `public` is published, and
                     // no modifier is the package between them — the rung Java
@@ -72,6 +72,7 @@ impl JavaAdapter {
                     kndo_contract::evidence::EvidenceStream::Metrics,
                     kndo_contract::evidence::EvidenceStream::Markers,
                     kndo_contract::evidence::EvidenceStream::Relations,
+                    kndo_contract::evidence::EvidenceStream::Qualifiers,
                 ]))
                 .dispatch(dispatch_rules())
                 .build(),

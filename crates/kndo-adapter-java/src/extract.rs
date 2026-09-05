@@ -520,7 +520,12 @@ fn references_and_comments(root: Node<'_>, source: &[u8], out: &mut EvidenceSink
             if !is_use(n, parent, source) {
                 return;
             }
-            out.reference(tk::text(n, source), classify(n, parent), tk::span(n));
+            out.reference_on(
+                tk::text(n, source),
+                classify(n, parent),
+                written_on(n, parent, source),
+                tk::span(n),
+            );
         },
     );
 }
@@ -569,6 +574,29 @@ fn is_use(n: Node<'_>, parent: Node<'_>, source: &[u8]) -> bool {
         // keep-alive direction.
         _ => true,
     }
+}
+
+/// What this name was read FROM: the receiver of a field access or a method
+/// invocation, as written. `this` and `super` report NOTHING — a name reached
+/// through them is reached the way a bare name is, from the enclosing
+/// declaration and whatever it inherits, so calling them a receiver would say
+/// a member was named from outside when it was named from inside.
+fn written_on(n: Node<'_>, parent: Node<'_>, source: &[u8]) -> Option<SmolStr> {
+    let object = match parent.kind() {
+        "field_access" if parent.child_by_field_name("field") == Some(n) => {
+            parent.child_by_field_name("object")
+        }
+        "method_invocation" if parent.child_by_field_name("name") == Some(n) => {
+            parent.child_by_field_name("object")
+        }
+        // `Foo::bar` names `bar` on `Foo` as surely as `foo.bar()` does; the
+        // grammar gives the pair no field names, so it is the first named
+        // child and the name is the last.
+        "method_reference" if parent.named_child(0) != Some(n) => parent.named_child(0),
+        _ => None,
+    }?;
+    let text = tk::text(object, source);
+    (!matches!(text, "this" | "super")).then_some(SmolStr::new(text))
 }
 
 fn classify(n: Node<'_>, parent: Node<'_>) -> RefKind {

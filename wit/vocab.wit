@@ -33,6 +33,7 @@ interface types {
         metrics,
         markers,
         relations,
+        qualifiers,
     }
 
     /// Mirrors `SymbolKind`; `other` carries the adapter's own word verbatim.
@@ -79,6 +80,10 @@ interface types {
     record reference {
         name: string,
         kind: ref-kind,
+        /// Mirrors `Reference::on`: what the name was read from, as written,
+        /// and nothing for a bare name. Meaningful only under the
+        /// `qualifiers` stream.
+        on: option<string>,
         span: span,
     }
 

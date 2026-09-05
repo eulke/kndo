@@ -71,6 +71,11 @@ pub enum EvidenceStream {
     Markers,
     /// Supertype links — see [`Relation`].
     Relations,
+    /// Whether each reference was written ON something — see
+    /// [`Reference::on`]. Undeclared, every reference is a bare name AND
+    /// means nothing by it, so a judgment that needs the difference keeps the
+    /// answer it gave before the stream existed.
+    Qualifiers,
 }
 
 /// The set of optional streams an adapter DECLARES it produces — the pairing rule.
@@ -246,6 +251,16 @@ pub enum RefKind {
 pub struct Reference {
     pub name: SmolStr,
     pub kind: RefKind,
+    /// What this name was read FROM, as written — `Some("LongMath")` for
+    /// `LongMath.FLOOR_SQRT_MAX_LONG`, `Some("queue")` for `queue.head`, and
+    /// `None` for a bare name: a local, a parameter, an unqualified call, or a
+    /// receiver that IS the enclosing declaration (Java's `this`), which
+    /// reaches the same members a bare name does.
+    ///
+    /// Meaningful only where the claiming adapter declares
+    /// [`EvidenceStream::Qualifiers`]; undeclared, it is always `None` and a
+    /// consumer must read the stream before believing it.
+    pub on: Option<SmolStr>,
     pub span: Span,
 }
 
@@ -660,10 +675,28 @@ impl EvidenceSink {
     }
 
     pub fn reference(&mut self, name: impl Into<SmolStr>, kind: RefKind, span: Span) {
+        self.reference_on(name, kind, None, span);
+    }
+
+    /// A reference and what it was read from — see [`Reference::on`]. The
+    /// receiver is kept only where [`EvidenceStream::Qualifiers`] is declared;
+    /// undeclared it is dropped, and the reference lands bare like every other.
+    pub fn reference_on(
+        &mut self,
+        name: impl Into<SmolStr>,
+        kind: RefKind,
+        on: Option<SmolStr>,
+        span: Span,
+    ) {
         let span = self.clamp(span, "reference");
+        // A BARE reference writes nothing to the stream, so an adapter that
+        // never qualifies anything is not defective for calling this — only a
+        // receiver offered without the declaration is.
+        let on = on.filter(|_| self.declared(EvidenceStream::Qualifiers));
         self.out.references.push(Reference {
             name: name.into(),
             kind,
+            on,
             span,
         });
     }

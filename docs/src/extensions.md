@@ -117,7 +117,7 @@ The spec is the whole declaration. What a builder chain can state:
 |---|---|
 | `builder(coordinate, version)` | the extension's identity and the version of the evidence it emits — bump it when the same source yields different evidence, and every cache keyed on it invalidates |
 | `suffixes`, `claims` | which files it claims (a suffix list, and extra globs) |
-| `emits` | the optional evidence streams it produces (`Comments`, `Metrics`, `Markers`, `Relations`); an undeclared stream is typed absence, and analyses that need it abstain on its files |
+| `emits` | the optional evidence streams it produces (`Comments`, `Metrics`, `Markers`, `Relations`, `Qualifiers`); an undeclared stream is typed absence, and analyses that need it abstain on its files or keep the answer they gave before it existed |
 | `manifests` | globs of the manifests it reads for roots, packages and dependency declarations |
 | `launchers` | globs of files it reads for roots alone — a CI workflow, a task runner's file — which declare no package and own no files |
 | `ladder`, `narrowable`, `export_narrowing`, `import_cycles`, `dependency_scoping`, `dependency_identity`, `dependency_builtins`, `dependency_importers` | the language facts the engine's judgments consume (see [Languages](languages.md)); `ladder` pairs each reach the language can spell with the word it spells it with, narrowest first |

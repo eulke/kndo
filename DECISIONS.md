@@ -3338,3 +3338,62 @@ fixture moves — so the kndo-adapter-java fixtures this range touches are that
 one plus the eight the previous entry moved for the ladder row. That entry
 called them "java conformance fixtures", which is not the vocabulary the
 loudness gate reads; naming them here closes the range.
+
+## 2026-09-06 — M8.b.7: a member is reached through an access, not by spelling its name
+
+**The debt the last entry named, paid.** `internal-only` disqualified a
+declaration when any file in its pool spelled the NAME — no owner, no receiver
+— so `com.google.common.cache`'s advisory for `AccessQueue.head` died on a
+comment reading `// head`, and `FinalizableReference.latch` on a test's local
+`CountDownLatch latch`. Widening the pool to the compilation made that bill
+visible: 268 advisories lost to coincidence on guava alone.
+
+**What a language now says.** `EvidenceStream::Qualifiers` — an adapter
+declaring it reports, per reference, what the name was read FROM:
+`Some("LongMath")` for `LongMath.FLOOR_SQRT_MAX_LONG`, `Some("queue")` for
+`queue.head`, `None` for a bare name. Java's `this` and `super` report NOTHING
+on purpose: a name reached through them is reached the way a bare name is, from
+the enclosing declaration and whatever it inherits, so calling them a receiver
+would say a member was named from outside when it was named from inside. Method
+references (`Foo::bar`) name `bar` on `Foo` as surely as a call does, and read
+the pair by position because the grammar gives it no field names.
+
+**What the engine now asks.** A MEMBER of another file's class is reached
+through an access, through an import binding (Java's static import already
+lands there), or through the inheritance that puts it in that file's own
+scopes — so a bare name disqualifies only from a file declaring a SUBTYPE of
+the owner, transitively, over the relation stream that already answers
+witnesses and overrides. A nested TYPE is exempt: it is named bare, after an
+import or from inside its own package. And the stream is the REFERENCING
+file's to declare — a file whose adapter is silent keeps its bare names
+counting, which is what makes a mixed-language package degrade instead of
+break.
+
+**Measurement.** guava 9,011 → 9,741: **730 `internal-only` advisories
+recovered, zero removed** (692 by distinct finding id — see the note below),
+every other repository byte-identical (only java declares the stream). Fifteen sampled by hand, fifteen true: the outside
+occurrence is another class's identically-named member
+(`ImmutableListMultimap.fromMapEntries`, `RegularImmutableBiMap.MAX_LOAD_FACTOR`),
+a test double's own field (`LocalCacheTest`'s `nextAccess`), a local
+(`ExecutionListTest`'s `runCalled`), a static import of a DIFFERENT class's
+method (`SerializableTester.reserialize`), or prose — a Javadoc URL fragment
+`#comparators`, a comment saying "an integer". Against the pre-unit baseline
+the two slices together are +121 findings on guava: 609 accusations withdrawn
+because a sibling artifact really does use them, 730 restored because a
+coincidence never did.
+
+**Observed, not fixed: finding identity is not unique.** Counting these runs
+by finding id and by row disagrees, because 152 ids on guava appear twice —
+`FreshValueGenerator.generateRange` and 151 like it, where two OVERLOADS share
+one `SymbolSelector::Member { owner, name }` and therefore one id. It predates
+this work (156 such ids before the unit slice) and it means a report can show
+one finding twice and health can count it twice. The fix is a selector that
+tells two overloads apart, which is a contract change with its own measurement;
+recorded here so it is not rediscovered.
+
+Contract fingerprint and report schema move for the reference's new field;
+`kndo:java` 7 → 8 for what it now emits; the WIT record and the four pinned
+compat components move with them. Two fixtures are added,
+`member-named-through-an-access` and — from the previous slice —
+`package-private-across-modules`; kmock speaks `call x.name` for the access and
+`call name` for the bare word. No existing kndo-adapter-java fixtures move.

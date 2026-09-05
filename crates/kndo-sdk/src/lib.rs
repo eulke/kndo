@@ -240,6 +240,7 @@ pub fn evidence_to_wire(evidence: &FileEvidence) -> wire::FileEvidence {
             .map(|r| wire::Reference {
                 name: r.name.to_string(),
                 kind: ref_kind_to_wire(r.kind),
+                on: r.on.as_ref().map(|o| o.to_string()),
                 span: span_to_wire(r.span),
             })
             .collect(),

@@ -420,6 +420,11 @@
           "description": "Supertype links — see [`Relation`].",
           "type": "string",
           "const": "relations"
+        },
+        {
+          "description": "Whether each reference was written ON something — see\n[`Reference::on`]. Undeclared, every reference is a bare name AND\nmeans nothing by it, so a judgment that needs the difference keeps the\nanswer it gave before the stream existed.",
+          "type": "string",
+          "const": "qualifiers"
         }
       ]
     },

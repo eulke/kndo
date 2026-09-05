@@ -73,9 +73,11 @@ adapter says nothing:
   `internal-only` never advises narrowing it. `used-by` shows the first as
   `witness`.
 - **Evidence streams**: comments (for `kndo:allow`), per-function metrics
-  (for `duplicate` and `crap`), markers (for dispatch) and relations (for
-  witnesses), each declared so their absence is typed and an analysis abstains
-  instead of guessing.
+  (for `duplicate` and `crap`), markers (for dispatch), relations (for
+  witnesses) and qualifiers — whether each reference was written ON something,
+  which is how `internal-only` tells `queue.head` from somebody else's local
+  named `head`. Each is declared, so its absence is typed and an analysis
+  abstains or keeps its pre-stream answer instead of guessing.
 
 ## Cross-language reach
 

@@ -1,0 +1,17 @@
+# member-named-through-an-access: a member of another file's class is reached
+# through an access or through inheritance. A bare name that merely SPELLS it
+# is somebody else's local, and reading it as a use is how one common word
+# silences a whole package.
+
+[[alive]]
+subject = "src/main/java/com/foo/Widget.java#Widget.tally"
+why = "`widget.tally` in Reader is an access on the widget itself"
+
+[[alive]]
+subject = "src/main/java/com/foo/Widget.java#Widget.inherited"
+why = "Bigger extends Widget, so its bare `inherited` is this member"
+
+[[dead]]
+subject = "src/main/java/com/foo/Widget.java#Widget.spare"
+category = "internal-only"
+why = "Reader's `spare` is Reader's own local — nothing outside this file reads the member"

@@ -206,6 +206,13 @@ impl Index {
             .find(|t| self.declares(t, member))
     }
 
+    /// Every type that is a SUBtype of this one, transitively — the types
+    /// whose own files reach its members by a bare name, because inheritance
+    /// puts them in their scopes.
+    pub fn subtypes(&self, type_name: &str) -> Vec<SmolStr> {
+        self.walk(&self.subtypes_of, type_name)
+    }
+
     /// Does some SUBtype — transitively — declare a member of this name? Then
     /// the member is overridden, and narrowing it below what its overriders
     /// need is not advice, it is a compile error.

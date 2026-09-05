@@ -1180,3 +1180,24 @@ tool stops telling developers to narrow members their own test module uses, and
 loses 268 advisories to a coincidence it already had. Qualified references is
 the slice that takes those back, and 268 is the number it will be measured
 against.
+
+### Qualified references: the name is not the member (2026-09-06)
+
+| guava | findings | internal-only |
+|---|---|---|
+| pool by unit, bare-name matching | 9,011 | 2,474 |
+| a member needs an access | 9,741 | 3,166 |
+
+730 advisories recovered (692 by distinct id, the rest overloads that share
+one), none removed, every other repository byte-identical —
+only `kndo:java` declares the qualifiers stream, so every other language keeps
+the answer it gave before the stream existed. Fifteen of the recovered were
+read by hand and all fifteen are true: what silenced them was another class's
+identically-named member, a test double's own field, a local variable, a static
+import of a different class's method, or prose in a comment.
+
+Against the pre-unit baseline (9,620) the two slices net to +121: 609
+accusations withdrawn because a sibling artifact really uses those members, 730
+restored because a coincidence never did. Precision moved in both directions
+for the same reason — the engine stopped answering a question about a SYMBOL
+with evidence about a WORD.

@@ -77,6 +77,7 @@ pub(crate) fn extension_spec(spec: awire::ExtensionSpec) -> ExtensionSpec {
                     awire::EvidenceStream::Metrics => EvidenceStream::Metrics,
                     awire::EvidenceStream::Markers => EvidenceStream::Markers,
                     awire::EvidenceStream::Relations => EvidenceStream::Relations,
+                    awire::EvidenceStream::Qualifiers => EvidenceStream::Qualifiers,
                 })
                 .collect::<Vec<_>>(),
         ),

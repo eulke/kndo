@@ -14,7 +14,8 @@
 //! package a.b          the namespace this file declares itself into
 //! extends Sub Base     `Sub` extends the type named `Base`
 //! implements Impl Face `Impl` implements the type named `Face`
-//! call name            a Call reference to `name`
+//! call name            a Call reference to a bare `name`
+//! call x.name          a Call reference to `name` read from `x`
 //! import ./x           side-effect import of x.kmock in the same directory
 //! import ./x { a, b }  binding import
 //! root name            production root anchored on the declaration `name`
@@ -85,6 +86,7 @@ fn kmock_spec() -> ExtensionSpecBuilder {
             EvidenceStream::Comments,
             EvidenceStream::Markers,
             EvidenceStream::Relations,
+            EvidenceStream::Qualifiers,
         ]))
         .manifests(&["**/kmock.pkg"])
 }
@@ -285,7 +287,17 @@ impl Extension for MockExtension {
         // Pass 2: everything that may point at a declaration.
         for (line, span) in lines_with_spans(&text) {
             if let Some(name) = line.strip_prefix("call ") {
-                out.reference(name.trim(), RefKind::Call, span);
+                // `call x.name` is a member access ON `x`; `call name` is the
+                // bare name a local or an unqualified call would write.
+                match name.trim().rsplit_once('.') {
+                    Some((on, member)) => out.reference_on(
+                        member,
+                        RefKind::Call,
+                        Some(smol_str::SmolStr::new(on)),
+                        span,
+                    ),
+                    None => out.reference(name.trim(), RefKind::Call, span),
+                }
             } else if line == "root-file" {
                 out.root(
                     RootTarget::WholeFile,
