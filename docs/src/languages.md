@@ -60,9 +60,17 @@ adapter says nothing:
   `#![allow(dead_code)]` is reported as a diagnostic so the silence is visible.
   `used-by` shows a dispatched root as `dispatch:<color>` and an exemption as
   `exempt`.
+- **Relations**: the types a declaration promises to be (`extends`,
+  `implements`, a protocol conformance). The engine reads one stream both ways:
+  a member whose owner promised a type declaring the same name is a WITNESS and
+  is kept — no call site can be required to exist, because every caller holds
+  the supertype — and a member some subtype declares is OVERRIDDEN, so
+  `internal-only` never advises narrowing it. `used-by` shows the first as
+  `witness`.
 - **Evidence streams**: comments (for `kndo:allow`), per-function metrics
-  (for `duplicate` and `crap`) and markers (for dispatch), each declared so
-  their absence is typed and an analysis abstains instead of guessing.
+  (for `duplicate` and `crap`), markers (for dispatch) and relations (for
+  witnesses), each declared so their absence is typed and an analysis abstains
+  instead of guessing.
 
 ## Cross-language reach
 

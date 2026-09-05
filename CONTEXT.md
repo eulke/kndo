@@ -61,8 +61,10 @@ file, with its path and arguments. What a marker MEANS is a dispatch rule's busi
 _Avoid_: attribute table, root attribute
 
 **Relation**:
-A typed link from a declaration to a named type: extends, conforms, implements,
-overrides.
+A typed link from a declaration to a named type — it extends a base, or it implements
+an interface, conforms to a protocol, satisfies a trait bound (one word: implements).
+An override is not reported: it is what the engine derives when a member's name sits
+on a type its owner relates to.
 
 **Witness**:
 A member whose name satisfies a requirement of a type its owner relates to (an
