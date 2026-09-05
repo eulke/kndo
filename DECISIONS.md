@@ -2762,3 +2762,128 @@ implementation of the one algorithm the determinism law wants once, for
 dominates again — the container's disk did that once today (19 s for one
 materialization), which is why the shortcut removes the common road's
 materialization entirely rather than making it cheaper.
+
+## 2026-09-05 — M8: evidence declared, structure in the engine (the root-cause redesign, approved)
+
+**What.** The nine-adapter audit (2026-09-04/05; seven auditors, each adapter
+crossed against its grammar's node inventory and its language's primary
+sources, the top findings reproduced with the release binary) left the verdict
+matrix with WRONG and GAP in every column. The owner asked for the definitive,
+root-cause design and approved it on 2026-09-05. Its thesis: an adapter reports
+what its file and its manifest SAY — the namespace clause, markers (attributes,
+annotations, decorators), relations (extends, conforms, implements, overrides),
+qualified references (`pkg.Name`, `super::x::f`), the timing of every import
+(load, lazy, erased), mounts (`mod x;`), embedded regions (`<script>`), and
+manifest evidence (units with roots, excludes, entries, friends and publication;
+packages; dependencies with normalized requirements; path aliases; ignores) —
+and never a conclusion computed from a path convention. The engine owns the
+structure in three deep modules: `Project` (units, friendship, publication,
+aliases, ignores, file roles), `Scopes` (the forest project → unit → namespace →
+file → owner, with structured `Reach`, effective reach capped by the owner,
+pools by subtree plus friends, and the language's ladder), and `Dispatch`
+(declarative rules marker/relation/name/witness → root, witness, exemption,
+generated). Framework knowledge is data: JUnit, TestNG, Spring, Lombok, XCTest,
+swift-testing, SwiftUI/UIKit, rstest and kin, pytest/Django/Flask, Storybook
+ride rule packs — conduct extensions that declare rules and an activation
+(`ManifestDependency`, `FileExists`, the new `FileImports`) and nothing else.
+
+**Five root causes, each with the element that removes it.** (1) Visibility
+without structure — `Reach::Scoped{token}` plus a per-file region the adapter
+computed from paths — becomes the scope forest and a structured `Reach`
+(`Owner`, `File`, `Namespace{up}`, `Unit{up}`, `Directory{up}`, `Named`,
+`Inherited`, `Exported`); `sees` and `seen_from` die. (2) Project knowledge
+re-derived by convention (SwiftPM `path:`, Maven/Gradle source sets, tsconfig,
+`sys.path`, the go tool's ignores, Gradle catalogs, `publish = false`,
+`private: true`) becomes one hook, `extract_manifest`, writing
+`ManifestEvidence` through a `ManifestSink`; `roots`, `packages`,
+`manifest_dependencies` and `manifest_mentions` die. (3) Dispatch by convention
+in code (closed text tables of rooting attributes in every adapter) becomes
+markers and relations as evidence plus dispatch rules; the language's defaults
+ride its spec, frameworks ride packs. (4) The engine not seeing through imports
+(a namespace or glob import kept a whole surface; `EntrySurface` kept private
+members; every production file was a whole-file root; cycles counted edges
+that never run) becomes qualified references, glob pooled by name, the
+published surface per unit, import timing and rewritten keepers where
+`Owner`/`File`-reaching members never ride. (5) No gate for what the grammar
+offers or what a fixture claims becomes a generated grammar-inventory ledger
+per adapter, expectations as pins (`expectations.toml`), a loud-change gate,
+vendored grammars with patch files, and an ERROR-tolerant item walk.
+
+**Removed layers.** `Extension::sees`, `Extension::seen_from`,
+`Reach::Scoped{token}` (after the adapters migrate), `narrowable_scopes` and
+`export_narrowing` (folded into the ladder), the four manifest hooks, the
+whole-file library root spelled in nine adapters (the published surface is a
+unit's), html's second `TypeScriptAdapter` and hand-written JavaScript scanner
+(embedded regions), the line scanners of pom, Gradle, pyproject and go.mod
+(structural parsers), and the toolkit's second copies (`parent_dir`, the loader
+suffix strip, generated needles, comment markers, the file-role block).
+
+**Execution rule.** The capability law stands: a contract growth lands with its
+default, its named consumer in core and its conformance case, in one merge. So
+the milestones are vertical slices, not a contract-first cutover: M8.a adds
+expectations and the loud-change gate, import timing with `cyclic` on load-time
+edges, and markers/relations with `Dispatch` (Rust first, the dogfood); M8.b
+lands `ManifestEvidence`, `Project`, `Scopes` and the keepers; M8.c migrates the
+adapters one by one (rust, go, java+kotlin, swift, python, js-ts, html+css),
+each deleting its convention code and adding the audit's fixtures; M8.d the
+structural manifests; M8.e the rule packs; M8.f the grammars (vendoring with
+patches, the ledger gate, the Kotlin bake-off on Exposed); M8.g the close-out,
+whose exit criterion is the audit re-run over the new tree with OK in every
+cell. Old hooks stay as defaulted bridges until the last adapter migrates, so
+the tree is green between slices. The contract fingerprint, the graph semantics
+version and each adapter's version move once each, in the slice that earns it.
+
+**Measurements the design rests on** (audit, verified with the release binary):
+Swift's test containers alone are 161 of the corpus's 218 `unused` (Alamofire
+113 of 141, vapor 48 of 77); 37 of Alamofire's 41 `untested` follow from
+`import Alamofire` never resolving under `path: "Source"`; guava: 588 of 1,751
+main-tree `internal-only` advise narrowing members its same-package tests use,
+and 914 private methods plus 535 private nested classes are invisible under the
+private-member keep; Exposed: 61 of 802 files (7.6%) parse with errors under
+kotlin-ng 1.1.0 and keep about a fifth of their declarations; flask's cycle
+component drops from 20 files to 9 over load-time edges only; gin: 72 grouped
+`var` names invisible, a phantom declaration named `,` on every multi-name
+`const`. Eleven fixtures carried comments contradicting their pins with no
+DECISIONS entry (js-ts 4, go 3, swift 2, java/kotlin 2).
+
+**Naming.** The manifest payload is `ManifestEvidence`, the name this file gave
+it on 2026-08-29 (evidence, never facts); the hook is `extract_manifest`, the
+mirror of `extract`. A fixture's claims are **expectations**, not claims — that
+word already names file claiming by suffix. The glossary lands as `CONTEXT.md`
+with this entry.
+
+**Three owner decisions, taken 2026-09-05.**
+
+1. `#[allow(dead_code)]` and its kin (`@SuppressWarnings("unused")`,
+   `@Suppress("unused")`, `eslint-disable … no-unused-vars`) are honored. At
+   item level as `Effect::Exempt`, visible as a keeper (`kept-by: exempt
+   allow(dead_code)`): the author already declared the intent, and accusing
+   what the compiler silences on request is noise by definition. A blanket
+   allow at file or crate level is honored too and reported as a run
+   diagnostic naming the count it hides. `kndo:allow` stays the channel common
+   to every language and the only one that suppresses categories other than
+   `unused`.
+2. Python's `_x` reaches the distribution's root package (`Unit{0}`): PEP 8's
+   "internal use" — `mod._x()` from a sibling module is legal and common, so it
+   is never accused; an `_x` unused across the package is. No narrowing advice:
+   the ladder is empty because no keyword exists. The alternative (`Exported`
+   with a warning) would make no `_x` accusable inside a published unit — the
+   one class of dead code Python reports today.
+3. Go methods are declared, always, as members of the receiver's base type;
+   accusation follows reach. Measured on gin (98 files) before deciding: 406
+   methods (368 exported, 38 not); 146 match a method name of a project
+   interface and 85 a common standard-library interface (`String`, `Error`,
+   `ServeHTTP`, `MarshalJSON`, …); only 9 are never called as `.Name(`
+   anywhere, and the 6 of those matching no interface at all are
+   `CreateDecoder`/`CreateEncoder`/`IsEmpty` in `binding/json_test.go` — the
+   structural dispatch through EXTERNAL interfaces that retired the class in
+   M4.c. The rule the number yields: an exported method satisfies interfaces
+   kndo cannot see (other packages, the standard library), so it is declared
+   and carries the language's `Possible` root ("structural dispatch") — it
+   enters the graph, `describe`, `used-by`, `trace`, the metrics and
+   `duplicate` (which was blind to Go method-body clones, a recorded
+   under-report) and is never accused; an unexported method can only satisfy
+   interfaces of its own package, all visible, so it is judged with a witness
+   against them and accused when nothing names it. Expected on gin: zero new
+   accusations, 406 declarations with an owner. The same shape Swift and Java
+   already have: the whole graph tells the story, reach decides the accusation.
