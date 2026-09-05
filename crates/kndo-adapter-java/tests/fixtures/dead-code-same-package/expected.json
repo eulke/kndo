@@ -49,7 +49,7 @@
   },
   "findings": [
     {
-      "id": "kndo-da56d8b1673a",
+      "id": "kndo-e5504ba9df84",
       "category": "unused",
       "severity": "warning",
       "confidence": "certain",
@@ -57,10 +57,9 @@
         "kind": "symbol",
         "path": "src/main/java/com/foo/Helper.java",
         "selector": {
-          "Member": {
-            "owner": "Helper",
-            "name": "dead"
-          }
+          "owner": "Helper",
+          "name": "dead",
+          "signature": "()"
         },
         "span": {
           "start": 203,

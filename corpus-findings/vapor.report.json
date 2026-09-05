@@ -54,7 +54,7 @@
         "kind": "symbol",
         "path": "Sources/Development/routes.swift",
         "selector": {
-          "Free": "NotContentType"
+          "name": "NotContentType"
         },
         "span": {
           "start": 13939,
@@ -76,10 +76,8 @@
         "kind": "symbol",
         "path": "Sources/Development/routes.swift",
         "selector": {
-          "Member": {
-            "owner": "UserController",
-            "name": "promoteUser"
-          }
+          "owner": "UserController",
+          "name": "promoteUser"
         },
         "span": {
           "start": 13313,
@@ -101,10 +99,8 @@
         "kind": "symbol",
         "path": "Sources/Development/routes.swift",
         "selector": {
-          "Member": {
-            "owner": "UserController",
-            "name": "macroDynamicPathParameter"
-          }
+          "owner": "UserController",
+          "name": "macroDynamicPathParameter"
         },
         "span": {
           "start": 12815,
@@ -126,10 +122,8 @@
         "kind": "symbol",
         "path": "Sources/Development/routes.swift",
         "selector": {
-          "Member": {
-            "owner": "NotContentType",
-            "name": "something"
-          }
+          "owner": "NotContentType",
+          "name": "something"
         },
         "span": {
           "start": 13967,
@@ -151,10 +145,8 @@
         "kind": "symbol",
         "path": "Sources/Development/routes.swift",
         "selector": {
-          "Member": {
-            "owner": "UserController",
-            "name": "syncRoute"
-          }
+          "owner": "UserController",
+          "name": "syncRoute"
         },
         "span": {
           "start": 12706,
@@ -176,10 +168,8 @@
         "kind": "symbol",
         "path": "Sources/Development/routes.swift",
         "selector": {
-          "Member": {
-            "owner": "UserController",
-            "name": "getUsers"
-          }
+          "owner": "UserController",
+          "name": "getUsers"
         },
         "span": {
           "start": 11753,
@@ -201,7 +191,7 @@
         "kind": "symbol",
         "path": "Sources/Development/routes.swift",
         "selector": {
-          "Free": "TestController"
+          "name": "TestController"
         },
         "span": {
           "start": 11466,
@@ -223,10 +213,8 @@
         "kind": "symbol",
         "path": "Sources/Development/routes.swift",
         "selector": {
-          "Member": {
-            "owner": "UserController",
-            "name": "getCustomHTTPMethod"
-          }
+          "owner": "UserController",
+          "name": "getCustomHTTPMethod"
         },
         "span": {
           "start": 11875,
@@ -248,10 +236,8 @@
         "kind": "symbol",
         "path": "Sources/Development/routes.swift",
         "selector": {
-          "Member": {
-            "owner": "UserController",
-            "name": "getLotsOfParameters"
-          }
+          "owner": "UserController",
+          "name": "getLotsOfParameters"
         },
         "span": {
           "start": 12395,
@@ -273,10 +259,8 @@
         "kind": "symbol",
         "path": "Sources/Development/routes.swift",
         "selector": {
-          "Member": {
-            "owner": "UserController",
-            "name": "macroDynamicPartialPathParameter"
-          }
+          "owner": "UserController",
+          "name": "macroDynamicPartialPathParameter"
         },
         "span": {
           "start": 13047,
@@ -298,10 +282,8 @@
         "kind": "symbol",
         "path": "Sources/Development/routes.swift",
         "selector": {
-          "Member": {
-            "owner": "UserController",
-            "name": "getUser"
-          }
+          "owner": "UserController",
+          "name": "getUser"
         },
         "span": {
           "start": 12040,
@@ -323,10 +305,8 @@
         "kind": "symbol",
         "path": "Sources/Development/routes.swift",
         "selector": {
-          "Member": {
-            "owner": "UserController",
-            "name": "getCustomHTTPMethodWithPathParameter"
-          }
+          "owner": "UserController",
+          "name": "getCustomHTTPMethodWithPathParameter"
         },
         "span": {
           "start": 12194,
@@ -348,7 +328,7 @@
         "kind": "symbol",
         "path": "Sources/Vapor/Application.swift",
         "selector": {
-          "Free": "insertOrReturn"
+          "name": "insertOrReturn"
         },
         "span": {
           "start": 10636,
@@ -370,7 +350,7 @@
         "kind": "symbol",
         "path": "Sources/Vapor/Concurrency/RequestBody+Concurrency.swift",
         "selector": {
-          "Free": "checkBodyStorage"
+          "name": "checkBodyStorage"
         },
         "span": {
           "start": 3915,
@@ -392,7 +372,7 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroIntegrationTests/AuthMiddlewareIntegrationTests.swift",
         "selector": {
-          "Free": "AuthMiddlewareIntegrationTests"
+          "name": "AuthMiddlewareIntegrationTests"
         },
         "span": {
           "start": 120,
@@ -414,10 +394,8 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroIntegrationTests/AuthMiddlewareIntegrationTests.swift",
         "selector": {
-          "Member": {
-            "owner": "AuthTestController",
-            "name": "admin"
-          }
+          "owner": "AuthTestController",
+          "name": "admin"
         },
         "span": {
           "start": 5273,
@@ -439,10 +417,8 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroIntegrationTests/AuthMiddlewareIntegrationTests.swift",
         "selector": {
-          "Member": {
-            "owner": "AuthTestController",
-            "name": "feed"
-          }
+          "owner": "AuthTestController",
+          "name": "feed"
         },
         "span": {
           "start": 5053,
@@ -464,10 +440,8 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroIntegrationTests/AuthMiddlewareIntegrationTests.swift",
         "selector": {
-          "Member": {
-            "owner": "AuthTestController",
-            "name": "promote"
-          }
+          "owner": "AuthTestController",
+          "name": "promote"
         },
         "span": {
           "start": 4795,
@@ -489,10 +463,8 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroIntegrationTests/ControllerMacroIntegrationTests.swift",
         "selector": {
-          "Member": {
-            "owner": "TestUserController",
-            "name": "getUsers"
-          }
+          "owner": "TestUserController",
+          "name": "getUsers"
         },
         "span": {
           "start": 2826,
@@ -514,10 +486,8 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroIntegrationTests/ControllerMacroIntegrationTests.swift",
         "selector": {
-          "Member": {
-            "owner": "TestUserController",
-            "name": "customHTTPMethodWithPathParameter"
-          }
+          "owner": "TestUserController",
+          "name": "customHTTPMethodWithPathParameter"
         },
         "span": {
           "start": 3365,
@@ -539,10 +509,8 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroIntegrationTests/ControllerMacroIntegrationTests.swift",
         "selector": {
-          "Member": {
-            "owner": "TestUserController",
-            "name": "getUser"
-          }
+          "owner": "TestUserController",
+          "name": "getUser"
         },
         "span": {
           "start": 2946,
@@ -564,7 +532,7 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroIntegrationTests/ControllerMacroIntegrationTests.swift",
         "selector": {
-          "Free": "ControllerMacroIntegrationTests"
+          "name": "ControllerMacroIntegrationTests"
         },
         "span": {
           "start": 120,
@@ -586,10 +554,8 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroIntegrationTests/ControllerMacroIntegrationTests.swift",
         "selector": {
-          "Member": {
-            "owner": "TestUserController",
-            "name": "syncRoute"
-          }
+          "owner": "TestUserController",
+          "name": "syncRoute"
         },
         "span": {
           "start": 3098,
@@ -611,7 +577,7 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroIntegrationTests/StandaloneMacroIntegrationTests.swift",
         "selector": {
-          "Free": "StandaloneMacroIntegrationTests"
+          "name": "StandaloneMacroIntegrationTests"
         },
         "span": {
           "start": 120,
@@ -633,7 +599,7 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroTests/AuthMiddlewareMacroTests.swift",
         "selector": {
-          "Free": "AuthMiddlewareMacroTests"
+          "name": "AuthMiddlewareMacroTests"
         },
         "span": {
           "start": 110,
@@ -655,7 +621,7 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroTests/ControllerMacroTests.swift",
         "selector": {
-          "Free": "ControllerMacroTests"
+          "name": "ControllerMacroTests"
         },
         "span": {
           "start": 110,
@@ -677,7 +643,7 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroTests/HTTPMethodMacroTests.swift",
         "selector": {
-          "Free": "HTTPMethodMacroTests"
+          "name": "HTTPMethodMacroTests"
         },
         "span": {
           "start": 110,
@@ -699,7 +665,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ApplicationTests.swift",
         "selector": {
-          "Free": "ApplicationTests"
+          "name": "ApplicationTests"
         },
         "span": {
           "start": 280,
@@ -721,7 +687,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/AuthenticationTests.swift",
         "selector": {
-          "Free": "AuthenticationTests"
+          "name": "AuthenticationTests"
         },
         "span": {
           "start": 239,
@@ -743,7 +709,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/BaseNTests.swift",
         "selector": {
-          "Free": "expectedHexUpper"
+          "name": "expectedHexUpper"
         },
         "span": {
           "start": 7444,
@@ -765,7 +731,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/BaseNTests.swift",
         "selector": {
-          "Free": "expectedBase4"
+          "name": "expectedBase4"
         },
         "span": {
           "start": 19103,
@@ -787,7 +753,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/BaseNTests.swift",
         "selector": {
-          "Free": "expectedBase8"
+          "name": "expectedBase8"
         },
         "span": {
           "start": 21488,
@@ -809,7 +775,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/BaseNTests.swift",
         "selector": {
-          "Free": "expectedBase2"
+          "name": "expectedBase2"
         },
         "span": {
           "start": 14578,
@@ -831,7 +797,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/BaseNTests.swift",
         "selector": {
-          "Free": "expectedBase128"
+          "name": "expectedBase128"
         },
         "span": {
           "start": 23182,
@@ -853,7 +819,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/BaseNTests.swift",
         "selector": {
-          "Free": "expectedHexLower"
+          "name": "expectedHexLower"
         },
         "span": {
           "start": 6126,
@@ -875,7 +841,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/CacheTests.swift",
         "selector": {
-          "Free": "CacheTests"
+          "name": "CacheTests"
         },
         "span": {
           "start": 64,
@@ -897,7 +863,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ClientTests.swift",
         "selector": {
-          "Free": "ClientTests"
+          "name": "ClientTests"
         },
         "span": {
           "start": 340,
@@ -919,7 +885,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
         "selector": {
-          "Free": "ConditionalResponseCompressionRouteTests"
+          "name": "ConditionalResponseCompressionRouteTests"
         },
         "span": {
           "start": 49740,
@@ -941,7 +907,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
         "selector": {
-          "Free": "compressiblePayload"
+          "name": "compressiblePayload"
         },
         "span": {
           "start": 60240,
@@ -963,7 +929,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
         "selector": {
-          "Free": "unknownType"
+          "name": "unknownType"
         },
         "span": {
           "start": 61896,
@@ -985,7 +951,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ContentTests.swift",
         "selector": {
-          "Free": "ContentTests"
+          "name": "ContentTests"
         },
         "span": {
           "start": 194,
@@ -1007,10 +973,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ContentTests.swift",
         "selector": {
-          "Member": {
-            "owner": "JsonApiContent",
-            "name": "meta"
-          }
+          "owner": "JsonApiContent",
+          "name": "meta"
         },
         "span": {
           "start": 32278,
@@ -1032,7 +996,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/Date+RFC1123Tests.swift",
         "selector": {
-          "Free": "DateRFC1123Tests"
+          "name": "DateRFC1123Tests"
         },
         "span": {
           "start": 134,
@@ -1054,7 +1018,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/DotEnvTests.swift",
         "selector": {
-          "Free": "DotEnvTests"
+          "name": "DotEnvTests"
         },
         "span": {
           "start": 90,
@@ -1076,7 +1040,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/EndpointCacheTests.swift",
         "selector": {
-          "Free": "EndpointCacheTests"
+          "name": "EndpointCacheTests"
         },
         "span": {
           "start": 97,
@@ -1098,7 +1062,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/EnvironmentTests.swift",
         "selector": {
-          "Free": "EnvironmentSecretTests"
+          "name": "EnvironmentSecretTests"
         },
         "span": {
           "start": 436,
@@ -1120,7 +1084,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ErrorTests.swift",
         "selector": {
-          "Free": "ErrorTests"
+          "name": "ErrorTests"
         },
         "span": {
           "start": 194,
@@ -1142,7 +1106,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/FileETagHashCacheTests.swift",
         "selector": {
-          "Free": "FileETagHashCacheTests"
+          "name": "FileETagHashCacheTests"
         },
         "span": {
           "start": 208,
@@ -1164,7 +1128,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/FileTests.swift",
         "selector": {
-          "Free": "FileTests"
+          "name": "FileTests"
         },
         "span": {
           "start": 310,
@@ -1186,7 +1150,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/HTTPCacheTests.swift",
         "selector": {
-          "Free": "HTTPCacheTests"
+          "name": "HTTPCacheTests"
         },
         "span": {
           "start": 141,
@@ -1208,7 +1172,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/HTTPHeaderTests.swift",
         "selector": {
-          "Free": "HTTPHeaderTests"
+          "name": "HTTPHeaderTests"
         },
         "span": {
           "start": 151,
@@ -1230,7 +1194,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/HTTPMediaTypeSetTests.swift",
         "selector": {
-          "Free": "HTTPMediaTypeSetTests"
+          "name": "HTTPMediaTypeSetTests"
         },
         "span": {
           "start": 56,
@@ -1252,7 +1216,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/HTTPServerConfigurationTests.swift",
         "selector": {
-          "Free": "SupportedHTTPVersionsTests"
+          "name": "SupportedHTTPVersionsTests"
         },
         "span": {
           "start": 1830,
@@ -1274,7 +1238,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/HTTPServerConfigurationTests.swift",
         "selector": {
-          "Free": "HTTPServerConfigurationTests"
+          "name": "HTTPServerConfigurationTests"
         },
         "span": {
           "start": 83,
@@ -1296,7 +1260,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/HTTPServerConfigurationTests.swift",
         "selector": {
-          "Free": "HTTP2Tests"
+          "name": "HTTP2Tests"
         },
         "span": {
           "start": 168,
@@ -1318,7 +1282,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/HTTPServerConfigurationTests.swift",
         "selector": {
-          "Free": "PreflightValidationTests"
+          "name": "PreflightValidationTests"
         },
         "span": {
           "start": 2929,
@@ -1340,7 +1304,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/MiddlewareTests.swift",
         "selector": {
-          "Free": "MiddlewareTests"
+          "name": "MiddlewareTests"
         },
         "span": {
           "start": 270,
@@ -1362,7 +1326,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/PipelineTests.swift",
         "selector": {
-          "Free": "PipelineTests"
+          "name": "PipelineTests"
         },
         "span": {
           "start": 893,
@@ -1384,7 +1348,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/QueryTests.swift",
         "selector": {
-          "Free": "QueryTests"
+          "name": "QueryTests"
         },
         "span": {
           "start": 117,
@@ -1406,7 +1370,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/RouteTests.swift",
         "selector": {
-          "Free": "RouteTests"
+          "name": "RouteTests"
         },
         "span": {
           "start": 194,
@@ -1428,7 +1392,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/SecurityTests.swift",
         "selector": {
-          "Free": "OTPTests"
+          "name": "OTPTests"
         },
         "span": {
           "start": 138,
@@ -1450,7 +1414,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ServerTLSTests.swift",
         "selector": {
-          "Free": "ServerTLSTests"
+          "name": "ServerTLSTests"
         },
         "span": {
           "start": 247,
@@ -1472,7 +1436,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ServerTests.swift",
         "selector": {
-          "Free": "CompressionTests"
+          "name": "CompressionTests"
         },
         "span": {
           "start": 538,
@@ -1494,7 +1458,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ServerTests.swift",
         "selector": {
-          "Free": "RequestBodyStreamingTests"
+          "name": "RequestBodyStreamingTests"
         },
         "span": {
           "start": 37443,
@@ -1516,7 +1480,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ServerTests.swift",
         "selector": {
-          "Free": "AddressConfigurationTests"
+          "name": "AddressConfigurationTests"
         },
         "span": {
           "start": 57924,
@@ -1538,7 +1502,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ServerTests.swift",
         "selector": {
-          "Free": "ServerTests"
+          "name": "ServerTests"
         },
         "span": {
           "start": 490,
@@ -1560,7 +1524,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ServerTests.swift",
         "selector": {
-          "Free": "TLSConfigurationTests"
+          "name": "TLSConfigurationTests"
         },
         "span": {
           "start": 68427,
@@ -1582,7 +1546,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/SessionTests.swift",
         "selector": {
-          "Free": "SessionTests"
+          "name": "SessionTests"
         },
         "span": {
           "start": 99,
@@ -1604,7 +1568,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/StreamingBodyTests.swift",
         "selector": {
-          "Free": "StreamingBodyTests"
+          "name": "StreamingBodyTests"
         },
         "span": {
           "start": 332,
@@ -1626,7 +1590,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/String+removingPercentEncodingTests.swift",
         "selector": {
-          "Free": "StringRemovingPercentEncodingTests"
+          "name": "StringRemovingPercentEncodingTests"
         },
         "span": {
           "start": 229,
@@ -1648,7 +1612,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/StringProtocol+isCaseInsensitiveEqualASCIITests.swift",
         "selector": {
-          "Free": "StringProtocolCaseInsensitiveEqualASCIITests"
+          "name": "StringProtocolCaseInsensitiveEqualASCIITests"
         },
         "span": {
           "start": 39,
@@ -1670,7 +1634,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/URITests.swift",
         "selector": {
-          "Free": "URITests"
+          "name": "URITests"
         },
         "span": {
           "start": 267,
@@ -1692,7 +1656,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/URLEncodedFormTests.swift",
         "selector": {
-          "Free": "URLEncodedFormTests"
+          "name": "URLEncodedFormTests"
         },
         "span": {
           "start": 73,
@@ -1714,7 +1678,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/Utilities/TestLogging.swift",
         "selector": {
-          "Free": "isLoggingConfigured"
+          "name": "isLoggingConfigured"
         },
         "span": {
           "start": 145,
@@ -1736,7 +1700,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/UtilityTests.swift",
         "selector": {
-          "Free": "UtilityTests"
+          "name": "UtilityTests"
         },
         "span": {
           "start": 39,
@@ -1758,7 +1722,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ValidationTests.swift",
         "selector": {
-          "Free": "ValidationTests"
+          "name": "ValidationTests"
         },
         "span": {
           "start": 194,
@@ -1780,7 +1744,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/VaporTesting.swift",
         "selector": {
-          "Free": "VaporTestingTests"
+          "name": "VaporTestingTests"
         },
         "span": {
           "start": 148,
@@ -1802,7 +1766,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ViewTests.swift",
         "selector": {
-          "Free": "ViewTests"
+          "name": "ViewTests"
         },
         "span": {
           "start": 99,
@@ -1824,7 +1788,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/WebSocketTests.swift",
         "selector": {
-          "Free": "WebSocketTests"
+          "name": "WebSocketTests"
         },
         "span": {
           "start": 192,
@@ -1846,35 +1810,8 @@
         "kind": "symbol",
         "path": "Sources/Vapor/Client/Client.swift",
         "selector": {
-          "Member": {
-            "owner": "Client",
-            "name": "put"
-          }
-        },
-        "span": {
-          "start": 1926,
-          "end": 2149
-        }
-      },
-      "lines": {
-        "start": 38,
-        "end": 40
-      },
-      "message": "structural clone of Sources/Vapor/Client/Client.swift:Client.post"
-    },
-    {
-      "id": "kndo-0d95bcd18027",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "Sources/Vapor/Client/Client.swift",
-        "selector": {
-          "Member": {
-            "owner": "Client",
-            "name": "put"
-          }
+          "owner": "Client",
+          "name": "put"
         },
         "span": {
           "start": 966,
@@ -1896,10 +1833,8 @@
         "kind": "symbol",
         "path": "Sources/Vapor/Client/Client.swift",
         "selector": {
-          "Member": {
-            "owner": "Client",
-            "name": "delete"
-          }
+          "owner": "Client",
+          "name": "delete"
         },
         "span": {
           "start": 1209,
@@ -1921,35 +1856,8 @@
         "kind": "symbol",
         "path": "Sources/Vapor/Client/Client.swift",
         "selector": {
-          "Member": {
-            "owner": "Client",
-            "name": "patch"
-          }
-        },
-        "span": {
-          "start": 1693,
-          "end": 1920
-        }
-      },
-      "lines": {
-        "start": 34,
-        "end": 36
-      },
-      "message": "structural clone of Sources/Vapor/Client/Client.swift:Client.post"
-    },
-    {
-      "id": "kndo-8e8e1cc8e078",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "Sources/Vapor/Client/Client.swift",
-        "selector": {
-          "Member": {
-            "owner": "Client",
-            "name": "patch"
-          }
+          "owner": "Client",
+          "name": "patch"
         },
         "span": {
           "start": 719,
@@ -1971,10 +1879,8 @@
         "kind": "symbol",
         "path": "Sources/Vapor/Client/Client.swift",
         "selector": {
-          "Member": {
-            "owner": "Client",
-            "name": "post"
-          }
+          "owner": "Client",
+          "name": "post"
         },
         "span": {
           "start": 474,
@@ -1988,7 +1894,55 @@
       "message": "structural clone of Sources/Vapor/Client/Client.swift:Client.get"
     },
     {
-      "id": "kndo-78dfb7be1ac5",
+      "id": "kndo-bd6a24e71693",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/Vapor/Client/Client.swift",
+        "selector": {
+          "owner": "Client",
+          "name": "put",
+          "nth": 1
+        },
+        "span": {
+          "start": 1926,
+          "end": 2149
+        }
+      },
+      "lines": {
+        "start": 38,
+        "end": 40
+      },
+      "message": "structural clone of Sources/Vapor/Client/Client.swift:Client.post#2"
+    },
+    {
+      "id": "kndo-cc56ae06836e",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/Vapor/Client/Client.swift",
+        "selector": {
+          "owner": "Client",
+          "name": "patch",
+          "nth": 1
+        },
+        "span": {
+          "start": 1693,
+          "end": 1920
+        }
+      },
+      "lines": {
+        "start": 34,
+        "end": 36
+      },
+      "message": "structural clone of Sources/Vapor/Client/Client.swift:Client.post#2"
+    },
+    {
+      "id": "kndo-aba07f0e7161",
       "category": "duplicate",
       "severity": "info",
       "confidence": "certain",
@@ -1996,7 +1950,8 @@
         "kind": "symbol",
         "path": "Sources/Vapor/Content/JSONCoder+Custom.swift",
         "selector": {
-          "Free": "custom"
+          "name": "custom",
+          "nth": 1
         },
         "span": {
           "start": 2321,
@@ -2018,10 +1973,8 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroIntegrationTests/AuthMiddlewareIntegrationTests.swift",
         "selector": {
-          "Member": {
-            "owner": "AuthMiddlewareIntegrationTests",
-            "name": "optionalAuthRouteAuthenticated"
-          }
+          "owner": "AuthMiddlewareIntegrationTests",
+          "name": "optionalAuthRouteAuthenticated"
         },
         "span": {
           "start": 2151,
@@ -2043,10 +1996,8 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroIntegrationTests/AuthMiddlewareIntegrationTests.swift",
         "selector": {
-          "Member": {
-            "owner": "AuthMiddlewareIntegrationTests",
-            "name": "authRouteWithPathParameter"
-          }
+          "owner": "AuthMiddlewareIntegrationTests",
+          "name": "authRouteWithPathParameter"
         },
         "span": {
           "start": 1146,
@@ -2068,10 +2019,8 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroIntegrationTests/ControllerMacroIntegrationTests.swift",
         "selector": {
-          "Member": {
-            "owner": "ControllerMacroIntegrationTests",
-            "name": "controllerRouteNotFound"
-          }
+          "owner": "ControllerMacroIntegrationTests",
+          "name": "controllerRouteNotFound"
         },
         "span": {
           "start": 2393,
@@ -2093,10 +2042,8 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroIntegrationTests/ControllerMacroIntegrationTests.swift",
         "selector": {
-          "Member": {
-            "owner": "ControllerMacroIntegrationTests",
-            "name": "controllerGetRoute"
-          }
+          "owner": "ControllerMacroIntegrationTests",
+          "name": "controllerGetRoute"
         },
         "span": {
           "start": 211,
@@ -2118,10 +2065,8 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroIntegrationTests/ControllerMacroIntegrationTests.swift",
         "selector": {
-          "Member": {
-            "owner": "ControllerMacroIntegrationTests",
-            "name": "controllerCustomHTTPMethodWithPathParameter"
-          }
+          "owner": "ControllerMacroIntegrationTests",
+          "name": "controllerCustomHTTPMethodWithPathParameter"
         },
         "span": {
           "start": 1905,
@@ -2143,10 +2088,8 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroIntegrationTests/ControllerMacroIntegrationTests.swift",
         "selector": {
-          "Member": {
-            "owner": "ControllerMacroIntegrationTests",
-            "name": "controllerCustomHTTPMethod"
-          }
+          "owner": "ControllerMacroIntegrationTests",
+          "name": "controllerCustomHTTPMethod"
         },
         "span": {
           "start": 1467,
@@ -2168,10 +2111,8 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroIntegrationTests/ControllerMacroIntegrationTests.swift",
         "selector": {
-          "Member": {
-            "owner": "ControllerMacroIntegrationTests",
-            "name": "controllerPostRoute"
-          }
+          "owner": "ControllerMacroIntegrationTests",
+          "name": "controllerPostRoute"
         },
         "span": {
           "start": 1073,
@@ -2193,10 +2134,8 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroIntegrationTests/ControllerMacroIntegrationTests.swift",
         "selector": {
-          "Member": {
-            "owner": "ControllerMacroIntegrationTests",
-            "name": "controllerGetRouteWithPathParameter"
-          }
+          "owner": "ControllerMacroIntegrationTests",
+          "name": "controllerGetRouteWithPathParameter"
         },
         "span": {
           "start": 629,
@@ -2218,10 +2157,8 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroIntegrationTests/StandaloneMacroIntegrationTests.swift",
         "selector": {
-          "Member": {
-            "owner": "StandaloneMacroIntegrationTests",
-            "name": "standaloneGetRouteWithPathParameter"
-          }
+          "owner": "StandaloneMacroIntegrationTests",
+          "name": "standaloneGetRouteWithPathParameter"
         },
         "span": {
           "start": 634,
@@ -2243,10 +2180,8 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroIntegrationTests/StandaloneMacroIntegrationTests.swift",
         "selector": {
-          "Member": {
-            "owner": "StandaloneMacroIntegrationTests",
-            "name": "standaloneDeleteRoute"
-          }
+          "owner": "StandaloneMacroIntegrationTests",
+          "name": "standaloneDeleteRoute"
         },
         "span": {
           "start": 1450,
@@ -2268,10 +2203,8 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroIntegrationTests/StandaloneMacroIntegrationTests.swift",
         "selector": {
-          "Member": {
-            "owner": "StandaloneMacroIntegrationTests",
-            "name": "standalonePostRoute"
-          }
+          "owner": "StandaloneMacroIntegrationTests",
+          "name": "standalonePostRoute"
         },
         "span": {
           "start": 1070,
@@ -2293,10 +2226,8 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroTests/ControllerMacroTests.swift",
         "selector": {
-          "Member": {
-            "owner": "ControllerMacroTests",
-            "name": "testControllerWithDifferentHTTPMethods"
-          }
+          "owner": "ControllerMacroTests",
+          "name": "testControllerWithDifferentHTTPMethods"
         },
         "span": {
           "start": 4746,
@@ -2318,10 +2249,8 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroTests/HTTPMethodMacroTests.swift",
         "selector": {
-          "Member": {
-            "owner": "HTTPMethodMacroTests",
-            "name": "testGetMacroWithMultipleDynamicPathParametersOfSameType"
-          }
+          "owner": "HTTPMethodMacroTests",
+          "name": "testGetMacroWithMultipleDynamicPathParametersOfSameType"
         },
         "span": {
           "start": 1954,
@@ -2343,10 +2272,8 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroTests/HTTPMethodMacroTests.swift",
         "selector": {
-          "Member": {
-            "owner": "HTTPMethodMacroTests",
-            "name": "testGetMacroFailsWhenMissingRequestParameter"
-          }
+          "owner": "HTTPMethodMacroTests",
+          "name": "testGetMacroFailsWhenMissingRequestParameter"
         },
         "span": {
           "start": 15950,
@@ -2368,10 +2295,8 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroTests/HTTPMethodMacroTests.swift",
         "selector": {
-          "Member": {
-            "owner": "HTTPMethodMacroTests",
-            "name": "testGetMacroAutoRegistersInsideFunction"
-          }
+          "owner": "HTTPMethodMacroTests",
+          "name": "testGetMacroAutoRegistersInsideFunction"
         },
         "span": {
           "start": 12675,
@@ -2393,10 +2318,8 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroTests/HTTPMethodMacroTests.swift",
         "selector": {
-          "Member": {
-            "owner": "HTTPMethodMacroTests",
-            "name": "testGetMacroWithRoutesBuilderPassedInWithDynamicPathParameters"
-          }
+          "owner": "HTTPMethodMacroTests",
+          "name": "testGetMacroWithRoutesBuilderPassedInWithDynamicPathParameters"
         },
         "span": {
           "start": 18355,
@@ -2418,10 +2341,8 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroTests/HTTPMethodMacroTests.swift",
         "selector": {
-          "Member": {
-            "owner": "HTTPMethodMacroTests",
-            "name": "testHTTPMethodMacroWithRoutesBuilderPassedInWithDynamicPathParameters"
-          }
+          "owner": "HTTPMethodMacroTests",
+          "name": "testHTTPMethodMacroWithRoutesBuilderPassedInWithDynamicPathParameters"
         },
         "span": {
           "start": 19377,
@@ -2443,10 +2364,8 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroTests/HTTPMethodMacroTests.swift",
         "selector": {
-          "Member": {
-            "owner": "HTTPMethodMacroTests",
-            "name": "testGetMacroWithMultipleDynamicPathParametersOfDifferentTypes"
-          }
+          "owner": "HTTPMethodMacroTests",
+          "name": "testGetMacroWithMultipleDynamicPathParametersOfDifferentTypes"
         },
         "span": {
           "start": 3124,
@@ -2468,10 +2387,8 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroTests/HTTPMethodMacroTests.swift",
         "selector": {
-          "Member": {
-            "owner": "HTTPMethodMacroTests",
-            "name": "testGetMacroFailsWhenExtraFunctionParameter"
-          }
+          "owner": "HTTPMethodMacroTests",
+          "name": "testGetMacroFailsWhenExtraFunctionParameter"
         },
         "span": {
           "start": 6172,
@@ -2493,10 +2410,8 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroTests/HTTPMethodMacroTests.swift",
         "selector": {
-          "Member": {
-            "owner": "HTTPMethodMacroTests",
-            "name": "testGetMacroFailsWhenNoParameters"
-          }
+          "owner": "HTTPMethodMacroTests",
+          "name": "testGetMacroFailsWhenNoParameters"
         },
         "span": {
           "start": 16744,
@@ -2518,10 +2433,8 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroTests/HTTPMethodMacroTests.swift",
         "selector": {
-          "Member": {
-            "owner": "HTTPMethodMacroTests",
-            "name": "testGetMacroAutoRegistersWithDynamicParams"
-          }
+          "owner": "HTTPMethodMacroTests",
+          "name": "testGetMacroAutoRegistersWithDynamicParams"
         },
         "span": {
           "start": 13733,
@@ -2543,10 +2456,8 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroTests/HTTPMethodMacroTests.swift",
         "selector": {
-          "Member": {
-            "owner": "HTTPMethodMacroTests",
-            "name": "testGetMacroWithInternalAndExternalParameterNames"
-          }
+          "owner": "HTTPMethodMacroTests",
+          "name": "testGetMacroWithInternalAndExternalParameterNames"
         },
         "span": {
           "start": 4301,
@@ -2568,10 +2479,8 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroTests/HTTPMethodMacroTests.swift",
         "selector": {
-          "Member": {
-            "owner": "HTTPMethodMacroTests",
-            "name": "testGetMacroWithRoutesBuilderPassedIn"
-          }
+          "owner": "HTTPMethodMacroTests",
+          "name": "testGetMacroWithRoutesBuilderPassedIn"
         },
         "span": {
           "start": 17499,
@@ -2593,10 +2502,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
         "selector": {
-          "Member": {
-            "owner": "ConditionalResponseCompressionRouteTests",
-            "name": "testRoutingPrioritizesDisabledResponse"
-          }
+          "owner": "ConditionalResponseCompressionRouteTests",
+          "name": "testRoutingPrioritizesDisabledResponse"
         },
         "span": {
           "start": 55659,
@@ -2618,10 +2525,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
         "selector": {
-          "Member": {
-            "owner": "ConditionalResponseCompressionRouteTests",
-            "name": "testRoutingDoesNotPrioritizeOtherResponse"
-          }
+          "owner": "ConditionalResponseCompressionRouteTests",
+          "name": "testRoutingDoesNotPrioritizeOtherResponse"
         },
         "span": {
           "start": 57176,
@@ -2643,10 +2548,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/FileTests.swift",
         "selector": {
-          "Member": {
-            "owner": "FileTests",
-            "name": "testNoRedirect"
-          }
+          "owner": "FileTests",
+          "name": "testNoRedirect"
         },
         "span": {
           "start": 19372,
@@ -2668,10 +2571,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/FileTests.swift",
         "selector": {
-          "Member": {
-            "owner": "FileTests",
-            "name": "testStreamFileContentHeaderStart"
-          }
+          "owner": "FileTests",
+          "name": "testStreamFileContentHeaderStart"
         },
         "span": {
           "start": 7047,
@@ -2693,10 +2594,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/FileTests.swift",
         "selector": {
-          "Member": {
-            "owner": "FileTests",
-            "name": "testStreamFileContentHeadersTailFail"
-          }
+          "owner": "FileTests",
+          "name": "testStreamFileContentHeadersTailFail"
         },
         "span": {
           "start": 13042,
@@ -2718,10 +2617,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/FileTests.swift",
         "selector": {
-          "Member": {
-            "owner": "FileTests",
-            "name": "testDefaultFileAbsolute"
-          }
+          "owner": "FileTests",
+          "name": "testDefaultFileAbsolute"
         },
         "span": {
           "start": 16154,
@@ -2743,10 +2640,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/HTTPCacheTests.swift",
         "selector": {
-          "Member": {
-            "owner": "HTTPCacheTests",
-            "name": "testNoMatching"
-          }
+          "owner": "HTTPCacheTests",
+          "name": "testNoMatching"
         },
         "span": {
           "start": 1408,
@@ -2768,10 +2663,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/HTTPCacheTests.swift",
         "selector": {
-          "Member": {
-            "owner": "HTTPCacheTests",
-            "name": "testObsoleteFormatTwo"
-          }
+          "owner": "HTTPCacheTests",
+          "name": "testObsoleteFormatTwo"
         },
         "span": {
           "start": 2784,
@@ -2793,10 +2686,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/HTTPCacheTests.swift",
         "selector": {
-          "Member": {
-            "owner": "HTTPCacheTests",
-            "name": "testObsoleteFormatOne"
-          }
+          "owner": "HTTPCacheTests",
+          "name": "testObsoleteFormatOne"
         },
         "span": {
           "start": 2360,
@@ -2818,10 +2709,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/HTTPHeaderTests.swift",
         "selector": {
-          "Member": {
-            "owner": "HTTPHeaderTests",
-            "name": "testValue_directives_multiple_quotedSemicolonEqual"
-          }
+          "owner": "HTTPHeaderTests",
+          "name": "testValue_directives_multiple_quotedSemicolonEqual"
         },
         "span": {
           "start": 3506,
@@ -2843,10 +2732,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/HTTPHeaderTests.swift",
         "selector": {
-          "Member": {
-            "owner": "HTTPHeaderTests",
-            "name": "testValue_directives_multiple_quotedSemicolon"
-          }
+          "owner": "HTTPHeaderTests",
+          "name": "testValue_directives_multiple_quotedSemicolon"
         },
         "span": {
           "start": 3093,
@@ -2868,10 +2755,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/HTTPHeaderTests.swift",
         "selector": {
-          "Member": {
-            "owner": "HTTPHeaderTests",
-            "name": "testValue_directives_multiple"
-          }
+          "owner": "HTTPHeaderTests",
+          "name": "testValue_directives_multiple"
         },
         "span": {
           "start": 2337,
@@ -2893,10 +2778,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/HTTPHeaderTests.swift",
         "selector": {
-          "Member": {
-            "owner": "HTTPHeaderTests",
-            "name": "testValue_directives_quote"
-          }
+          "owner": "HTTPHeaderTests",
+          "name": "testValue_directives_quote"
         },
         "span": {
           "start": 1560,
@@ -2918,10 +2801,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/HTTPHeaderTests.swift",
         "selector": {
-          "Member": {
-            "owner": "HTTPHeaderTests",
-            "name": "testExpiresHeader"
-          }
+          "owner": "HTTPHeaderTests",
+          "name": "testExpiresHeader"
         },
         "span": {
           "start": 21908,
@@ -2943,10 +2824,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/URLEncodedFormTests.swift",
         "selector": {
-          "Member": {
-            "owner": "URLEncodedFormTests",
-            "name": "testDecodeStringWithCommas"
-          }
+          "owner": "URLEncodedFormTests",
+          "name": "testDecodeStringWithCommas"
         },
         "span": {
           "start": 2448,
@@ -2968,10 +2847,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/URLEncodedFormTests.swift",
         "selector": {
-          "Member": {
-            "owner": "URLEncodedFormTests",
-            "name": "testDecodeWithoutArrayBrackets"
-          }
+          "owner": "URLEncodedFormTests",
+          "name": "testDecodeWithoutArrayBrackets"
         },
         "span": {
           "start": 1420,
@@ -2993,10 +2870,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/URLEncodedFormTests.swift",
         "selector": {
-          "Member": {
-            "owner": "URLEncodedFormTests",
-            "name": "testDecodeUnindexedArray"
-          }
+          "owner": "URLEncodedFormTests",
+          "name": "testDecodeUnindexedArray"
         },
         "span": {
           "start": 4688,
@@ -3018,10 +2893,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/URLEncodedFormTests.swift",
         "selector": {
-          "Member": {
-            "owner": "URLEncodedFormTests",
-            "name": "testSubArray3"
-          }
+          "owner": "URLEncodedFormTests",
+          "name": "testSubArray3"
         },
         "span": {
           "start": 27489,
@@ -3043,10 +2916,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/URLEncodedFormTests.swift",
         "selector": {
-          "Member": {
-            "owner": "URLEncodedFormTests",
-            "name": "testBracketsInTheMiddle"
-          }
+          "owner": "URLEncodedFormTests",
+          "name": "testBracketsInTheMiddle"
         },
         "span": {
           "start": 28391,
@@ -3068,10 +2939,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/URLEncodedFormTests.swift",
         "selector": {
-          "Member": {
-            "owner": "URLEncodedFormTests",
-            "name": "testDecodeCommaSeparatedArray"
-          }
+          "owner": "URLEncodedFormTests",
+          "name": "testDecodeCommaSeparatedArray"
         },
         "span": {
           "start": 775,
@@ -3093,10 +2962,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ValidationTests.swift",
         "selector": {
-          "Member": {
-            "owner": "ValidationTests",
-            "name": "testURL"
-          }
+          "owner": "ValidationTests",
+          "name": "testURL"
         },
         "span": {
           "start": 23619,
@@ -3118,7 +2985,7 @@
         "kind": "symbol",
         "path": "Performance/Sources/PerformanceServer/main.swift",
         "selector": {
-          "Free": "large"
+          "name": "large"
         },
         "span": {
           "start": 393,
@@ -3140,10 +3007,8 @@
         "kind": "symbol",
         "path": "Performance/Sources/PerformanceServer/main.swift",
         "selector": {
-          "Member": {
-            "owner": "Payload",
-            "name": "tags"
-          }
+          "owner": "Payload",
+          "name": "tags"
         },
         "span": {
           "start": 287,
@@ -3165,7 +3030,7 @@
         "kind": "symbol",
         "path": "Performance/Sources/PerformanceServer/main.swift",
         "selector": {
-          "Free": "small"
+          "name": "small"
         },
         "span": {
           "start": 345,
@@ -3187,7 +3052,7 @@
         "kind": "symbol",
         "path": "Sources/Development/configure.swift",
         "selector": {
-          "Free": "tls"
+          "name": "tls"
         },
         "span": {
           "start": 838,
@@ -3209,10 +3074,8 @@
         "kind": "symbol",
         "path": "Sources/Development/configure.swift",
         "selector": {
-          "Member": {
-            "owner": "TLSData",
-            "name": "sampleServerPrivateKeyPEM"
-          }
+          "owner": "TLSData",
+          "name": "sampleServerPrivateKeyPEM"
         },
         "span": {
           "start": 2357,
@@ -3234,10 +3097,8 @@
         "kind": "symbol",
         "path": "Sources/Development/configure.swift",
         "selector": {
-          "Member": {
-            "owner": "TLSData",
-            "name": "sampleServerCertificatePEM"
-          }
+          "owner": "TLSData",
+          "name": "sampleServerCertificatePEM"
         },
         "span": {
           "start": 913,
@@ -3259,7 +3120,7 @@
         "kind": "symbol",
         "path": "Sources/Development/configure.swift",
         "selector": {
-          "Free": "TLSData"
+          "name": "TLSData"
         },
         "span": {
           "start": 894,
@@ -3281,7 +3142,7 @@
         "kind": "symbol",
         "path": "Sources/Development/routes.swift",
         "selector": {
-          "Free": "Creds"
+          "name": "Creds"
         },
         "span": {
           "start": 138,
@@ -3303,7 +3164,7 @@
         "kind": "symbol",
         "path": "Sources/Development/routes.swift",
         "selector": {
-          "Free": "TestMiddleware"
+          "name": "TestMiddleware"
         },
         "span": {
           "start": 11084,
@@ -3325,7 +3186,7 @@
         "kind": "symbol",
         "path": "Sources/Development/routes.swift",
         "selector": {
-          "Free": "UserController"
+          "name": "UserController"
         },
         "span": {
           "start": 11713,
@@ -3347,7 +3208,7 @@
         "kind": "symbol",
         "path": "Sources/Development/routes.swift",
         "selector": {
-          "Free": "UserAuthMiddleware"
+          "name": "UserAuthMiddleware"
         },
         "span": {
           "start": 14072,
@@ -3369,7 +3230,7 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroIntegrationTests/AuthMiddlewareIntegrationTests.swift",
         "selector": {
-          "Free": "AuthTestController"
+          "name": "AuthTestController"
         },
         "span": {
           "start": 4552,
@@ -3391,7 +3252,7 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroIntegrationTests/AuthMiddlewareIntegrationTests.swift",
         "selector": {
-          "Free": "AuthTestTokenMiddleware"
+          "name": "AuthTestTokenMiddleware"
         },
         "span": {
           "start": 3659,
@@ -3413,7 +3274,7 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroIntegrationTests/AuthMiddlewareIntegrationTests.swift",
         "selector": {
-          "Free": "AuthTestUser"
+          "name": "AuthTestUser"
         },
         "span": {
           "start": 3549,
@@ -3435,7 +3296,7 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroIntegrationTests/AuthMiddlewareIntegrationTests.swift",
         "selector": {
-          "Free": "AuthTestAdminOnlyMiddleware"
+          "name": "AuthTestAdminOnlyMiddleware"
         },
         "span": {
           "start": 4218,
@@ -3457,7 +3318,7 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroIntegrationTests/ControllerMacroIntegrationTests.swift",
         "selector": {
-          "Free": "TestUserController"
+          "name": "TestUserController"
         },
         "span": {
           "start": 2782,
@@ -3479,7 +3340,7 @@
         "kind": "symbol",
         "path": "Tests/VaporMacroIntegrationTests/StandaloneMacroIntegrationTests.swift",
         "selector": {
-          "Free": "registerStandaloneRoutes"
+          "name": "registerStandaloneRoutes"
         },
         "span": {
           "start": 1868,
@@ -3501,7 +3362,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/BaseNTests.swift",
         "selector": {
-          "Free": "BaseNTests"
+          "name": "BaseNTests"
         },
         "span": {
           "start": 157,
@@ -3523,7 +3384,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/BaseNTests.swift",
         "selector": {
-          "Free": "expectedBase32Lower"
+          "name": "expectedBase32Lower"
         },
         "span": {
           "start": 10080,
@@ -3545,7 +3406,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/BaseNTests.swift",
         "selector": {
-          "Free": "expectedBase64Bcrypt"
+          "name": "expectedBase64Bcrypt"
         },
         "span": {
           "start": 13590,
@@ -3567,10 +3428,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/BaseNTests.swift",
         "selector": {
-          "Member": {
-            "owner": "BaseNTests",
-            "name": "checks"
-          }
+          "owner": "BaseNTests",
+          "name": "checks"
         },
         "span": {
           "start": 3593,
@@ -3592,7 +3451,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/BaseNTests.swift",
         "selector": {
-          "Free": "expectedBase64"
+          "name": "expectedBase64"
         },
         "span": {
           "start": 12540,
@@ -3614,10 +3473,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/BaseNTests.swift",
         "selector": {
-          "Member": {
-            "owner": "BaseNTests",
-            "name": "printVectors"
-          }
+          "owner": "BaseNTests",
+          "name": "printVectors"
         },
         "span": {
           "start": 4336,
@@ -3639,7 +3496,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/BaseNTests.swift",
         "selector": {
-          "Free": "expectedBase32"
+          "name": "expectedBase32"
         },
         "span": {
           "start": 8762,
@@ -3661,10 +3518,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/BaseNTests.swift",
         "selector": {
-          "Member": {
-            "owner": "BaseNTests",
-            "name": "vector"
-          }
+          "owner": "BaseNTests",
+          "name": "vector"
         },
         "span": {
           "start": 3417,
@@ -3686,7 +3541,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/BaseNTests.swift",
         "selector": {
-          "Free": "expectedBase32Relaxed"
+          "name": "expectedBase32Relaxed"
         },
         "span": {
           "start": 11403,
@@ -3708,7 +3563,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/CacheTests.swift",
         "selector": {
-          "Free": "FooCache"
+          "name": "FooCache"
         },
         "span": {
           "start": 1667,
@@ -3730,7 +3585,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ClientTests.swift",
         "selector": {
-          "Free": "CustomClient"
+          "name": "CustomClient"
         },
         "span": {
           "start": 11942,
@@ -3752,7 +3607,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ClientTests.swift",
         "selector": {
-          "Free": "SomeJSON"
+          "name": "SomeJSON"
         },
         "span": {
           "start": 12550,
@@ -3774,7 +3629,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ClientTests.swift",
         "selector": {
-          "Free": "VaporRepoJSON"
+          "name": "VaporRepoJSON"
         },
         "span": {
           "start": 13010,
@@ -3796,7 +3651,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ClientTests.swift",
         "selector": {
-          "Free": "AnythingResponse"
+          "name": "AnythingResponse"
         },
         "span": {
           "start": 13086,
@@ -3818,10 +3673,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ClientTests.swift",
         "selector": {
-          "Member": {
-            "owner": "ClientTests",
-            "name": "withRemoteApp"
-          }
+          "owner": "ClientTests",
+          "name": "withRemoteApp"
         },
         "span": {
           "start": 5878,
@@ -3843,10 +3696,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ClientTests.swift",
         "selector": {
-          "Member": {
-            "owner": "CustomClient",
-            "name": "_requests"
-          }
+          "owner": "CustomClient",
+          "name": "_requests"
         },
         "span": {
           "start": 11991,
@@ -3868,10 +3719,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ClientTests.swift",
         "selector": {
-          "Member": {
-            "owner": "CustomClient",
-            "name": "requests"
-          }
+          "owner": "CustomClient",
+          "name": "requests"
         },
         "span": {
           "start": 12168,
@@ -3893,10 +3742,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ClientTests.swift",
         "selector": {
-          "Member": {
-            "owner": "SomeNestedJSON",
-            "name": "repos"
-          }
+          "owner": "SomeNestedJSON",
+          "name": "repos"
         },
         "span": {
           "start": 12980,
@@ -3918,10 +3765,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ClientTests.swift",
         "selector": {
-          "Member": {
-            "owner": "SomeJSON",
-            "name": "vapor"
-          }
+          "owner": "SomeJSON",
+          "name": "vapor"
         },
         "span": {
           "start": 12581,
@@ -3943,7 +3788,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ClientTests.swift",
         "selector": {
-          "Free": "SomeNestedJSON"
+          "name": "SomeNestedJSON"
         },
         "span": {
           "start": 12905,
@@ -3965,10 +3810,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
         "selector": {
-          "Member": {
-            "owner": "ConditionalResponseCompressionRouteTests",
-            "name": "disabledMiddleware"
-          }
+          "owner": "ConditionalResponseCompressionRouteTests",
+          "name": "disabledMiddleware"
         },
         "span": {
           "start": 50567,
@@ -3990,10 +3833,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
         "selector": {
-          "Member": {
-            "owner": "ConditionalResponseCompressionRouteTests",
-            "name": "forceDisabledMiddleware"
-          }
+          "owner": "ConditionalResponseCompressionRouteTests",
+          "name": "forceDisabledMiddleware"
         },
         "span": {
           "start": 50913,
@@ -4015,10 +3856,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
         "selector": {
-          "Member": {
-            "owner": "ConditionalResponseCompressionRouteTests",
-            "name": "defaultMiddleware"
-          }
+          "owner": "ConditionalResponseCompressionRouteTests",
+          "name": "defaultMiddleware"
         },
         "span": {
           "start": 50650,
@@ -4040,10 +3879,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
         "selector": {
-          "Member": {
-            "owner": "ConditionalResponseCompressionRouteTests",
-            "name": "forceEnabledMiddleware"
-          }
+          "owner": "ConditionalResponseCompressionRouteTests",
+          "name": "forceEnabledMiddleware"
         },
         "span": {
           "start": 50814,
@@ -4065,10 +3902,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
         "selector": {
-          "Member": {
-            "owner": "TestResponder",
-            "name": "transform"
-          }
+          "owner": "TestResponder",
+          "name": "transform"
         },
         "span": {
           "start": 62023,
@@ -4090,10 +3925,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
         "selector": {
-          "Member": {
-            "owner": "ConditionalResponseCompressionRouteTests",
-            "name": "unsetMiddleware"
-          }
+          "owner": "ConditionalResponseCompressionRouteTests",
+          "name": "unsetMiddleware"
         },
         "span": {
           "start": 50735,
@@ -4115,10 +3948,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
         "selector": {
-          "Member": {
-            "owner": "ConditionalResponseCompressionRouteTests",
-            "name": "forceUnsetMiddleware"
-          }
+          "owner": "ConditionalResponseCompressionRouteTests",
+          "name": "forceUnsetMiddleware"
         },
         "span": {
           "start": 51117,
@@ -4140,10 +3971,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
         "selector": {
-          "Member": {
-            "owner": "ConditionalResponseCompressionRouteTests",
-            "name": "forceDefaultMiddleware"
-          }
+          "owner": "ConditionalResponseCompressionRouteTests",
+          "name": "forceDefaultMiddleware"
         },
         "span": {
           "start": 51014,
@@ -4165,7 +3994,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
         "selector": {
-          "Free": "markerHeader"
+          "name": "markerHeader"
         },
         "span": {
           "start": 259,
@@ -4187,7 +4016,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ContentTests.swift",
         "selector": {
-          "Free": "Meta"
+          "name": "Meta"
         },
         "span": {
           "start": 32226,
@@ -4209,10 +4038,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/EndpointCacheTests.swift",
         "selector": {
-          "Member": {
-            "owner": "CurrentActor",
-            "name": "getCurrent"
-          }
+          "owner": "CurrentActor",
+          "name": "getCurrent"
         },
         "span": {
           "start": 282,
@@ -4234,7 +4061,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/EndpointCacheTests.swift",
         "selector": {
-          "Free": "CurrentActor"
+          "name": "CurrentActor"
         },
         "span": {
           "start": 160,
@@ -4256,10 +4083,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/EndpointCacheTests.swift",
         "selector": {
-          "Member": {
-            "owner": "CurrentActor",
-            "name": "increment"
-          }
+          "owner": "CurrentActor",
+          "name": "increment"
         },
         "span": {
           "start": 214,
@@ -4281,10 +4106,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ErrorTests.swift",
         "selector": {
-          "Member": {
-            "owner": "MinimumError",
-            "name": "suggestedFixes"
-          }
+          "owner": "MinimumError",
+          "name": "suggestedFixes"
         },
         "span": {
           "start": 5814,
@@ -4306,10 +4129,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ErrorTests.swift",
         "selector": {
-          "Member": {
-            "owner": "FooError",
-            "name": "readableName"
-          }
+          "owner": "FooError",
+          "name": "readableName"
         },
         "span": {
           "start": 5942,
@@ -4331,10 +4152,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ErrorTests.swift",
         "selector": {
-          "Member": {
-            "owner": "FooError",
-            "name": "documentationLinks"
-          }
+          "owner": "FooError",
+          "name": "documentationLinks"
         },
         "span": {
           "start": 6796,
@@ -4356,10 +4175,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ErrorTests.swift",
         "selector": {
-          "Member": {
-            "owner": "MinimumError",
-            "name": "possibleCauses"
-          }
+          "owner": "MinimumError",
+          "name": "possibleCauses"
         },
         "span": {
           "start": 5754,
@@ -4381,10 +4198,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ErrorTests.swift",
         "selector": {
-          "Member": {
-            "owner": "FooError",
-            "name": "suggestedFixes"
-          }
+          "owner": "FooError",
+          "name": "suggestedFixes"
         },
         "span": {
           "start": 6550,
@@ -4406,10 +4221,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ErrorTests.swift",
         "selector": {
-          "Member": {
-            "owner": "FooError",
-            "name": "possibleCauses"
-          }
+          "owner": "FooError",
+          "name": "possibleCauses"
         },
         "span": {
           "start": 6205,
@@ -4431,10 +4244,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/MiddlewareTests.swift",
         "selector": {
-          "Member": {
-            "owner": "OrderStore",
-            "name": "getOrder"
-          }
+          "owner": "OrderStore",
+          "name": "getOrder"
         },
         "span": {
           "start": 22885,
@@ -4456,7 +4267,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/MiddlewareTests.swift",
         "selector": {
-          "Free": "OrderMiddleware"
+          "name": "OrderMiddleware"
         },
         "span": {
           "start": 22943,
@@ -4478,10 +4289,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/MiddlewareTests.swift",
         "selector": {
-          "Member": {
-            "owner": "OrderStore",
-            "name": "addOrder"
-          }
+          "owner": "OrderStore",
+          "name": "addOrder"
         },
         "span": {
           "start": 22798,
@@ -4503,7 +4312,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/MiddlewareTests.swift",
         "selector": {
-          "Free": "OrderStore"
+          "name": "OrderStore"
         },
         "span": {
           "start": 22745,
@@ -4525,10 +4334,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/MiddlewareTests.swift",
         "selector": {
-          "Member": {
-            "owner": "OrderStore",
-            "name": "order"
-          }
+          "owner": "OrderStore",
+          "name": "order"
         },
         "span": {
           "start": 22768,
@@ -4550,10 +4357,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/MiddlewareTests.swift",
         "selector": {
-          "Member": {
-            "owner": "OrderMiddleware",
-            "name": "pos"
-          }
+          "owner": "OrderMiddleware",
+          "name": "pos"
         },
         "span": {
           "start": 22989,
@@ -4575,10 +4380,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/SecurityTests.swift",
         "selector": {
-          "Member": {
-            "owner": "OTPTests",
-            "name": "HOTPTest"
-          }
+          "owner": "OTPTests",
+          "name": "HOTPTest"
         },
         "span": {
           "start": 2375,
@@ -4600,10 +4403,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ServerTLSTests.swift",
         "selector": {
-          "Member": {
-            "owner": "TestCredentials",
-            "name": "nioCertificate"
-          }
+          "owner": "TestCredentials",
+          "name": "nioCertificate"
         },
         "span": {
           "start": 17238,
@@ -4625,10 +4426,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ServerTLSTests.swift",
         "selector": {
-          "Member": {
-            "owner": "TestCredentials",
-            "name": "privateKeyPath"
-          }
+          "owner": "TestCredentials",
+          "name": "privateKeyPath"
         },
         "span": {
           "start": 17131,
@@ -4650,10 +4449,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ServerTLSTests.swift",
         "selector": {
-          "Member": {
-            "owner": "TestCredentials",
-            "name": "privateKey"
-          }
+          "owner": "TestCredentials",
+          "name": "privateKey"
         },
         "span": {
           "start": 17195,
@@ -4675,10 +4472,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ServerTLSTests.swift",
         "selector": {
-          "Member": {
-            "owner": "TestCredentials",
-            "name": "localhost"
-          }
+          "owner": "TestCredentials",
+          "name": "localhost"
         },
         "span": {
           "start": 17281,
@@ -4700,10 +4495,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ServerTLSTests.swift",
         "selector": {
-          "Member": {
-            "owner": "TestCredentials",
-            "name": "certificatePath"
-          }
+          "owner": "TestCredentials",
+          "name": "certificatePath"
         },
         "span": {
           "start": 17099,
@@ -4725,10 +4518,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ServerTLSTests.swift",
         "selector": {
-          "Member": {
-            "owner": "TestCredentials",
-            "name": "certificate"
-          }
+          "owner": "TestCredentials",
+          "name": "certificate"
         },
         "span": {
           "start": 17162,
@@ -4750,7 +4541,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ServerTests.swift",
         "selector": {
-          "Free": "customServer"
+          "name": "customServer"
         },
         "span": {
           "start": 87952,
@@ -4772,10 +4563,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ServerTests.swift",
         "selector": {
-          "Member": {
-            "owner": "CustomServer",
-            "name": "didShutdown"
-          }
+          "owner": "CustomServer",
+          "name": "didShutdown"
         },
         "span": {
           "start": 88292,
@@ -4797,7 +4586,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ServerTests.swift",
         "selector": {
-          "Free": "CustomServer"
+          "name": "CustomServer"
         },
         "span": {
           "start": 88201,
@@ -4819,7 +4608,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ServerTests.swift",
         "selector": {
-          "Free": "Key"
+          "name": "Key"
         },
         "span": {
           "start": 87877,
@@ -4841,10 +4630,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/ServerTests.swift",
         "selector": {
-          "Member": {
-            "owner": "CustomServer",
-            "name": "didStart"
-          }
+          "owner": "CustomServer",
+          "name": "didStart"
         },
         "span": {
           "start": 88250,
@@ -4866,10 +4653,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/SessionTests.swift",
         "selector": {
-          "Member": {
-            "owner": "MockKeyedCache",
-            "name": "ops"
-          }
+          "owner": "MockKeyedCache",
+          "name": "ops"
         },
         "span": {
           "start": 4083,
@@ -4891,7 +4676,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/SessionTests.swift",
         "selector": {
-          "Free": "MockKeyedCache"
+          "name": "MockKeyedCache"
         },
         "span": {
           "start": 4041,
@@ -4913,10 +4698,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/URLEncodedFormTests.swift",
         "selector": {
-          "Member": {
-            "owner": "User",
-            "name": "dict"
-          }
+          "owner": "User",
+          "name": "dict"
         },
         "span": {
           "start": 31550,
@@ -4938,7 +4721,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/URLEncodedFormTests.swift",
         "selector": {
-          "Free": "DateCoding"
+          "name": "DateCoding"
         },
         "span": {
           "start": 31772,
@@ -4960,10 +4743,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/URLEncodedFormTests.swift",
         "selector": {
-          "Member": {
-            "owner": "User",
-            "name": "nums"
-          }
+          "owner": "User",
+          "name": "nums"
         },
         "span": {
           "start": 31598,
@@ -4985,10 +4766,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/URLEncodedFormTests.swift",
         "selector": {
-          "Member": {
-            "owner": "User",
-            "name": "pets"
-          }
+          "owner": "User",
+          "name": "pets"
         },
         "span": {
           "start": 31527,
@@ -5010,7 +4789,7 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/URLEncodedFormTests.swift",
         "selector": {
-          "Free": "DateArrayCoding"
+          "name": "DateArrayCoding"
         },
         "span": {
           "start": 31834,
@@ -5032,10 +4811,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/URLEncodedFormTests.swift",
         "selector": {
-          "Member": {
-            "owner": "Users",
-            "name": "users"
-          }
+          "owner": "Users",
+          "name": "users"
         },
         "span": {
           "start": 31689,
@@ -5057,10 +4834,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/URLEncodedFormTests.swift",
         "selector": {
-          "Member": {
-            "owner": "DateArrayCoding",
-            "name": "dates"
-          }
+          "owner": "DateArrayCoding",
+          "name": "dates"
         },
         "span": {
           "start": 31883,
@@ -5082,10 +4857,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/URLEncodedFormTests.swift",
         "selector": {
-          "Member": {
-            "owner": "User",
-            "name": "foos"
-          }
+          "owner": "User",
+          "name": "foos"
         },
         "span": {
           "start": 31578,
@@ -5107,10 +4880,8 @@
         "kind": "symbol",
         "path": "Tests/VaporTests/URLEncodedFormTests.swift",
         "selector": {
-          "Member": {
-            "owner": "User",
-            "name": "isCool"
-          }
+          "owner": "User",
+          "name": "isCool"
         },
         "span": {
           "start": 31622,

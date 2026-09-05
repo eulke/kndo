@@ -38,7 +38,7 @@
         "kind": "symbol",
         "path": "auth.go",
         "selector": {
-          "Free": "BasicAuthForProxy"
+          "name": "BasicAuthForProxy"
         },
         "span": {
           "start": 3090,
@@ -60,7 +60,7 @@
         "kind": "symbol",
         "path": "benchmarks_test.go",
         "selector": {
-          "Free": "Benchmark404Many"
+          "name": "Benchmark404Many"
         },
         "span": {
           "start": 2757,
@@ -82,7 +82,7 @@
         "kind": "symbol",
         "path": "binding/binding_test.go",
         "selector": {
-          "Free": "testQueryBindingBoolFail"
+          "name": "testQueryBindingBoolFail"
         },
         "span": {
           "start": 32944,
@@ -104,7 +104,7 @@
         "kind": "symbol",
         "path": "binding/binding_test.go",
         "selector": {
-          "Free": "TestRequiredFails"
+          "name": "TestRequiredFails"
         },
         "span": {
           "start": 21705,
@@ -126,7 +126,7 @@
         "kind": "symbol",
         "path": "binding/binding_test.go",
         "selector": {
-          "Free": "createFormFilesMultipartRequestFail"
+          "name": "createFormFilesMultipartRequestFail"
         },
         "span": {
           "start": 15495,
@@ -148,7 +148,7 @@
         "kind": "symbol",
         "path": "binding/binding_test.go",
         "selector": {
-          "Free": "testFormBindingForTimeFailFormat"
+          "name": "testFormBindingForTimeFailFormat"
         },
         "span": {
           "start": 27996,
@@ -170,7 +170,7 @@
         "kind": "symbol",
         "path": "binding/binding_test.go",
         "selector": {
-          "Free": "TestBindingProtoBufFail"
+          "name": "TestBindingProtoBufFail"
         },
         "span": {
           "start": 20512,
@@ -192,7 +192,7 @@
         "kind": "symbol",
         "path": "binding/binding_test.go",
         "selector": {
-          "Free": "createFormPostRequestForMapFail"
+          "name": "createFormPostRequestForMapFail"
         },
         "span": {
           "start": 14516,
@@ -214,7 +214,7 @@
         "kind": "symbol",
         "path": "binding/binding_test.go",
         "selector": {
-          "Free": "testFormBindingDefaultValue"
+          "name": "testFormBindingDefaultValue"
         },
         "span": {
           "start": 24360,
@@ -236,7 +236,7 @@
         "kind": "symbol",
         "path": "binding/binding_test.go",
         "selector": {
-          "Free": "testFormBindingForTimeNotFormat"
+          "name": "testFormBindingForTimeNotFormat"
         },
         "span": {
           "start": 27493,
@@ -258,7 +258,7 @@
         "kind": "symbol",
         "path": "binding/binding_test.go",
         "selector": {
-          "Free": "testFormBindingInvalidName2"
+          "name": "testFormBindingInvalidName2"
         },
         "span": {
           "start": 29898,
@@ -280,7 +280,7 @@
         "kind": "symbol",
         "path": "binding/binding_test.go",
         "selector": {
-          "Free": "createDefaultFormPostRequest"
+          "name": "createDefaultFormPostRequest"
         },
         "span": {
           "start": 13996,
@@ -302,7 +302,7 @@
         "kind": "symbol",
         "path": "binding/binding_test.go",
         "selector": {
-          "Free": "TestBindingFormMultipart"
+          "name": "TestBindingFormMultipart"
         },
         "span": {
           "start": 19405,
@@ -324,7 +324,7 @@
         "kind": "symbol",
         "path": "binding/binding_test.go",
         "selector": {
-          "Free": "TestFormPostBindingFail"
+          "name": "TestFormPostBindingFail"
         },
         "span": {
           "start": 25496,
@@ -346,7 +346,7 @@
         "kind": "symbol",
         "path": "binding/binding_test.go",
         "selector": {
-          "Free": "TestFormMultipartBindingFail"
+          "name": "TestFormMultipartBindingFail"
         },
         "span": {
           "start": 25732,
@@ -368,7 +368,7 @@
         "kind": "symbol",
         "path": "binding/binding_test.go",
         "selector": {
-          "Free": "testFormBindingForTimeFailLocation"
+          "name": "testFormBindingForTimeFailLocation"
         },
         "span": {
           "start": 28502,
@@ -390,7 +390,7 @@
         "kind": "symbol",
         "path": "binding/form_mapping_test.go",
         "selector": {
-          "Free": "TestMappingCustomSliceOfSliceUnmarshalTextUri"
+          "name": "TestMappingCustomSliceOfSliceUnmarshalTextUri"
         },
         "span": {
           "start": 25510,
@@ -412,7 +412,7 @@
         "kind": "symbol",
         "path": "binding/form_mapping_test.go",
         "selector": {
-          "Free": "TestMappingForm"
+          "name": "TestMappingForm"
         },
         "span": {
           "start": 3808,
@@ -434,7 +434,7 @@
         "kind": "symbol",
         "path": "binding/form_mapping_test.go",
         "selector": {
-          "Free": "TestMappingCustomArrayOfArrayUnmarshalTextForm"
+          "name": "TestMappingCustomArrayOfArrayUnmarshalTextForm"
         },
         "span": {
           "start": 28376,
@@ -456,7 +456,7 @@
         "kind": "symbol",
         "path": "binding/form_mapping_test.go",
         "selector": {
-          "Free": "TestMappingCustomSliceForm"
+          "name": "TestMappingCustomSliceForm"
         },
         "span": {
           "start": 17883,
@@ -478,7 +478,7 @@
         "kind": "symbol",
         "path": "binding/form_mapping_test.go",
         "selector": {
-          "Free": "TestMappingCustomArrayOfArrayForm"
+          "name": "TestMappingCustomArrayOfArrayForm"
         },
         "span": {
           "start": 20503,
@@ -500,7 +500,7 @@
         "kind": "symbol",
         "path": "binding/form_mapping_test.go",
         "selector": {
-          "Free": "TestMappingCustomUnmarshalTextHexForm"
+          "name": "TestMappingCustomUnmarshalTextHexForm"
         },
         "span": {
           "start": 21582,
@@ -522,7 +522,7 @@
         "kind": "symbol",
         "path": "binding/form_mapping_test.go",
         "selector": {
-          "Free": "TestMappingCustomSliceOfSliceUnmarshalTextForm"
+          "name": "TestMappingCustomSliceOfSliceUnmarshalTextForm"
         },
         "span": {
           "start": 25904,
@@ -544,7 +544,7 @@
         "kind": "symbol",
         "path": "binding/form_mapping_test.go",
         "selector": {
-          "Free": "TestMappingCustomSliceUnmarshalTextStopsWhenError"
+          "name": "TestMappingCustomSliceUnmarshalTextStopsWhenError"
         },
         "span": {
           "start": 25191,
@@ -566,7 +566,7 @@
         "kind": "symbol",
         "path": "binding/form_mapping_test.go",
         "selector": {
-          "Free": "TestMappingCustomSliceUnmarshalTextUri"
+          "name": "TestMappingCustomSliceUnmarshalTextUri"
         },
         "span": {
           "start": 24526,
@@ -588,7 +588,7 @@
         "kind": "symbol",
         "path": "binding/form_mapping_test.go",
         "selector": {
-          "Free": "TestMappingCustomUnmarshalTextHexDefault"
+          "name": "TestMappingCustomUnmarshalTextHexDefault"
         },
         "span": {
           "start": 21865,
@@ -610,7 +610,7 @@
         "kind": "symbol",
         "path": "binding/form_mapping_test.go",
         "selector": {
-          "Free": "TestMappingCustomPointerStructTypeWithURITag"
+          "name": "TestMappingCustomPointerStructTypeWithURITag"
         },
         "span": {
           "start": 17016,
@@ -632,7 +632,7 @@
         "kind": "symbol",
         "path": "binding/form_mapping_test.go",
         "selector": {
-          "Free": "TestMappingCustomPointerStructTypeUnmarshalTextForm"
+          "name": "TestMappingCustomPointerStructTypeUnmarshalTextForm"
         },
         "span": {
           "start": 23382,
@@ -654,7 +654,7 @@
         "kind": "symbol",
         "path": "binding/form_mapping_test.go",
         "selector": {
-          "Free": "TestMappingCustomArrayForm"
+          "name": "TestMappingCustomArrayForm"
         },
         "span": {
           "start": 19797,
@@ -676,7 +676,7 @@
         "kind": "symbol",
         "path": "binding/form_mapping_test.go",
         "selector": {
-          "Free": "TestMappingCustomUnmarshalTextHexUri"
+          "name": "TestMappingCustomUnmarshalTextHexUri"
         },
         "span": {
           "start": 21302,
@@ -698,7 +698,7 @@
         "kind": "symbol",
         "path": "binding/form_mapping_test.go",
         "selector": {
-          "Free": "TestMappingCustomStructTypeUnmarshalTextUri"
+          "name": "TestMappingCustomStructTypeUnmarshalTextUri"
         },
         "span": {
           "start": 22977,
@@ -720,7 +720,7 @@
         "kind": "symbol",
         "path": "binding/form_mapping_test.go",
         "selector": {
-          "Free": "TestMappingUsingBindUnmarshalerAndTextUnmarshalerWhenOnlyTextUnmarshalerDefined"
+          "name": "TestMappingUsingBindUnmarshalerAndTextUnmarshalerWhenOnlyTextUnmarshalerDefined"
         },
         "span": {
           "start": 30318,
@@ -742,7 +742,7 @@
         "kind": "symbol",
         "path": "binding/form_mapping_test.go",
         "selector": {
-          "Free": "TestMappingCustomSliceOfSliceForm"
+          "name": "TestMappingCustomSliceOfSliceForm"
         },
         "span": {
           "start": 18743,
@@ -764,7 +764,7 @@
         "kind": "symbol",
         "path": "binding/form_mapping_test.go",
         "selector": {
-          "Free": "TestMappingCustomArrayUnmarshalTextForm"
+          "name": "TestMappingCustomArrayUnmarshalTextForm"
         },
         "span": {
           "start": 27493,
@@ -786,7 +786,7 @@
         "kind": "symbol",
         "path": "binding/form_mapping_test.go",
         "selector": {
-          "Free": "TestMappingUnexportedField"
+          "name": "TestMappingUnexportedField"
         },
         "span": {
           "start": 2960,
@@ -808,7 +808,7 @@
         "kind": "symbol",
         "path": "binding/form_mapping_test.go",
         "selector": {
-          "Free": "TestMappingCustomPointerStructTypeUnmarshalTextUri"
+          "name": "TestMappingCustomPointerStructTypeUnmarshalTextUri"
         },
         "span": {
           "start": 23798,
@@ -830,7 +830,7 @@
         "kind": "symbol",
         "path": "binding/form_mapping_test.go",
         "selector": {
-          "Free": "TestMappingCustomSliceUnmarshalTextForm"
+          "name": "TestMappingCustomSliceUnmarshalTextForm"
         },
         "span": {
           "start": 24857,
@@ -852,7 +852,7 @@
         "kind": "symbol",
         "path": "binding/form_mapping_test.go",
         "selector": {
-          "Free": "TestMappingCustomUnmarshalParamHexWithURITag"
+          "name": "TestMappingCustomUnmarshalParamHexWithURITag"
         },
         "span": {
           "start": 15051,
@@ -874,7 +874,7 @@
         "kind": "symbol",
         "path": "binding/form_mapping_test.go",
         "selector": {
-          "Free": "TestMappingCustomArrayOfArrayUnmarshalTextUri"
+          "name": "TestMappingCustomArrayOfArrayUnmarshalTextUri"
         },
         "span": {
           "start": 27858,
@@ -896,7 +896,7 @@
         "kind": "symbol",
         "path": "binding/form_mapping_test.go",
         "selector": {
-          "Free": "TestMappingCustomStructTypeUnmarshalTextForm"
+          "name": "TestMappingCustomStructTypeUnmarshalTextForm"
         },
         "span": {
           "start": 22569,
@@ -918,7 +918,7 @@
         "kind": "symbol",
         "path": "binding/form_mapping_test.go",
         "selector": {
-          "Free": "TestMappingCustomStructTypeWithURITag"
+          "name": "TestMappingCustomStructTypeWithURITag"
         },
         "span": {
           "start": 16269,
@@ -940,7 +940,7 @@
         "kind": "symbol",
         "path": "binding/form_mapping_test.go",
         "selector": {
-          "Free": "TestMappingCustomArrayUnmarshalTextUri"
+          "name": "TestMappingCustomArrayUnmarshalTextUri"
         },
         "span": {
           "start": 27131,
@@ -962,7 +962,7 @@
         "kind": "symbol",
         "path": "binding/xml_test.go",
         "selector": {
-          "Free": "TestXMLBindingBindBody"
+          "name": "TestXMLBindingBindBody"
         },
         "span": {
           "start": 277,
@@ -984,7 +984,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestContextShouldBindWithTOML"
+          "name": "TestContextShouldBindWithTOML"
         },
         "span": {
           "start": 80608,
@@ -1006,7 +1006,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestContextShouldBindWithXML"
+          "name": "TestContextShouldBindWithXML"
         },
         "span": {
           "start": 77645,
@@ -1028,7 +1028,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestContextShouldBindHeader"
+          "name": "TestContextShouldBindHeader"
         },
         "span": {
           "start": 78897,
@@ -1050,7 +1050,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestContextGetUint8Slice"
+          "name": "TestContextGetUint8Slice"
         },
         "span": {
           "start": 18110,
@@ -1072,7 +1072,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestContextRenderTOML"
+          "name": "TestContextRenderTOML"
         },
         "span": {
           "start": 51165,
@@ -1094,7 +1094,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestContextGetUint16Slice"
+          "name": "TestContextGetUint16Slice"
         },
         "span": {
           "start": 18321,
@@ -1116,7 +1116,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestContextShouldBindWithJSON"
+          "name": "TestContextShouldBindWithJSON"
         },
         "span": {
           "start": 77138,
@@ -1138,7 +1138,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestContextShouldBindPlain"
+          "name": "TestContextShouldBindPlain"
         },
         "span": {
           "start": 78215,
@@ -1160,7 +1160,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestContextGetUint64Slice"
+          "name": "TestContextGetUint64Slice"
         },
         "span": {
           "start": 18751,
@@ -1182,7 +1182,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestContextShouldBindWithYAML"
+          "name": "TestContextShouldBindWithYAML"
         },
         "span": {
           "start": 80109,
@@ -1204,7 +1204,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestContextShouldBindBodyWithXML"
+          "name": "TestContextShouldBindBodyWithXML"
         },
         "span": {
           "start": 85205,
@@ -1226,7 +1226,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestContextNegotiationWithTOML"
+          "name": "TestContextNegotiationWithTOML"
         },
         "span": {
           "start": 56055,
@@ -1248,7 +1248,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestContextGetFloat32Slice"
+          "name": "TestContextGetFloat32Slice"
         },
         "span": {
           "start": 18966,
@@ -1270,7 +1270,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestContextShouldBindBodyWithYAML"
+          "name": "TestContextShouldBindBodyWithYAML"
         },
         "span": {
           "start": 86676,
@@ -1292,7 +1292,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestContextShouldBindWithQuery"
+          "name": "TestContextShouldBindWithQuery"
         },
         "span": {
           "start": 79528,
@@ -1314,7 +1314,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestContextRenderNoContentXML"
+          "name": "TestContextRenderNoContentXML"
         },
         "span": {
           "start": 43793,
@@ -1336,7 +1336,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestContextGetFloat64Slice"
+          "name": "TestContextGetFloat64Slice"
         },
         "span": {
           "start": 19185,
@@ -1358,7 +1358,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestContextAbortWithStatusPureJSON"
+          "name": "TestContextAbortWithStatusPureJSON"
         },
         "span": {
           "start": 62927,
@@ -1380,7 +1380,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestContextRenderXML"
+          "name": "TestContextRenderXML"
         },
         "span": {
           "start": 43404,
@@ -1402,7 +1402,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestContextRenderNoContentAsciiJSON"
+          "name": "TestContextRenderNoContentAsciiJSON"
         },
         "span": {
           "start": 40391,
@@ -1424,7 +1424,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestContextBindWithXML"
+          "name": "TestContextBindWithXML"
         },
         "span": {
           "start": 72847,
@@ -1446,7 +1446,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestContextGetInt32Slice"
+          "name": "TestContextGetInt32Slice"
         },
         "span": {
           "start": 17481,
@@ -1468,7 +1468,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestContextBindWithTOML"
+          "name": "TestContextBindWithTOML"
         },
         "span": {
           "start": 75603,
@@ -1490,7 +1490,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestContextGetInt64Slice"
+          "name": "TestContextGetInt64Slice"
         },
         "span": {
           "start": 17692,
@@ -1512,7 +1512,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestContextGetUint32Slice"
+          "name": "TestContextGetUint32Slice"
         },
         "span": {
           "start": 18536,
@@ -1534,7 +1534,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestContextRenderNoContentData"
+          "name": "TestContextRenderNoContentData"
         },
         "span": {
           "start": 47231,
@@ -1556,7 +1556,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestContextAutoShouldBindJSON"
+          "name": "TestContextAutoShouldBindJSON"
         },
         "span": {
           "start": 76675,
@@ -1578,7 +1578,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestContextGetUintSlice"
+          "name": "TestContextGetUintSlice"
         },
         "span": {
           "start": 17903,
@@ -1600,7 +1600,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestSaveUploadedCreateFailed"
+          "name": "TestSaveUploadedCreateFailed"
         },
         "span": {
           "start": 6252,
@@ -1622,7 +1622,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestContextGetInt16Slice"
+          "name": "TestContextGetInt16Slice"
         },
         "span": {
           "start": 17270,
@@ -1644,7 +1644,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestContextRenderNoContentHTML"
+          "name": "TestContextRenderNoContentHTML"
         },
         "span": {
           "start": 42845,
@@ -1666,7 +1666,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestContextRenderNoContentString"
+          "name": "TestContextRenderNoContentString"
         },
         "span": {
           "start": 45437,
@@ -1688,7 +1688,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestContextRenderRedirectWith201"
+          "name": "TestContextRenderRedirectWith201"
         },
         "span": {
           "start": 53611,
@@ -1710,7 +1710,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestContextGetInt8Slice"
+          "name": "TestContextGetInt8Slice"
         },
         "span": {
           "start": 17063,
@@ -1732,7 +1732,7 @@
         "kind": "symbol",
         "path": "context_test.go",
         "selector": {
-          "Free": "TestContextRenderNoContentHTMLString"
+          "name": "TestContextRenderNoContentHTMLString"
         },
         "span": {
           "start": 46347,
@@ -1754,7 +1754,7 @@
         "kind": "symbol",
         "path": "ginS/gins_test.go",
         "selector": {
-          "Free": "TestPUT"
+          "name": "TestPUT"
         },
         "span": {
           "start": 988,
@@ -1776,7 +1776,7 @@
         "kind": "symbol",
         "path": "ginS/gins_test.go",
         "selector": {
-          "Free": "TestPATCH"
+          "name": "TestPATCH"
         },
         "span": {
           "start": 1623,
@@ -1798,7 +1798,7 @@
         "kind": "symbol",
         "path": "ginS/gins_test.go",
         "selector": {
-          "Free": "TestStatic"
+          "name": "TestStatic"
         },
         "span": {
           "start": 5341,
@@ -1820,7 +1820,7 @@
         "kind": "symbol",
         "path": "ginS/gins_test.go",
         "selector": {
-          "Free": "TestPOST"
+          "name": "TestPOST"
         },
         "span": {
           "start": 663,
@@ -1842,7 +1842,7 @@
         "kind": "symbol",
         "path": "ginS/gins_test.go",
         "selector": {
-          "Free": "TestAny"
+          "name": "TestAny"
         },
         "span": {
           "start": 2540,
@@ -1864,7 +1864,7 @@
         "kind": "symbol",
         "path": "ginS/gins_test.go",
         "selector": {
-          "Free": "TestOPTIONS"
+          "name": "TestOPTIONS"
         },
         "span": {
           "start": 1943,
@@ -1886,7 +1886,7 @@
         "kind": "symbol",
         "path": "ginS/gins_test.go",
         "selector": {
-          "Free": "TestDELETE"
+          "name": "TestDELETE"
         },
         "span": {
           "start": 1298,
@@ -1908,7 +1908,7 @@
         "kind": "symbol",
         "path": "gin_integration_test.go",
         "selector": {
-          "Free": "TestRunQUIC"
+          "name": "TestRunQUIC"
         },
         "span": {
           "start": 7884,
@@ -1930,7 +1930,7 @@
         "kind": "symbol",
         "path": "gin_test.go",
         "selector": {
-          "Free": "TestLoadHTMLGlobTestMode"
+          "name": "TestLoadHTMLGlobTestMode"
         },
         "span": {
           "start": 2447,
@@ -1952,7 +1952,7 @@
         "kind": "symbol",
         "path": "gin_test.go",
         "selector": {
-          "Free": "TestRebuild404Handlers"
+          "name": "TestRebuild404Handlers"
         },
         "span": {
           "start": 12393,
@@ -1974,7 +1974,7 @@
         "kind": "symbol",
         "path": "gin_test.go",
         "selector": {
-          "Free": "TestEngineHandleContextUseRawPathPercentEncoded"
+          "name": "TestEngineHandleContextUseRawPathPercentEncoded"
         },
         "span": {
           "start": 20405,
@@ -1996,7 +1996,7 @@
         "kind": "symbol",
         "path": "gin_test.go",
         "selector": {
-          "Free": "TestLoadHTMLFSFuncMap"
+          "name": "TestLoadHTMLFSFuncMap"
         },
         "span": {
           "start": 8336,
@@ -2018,7 +2018,7 @@
         "kind": "symbol",
         "path": "gin_test.go",
         "selector": {
-          "Free": "TestLoadHTMLGlobFromFuncMap"
+          "name": "TestLoadHTMLGlobFromFuncMap"
         },
         "span": {
           "start": 3767,
@@ -2040,7 +2040,7 @@
         "kind": "symbol",
         "path": "gin_test.go",
         "selector": {
-          "Free": "TestLoadHTMLFilesFuncMap"
+          "name": "TestLoadHTMLFilesFuncMap"
         },
         "span": {
           "start": 6190,
@@ -2062,7 +2062,7 @@
         "kind": "symbol",
         "path": "gin_test.go",
         "selector": {
-          "Free": "TestLoadHTMLFSReleaseMode"
+          "name": "TestLoadHTMLFSReleaseMode"
         },
         "span": {
           "start": 7369,
@@ -2084,7 +2084,7 @@
         "kind": "symbol",
         "path": "gin_test.go",
         "selector": {
-          "Free": "TestNoMethodWithGlobalHandlers"
+          "name": "TestNoMethodWithGlobalHandlers"
         },
         "span": {
           "start": 13144,
@@ -2106,7 +2106,7 @@
         "kind": "symbol",
         "path": "gin_test.go",
         "selector": {
-          "Free": "TestLoadHTMLFSDebugMode"
+          "name": "TestLoadHTMLFSDebugMode"
         },
         "span": {
           "start": 7000,
@@ -2128,7 +2128,7 @@
         "kind": "symbol",
         "path": "gin_test.go",
         "selector": {
-          "Free": "TestNoMethodWithoutGlobalHandlers"
+          "name": "TestNoMethodWithoutGlobalHandlers"
         },
         "span": {
           "start": 11657,
@@ -2150,7 +2150,7 @@
         "kind": "symbol",
         "path": "gin_test.go",
         "selector": {
-          "Free": "TestLoadHTMLFilesReleaseMode"
+          "name": "TestLoadHTMLFilesReleaseMode"
         },
         "span": {
           "start": 5147,
@@ -2172,7 +2172,7 @@
         "kind": "symbol",
         "path": "gin_test.go",
         "selector": {
-          "Free": "TestLoadHTMLFilesDebugMode"
+          "name": "TestLoadHTMLFilesDebugMode"
         },
         "span": {
           "start": 4740,
@@ -2194,7 +2194,7 @@
         "kind": "symbol",
         "path": "gin_test.go",
         "selector": {
-          "Free": "TestLoadHTMLGlobReleaseMode"
+          "name": "TestLoadHTMLGlobReleaseMode"
         },
         "span": {
           "start": 2809,
@@ -2216,7 +2216,7 @@
         "kind": "symbol",
         "path": "githubapi_test.go",
         "selector": {
-          "Free": "TestBindUri"
+          "name": "TestBindUri"
         },
         "span": {
           "start": 13328,
@@ -2238,7 +2238,7 @@
         "kind": "symbol",
         "path": "githubapi_test.go",
         "selector": {
-          "Free": "BenchmarkParallelGithubDefault"
+          "name": "BenchmarkParallelGithubDefault"
         },
         "span": {
           "start": 17000,
@@ -2260,7 +2260,7 @@
         "kind": "symbol",
         "path": "render/render_test.go",
         "selector": {
-          "Free": "TestRenderJsonpJSON"
+          "name": "TestRenderJsonpJSON"
         },
         "span": {
           "start": 2808,
@@ -2282,7 +2282,7 @@
         "kind": "symbol",
         "path": "render/render_test.go",
         "selector": {
-          "Free": "TestRenderHTMLTemplateExecuteError"
+          "name": "TestRenderHTMLTemplateExecuteError"
         },
         "span": {
           "start": 18642,
@@ -2304,7 +2304,7 @@
         "kind": "symbol",
         "path": "routergroup_test.go",
         "selector": {
-          "Free": "TestRouterGroupInvalidStaticFile"
+          "name": "TestRouterGroupInvalidStaticFile"
         },
         "span": {
           "start": 2762,
@@ -2326,7 +2326,7 @@
         "kind": "symbol",
         "path": "routes_test.go",
         "selector": {
-          "Free": "TestRouteNotOK"
+          "name": "TestRouteNotOK"
         },
         "span": {
           "start": 2772,
@@ -2348,7 +2348,7 @@
         "kind": "symbol",
         "path": "routes_test.go",
         "selector": {
-          "Free": "TestRouteNotOK2"
+          "name": "TestRouteNotOK2"
         },
         "span": {
           "start": 3143,
@@ -2370,7 +2370,7 @@
         "kind": "symbol",
         "path": "tree_test.go",
         "selector": {
-          "Free": "TestTreeCatchAllConflict"
+          "name": "TestTreeCatchAllConflict"
         },
         "span": {
           "start": 20756,
@@ -2392,7 +2392,7 @@
         "kind": "symbol",
         "path": "tree_test.go",
         "selector": {
-          "Free": "TestTreeFindCaseInsensitivePathWildcardParamAndStaticChild"
+          "name": "TestTreeFindCaseInsensitivePathWildcardParamAndStaticChild"
         },
         "span": {
           "start": 34451,

@@ -95,10 +95,7 @@ fn declared_stream_writes_flow_through() {
 fn subject_derives_kind_and_identity_ignores_spans() {
     let subject = |span| Subject::Symbol {
         path: ProjectPath::new("src/lib.rs"),
-        selector: SymbolSelector::Member {
-            owner: "Widget".into(),
-            name: "draw".into(),
-        },
+        selector: SymbolSelector::member("Widget", "draw"),
         span,
     };
     let a = subject(Span::new(0, 10));
@@ -202,4 +199,77 @@ fn markers_ride_their_declared_stream() {
         "{:?}",
         ev.diagnostics
     );
+}
+
+#[test]
+fn a_selector_is_unique_within_its_file_by_construction() {
+    use kndo_contract::evidence::{EvidenceStreams, Reach, SymbolKind};
+    let mut sink = EvidenceSink::new(400, EvidenceStreams::none());
+    let widget = sink.declaration(
+        "Widget",
+        SymbolKind::Type,
+        Span::new(0, 400),
+        Reach::Exported,
+    );
+    // Two overloads the language tells apart by signature, a field of the
+    // same name it tells apart by having none, and a Python-style
+    // redefinition nothing but position tells apart.
+    let by_int = sink.declaration(
+        "size",
+        SymbolKind::Method,
+        Span::new(10, 40),
+        Reach::Exported,
+    );
+    sink.signature(by_int, "(int)");
+    let by_str = sink.declaration(
+        "size",
+        SymbolKind::Method,
+        Span::new(50, 90),
+        Reach::Exported,
+    );
+    sink.signature(by_str, "(String)");
+    let field = sink.declaration(
+        "size",
+        SymbolKind::Variable,
+        Span::new(100, 110),
+        Reach::Private,
+    );
+    let first = sink.declaration(
+        "helper",
+        SymbolKind::Function,
+        Span::new(200, 250),
+        Reach::Private,
+    );
+    let again = sink.declaration(
+        "helper",
+        SymbolKind::Function,
+        Span::new(300, 350),
+        Reach::Private,
+    );
+    for id in [by_int, by_str, field] {
+        sink.member_of(id, widget);
+    }
+    let ev = sink.finish();
+
+    let render = |id| ev.selector_of(id).render();
+    assert_eq!(render(by_int), "Widget.size(int)");
+    assert_eq!(render(by_str), "Widget.size(String)");
+    assert_eq!(
+        render(field),
+        "Widget.size",
+        "no signature: the field keeps the bare spelling"
+    );
+    assert_eq!(render(first), "helper");
+    assert_eq!(
+        render(again),
+        "helper#2",
+        "position, when the language spells nothing else"
+    );
+
+    let path = ProjectPath::new("src/Widget.java");
+    let ids: std::collections::BTreeSet<FindingId> = [by_int, by_str, field, first, again]
+        .into_iter()
+        .map(|id| FindingId::derive(&Category::UNUSED, &ev.subject_of(&path, id), ""))
+        .collect();
+    assert_eq!(ids.len(), 5, "five declarations, five identities");
 }

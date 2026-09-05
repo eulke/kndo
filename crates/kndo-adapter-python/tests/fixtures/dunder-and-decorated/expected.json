@@ -43,7 +43,7 @@
         "kind": "symbol",
         "path": "src/app.py",
         "selector": {
-          "Free": "_forgotten"
+          "name": "_forgotten"
         },
         "span": {
           "start": 288,

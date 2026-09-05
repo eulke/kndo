@@ -20,6 +20,7 @@ use crate::graph::Graph;
 pub use crate::navigate::ReachColor;
 use crate::navigate::{self, Index, Keeper};
 use crate::session::Snapshot;
+use kndo_contract::evidence::DeclarationId;
 use kndo_contract::finding::LineSpan;
 use kndo_contract::vocab::{ProjectPath, Span};
 use serde::{Deserialize, Serialize};
@@ -428,11 +429,27 @@ enum Resolve {
     Ambiguous(Vec<String>),
 }
 
-/// Whether `raw` — a path, `path#name` or `path#Owner.member` in the query
-/// contract's spelling — names one thing the graph holds. What a fixture's
-/// expectations use to refuse a subject nothing declares.
+/// Whether `raw` — a path, or `path#` followed by a selector's exact render —
+/// names one thing the graph holds. What a fixture's expectations use to
+/// refuse a subject nothing declares: a pin is exact, so the leniency the
+/// verbs extend to a bare `Owner.name` does not apply here — an expectation
+/// spelled `Widget.size` when the tree declares `Widget.size(int)` names
+/// nothing, and says so, instead of quietly matching whichever came first.
 pub fn selector_exists(graph: &Graph, raw: &str) -> bool {
-    matches!(resolve(graph, raw), Resolve::Hit(_))
+    let (path, symbol) = match raw.split_once('#') {
+        None => (raw, None),
+        Some((p, s)) => (p, Some(s)),
+    };
+    let Some(file) = graph.files.iter().position(|f| f.path.as_str() == path) else {
+        return false;
+    };
+    let Some(symbol) = symbol else {
+        return true;
+    };
+    let evidence = &graph.files[file].evidence;
+    evidence
+        .declarations_with_ids()
+        .any(|(id, _)| evidence.selector_of(id).render() == symbol)
 }
 
 fn resolve(graph: &Graph, raw: &str) -> Resolve {
@@ -446,62 +463,91 @@ fn resolve(graph: &Graph, raw: &str) -> Resolve {
     let Some(symbol) = symbol else {
         return Resolve::Hit(Selector::File(file));
     };
-    let decls = &graph.files[file].evidence.declarations;
-    let (owner, name) = match symbol.split_once('.') {
-        Some((o, n)) => (Some(o), n),
-        None => (None, symbol),
-    };
-    let mut hits: Vec<usize> = Vec::new();
-    for (ix, d) in decls.iter().enumerate() {
-        if d.name != name {
-            continue;
-        }
-        match (owner, d.owner) {
-            (Some(o), Some(od)) if decls[od.index()].name == o => hits.push(ix),
-            (Some(_), _) => {}
-            // A bare name matches free declarations first; members join only
-            // when no free declaration carries the name.
-            (None, None) => hits.push(ix),
-            (None, Some(_)) => {}
-        }
-    }
-    if owner.is_none() && hits.is_empty() {
-        for (ix, d) in decls.iter().enumerate() {
-            if d.name == name && d.owner.is_some() {
-                hits.push(ix);
-            }
-        }
-    }
-    match hits.len() {
-        0 => Resolve::Miss,
-        1 => Resolve::Hit(Selector::Symbol {
+    match declaration_named(graph, file, symbol) {
+        Ok(Some(id)) => Resolve::Hit(Selector::Symbol {
             file,
-            decl: hits[0],
+            decl: id.index(),
         }),
-        _ => Resolve::Ambiguous(
-            hits.iter()
-                .map(|&ix| selector_of(graph, file, Some(ix)))
+        Ok(None) => Resolve::Miss,
+        Err(candidates) => Resolve::Ambiguous(
+            candidates
+                .into_iter()
+                .map(|id| selector_of(graph, file, Some(id.index())))
                 .collect(),
         ),
     }
 }
 
-/// The canonical spelling — what every NodeRef carries and every verb accepts.
+/// The declaration a symbol spelling names in one file — the ONE resolver the
+/// query verbs, a fixture's expectations and a plugin's targets share, so all
+/// three accept the same spellings. A selector's exact render
+/// (`Owner.name(int)`, `name#2`) hits directly; a bare `name` or `Owner.name`
+/// is accepted when it names one thing, free declarations first. `Err` lists
+/// the ids of everything it could mean, each with a distinct render to retry
+/// with — never two identical suggestions.
+pub(crate) fn declaration_named(
+    graph: &Graph,
+    file: usize,
+    symbol: &str,
+) -> Result<Option<DeclarationId>, Vec<DeclarationId>> {
+    let evidence = &graph.files[file].evidence;
+    if let Some((id, _)) = evidence
+        .declarations_with_ids()
+        .find(|(id, _)| evidence.selector_of(*id).render() == symbol)
+    {
+        return Ok(Some(id));
+    }
+    let (owner, name) = match symbol.split_once('.') {
+        Some((o, n)) => (Some(o), n),
+        None => (None, symbol),
+    };
+    let decls = &evidence.declarations;
+    let mut hits: Vec<DeclarationId> = Vec::new();
+    for (id, d) in evidence.declarations_with_ids() {
+        if d.name != name {
+            continue;
+        }
+        match (owner, d.owner) {
+            (Some(o), Some(od)) if decls[od.index()].name == o => hits.push(id),
+            (Some(_), _) => {}
+            // A bare name matches free declarations first; members join only
+            // when no free declaration carries the name.
+            (None, None) => hits.push(id),
+            (None, Some(_)) => {}
+        }
+    }
+    if owner.is_none() && hits.is_empty() {
+        hits.extend(
+            evidence
+                .declarations_with_ids()
+                .filter(|(_, d)| d.name == name && d.owner.is_some())
+                .map(|(id, _)| id),
+        );
+    }
+    match hits.len() {
+        0 => Ok(None),
+        1 => Ok(Some(hits[0])),
+        _ => Err(hits),
+    }
+}
+
+/// The canonical spelling — what every NodeRef carries and every verb accepts:
+/// the path, and for a declaration its selector's one render after `#`.
 fn selector_of(graph: &Graph, file: usize, decl: Option<usize>) -> String {
     let f = &graph.files[file];
     match decl {
         None => f.path.as_str().to_string(),
         Some(ix) => {
-            let d = &f.evidence.declarations[ix];
-            match d.owner {
-                Some(o) => format!(
-                    "{}#{}.{}",
-                    f.path.as_str(),
-                    f.evidence.declarations[o.index()].name,
-                    d.name
-                ),
-                None => format!("{}#{}", f.path.as_str(), d.name),
-            }
+            let (id, _) = f
+                .evidence
+                .declarations_with_ids()
+                .nth(ix)
+                .expect("a declaration index the caller took from this file");
+            format!(
+                "{}#{}",
+                f.path.as_str(),
+                f.evidence.selector_of(id).render()
+            )
         }
     }
 }

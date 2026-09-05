@@ -38,7 +38,7 @@
         "kind": "symbol",
         "path": "orders.ts",
         "selector": {
-          "Free": "sumWithFee"
+          "name": "sumWithFee"
         },
         "span": {
           "start": 169,

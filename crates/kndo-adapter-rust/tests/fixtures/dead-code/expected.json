@@ -57,7 +57,7 @@
         "kind": "symbol",
         "path": "src/util.rs",
         "selector": {
-          "Free": "abandoned"
+          "name": "abandoned"
         },
         "span": {
           "start": 18,

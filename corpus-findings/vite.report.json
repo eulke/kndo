@@ -1489,7 +1489,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/module-runner/sourcemap/decoder.ts",
         "selector": {
-          "Free": "getOriginalPosition"
+          "name": "getOriginalPosition"
         },
         "span": {
           "start": 1205,
@@ -1511,7 +1511,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/assetSource.ts",
         "selector": {
-          "Free": "getNodeAssetAttributes"
+          "name": "getNodeAssetAttributes"
         },
         "span": {
           "start": 2694,
@@ -1533,7 +1533,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/build.ts",
         "selector": {
-          "Free": "resolveLibFilename"
+          "name": "resolveLibFilename"
         },
         "span": {
           "start": 31630,
@@ -1555,7 +1555,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/asset.ts",
         "selector": {
-          "Free": "fileToUrl"
+          "name": "fileToUrl"
         },
         "span": {
           "start": 13382,
@@ -1577,7 +1577,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/html.ts",
         "selector": {
-          "Free": "extractImportExpressionFromClassicScript"
+          "name": "extractImportExpressionFromClassicScript"
         },
         "span": {
           "start": 38944,
@@ -1599,7 +1599,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/importMetaGlob.ts",
         "selector": {
-          "Free": "transformGlobImport"
+          "name": "transformGlobImport"
         },
         "span": {
           "start": 11992,
@@ -1621,7 +1621,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/importMetaGlob.ts",
         "selector": {
-          "Free": "parseImportGlob"
+          "name": "parseImportGlob"
         },
         "span": {
           "start": 7700,
@@ -1643,7 +1643,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/importMetaGlob.ts",
         "selector": {
-          "Free": "toAbsoluteGlob"
+          "name": "toAbsoluteGlob"
         },
         "span": {
           "start": 19068,
@@ -1665,7 +1665,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/index.ts",
         "selector": {
-          "Free": "getCachedFilterForPlugin"
+          "name": "getCachedFilterForPlugin"
         },
         "span": {
           "start": 7624,
@@ -1687,7 +1687,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/oxc.ts",
         "selector": {
-          "Free": "getRollupJsxPresets"
+          "name": "getRollupJsxPresets"
         },
         "span": {
           "start": 1879,
@@ -1709,7 +1709,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/worker.ts",
         "selector": {
-          "Free": "generateWorkerEntryUrlExpr"
+          "name": "generateWorkerEntryUrlExpr"
         },
         "span": {
           "start": 9973,
@@ -1731,7 +1731,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/worker.ts",
         "selector": {
-          "Free": "recordWorkerReference"
+          "name": "recordWorkerReference"
         },
         "span": {
           "start": 9413,
@@ -1753,7 +1753,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/worker.ts",
         "selector": {
-          "Free": "workerFileToUrl"
+          "name": "workerFileToUrl"
         },
         "span": {
           "start": 14649,
@@ -1775,7 +1775,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/server/sourcemap.ts",
         "selector": {
-          "Free": "injectSourcesContent"
+          "name": "injectSourcesContent"
         },
         "span": {
           "start": 2231,
@@ -1797,7 +1797,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/server/transformRequest.ts",
         "selector": {
-          "Free": "transformRequest"
+          "name": "transformRequest"
         },
         "span": {
           "start": 2312,
@@ -1819,7 +1819,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/ssr/runnerImport.ts",
         "selector": {
-          "Free": "runnerImport"
+          "name": "runnerImport"
         },
         "span": {
           "start": 379,
@@ -1841,7 +1841,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/ssr/ssrModuleLoader.ts",
         "selector": {
-          "Free": "ssrLoadModule"
+          "name": "ssrLoadModule"
         },
         "span": {
           "start": 706,
@@ -1863,7 +1863,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/utils.ts",
         "selector": {
-          "Free": "posToNumber"
+          "name": "posToNumber"
         },
         "span": {
           "start": 14568,
@@ -1885,7 +1885,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/utils.ts",
         "selector": {
-          "Free": "createDebugger"
+          "name": "createDebugger"
         },
         "span": {
           "start": 5570,
@@ -1907,7 +1907,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/utils.ts",
         "selector": {
-          "Free": "generateCodeFrame"
+          "name": "generateCodeFrame"
         },
         "span": {
           "start": 15358,
@@ -1929,7 +1929,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/utils.ts",
         "selector": {
-          "Free": "deepClone"
+          "name": "deepClone"
         },
         "span": {
           "start": 36596,
@@ -1951,7 +1951,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/utils.ts",
         "selector": {
-          "Free": "processSrcSet"
+          "name": "processSrcSet"
         },
         "span": {
           "start": 25001,
@@ -1973,7 +1973,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/utils.ts",
         "selector": {
-          "Free": "mergeWithDefaults"
+          "name": "mergeWithDefaults"
         },
         "span": {
           "start": 38792,
@@ -1995,7 +1995,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/utils.ts",
         "selector": {
-          "Free": "processSrcSetSync"
+          "name": "processSrcSetSync"
         },
         "span": {
           "start": 25304,
@@ -2017,7 +2017,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/utils.ts",
         "selector": {
-          "Free": "asyncFlatten"
+          "name": "asyncFlatten"
         },
         "span": {
           "start": 50050,
@@ -2039,7 +2039,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/utils.ts",
         "selector": {
-          "Free": "mergeWithDefaults"
+          "name": "mergeWithDefaults"
         },
         "span": {
           "start": 38792,
@@ -2061,7 +2061,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/utils.ts",
         "selector": {
-          "Free": "parseSrcset"
+          "name": "parseSrcset"
         },
         "span": {
           "start": 24597,
@@ -2083,7 +2083,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/utils.ts",
         "selector": {
-          "Free": "numberToPos"
+          "name": "numberToPos"
         },
         "span": {
           "start": 14891,
@@ -2105,7 +2105,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/utils.ts",
         "selector": {
-          "Free": "getPackageManagerCommand"
+          "name": "getPackageManagerCommand"
         },
         "span": {
           "start": 52726,
@@ -2127,7 +2127,7 @@
         "kind": "symbol",
         "path": "playground/test-utils.ts",
         "selector": {
-          "Free": "untilBrowserLogAfter"
+          "name": "untilBrowserLogAfter"
         },
         "span": {
           "start": 8720,
@@ -2590,7 +2590,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/esbuild.ts",
         "selector": {
-          "Free": "esbuildPlugin"
+          "name": "esbuildPlugin"
         },
         "span": {
           "start": 8888,
@@ -2612,10 +2612,8 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/server/environments/fetchableEnvironments.ts",
         "selector": {
-          "Member": {
-            "owner": "FetchableDevEnvironment",
-            "name": "dispatchFetch"
-          }
+          "owner": "FetchableDevEnvironment",
+          "name": "dispatchFetch"
         },
         "span": {
           "start": 1444,
@@ -2629,6 +2627,30 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
+      "id": "kndo-22389ab7725d",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/node/server/mixedModuleGraph.ts",
+        "selector": {
+          "owner": "ModuleNode",
+          "name": "ssrTransformResult",
+          "nth": 1
+        },
+        "span": {
+          "start": 5872,
+          "end": 6010
+        }
+      },
+      "lines": {
+        "start": 189,
+        "end": 193
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
       "id": "kndo-45348efd82f2",
       "category": "unused",
       "severity": "warning",
@@ -2637,10 +2659,8 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/server/mixedModuleGraph.ts",
         "selector": {
-          "Member": {
-            "owner": "ModuleNode",
-            "name": "ssrInvalidationState"
-          }
+          "owner": "ModuleNode",
+          "name": "ssrInvalidationState"
         },
         "span": {
           "start": 6883,
@@ -2662,10 +2682,8 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/server/mixedModuleGraph.ts",
         "selector": {
-          "Member": {
-            "owner": "ModuleNode",
-            "name": "ssrImportedModules"
-          }
+          "owner": "ModuleNode",
+          "name": "ssrImportedModules"
         },
         "span": {
           "start": 4846,
@@ -2687,10 +2705,8 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/server/mixedModuleGraph.ts",
         "selector": {
-          "Member": {
-            "owner": "ModuleNode",
-            "name": "clientImportedModules"
-          }
+          "owner": "ModuleNode",
+          "name": "clientImportedModules"
         },
         "span": {
           "start": 4723,
@@ -2712,10 +2728,8 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/server/mixedModuleGraph.ts",
         "selector": {
-          "Member": {
-            "owner": "ModuleNode",
-            "name": "ssrTransformResult"
-          }
+          "owner": "ModuleNode",
+          "name": "ssrTransformResult"
         },
         "span": {
           "start": 5763,
@@ -2729,31 +2743,6 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
-      "id": "kndo-de13ecc3e4b5",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "packages/vite/src/node/server/mixedModuleGraph.ts",
-        "selector": {
-          "Member": {
-            "owner": "ModuleNode",
-            "name": "ssrTransformResult"
-          }
-        },
-        "span": {
-          "start": 5872,
-          "end": 6010
-        }
-      },
-      "lines": {
-        "start": 189,
-        "end": 193
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
       "id": "kndo-994703a8b84d",
       "category": "unused",
       "severity": "warning",
@@ -2762,10 +2751,8 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/server/pluginContainer.ts",
         "selector": {
-          "Member": {
-            "owner": "PluginContext",
-            "name": "setAssetSource"
-          }
+          "owner": "PluginContext",
+          "name": "setAssetSource"
         },
         "span": {
           "start": 26774,
@@ -2787,10 +2774,8 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/server/pluginContainer.ts",
         "selector": {
-          "Member": {
-            "owner": "PluginContext",
-            "name": "getWatchFiles"
-          }
+          "owner": "PluginContext",
+          "name": "getWatchFiles"
         },
         "span": {
           "start": 26584,
@@ -2812,10 +2797,8 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/server/pluginContainer.ts",
         "selector": {
-          "Member": {
-            "owner": "PluginContext",
-            "name": "getModuleIds"
-          }
+          "owner": "PluginContext",
+          "name": "getModuleIds"
         },
         "span": {
           "start": 26167,
@@ -2859,10 +2842,8 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/watch.ts",
         "selector": {
-          "Member": {
-            "owner": "NoopWatcher",
-            "name": "unwatch"
-          }
+          "owner": "NoopWatcher",
+          "name": "unwatch"
         },
         "span": {
           "start": 3751,
@@ -2884,10 +2865,8 @@
         "kind": "symbol",
         "path": "packages/vite/src/shared/hmr.ts",
         "selector": {
-          "Member": {
-            "owner": "HMRContext",
-            "name": "decline"
-          }
+          "owner": "HMRContext",
+          "name": "decline"
         },
         "span": {
           "start": 2832,
@@ -2909,7 +2888,7 @@
         "kind": "symbol",
         "path": "packages/vite/types/importMeta.d.ts",
         "selector": {
-          "Free": "ImportMeta"
+          "name": "ImportMeta"
         },
         "span": {
           "start": 708,
@@ -3173,7 +3152,7 @@
         "kind": "symbol",
         "path": "playground/css-codesplit/shared-css-empty-1.js",
         "selector": {
-          "Free": "shouldBeTreeshaken_1"
+          "name": "shouldBeTreeshaken_1"
         },
         "span": {
           "start": 0,
@@ -3195,7 +3174,7 @@
         "kind": "symbol",
         "path": "playground/css-codesplit/shared-css-main.js",
         "selector": {
-          "Free": "shouldBeTreeshaken_0"
+          "name": "shouldBeTreeshaken_0"
         },
         "span": {
           "start": 151,
@@ -4438,7 +4417,7 @@
         "kind": "symbol",
         "path": "playground/hmr-ssr/accept-exports/unused-exports/used.ts",
         "selector": {
-          "Free": "bar"
+          "name": "bar"
         },
         "span": {
           "start": 40,
@@ -4977,7 +4956,7 @@
         "kind": "symbol",
         "path": "playground/hmr/accept-exports/main-non-accepted/default.ts",
         "selector": {
-          "Free": "x"
+          "name": "x"
         },
         "span": {
           "start": 13,
@@ -4999,7 +4978,7 @@
         "kind": "symbol",
         "path": "playground/hmr/accept-exports/main-non-accepted/named.ts",
         "selector": {
-          "Free": "b"
+          "name": "b"
         },
         "span": {
           "start": 61,
@@ -5021,7 +5000,7 @@
         "kind": "symbol",
         "path": "playground/hmr/accept-exports/unused-exports/used.ts",
         "selector": {
-          "Free": "bar"
+          "name": "bar"
         },
         "span": {
           "start": 40,
@@ -5043,7 +5022,7 @@
         "kind": "symbol",
         "path": "playground/hmr/counter/index.ts",
         "selector": {
-          "Free": "neverCalled"
+          "name": "neverCalled"
         },
         "span": {
           "start": 168,
@@ -5825,7 +5804,7 @@
         "kind": "symbol",
         "path": "playground/optimize-missing-deps/__test__/serve.ts",
         "selector": {
-          "Free": "serve"
+          "name": "serve"
         },
         "span": {
           "start": 259,
@@ -6045,7 +6024,7 @@
         "kind": "symbol",
         "path": "playground/resolve/browser-field/multiple.dot.path.js",
         "selector": {
-          "Free": "fs"
+          "name": "fs"
         },
         "span": {
           "start": 6,
@@ -6067,7 +6046,7 @@
         "kind": "symbol",
         "path": "playground/resolve/browser-field/not-browser.js",
         "selector": {
-          "Free": "fs"
+          "name": "fs"
         },
         "span": {
           "start": 6,
@@ -7015,7 +6994,7 @@
         "kind": "symbol",
         "path": "playground/tsconfig-json/nested-with-extends/main.ts",
         "selector": {
-          "Free": "d"
+          "name": "d"
         },
         "span": {
           "start": 479,
@@ -7037,7 +7016,7 @@
         "kind": "symbol",
         "path": "playground/tsconfig-json/nested/main.ts",
         "selector": {
-          "Free": "d"
+          "name": "d"
         },
         "span": {
           "start": 413,
@@ -7059,7 +7038,7 @@
         "kind": "symbol",
         "path": "playground/tsconfig-json/src/main.ts",
         "selector": {
-          "Free": "d"
+          "name": "d"
         },
         "span": {
           "start": 484,
@@ -7136,7 +7115,7 @@
         "kind": "symbol",
         "path": "playground/worker/dce-test-worker.js",
         "selector": {
-          "Free": "_nested"
+          "name": "_nested"
         },
         "span": {
           "start": 76,
@@ -7400,7 +7379,7 @@
         "kind": "symbol",
         "path": "packages/create-vite/template-preact/src/app.jsx",
         "selector": {
-          "Free": "App"
+          "name": "App"
         },
         "span": {
           "start": 193,
@@ -7444,7 +7423,7 @@
         "kind": "symbol",
         "path": "packages/create-vite/template-react-ts/src/App.tsx",
         "selector": {
-          "Free": "App"
+          "name": "App"
         },
         "span": {
           "start": 177,
@@ -7466,7 +7445,7 @@
         "kind": "symbol",
         "path": "packages/create-vite/template-react/src/App.jsx",
         "selector": {
-          "Free": "App"
+          "name": "App"
         },
         "span": {
           "start": 177,
@@ -7499,7 +7478,7 @@
         "kind": "symbol",
         "path": "packages/create-vite/template-solid/src/App.jsx",
         "selector": {
-          "Free": "App"
+          "name": "App"
         },
         "span": {
           "start": 184,
@@ -7719,7 +7698,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/__tests__/plugins/workerImportMetaUrl.spec.ts",
         "selector": {
-          "Free": "createWorkerImportMetaUrlPluginTransform"
+          "name": "createWorkerImportMetaUrlPluginTransform"
         },
         "span": {
           "start": 274,
@@ -7741,7 +7720,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/build.ts",
         "selector": {
-          "Free": "toOutputFilePathWithoutRuntime"
+          "name": "toOutputFilePathWithoutRuntime"
         },
         "span": {
           "start": 51496,
@@ -7763,7 +7742,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/html.ts",
         "selector": {
-          "Free": "getBaseInHTML"
+          "name": "getBaseInHTML"
         },
         "span": {
           "start": 50473,
@@ -7785,7 +7764,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/importAnalysis.ts",
         "selector": {
-          "Free": "__vite__injectQuery"
+          "name": "__vite__injectQuery"
         },
         "span": {
           "start": 39351,
@@ -7961,7 +7940,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/utils.ts",
         "selector": {
-          "Free": "joinUrlSegments"
+          "name": "joinUrlSegments"
         },
         "span": {
           "start": 51179,
@@ -7983,7 +7962,7 @@
         "kind": "symbol",
         "path": "playground/cli/__tests__/serve.ts",
         "selector": {
-          "Free": "startedOnPort"
+          "name": "startedOnPort"
         },
         "span": {
           "start": 3579,
@@ -8005,7 +7984,7 @@
         "kind": "symbol",
         "path": "playground/cli/__tests__/serve.ts",
         "selector": {
-          "Free": "resolvedOrTimeout"
+          "name": "resolvedOrTimeout"
         },
         "span": {
           "start": 4489,
@@ -8687,7 +8666,7 @@
         "kind": "symbol",
         "path": "playground/multiple-entrypoints/entrypoints/a1.js",
         "selector": {
-          "Free": "other"
+          "name": "other"
         },
         "span": {
           "start": 589,
@@ -8709,7 +8688,7 @@
         "kind": "symbol",
         "path": "playground/multiple-entrypoints/entrypoints/a10.js",
         "selector": {
-          "Free": "other"
+          "name": "other"
         },
         "span": {
           "start": 389,
@@ -8731,7 +8710,7 @@
         "kind": "symbol",
         "path": "playground/multiple-entrypoints/entrypoints/a11.js",
         "selector": {
-          "Free": "other"
+          "name": "other"
         },
         "span": {
           "start": 366,
@@ -8753,7 +8732,7 @@
         "kind": "symbol",
         "path": "playground/multiple-entrypoints/entrypoints/a2.js",
         "selector": {
-          "Free": "other"
+          "name": "other"
         },
         "span": {
           "start": 567,
@@ -8775,7 +8754,7 @@
         "kind": "symbol",
         "path": "playground/multiple-entrypoints/entrypoints/a3.js",
         "selector": {
-          "Free": "other"
+          "name": "other"
         },
         "span": {
           "start": 545,
@@ -8797,7 +8776,7 @@
         "kind": "symbol",
         "path": "playground/multiple-entrypoints/entrypoints/a4.js",
         "selector": {
-          "Free": "other"
+          "name": "other"
         },
         "span": {
           "start": 523,
@@ -8819,7 +8798,7 @@
         "kind": "symbol",
         "path": "playground/multiple-entrypoints/entrypoints/a5.js",
         "selector": {
-          "Free": "other"
+          "name": "other"
         },
         "span": {
           "start": 501,
@@ -8841,7 +8820,7 @@
         "kind": "symbol",
         "path": "playground/multiple-entrypoints/entrypoints/a6.js",
         "selector": {
-          "Free": "other"
+          "name": "other"
         },
         "span": {
           "start": 479,
@@ -8863,7 +8842,7 @@
         "kind": "symbol",
         "path": "playground/multiple-entrypoints/entrypoints/a7.js",
         "selector": {
-          "Free": "other"
+          "name": "other"
         },
         "span": {
           "start": 457,
@@ -8885,7 +8864,7 @@
         "kind": "symbol",
         "path": "playground/multiple-entrypoints/entrypoints/a8.js",
         "selector": {
-          "Free": "other"
+          "name": "other"
         },
         "span": {
           "start": 435,
@@ -8907,7 +8886,7 @@
         "kind": "symbol",
         "path": "playground/multiple-entrypoints/entrypoints/a9.js",
         "selector": {
-          "Free": "other"
+          "name": "other"
         },
         "span": {
           "start": 413,
@@ -9083,7 +9062,7 @@
         "kind": "symbol",
         "path": "playground/optimize-deps/dep-with-assets/nested/index.js",
         "selector": {
-          "Free": "urlImportWorker"
+          "name": "urlImportWorker"
         },
         "span": {
           "start": 7,
@@ -9369,7 +9348,7 @@
         "kind": "symbol",
         "path": "playground/ssr-pug/__tests__/serve.ts",
         "selector": {
-          "Free": "serve"
+          "name": "serve"
         },
         "span": {
           "start": 274,
@@ -9424,7 +9403,7 @@
         "kind": "symbol",
         "path": "playground/ssr-wasm/__tests__/serve.ts",
         "selector": {
-          "Free": "serve"
+          "name": "serve"
         },
         "span": {
           "start": 427,
@@ -9567,7 +9546,7 @@
         "kind": "symbol",
         "path": "playground/tailwind/vite.config.ts",
         "selector": {
-          "Free": "delayIndexCssPlugin"
+          "name": "delayIndexCssPlugin"
         },
         "span": {
           "start": 116,
@@ -9589,7 +9568,7 @@
         "kind": "symbol",
         "path": "playground/test-utils.ts",
         "selector": {
-          "Free": "untilBrowserLogAfter"
+          "name": "untilBrowserLogAfter"
         },
         "span": {
           "start": 8720,
@@ -9622,7 +9601,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/module-runner/importMetaResolver.ts",
         "selector": {
-          "Free": "ImportMetaResolver"
+          "name": "ImportMetaResolver"
         },
         "span": {
           "start": 79,
@@ -9644,7 +9623,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/build.ts",
         "selector": {
-          "Free": "enhanceRollupError"
+          "name": "enhanceRollupError"
         },
         "span": {
           "start": 29442,
@@ -9666,7 +9645,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/build.ts",
         "selector": {
-          "Free": "clearLine"
+          "name": "clearLine"
         },
         "span": {
           "start": 34288,
@@ -9688,7 +9667,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/build.ts",
         "selector": {
-          "Free": "toOutputFilePathWithoutRuntime"
+          "name": "toOutputFilePathWithoutRuntime"
         },
         "span": {
           "start": 51496,
@@ -9710,7 +9689,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/nativeConfigCompat.ts",
         "selector": {
-          "Free": "analyzeConfigModuleReferences"
+          "name": "analyzeConfigModuleReferences"
         },
         "span": {
           "start": 2799,
@@ -9732,7 +9711,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/nativeConfigCompat.ts",
         "selector": {
-          "Free": "ConfigImportRef"
+          "name": "ConfigImportRef"
         },
         "span": {
           "start": 820,
@@ -9754,7 +9733,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/nativeConfigCompat.ts",
         "selector": {
-          "Free": "NativeConfigIncompatibilityType"
+          "name": "NativeConfigIncompatibilityType"
         },
         "span": {
           "start": 316,
@@ -9776,7 +9755,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/nativeConfigCompat.ts",
         "selector": {
-          "Free": "findEsmSyntaxInCjs"
+          "name": "findEsmSyntaxInCjs"
         },
         "span": {
           "start": 4765,
@@ -9798,7 +9777,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/nativeConfigCompat.ts",
         "selector": {
-          "Free": "classifyImportRef"
+          "name": "classifyImportRef"
         },
         "span": {
           "start": 1418,
@@ -9820,7 +9799,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/nodeResolve.ts",
         "selector": {
-          "Free": "NodeResolveWithViteOptions"
+          "name": "NodeResolveWithViteOptions"
         },
         "span": {
           "start": 215,
@@ -9842,7 +9821,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugin.ts",
         "selector": {
-          "Free": "PluginContextMetaExtension"
+          "name": "PluginContextMetaExtension"
         },
         "span": {
           "start": 2673,
@@ -9864,7 +9843,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/asset.ts",
         "selector": {
-          "Free": "registerCustomMime"
+          "name": "registerCustomMime"
         },
         "span": {
           "start": 2986,
@@ -9886,7 +9865,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/asset.ts",
         "selector": {
-          "Free": "noInlineRE"
+          "name": "noInlineRE"
         },
         "span": {
           "start": 1522,
@@ -9908,7 +9887,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/asset.ts",
         "selector": {
-          "Free": "fileToDevUrl"
+          "name": "fileToDevUrl"
         },
         "span": {
           "start": 13879,
@@ -9930,7 +9909,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/css.ts",
         "selector": {
-          "Free": "importCssRE"
+          "name": "importCssRE"
         },
         "span": {
           "start": 68353,
@@ -9952,7 +9931,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/css.ts",
         "selector": {
-          "Free": "cssDataUriRE"
+          "name": "cssDataUriRE"
         },
         "span": {
           "start": 68240,
@@ -9974,7 +9953,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/css.ts",
         "selector": {
-          "Free": "CSSAtImportResolvers"
+          "name": "CSSAtImportResolvers"
         },
         "span": {
           "start": 47321,
@@ -9996,7 +9975,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/css.ts",
         "selector": {
-          "Free": "StylePreprocessorResults"
+          "name": "StylePreprocessorResults"
         },
         "span": {
           "start": 80620,
@@ -10018,7 +9997,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/dynamicImportVars.ts",
         "selector": {
-          "Free": "dynamicImportHelperId"
+          "name": "dynamicImportHelperId"
         },
         "span": {
           "start": 1141,
@@ -10040,7 +10019,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/esbuild.ts",
         "selector": {
-          "Free": "TSCompilerOptions"
+          "name": "TSCompilerOptions"
         },
         "span": {
           "start": 2522,
@@ -10062,7 +10041,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/esbuild.ts",
         "selector": {
-          "Free": "defaultEsbuildSupported"
+          "name": "defaultEsbuildSupported"
         },
         "span": {
           "start": 1505,
@@ -10084,7 +10063,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/esbuild.ts",
         "selector": {
-          "Free": "ESBuildTransformResult"
+          "name": "ESBuildTransformResult"
         },
         "span": {
           "start": 1896,
@@ -10106,7 +10085,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/html.ts",
         "selector": {
-          "Free": "isAsyncScriptMap"
+          "name": "isAsyncScriptMap"
         },
         "span": {
           "start": 5195,
@@ -10128,7 +10107,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/html.ts",
         "selector": {
-          "Free": "parseRelAttr"
+          "name": "parseRelAttr"
         },
         "span": {
           "start": 38196,
@@ -10150,7 +10129,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/html.ts",
         "selector": {
-          "Free": "htmlProxyMap"
+          "name": "htmlProxyMap"
         },
         "span": {
           "start": 2672,
@@ -10172,7 +10151,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/importAnalysis.ts",
         "selector": {
-          "Free": "canSkipImportAnalysis"
+          "name": "canSkipImportAnalysis"
         },
         "span": {
           "start": 2299,
@@ -10194,7 +10173,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/importAnalysis.ts",
         "selector": {
-          "Free": "interopNamedImports"
+          "name": "interopNamedImports"
         },
         "span": {
           "start": 32888,
@@ -10216,7 +10195,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/importAnalysis.ts",
         "selector": {
-          "Free": "createParseErrorInfo"
+          "name": "createParseErrorInfo"
         },
         "span": {
           "start": 31477,
@@ -10238,7 +10217,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/importAnalysisBuild.ts",
         "selector": {
-          "Free": "isModernFlag"
+          "name": "isModernFlag"
         },
         "span": {
           "start": 1230,
@@ -10260,7 +10239,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/importMetaGlob.ts",
         "selector": {
-          "Free": "TransformGlobImportResult"
+          "name": "TransformGlobImportResult"
         },
         "span": {
           "start": 11784,
@@ -10282,7 +10261,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/importMetaGlob.ts",
         "selector": {
-          "Free": "toAbsoluteGlob"
+          "name": "toAbsoluteGlob"
         },
         "span": {
           "start": 19068,
@@ -10304,7 +10283,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/importMetaGlob.ts",
         "selector": {
-          "Free": "ParsedImportGlob"
+          "name": "ParsedImportGlob"
         },
         "span": {
           "start": 963,
@@ -10326,7 +10305,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/importMetaGlob.ts",
         "selector": {
-          "Free": "isVirtualModule"
+          "name": "isVirtualModule"
         },
         "span": {
           "start": 21100,
@@ -10348,7 +10327,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/index.ts",
         "selector": {
-          "Free": "viteAliasCustomResolver"
+          "name": "viteAliasCustomResolver"
         },
         "span": {
           "start": 9098,
@@ -10370,7 +10349,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/license.ts",
         "selector": {
-          "Free": "LicenseEntry"
+          "name": "LicenseEntry"
         },
         "span": {
           "start": 266,
@@ -10392,7 +10371,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/optimizedDeps.ts",
         "selector": {
-          "Free": "throwFileNotFoundInOptimizedDep"
+          "name": "throwFileNotFoundInOptimizedDep"
         },
         "span": {
           "start": 4583,
@@ -10414,7 +10393,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/resolve.ts",
         "selector": {
-          "Free": "resolvePackageEntry"
+          "name": "resolvePackageEntry"
         },
         "span": {
           "start": 29078,
@@ -10436,7 +10415,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/plugins/resolve.ts",
         "selector": {
-          "Free": "ResolvePluginOptionsWithOverrides"
+          "name": "ResolvePluginOptionsWithOverrides"
         },
         "span": {
           "start": 4860,
@@ -10458,7 +10437,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/server/bundledDev.ts",
         "selector": {
-          "Free": "MemoryFiles"
+          "name": "MemoryFiles"
         },
         "span": {
           "start": 933,
@@ -10480,7 +10459,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/server/hmr.ts",
         "selector": {
-          "Free": "getSortedPluginsByHotUpdateHook"
+          "name": "getSortedPluginsByHotUpdateHook"
         },
         "span": {
           "start": 9686,
@@ -10502,7 +10481,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/server/hmr.ts",
         "selector": {
-          "Free": "ServerHotChannelApi"
+          "name": "ServerHotChannelApi"
         },
         "span": {
           "start": 33436,
@@ -10524,7 +10503,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/server/transformRequest.ts",
         "selector": {
-          "Free": "ERR_LOAD_PUBLIC_URL"
+          "name": "ERR_LOAD_PUBLIC_URL"
         },
         "span": {
           "start": 1210,
@@ -10546,7 +10525,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/server/ws.ts",
         "selector": {
-          "Free": "HMR_HEADER"
+          "name": "HMR_HEADER"
         },
         "span": {
           "start": 1469,
@@ -10568,7 +10547,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/ssr/ssrStacktrace.ts",
         "selector": {
-          "Free": "rebindErrorStacktrace"
+          "name": "rebindErrorStacktrace"
         },
         "span": {
           "start": 2420,
@@ -10590,7 +10569,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/utils.ts",
         "selector": {
-          "Free": "splitRE"
+          "name": "splitRE"
         },
         "span": {
           "start": 14276,
@@ -10612,7 +10591,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/utils.ts",
         "selector": {
-          "Free": "ViteDebugScope"
+          "name": "ViteDebugScope"
         },
         "span": {
           "start": 5523,
@@ -10634,7 +10613,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/utils.ts",
         "selector": {
-          "Free": "parseSrcset"
+          "name": "parseSrcset"
         },
         "span": {
           "start": 24597,
@@ -10656,7 +10635,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/utils.ts",
         "selector": {
-          "Free": "isCaseInsensitiveFS"
+          "name": "isCaseInsensitiveFS"
         },
         "span": {
           "start": 6709,
@@ -10678,7 +10657,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/node/utils.ts",
         "selector": {
-          "Free": "arrayEqual"
+          "name": "arrayEqual"
         },
         "span": {
           "start": 51746,
@@ -10700,7 +10679,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/shared/forwardConsole.ts",
         "selector": {
-          "Free": "ForwardConsoleLogLevel"
+          "name": "ForwardConsoleLogLevel"
         },
         "span": {
           "start": 180,
@@ -10722,7 +10701,7 @@
         "kind": "symbol",
         "path": "packages/vite/src/shared/invokeMethods.ts",
         "selector": {
-          "Free": "CachedFetchResult"
+          "name": "CachedFetchResult"
         },
         "span": {
           "start": 185,

@@ -41,7 +41,7 @@
         "kind": "symbol",
         "path": "src/messages.rs",
         "selector": {
-          "Free": "local_only"
+          "name": "local_only"
         },
         "span": {
           "start": 131,

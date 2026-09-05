@@ -217,12 +217,11 @@ mod tests {
     use super::*;
     use kndo_contract::subject::SymbolSelector;
     use kndo_contract::vocab::{Confidence, ProjectPath, Span};
-    use smol_str::SmolStr;
 
     fn symbol(path: &str, name: &str) -> Subject {
         Subject::Symbol {
             path: ProjectPath::new(path),
-            selector: SymbolSelector::Free(SmolStr::new(name)),
+            selector: SymbolSelector::free(name),
             span: Span::new(0, 10),
         }
     }

@@ -256,10 +256,7 @@ mod tests {
     fn the_contract_mapping_holds() {
         let symbol = Subject::Symbol {
             path: ProjectPath::new("src/a.py"),
-            selector: SymbolSelector::Member {
-                owner: SmolStr::new("Store"),
-                name: SmolStr::new("_drop"),
-            },
+            selector: SymbolSelector::member("Store", "_drop"),
             span: Span::new(120, 180),
         };
         let dependency = Subject::Dependency {

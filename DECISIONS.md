@@ -3397,3 +3397,85 @@ compat components move with them. Two fixtures are added,
 `member-named-through-an-access` and — from the previous slice —
 `package-private-across-modules`; kmock speaks `call x.name` for the access and
 `call name` for the bare word. No existing kndo-adapter-java fixtures move.
+
+## 2026-09-06 — A selector is a key: finding identity and query addresses tell every declaration apart
+
+**The defect, at its root.** A finding's identity hashed the category and the
+subject's render, and a symbol's render was `Owner.name` — so two declarations
+a language legitimately lets coexist under one name shared one identity.
+Measured across the corpus: guava 152 duplicated ids (277 rows), Exposed 18
+(45 rows), Alamofire 21 (13 of them free functions), vapor 2, vite 1 —
+overloads in Java, Kotlin and Swift, an overload signature in TypeScript. Two
+consequences, both silent: a baseline naming one overload silenced every
+namesake, and deleting one was never `fixed` while another stood; and the
+query side, which shares the address space, answered
+`describe …#FreshValueGenerator.generateRange` with "ambiguous — retry with
+one of: X, X" — two identical suggestions, so the overloads were unaddressable.
+`stale` had already met the same collision on suppressions and patched it
+locally, with an ordinal in its discriminator: the right instinct, in the
+wrong place, invisible to the address.
+
+**The model.** Four words the glossary lacked now define it: a **Finding** is
+one verdict on one subject and two findings with one identity are one finding;
+a **Subject** is what a finding is about, rendered one way everywhere; a
+**Selector** is the address of one declaration inside its file — owner, name,
+signature, and position among the declarations sharing all three — unique
+within the file by construction; a **Signature** is what a language reads
+beyond the identifier to tell same-named declarations apart, as it spells it
+(Java's parameter types, Swift's argument labels), never parameter names or a
+return type. **Identity** is category plus subject and never the span.
+
+**The module.** Uniqueness is a property the evidence sink now guarantees at
+`finish()`: `Declaration.nth` counts the earlier declarations of the file
+sharing owner name, name and signature, and a declaration's selector is built
+in ONE place, `FileEvidence::selector_of`, which every analysis, the query
+resolver, a fixture's expectations and a plugin's targets call. Seven copies of
+"owner-or-free, then the name" — in `unused`, `untested`, `internal-only`,
+`crap`, `duplicate`, `private-type-leak` and the conduct bridge — plus three
+re-spellings of the render (the query's `selector_of`, the expectations'
+`spell`, the gate's own match) collapsed onto it; the conduct bridge, which
+resolved a plugin's target by first-name-wins, now goes through the query's
+resolver and drops an ambiguous target instead of guessing. `SymbolSelector`
+became a struct (`owner`, `name`, `signature`, `nth`) — the two variants were
+already duplicating `name`, and would have duplicated three fields — with
+`free`/`member` constructors for hand-built subjects, whose doc says evidence
+never goes through them. The render is one function: `Owner.name`, the
+signature verbatim, `#k` for the k-th of several a language cannot tell apart.
+
+**The language's word.** `EvidenceSink::signature(id, text)` is how an adapter
+states the signature; `kndo:java` states the parameter types as written,
+`(int, List<String>, T...)`, so `Widget.size` the field and `Widget.size()` the
+method are two addresses without needing position at all. Kotlin and Swift
+state none yet and fall back to position — `Owner.name#2` — which keeps their
+identities unique today and is the item M8.c pays when each migrates. The span
+method that shared the name became `signature_span`, since a promise region
+and an address are two things.
+
+**Always, not only on collision.** Rendering the signature only when a
+namesake exists was rejected: adding an overload to a baselined method would
+have re-addressed the existing one, so the new method inherited the baseline
+entry and the old one appeared new — a recurring silent lie. Rendering it
+always costs one loud migration of every Java method's identity, which is the
+sanctioned path: every java conformance fixture that names a method moved, 24
+expectation subjects were respelled from the tool's own canonical answer
+(`describe` accepts the bare `Owner.name` when unique and answers with the
+exact address). And because the selector's wire shape changed for every symbol
+subject — `{"Free": "x"}` and `{"Member": {…}}` became one object with `name`,
+`owner`, `signature` and `nth` — every conformance fixture that reports a
+symbol moves, in every crate, with no finding added or removed in any of them. The pins themselves are exact: `selector_exists` no longer extends the
+verbs' leniency to an expectation, so `Widget.size` pinned against a tree
+declaring `Widget.size(int)` names nothing and says so.
+
+**Measurement.** Nine repositories, every finding row unchanged as a multiset
+(category, subject, lines) and **zero duplicated ids** where there were 194.
+guava now carries 6,084 signatures on its findings; the positional fallback
+fires 117 times across the corpus and each sampled case is honest — flask's
+three `@overload` stubs of `App.template_test`, guava's two `of(K, V, …)`
+overloads whose parameter types spell identically and differ only in the type
+variables' bounds. `describe` on the guava overload now lists two distinct
+addresses and resolves each. The contract fingerprint, the report and query
+schemas, the WIT `declaration` record and the four pinned compat components
+move; the host now also replays a reference's receiver, which the previous
+slice had added to the wire and the replay had dropped. `kndo:java` 8 → 9 for
+the signatures it emits. One fixture is added, `overloads-are-two-declarations`,
+pinning two dead overloads as two findings.

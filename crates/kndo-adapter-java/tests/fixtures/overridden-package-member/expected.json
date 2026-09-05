@@ -44,7 +44,7 @@
   },
   "findings": [
     {
-      "id": "kndo-e3e62fb7b4ff",
+      "id": "kndo-ac269b040777",
       "category": "internal-only",
       "severity": "info",
       "confidence": "probable",
@@ -52,10 +52,9 @@
         "kind": "symbol",
         "path": "src/main/java/demo/Shape.java",
         "selector": {
-          "Member": {
-            "owner": "Shape",
-            "name": "onlyHere"
-          }
+          "owner": "Shape",
+          "name": "onlyHere",
+          "signature": "()"
         },
         "span": {
           "start": 127,

@@ -72,6 +72,12 @@ adapter says nothing:
   the supertype — and a member some subtype declares is OVERRIDDEN, so
   `internal-only` never advises narrowing it. `used-by` shows the first as
   `witness`.
+- **Signatures**: what the language reads beyond the identifier to tell
+  same-named declarations apart, as it spells it — Java's parameter types
+  `(int, List<String>)`. It is part of a declaration's address, so an overload
+  has its own finding identity and its own query address; a language that
+  states none (Kotlin and Swift, until their adapters do) gets `#2` on the
+  second of two the engine cannot otherwise split.
 - **Evidence streams**: comments (for `kndo:allow`), per-function metrics
   (for `duplicate` and `crap`), markers (for dispatch), relations (for
   witnesses) and qualifiers — whether each reference was written ON something,

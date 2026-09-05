@@ -1,0 +1,26 @@
+# overloads-are-two-declarations: two `size` methods and a `size` field share a
+# name and nothing else. Each has its own address, its own finding identity and
+# its own verdict — one is used, one is not, and a baseline that names one can
+# never silence the other.
+
+[[alive]]
+subject = "src/main/java/com/foo/Widget.java#Widget.size(int)"
+why = "total() calls it with the int field"
+
+[[alive]]
+subject = "src/main/java/com/foo/Widget.java#Widget.size(List<String>)"
+why = "Caller calls it through Widget from another file"
+
+[[alive]]
+subject = "src/main/java/com/foo/Widget.java#Widget.size"
+why = "the field: total() reads it"
+
+[[dead]]
+subject = "src/main/java/com/foo/Widget.java#Widget.spare(int)"
+category = "unused"
+why = "nothing calls either spare; this is the first, under its own address"
+
+[[dead]]
+subject = "src/main/java/com/foo/Widget.java#Widget.spare(long)"
+category = "unused"
+why = "and the second, under its own — not one finding reported twice"

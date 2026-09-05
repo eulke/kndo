@@ -46,10 +46,8 @@
         "kind": "symbol",
         "path": "Sources/App/Helper.swift",
         "selector": {
-          "Member": {
-            "owner": "Helper",
-            "name": "dead"
-          }
+          "owner": "Helper",
+          "name": "dead"
         },
         "span": {
           "start": 184,
@@ -71,7 +69,7 @@
         "kind": "symbol",
         "path": "Sources/App/main.swift",
         "selector": {
-          "Free": "helper"
+          "name": "helper"
         },
         "span": {
           "start": 0,

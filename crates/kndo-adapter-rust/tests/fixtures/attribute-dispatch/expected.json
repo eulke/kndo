@@ -46,7 +46,7 @@
         "kind": "symbol",
         "path": "src/ffi.rs",
         "selector": {
-          "Free": "truly_dead"
+          "name": "truly_dead"
         },
         "span": {
           "start": 168,

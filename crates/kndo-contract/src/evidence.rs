@@ -29,7 +29,8 @@
 //!    deliberate.
 
 use crate::fingerprint::ContractFingerprint;
-use crate::vocab::{Confidence, Span};
+use crate::subject::{Subject, SymbolSelector};
+use crate::vocab::{Confidence, ProjectPath, Span};
 use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
 
@@ -231,6 +232,20 @@ pub struct Declaration {
     /// from its local name (`export default`, `export { local as alias }`) — what
     /// importers actually bind. Set via [`EvidenceSink::exported_as`].
     pub exported_as: Option<SmolStr>,
+    /// What the language reads beyond the identifier to tell same-named
+    /// declarations apart, as it spells it: Java's parameter types
+    /// `(int, String)`, Swift's argument labels `(_:with:)`. Never parameter
+    /// names or a return type — renaming a parameter does not make a new
+    /// method — and never the identifier, which references carry alone. Set
+    /// via [`EvidenceSink::signature`]; `None` where the language has none or
+    /// the adapter does not spell it, in which case `nth` alone keeps two
+    /// same-named declarations apart.
+    pub signature: Option<SmolStr>,
+    /// Position among this file's declarations that share owner name, name and
+    /// signature, in source order. Computed by the sink when the evidence is
+    /// finished, never set by an adapter: it is what makes every selector in
+    /// a file unique when nothing the language says would.
+    pub nth: u32,
 }
 
 /// Grows as languages need it; an unknown kind in a consumer's wildcard arm counts as
@@ -507,6 +522,30 @@ impl FileEvidence {
             .enumerate()
             .map(|(i, d)| (DeclarationId(i as u32), d))
     }
+
+    /// The address of one declaration — THE place a declaration becomes a
+    /// selector, so that an analysis, a query, an expectation and a plugin
+    /// all spell it identically and none can forget a part. Unique within the
+    /// file: the sink assigned `nth` for exactly that.
+    pub fn selector_of(&self, id: DeclarationId) -> SymbolSelector {
+        let d = &self.declarations[id.index()];
+        SymbolSelector {
+            owner: d.owner.map(|o| self.declarations[o.index()].name.clone()),
+            name: d.name.clone(),
+            signature: d.signature.clone(),
+            nth: d.nth,
+        }
+    }
+
+    /// The finding subject for one declaration: the file, its address, its
+    /// span (carried for lines, never for identity).
+    pub fn subject_of(&self, path: &ProjectPath, id: DeclarationId) -> Subject {
+        Subject::Symbol {
+            path: path.clone(),
+            selector: self.selector_of(id),
+            span: self.declarations[id.index()].span,
+        }
+    }
 }
 
 /// The write side of extraction. Validates as evidence arrives — a span outside the
@@ -570,6 +609,8 @@ impl EvidenceSink {
             name: name.into(),
             kind,
             span,
+            signature: None,
+            nth: 0,
             reach,
             owner: None,
             exported_as: None,
@@ -608,11 +649,21 @@ impl EvidenceSink {
     }
 
     /// The signature region (see [`Declaration::signature_span`]) — by id.
-    pub fn signature(&mut self, of: DeclarationId, span: Span) {
-        if !self.valid_id(of, "signature") {
+    pub fn signature_span(&mut self, of: DeclarationId, span: Span) {
+        if !self.valid_id(of, "signature_span") {
             return;
         }
         self.out.declarations[of.index()].signature_span = Some(span);
+    }
+
+    /// The language's own spelling of what tells this declaration from a
+    /// same-named one — see [`Declaration::signature`]. By id, so a signature
+    /// can never attach to the wrong declaration.
+    pub fn signature(&mut self, of: DeclarationId, signature: impl Into<SmolStr>) {
+        if !self.valid_id(of, "signature") {
+            return;
+        }
+        self.out.declarations[of.index()].signature = Some(signature.into());
     }
 
     /// The exported alias, when it differs from the local name — by id, so the alias
@@ -821,7 +872,29 @@ impl EvidenceSink {
         });
     }
 
-    pub fn finish(self) -> FileEvidence {
+    /// Closes the evidence, and with it the guarantee every consumer of a
+    /// selector relies on: no two declarations in this file share an address.
+    /// A declaration's `nth` is how many earlier ones share its owner name,
+    /// name and signature — zero for nearly all, and the only thing keeping
+    /// two apart where the language spells nothing else.
+    pub fn finish(mut self) -> FileEvidence {
+        let mut seen: std::collections::HashMap<(Option<SmolStr>, SmolStr, Option<SmolStr>), u32> =
+            std::collections::HashMap::new();
+        let owner_names: Vec<Option<SmolStr>> = self
+            .out
+            .declarations
+            .iter()
+            .map(|d| {
+                d.owner
+                    .map(|o| self.out.declarations[o.index()].name.clone())
+            })
+            .collect();
+        for (d, owner) in self.out.declarations.iter_mut().zip(owner_names) {
+            let key = (owner, d.name.clone(), d.signature.clone());
+            let n = seen.entry(key).or_insert(0);
+            d.nth = *n;
+            *n += 1;
+        }
         self.out
     }
 }

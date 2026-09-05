@@ -1,10 +1,10 @@
 # dead-code-same-package: a same-package call needs no import, and the sibling nothing calls is reported.
 
 [[dead]]
-subject = "src/main/java/com/foo/Helper.java#Helper.dead"
+subject = "src/main/java/com/foo/Helper.java#Helper.dead()"
 category = "unused"
 why = "never called from anywhere — genuinely dead"
 
 [[alive]]
-subject = "src/main/java/com/foo/Helper.java#Helper.live"
+subject = "src/main/java/com/foo/Helper.java#Helper.live()"
 why = "Main calls it with no import — same package, the unit mechanism"

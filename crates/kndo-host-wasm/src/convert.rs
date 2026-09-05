@@ -280,10 +280,18 @@ pub(crate) fn replay_evidence(evidence: awire::FileEvidence, sink: &mut Evidence
         if let Some(alias) = &d.exported_as {
             sink.exported_as(ids[ix], SmolStr::new(alias));
         }
+        if let Some(signature) = &d.signature {
+            sink.signature(ids[ix], SmolStr::new(signature));
+        }
     }
 
     for r in evidence.references {
-        sink.reference(SmolStr::new(r.name), ref_kind(r.kind), span(r.span));
+        sink.reference_on(
+            SmolStr::new(r.name),
+            ref_kind(r.kind),
+            r.on.map(SmolStr::new),
+            span(r.span),
+        );
     }
     for i in evidence.imports {
         sink.import_at(

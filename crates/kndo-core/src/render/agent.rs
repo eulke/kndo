@@ -471,7 +471,7 @@ mod tests {
             Confidence::Probable,
             Subject::Symbol {
                 path: ProjectPath::new("src/lib.py"),
-                selector: SymbolSelector::Free(SmolStr::new(name)),
+                selector: SymbolSelector::free(name),
                 span: Span::new(10, 40),
             },
             "",

@@ -55,7 +55,7 @@
         "kind": "symbol",
         "path": "src/lib.ts",
         "selector": {
-          "Free": "dead"
+          "name": "dead"
         },
         "span": {
           "start": 60,

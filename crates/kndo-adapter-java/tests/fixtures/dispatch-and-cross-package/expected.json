@@ -49,7 +49,7 @@
   },
   "findings": [
     {
-      "id": "kndo-3e0db58d6384",
+      "id": "kndo-61d43e9ba135",
       "category": "unused",
       "severity": "warning",
       "confidence": "certain",
@@ -57,10 +57,9 @@
         "kind": "symbol",
         "path": "src/main/java/com/foo/Greeter.java",
         "selector": {
-          "Member": {
-            "owner": "Greeter",
-            "name": "go"
-          }
+          "owner": "Greeter",
+          "name": "go",
+          "signature": "()"
         },
         "span": {
           "start": 42,

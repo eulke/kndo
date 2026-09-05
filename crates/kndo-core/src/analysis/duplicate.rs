@@ -5,9 +5,9 @@
 //! the canonical copy; every other member is the finding.
 
 use super::{Analysis, AnalysisContext};
-use kndo_contract::evidence::EvidenceStream;
+use kndo_contract::evidence::{DeclarationId, EvidenceStream};
 use kndo_contract::finding::{Finding, Severity};
-use kndo_contract::subject::{Subject, SymbolSelector};
+use kndo_contract::subject::Subject;
 use kndo_contract::vocab::{Category, Confidence};
 use std::collections::BTreeMap;
 
@@ -67,7 +67,7 @@ impl Analysis for Duplicate {
         }
 
         // Structural function clones: equal fingerprint sets, above the token floor.
-        let mut groups: BTreeMap<&[u64], Vec<(usize, usize)>> = BTreeMap::new();
+        let mut groups: BTreeMap<&[u64], Vec<(usize, DeclarationId)>> = BTreeMap::new();
         for (i, f) in g.files.iter().enumerate() {
             if !cx.measured[i] || shadowed[i] {
                 continue;
@@ -79,7 +79,7 @@ impl Analysis for Duplicate {
                 groups
                     .entry(m.fingerprints.as_slice())
                     .or_default()
-                    .push((i, decl_id.index()));
+                    .push((i, *decl_id));
             }
         }
         for members in groups.values() {
@@ -89,23 +89,11 @@ impl Analysis for Duplicate {
             let canonical = render(g, *first);
             for &(file, decl) in rest {
                 let f = &g.files[file];
-                let d = &f.evidence.declarations[decl];
-                let selector = match d.owner {
-                    Some(owner) => SymbolSelector::Member {
-                        owner: f.evidence.declarations[owner.index()].name.clone(),
-                        name: d.name.clone(),
-                    },
-                    None => SymbolSelector::Free(d.name.clone()),
-                };
                 out.push(Finding::new(
                     Category::DUPLICATE,
                     Severity::Info,
                     Confidence::Certain,
-                    Subject::Symbol {
-                        path: f.path.clone(),
-                        selector,
-                        span: d.span,
-                    },
+                    f.evidence.subject_of(&f.path, decl),
                     "",
                     format!("structural clone of {canonical}"),
                 ));
@@ -115,15 +103,11 @@ impl Analysis for Duplicate {
     }
 }
 
-fn render(g: &crate::graph::Graph, (file, decl): (usize, usize)) -> String {
+fn render(g: &crate::graph::Graph, (file, decl): (usize, DeclarationId)) -> String {
     let f = &g.files[file];
-    let d = &f.evidence.declarations[decl];
-    let selector = match d.owner {
-        Some(owner) => kndo_contract::subject::SymbolSelector::Member {
-            owner: f.evidence.declarations[owner.index()].name.clone(),
-            name: d.name.clone(),
-        },
-        None => kndo_contract::subject::SymbolSelector::Free(d.name.clone()),
-    };
-    format!("{}:{}", f.path.as_str(), selector.render())
+    format!(
+        "{}:{}",
+        f.path.as_str(),
+        f.evidence.selector_of(decl).render()
+    )
 }

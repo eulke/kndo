@@ -5,7 +5,7 @@ subject = "src/main/java/retro/DefaultMethodSupport.java#DefaultMethodSupport"
 why = "Reflection.call names it from the same package in the base tree"
 
 [[alive]]
-subject = "src/main/java/retro/DefaultMethodSupport.java#DefaultMethodSupport.invoke"
+subject = "src/main/java/retro/DefaultMethodSupport.java#DefaultMethodSupport.invoke(Object)"
 why = "Reflection.call calls it; the base variant is what older runtimes load"
 
 [[alive]]
@@ -13,5 +13,5 @@ subject = "src/main/java16/retro/DefaultMethodSupport.java#DefaultMethodSupport"
 why = "the multi-release variant shares the base package unit symmetrically"
 
 [[alive]]
-subject = "src/main/java16/retro/DefaultMethodSupport.java#DefaultMethodSupport.invoke"
+subject = "src/main/java16/retro/DefaultMethodSupport.java#DefaultMethodSupport.invoke(Object)"
 why = "the same call from Reflection.call reaches the java16 variant a newer runtime loads"

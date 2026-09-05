@@ -6,10 +6,12 @@
 //!
 //! ```text
 //! fn name              private function declaration
+//! fn name(int, T)      the same, with the signature that tells two `name`s apart
 //! pub fn name          exported function declaration
 //! type Name            private type declaration
 //! pub type Name        exported type declaration
-//! member Owner.name    private member of `Owner`
+//! member Owner.name    private member of `Owner` (`Owner.name(int)` with a signature;
+//!                      a later line naming a bare `name` means the last one declared)
 //! pub member Owner.name   exported member of `Owner`
 //! package a.b          the namespace this file declares itself into
 //! extends Sub Base     `Sub` extends the type named `Base`
@@ -224,8 +226,11 @@ impl Extension for MockExtension {
             if kind == SymbolKind::Method {
                 continue;
             }
-            let name = rest.trim();
+            let (name, signature) = split_signature(rest.trim());
             let id = out.declaration(name, kind, span, reach);
+            if let Some(signature) = signature {
+                out.signature(id, signature);
+            }
             decls.insert(name, id);
         }
         for (line, span) in lines_with_spans(&text) {
@@ -236,11 +241,15 @@ impl Extension for MockExtension {
                 continue;
             }
             // `member Owner.name`: the owner is a type declared above.
-            let (owner, name) = match rest.trim().split_once('.') {
+            let (rest, signature) = split_signature(rest.trim());
+            let (owner, name) = match rest.split_once('.') {
                 Some((owner, name)) => (Some(owner), name),
-                None => (None, rest.trim()),
+                None => (None, rest),
             };
             let id = out.declaration(name, kind, span, reach);
+            if let Some(signature) = signature {
+                out.signature(id, signature);
+            }
             decls.insert(name, id);
             match owner.map(|o| decls.get(o)) {
                 Some(Some(owner)) => out.member_of(id, *owner),
@@ -453,6 +462,15 @@ fn normalized(path: &str) -> String {
         }
     }
     parts.join("/")
+}
+
+/// `f(int, String)` → the name and the language's spelling of what tells it
+/// from another `f`, kept verbatim with its parentheses; a bare `f` has none.
+fn split_signature(rest: &str) -> (&str, Option<&str>) {
+    match rest.find('(') {
+        Some(at) => (&rest[..at], Some(&rest[at..])),
+        None => (rest, None),
+    }
 }
 
 /// `pub fn f`, `type T`, `pub member T.m` — a declaration line's reach, kind

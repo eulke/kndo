@@ -52,10 +52,8 @@
         "kind": "symbol",
         "path": "src/main/java/com/foo/Widget.java",
         "selector": {
-          "Member": {
-            "owner": "Widget",
-            "name": "spare"
-          }
+          "owner": "Widget",
+          "name": "spare"
         },
         "span": {
           "start": 409,

@@ -5,5 +5,5 @@ subject = "src/main/java/com/foo/Handler.java#Handler.Query"
 why = "Main constructs it as Handler.Query; keeping the qualifier stops the lookup falling through to the imported annotation binding of the bare name"
 
 [[alive]]
-subject = "src/main/java/com/foo/Handler.java#Handler.checkArgument"
+subject = "src/main/java/com/foo/Handler.java#Handler.checkArgument(String)"
 why = "reached only from the nested type's constructor, so it dies with that constructor if the constructor gets no incoming edge"

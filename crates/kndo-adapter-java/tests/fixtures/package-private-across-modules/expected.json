@@ -55,7 +55,7 @@
   },
   "findings": [
     {
-      "id": "kndo-a2de5633ab5f",
+      "id": "kndo-fed0f68b3aee",
       "category": "unused",
       "severity": "warning",
       "confidence": "certain",
@@ -63,10 +63,9 @@
         "kind": "symbol",
         "path": "lib/src/main/java/com/foo/Widget.java",
         "selector": {
-          "Member": {
-            "owner": "Widget",
-            "name": "forgotten"
-          }
+          "owner": "Widget",
+          "name": "forgotten",
+          "signature": "()"
         },
         "span": {
           "start": 318,

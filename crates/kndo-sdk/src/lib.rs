@@ -232,6 +232,7 @@ pub fn evidence_to_wire(evidence: &FileEvidence) -> wire::FileEvidence {
                 },
                 owner: d.owner.map(|id| id.index() as u32),
                 exported_as: d.exported_as.as_ref().map(|s| s.to_string()),
+                signature: d.signature.as_ref().map(|s| s.to_string()),
             })
             .collect(),
         references: evidence

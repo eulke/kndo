@@ -38,7 +38,7 @@
         "kind": "symbol",
         "path": "src/calc.js",
         "selector": {
-          "Free": "neverRan"
+          "name": "neverRan"
         },
         "span": {
           "start": 199,

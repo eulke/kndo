@@ -6,22 +6,81 @@ use crate::vocab::{Category, ProjectPath, Span, SubjectKind};
 use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
 
-/// Names a symbol within a file. The one place the member-of relation is spelled;
-/// rendering (`Owner.name`) is the output edge's job, never a parsing convention.
+/// The address of one declaration inside its file — a KEY, unique within the
+/// file by construction (the evidence sink assigns `nth`), so two declarations
+/// can never share a finding identity or a query address. Built in one place,
+/// [`crate::evidence::FileEvidence::selector_of`]; every consumer that names a
+/// symbol goes through it and never re-spells the parts.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-pub enum SymbolSelector {
-    Free(SmolStr),
-    Member { owner: SmolStr, name: SmolStr },
+pub struct SymbolSelector {
+    /// The declaration this one is a member of, by name; `None` for a free
+    /// declaration.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner: Option<SmolStr>,
+    pub name: SmolStr,
+    /// What the language reads beyond the identifier to tell same-named
+    /// declarations apart, as it spells it — see
+    /// [`crate::evidence::Declaration::signature`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signature: Option<SmolStr>,
+    /// Position among the file's declarations sharing owner, name and
+    /// signature, in source order — zero for the common case, and the reason
+    /// two declarations a language cannot tell apart by name (a Python
+    /// redefinition, an overload whose adapter states no signature) still
+    /// have two addresses.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub nth: u32,
+}
+
+fn is_zero(n: &u32) -> bool {
+    *n == 0
 }
 
 impl SymbolSelector {
-    /// The display spelling; the inverse (parsing) deliberately does not exist.
-    pub fn render(&self) -> String {
-        match self {
-            SymbolSelector::Free(name) => name.to_string(),
-            SymbolSelector::Member { owner, name } => format!("{owner}.{name}"),
+    /// A free declaration known to be the only one of its name — a hand-built
+    /// subject in a test or a plugin. Evidence never goes through here: a
+    /// declaration's selector comes from
+    /// [`crate::evidence::FileEvidence::selector_of`], which is what makes it
+    /// unique.
+    pub fn free(name: &str) -> SymbolSelector {
+        SymbolSelector {
+            owner: None,
+            name: SmolStr::new(name),
+            signature: None,
+            nth: 0,
         }
+    }
+
+    /// A member known to be the only one of its name on its owner — see
+    /// [`SymbolSelector::free`].
+    pub fn member(owner: &str, name: &str) -> SymbolSelector {
+        SymbolSelector {
+            owner: Some(SmolStr::new(owner)),
+            name: SmolStr::new(name),
+            signature: None,
+            nth: 0,
+        }
+    }
+
+    /// The one display spelling: `Owner.name`, the signature verbatim when
+    /// there is one (`Owner.name(int, String)`), and `#k` for the k-th of
+    /// several a language cannot tell apart (`Owner.name#2`). The inverse
+    /// (parsing) deliberately does not exist — a consumer that wants to find
+    /// the declaration behind a spelling compares renders.
+    pub fn render(&self) -> String {
+        let mut out = match &self.owner {
+            Some(owner) => format!("{owner}.{}", self.name),
+            None => self.name.to_string(),
+        };
+        if let Some(signature) = &self.signature {
+            out.push_str(signature);
+        }
+        if self.nth > 0 {
+            out.push('#');
+            out.push_str(&(self.nth + 1).to_string());
+        }
+        out
     }
 }
 

@@ -133,6 +133,37 @@ a manifest excludes. Discovered, never claimed.
 
 ### Judgment
 
+**Finding**:
+One verdict of one category on one subject, with a message. Two findings with one
+identity are one finding — so identity must tell apart everything a verdict can be
+about.
+
+**Subject**:
+What a finding is about: a file, a symbol, a package, a dependency, a directory, an
+import statement, a suppression. Rendered one way everywhere a subject is shown or
+addressed; the parts are never re-spelled by a consumer.
+
+**Selector**:
+The address of one declaration inside its file: its owner (when it is a member), its
+name, its signature (when its language has one) and, when nothing else does, its
+position among the declarations that share all of those. Unique within a file by
+construction — the evidence sink guarantees it, so an overload, a field and method of
+one name, or two nested types of one name can never share an address.
+_Avoid_: symbol path, qualified name
+
+**Signature**:
+What a language reads beyond the identifier to tell same-named declarations apart, as
+that language spells it: Java's and Kotlin's parameter types `(int, String)`, Swift's
+argument labels `(_:with:)`. Never the identifier (references carry identifiers
+alone), never parameter names or a return type (renaming a parameter does not make a
+new method). Absent where the language has no such thing.
+_Avoid_: arity, overload key
+
+**Identity**:
+What makes a finding the same finding across runs: its category and its subject —
+never its span, so moving code changes nothing. Baselines and suppressions match on
+it, and `fixed` is what a baseline holds and a run no longer does.
+
 **Root**:
 What anchors liveness: a unit's entry, a test, a launched file, a declaration a
 dispatch rule names. Roots carry a color: production, test or tooling.

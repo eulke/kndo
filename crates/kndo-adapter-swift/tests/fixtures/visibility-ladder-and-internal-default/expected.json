@@ -41,7 +41,7 @@
         "kind": "symbol",
         "path": "Sources/App/main.swift",
         "selector": {
-          "Free": "widget"
+          "name": "widget"
         },
         "span": {
           "start": 0,

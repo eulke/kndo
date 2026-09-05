@@ -27,7 +27,9 @@ plugins:
 Finding ids are handles: `kndo explain <id>` expands one, `kndo used-by` and
 `kndo trace` answer the questions a model asks next, and every query answer
 ends with a `next:` line naming them. Symbols are spelled as
-`path#name · kind · color · lines`, one per line, nothing repeated. The grammar
+`path#name · kind · color · lines`, one per line, nothing repeated — where the
+name carries the signature a language spells (`Widget.size(int)`), so two
+overloads are two lines and each is an address the verbs accept. The grammar
 is versioned in its first line and pinned by a golden file in the test suite,
 so a prompt written against it keeps working.
 

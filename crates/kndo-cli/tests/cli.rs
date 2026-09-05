@@ -350,7 +350,7 @@ fn diff_mode_compares_the_worktree_against_a_ref() {
         .unwrap()
         .iter()
         .map(|f| {
-            f["subject"]["selector"]["Free"]
+            f["subject"]["selector"]["name"]
                 .as_str()
                 .unwrap_or("")
                 .to_string()
@@ -835,4 +835,73 @@ fn health_by_package_renders_the_split_on_a_terminal() {
         "{}",
         json.stdout
     );
+}
+
+#[test]
+fn two_overloads_are_two_addresses_through_the_shipped_frontend() {
+    // The finding address space and the query address space are one space,
+    // so an overload that has its own finding identity has its own address:
+    // the bare name is ambiguous and says which spellings to retry with, and
+    // each of those resolves to exactly one declaration.
+    let p = TempProject::new();
+    p.file(
+        "pom.xml",
+        "<project><modelVersion>4.0.0</modelVersion><groupId>com.foo</groupId>\
+         <artifactId>w</artifactId><version>1</version></project>\n",
+    );
+    p.file(
+        "src/main/java/com/foo/Widget.java",
+        "package com.foo;\n\npublic class Widget {\n  static int spare(int n) { return n; }\n  static int spare(long n) { return (int) n; }\n}\n",
+    );
+    let root = p.root().to_string_lossy().into_owned();
+    let ambiguous = run_args(
+        [
+            "kndo",
+            "describe",
+            "src/main/java/com/foo/Widget.java#Widget.spare",
+            "--root",
+            &root,
+        ],
+        piped(),
+    );
+    let response: serde_json::Value = serde_json::from_str(&ambiguous.stdout).expect("json");
+    assert_eq!(
+        response["results"][0]["status"], "error",
+        "{}",
+        ambiguous.stdout
+    );
+    let message = response["results"][0]["message"].as_str().unwrap();
+    assert!(
+        message.contains("Widget.spare(int)") && message.contains("Widget.spare(long)"),
+        "the retry list names each overload once, distinctly: {message}"
+    );
+
+    let exact = run_args(
+        [
+            "kndo",
+            "describe",
+            "src/main/java/com/foo/Widget.java#Widget.spare(long)",
+            "--root",
+            &root,
+        ],
+        piped(),
+    );
+    let response: serde_json::Value = serde_json::from_str(&exact.stdout).expect("json");
+    assert_eq!(response["results"][0]["status"], "ok", "{}", exact.stdout);
+    assert_eq!(
+        response["results"][0]["node"]["selector"],
+        "src/main/java/com/foo/Widget.java#Widget.spare(long)"
+    );
+
+    // And the two findings are two findings, never one reported twice.
+    let out = check(&p, &["--format", "json"], piped());
+    let report: serde_json::Value = serde_json::from_str(&out.stdout).expect("json");
+    let ids: std::collections::BTreeSet<&str> = report["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|f| f["category"] == "unused")
+        .map(|f| f["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(ids.len(), 2, "{}", out.stdout);
 }

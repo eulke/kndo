@@ -46,7 +46,7 @@
         "kind": "symbol",
         "path": "src/inner.rs",
         "selector": {
-          "Free": "helper"
+          "name": "helper"
         },
         "span": {
           "start": 17,

@@ -46,7 +46,7 @@
         "kind": "symbol",
         "path": "watchOS Example/watchOS Example WatchKit Extension/ContentView.swift",
         "selector": {
-          "Free": "ContentView_Previews"
+          "name": "ContentView_Previews"
         },
         "span": {
           "start": 108,
@@ -68,10 +68,8 @@
         "kind": "symbol",
         "path": "watchOS Example/watchOS Example WatchKit Extension/ContentView.swift",
         "selector": {
-          "Member": {
-            "owner": "ContentView_Previews",
-            "name": "previews"
-          }
+          "owner": "ContentView_Previews",
+          "name": "previews"
         },
         "span": {
           "start": 159,

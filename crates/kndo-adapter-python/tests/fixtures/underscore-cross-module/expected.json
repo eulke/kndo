@@ -43,7 +43,7 @@
         "kind": "symbol",
         "path": "src/pkg/inner.py",
         "selector": {
-          "Free": "_lost"
+          "name": "_lost"
         },
         "span": {
           "start": 31,

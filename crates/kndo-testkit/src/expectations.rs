@@ -31,7 +31,7 @@
 //! cannot rot.
 
 use kndo_contract::finding::Finding;
-use kndo_contract::subject::{Subject, SymbolSelector};
+use kndo_contract::subject::Subject;
 use serde::Deserialize;
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
@@ -106,12 +106,9 @@ impl Reported {
 pub fn spell(subject: &Subject) -> String {
     match subject {
         Subject::File { path } => path.as_str().to_string(),
-        Subject::Symbol { path, selector, .. } => match selector {
-            SymbolSelector::Free(name) => format!("{}#{}", path.as_str(), name),
-            SymbolSelector::Member { owner, name } => {
-                format!("{}#{}.{}", path.as_str(), owner, name)
-            }
-        },
+        Subject::Symbol { path, selector, .. } => {
+            format!("{}#{}", path.as_str(), selector.render())
+        }
         Subject::Dependency {
             owner_manifest,
             name,

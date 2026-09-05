@@ -38,7 +38,7 @@
         "kind": "symbol",
         "path": "src/classify.py",
         "selector": {
-          "Free": "classify"
+          "name": "classify"
         },
         "span": {
           "start": 0,
@@ -60,7 +60,7 @@
         "kind": "symbol",
         "path": "src/dark.py",
         "selector": {
-          "Free": "never_run"
+          "name": "never_run"
         },
         "span": {
           "start": 0,

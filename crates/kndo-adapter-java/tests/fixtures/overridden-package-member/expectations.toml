@@ -1,14 +1,14 @@
 # overridden-package-member: a package-private member a sibling of its package overrides cannot narrow to private — the override needs it at least this visible — and the override itself is kept by the promise, with no call site naming it.
 
 [[alive]]
-subject = "src/main/java/demo/Shape.java#Shape.area"
+subject = "src/main/java/demo/Shape.java#Shape.area()"
 why = "abstract and called through `describe`; Square overrides it, so narrowing is a compile error, not advice"
 
 [[alive]]
-subject = "src/main/java/demo/Square.java#Square.area"
+subject = "src/main/java/demo/Square.java#Square.area()"
 why = "a witness of Shape's surface: every caller holds a Shape and dispatches through it"
 
 [[dead]]
-subject = "src/main/java/demo/Shape.java#Shape.onlyHere"
+subject = "src/main/java/demo/Shape.java#Shape.onlyHere()"
 category = "internal-only"
 why = "package-private, used only inside its own file, and nothing overrides it — the narrower rung would suffice"

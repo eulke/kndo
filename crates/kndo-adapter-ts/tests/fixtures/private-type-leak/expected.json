@@ -43,7 +43,7 @@
         "kind": "symbol",
         "path": "index.ts",
         "selector": {
-          "Free": "make"
+          "name": "make"
         },
         "span": {
           "start": 38,

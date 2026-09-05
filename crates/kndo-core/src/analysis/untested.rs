@@ -9,7 +9,7 @@
 use super::{AbstentionReason, Analysis, AnalysisContext, RunContext, has_root_of};
 use kndo_contract::evidence::{RootKind, SymbolKind};
 use kndo_contract::finding::{Finding, Severity};
-use kndo_contract::subject::{Subject, SymbolSelector};
+use kndo_contract::subject::Subject;
 use kndo_contract::vocab::{Category, Confidence};
 
 pub struct Untested;
@@ -48,7 +48,7 @@ impl Analysis for Untested {
             }
             let file_coverage = cx.run.coverage.as_ref().and_then(|c| c.files.get(&f.path));
             let mut coverage_spoke = false;
-            for d in &f.evidence.declarations {
+            for (id, d) in f.evidence.declarations_with_ids() {
                 if !matches!(d.kind, SymbolKind::Function | SymbolKind::Method) {
                     continue;
                 }
@@ -60,22 +60,11 @@ impl Analysis for Untested {
                 if !untested {
                     continue;
                 }
-                let selector = match d.owner {
-                    Some(owner) => SymbolSelector::Member {
-                        owner: f.evidence.declarations[owner.index()].name.clone(),
-                        name: d.name.clone(),
-                    },
-                    None => SymbolSelector::Free(d.name.clone()),
-                };
                 out.push(Finding::new(
                     Category::UNTESTED,
                     Severity::Info,
                     Confidence::Certain,
-                    Subject::Symbol {
-                        path: f.path.clone(),
-                        selector,
-                        span: d.span,
-                    },
+                    f.evidence.subject_of(&f.path, id),
                     "",
                     "no test executes this function",
                 ));

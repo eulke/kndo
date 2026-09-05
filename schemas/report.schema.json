@@ -962,44 +962,35 @@
       ]
     },
     "SymbolSelector": {
-      "description": "Names a symbol within a file. The one place the member-of relation is spelled;\nrendering (`Owner.name`) is the output edge's job, never a parsing convention.",
-      "oneOf": [
-        {
-          "type": "object",
-          "properties": {
-            "Free": {
-              "type": "string"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "Free"
+      "description": "The address of one declaration inside its file — a KEY, unique within the\nfile by construction (the evidence sink assigns `nth`), so two declarations\ncan never share a finding identity or a query address. Built in one place,\n[`crate::evidence::FileEvidence::selector_of`]; every consumer that names a\nsymbol goes through it and never re-spells the parts.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "nth": {
+          "description": "Position among the file's declarations sharing owner, name and\nsignature, in source order — zero for the common case, and the reason\ntwo declarations a language cannot tell apart by name (a Python\nredefinition, an overload whose adapter states no signature) still\nhave two addresses.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "owner": {
+          "description": "The declaration this one is a member of, by name; `None` for a free\ndeclaration.",
+          "type": [
+            "string",
+            "null"
           ]
         },
-        {
-          "type": "object",
-          "properties": {
-            "Member": {
-              "type": "object",
-              "properties": {
-                "name": {
-                  "type": "string"
-                },
-                "owner": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "owner",
-                "name"
-              ]
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "Member"
+        "signature": {
+          "description": "What the language reads beyond the identifier to tell same-named\ndeclarations apart, as it spells it — see\n[`crate::evidence::Declaration::signature`].",
+          "type": [
+            "string",
+            "null"
           ]
         }
+      },
+      "required": [
+        "name"
       ]
     }
   }

@@ -41,7 +41,7 @@
         "kind": "symbol",
         "path": "src/main/kotlin/demo/Demo.kt",
         "selector": {
-          "Free": "MyProvider"
+          "name": "MyProvider"
         },
         "span": {
           "start": 243,
@@ -63,7 +63,7 @@
         "kind": "symbol",
         "path": "src/main/kotlin/demo/Demo.kt",
         "selector": {
-          "Free": "MyMeta"
+          "name": "MyMeta"
         },
         "span": {
           "start": 282,

@@ -1201,3 +1201,24 @@ accusations withdrawn because a sibling artifact really uses those members, 730
 restored because a coincidence never did. Precision moved in both directions
 for the same reason — the engine stopped answering a question about a SYMBOL
 with evidence about a WORD.
+
+### Identity: every declaration has its own (2026-09-06)
+
+Finding identity hashed `Owner.name`, so overloads shared one id — and one
+baseline entry, and one query address. The selector is now a key the evidence
+sink makes unique by construction.
+
+| repository | duplicated ids before | after | findings carrying a signature | positional `#k` |
+|---|---|---|---|---|
+| guava | 152 (277 rows) | 0 | 6,084 | 17 |
+| Exposed | 18 (45 rows) | 0 | 0 | 57 |
+| Alamofire | 21 | 0 | 0 | 33 |
+| vapor | 2 | 0 | 0 | 3 |
+| vite | 1 | 0 | 0 | 1 |
+| flask, gin, lodash, ripgrep | 0 | 0 | 0 | 5, 0, 0, 1 |
+
+Every row is unchanged as a multiset of (category, subject, lines): this slice
+changed what findings are CALLED, not which exist. Java states signatures, so
+its `#k` cases are only the ones no signature can split — two `ImmutableSortedMap.of(K, V, …)`
+whose parameter types spell identically; Kotlin and Swift state none yet and
+lean on position until their adapters migrate.

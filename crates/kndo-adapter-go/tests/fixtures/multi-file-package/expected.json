@@ -43,7 +43,7 @@
         "kind": "symbol",
         "path": "sub/format.go",
         "selector": {
-          "Free": "deadHelper"
+          "name": "deadHelper"
         },
         "span": {
           "start": 151,

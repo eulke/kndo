@@ -49,7 +49,7 @@
   },
   "findings": [
     {
-      "id": "kndo-812cc39faa67",
+      "id": "kndo-bf3103cc2752",
       "category": "unused",
       "severity": "warning",
       "confidence": "certain",
@@ -57,10 +57,9 @@
         "kind": "symbol",
         "path": "src/test/java/demo/ClassifyTest.java",
         "selector": {
-          "Member": {
-            "owner": "ClassifyTest",
-            "name": "darkness"
-          }
+          "owner": "ClassifyTest",
+          "name": "darkness",
+          "signature": "()"
         },
         "span": {
           "start": 334,
@@ -74,7 +73,7 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
-      "id": "kndo-85ed670193c9",
+      "id": "kndo-d1cc1a22fb23",
       "category": "unused",
       "severity": "warning",
       "confidence": "certain",
@@ -82,10 +81,9 @@
         "kind": "symbol",
         "path": "src/test/java/demo/ClassifyTest.java",
         "selector": {
-          "Member": {
-            "owner": "ClassifyTest",
-            "name": "gradesTheTop"
-          }
+          "owner": "ClassifyTest",
+          "name": "gradesTheTop",
+          "signature": "()"
         },
         "span": {
           "start": 197,
@@ -107,7 +105,7 @@
         "kind": "symbol",
         "path": "src/test/java/demo/ClassifyTest.java",
         "selector": {
-          "Free": "ClassifyTest"
+          "name": "ClassifyTest"
         },
         "span": {
           "start": 172,
@@ -121,7 +119,7 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
-      "id": "kndo-64bad2c23006",
+      "id": "kndo-848e5810dd02",
       "category": "untested",
       "severity": "info",
       "confidence": "certain",
@@ -129,10 +127,9 @@
         "kind": "symbol",
         "path": "src/main/java/demo/Classify.java",
         "selector": {
-          "Member": {
-            "owner": "Classify",
-            "name": "neverRan"
-          }
+          "owner": "Classify",
+          "name": "neverRan",
+          "signature": "(int)"
         },
         "span": {
           "start": 398,
@@ -146,7 +143,7 @@
       "message": "no test executes this function"
     },
     {
-      "id": "kndo-bcb28be171e6",
+      "id": "kndo-e3f1e9eb6221",
       "category": "untested",
       "severity": "info",
       "confidence": "certain",
@@ -154,10 +151,9 @@
         "kind": "symbol",
         "path": "src/main/java/demo/Dark.java",
         "selector": {
-          "Member": {
-            "owner": "Dark",
-            "name": "untouched"
-          }
+          "owner": "Dark",
+          "name": "untouched",
+          "signature": "(int)"
         },
         "span": {
           "start": 68,

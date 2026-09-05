@@ -21,7 +21,6 @@ use super::{
 };
 use kndo_contract::evidence::{EvidenceStream, RootKind};
 use kndo_contract::finding::{Finding, Severity};
-use kndo_contract::subject::{Subject, SymbolSelector};
 use kndo_contract::vocab::{Category, Confidence};
 
 /// The metric's own line: a function scoring at or above it is a finding.
@@ -85,22 +84,11 @@ impl Analysis for Crap {
                 if score < self.threshold {
                     continue;
                 }
-                let selector = match d.owner {
-                    Some(owner) => SymbolSelector::Member {
-                        owner: f.evidence.declarations[owner.index()].name.clone(),
-                        name: d.name.clone(),
-                    },
-                    None => SymbolSelector::Free(d.name.clone()),
-                };
                 out.push(Finding::new(
                     Category::CRAP,
                     Severity::Info,
                     Confidence::Probable,
-                    Subject::Symbol {
-                        path: f.path.clone(),
-                        selector,
-                        span: d.span,
-                    },
+                    f.evidence.subject_of(&f.path, *id),
                     "",
                     format!(
                         "complexity {} with {:.0}% of its lines executed by tests scores {:.0} on \

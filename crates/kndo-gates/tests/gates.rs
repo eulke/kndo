@@ -740,14 +740,7 @@ fn builtin_conduct_proofs() {
     // `category name` — a finding's identity as the proofs below spell it.
     let label = |f: &kndo::Finding| -> String {
         let name = match &f.subject {
-            kndo::Subject::Symbol {
-                selector: kndo::SymbolSelector::Free(name),
-                ..
-            } => name.to_string(),
-            kndo::Subject::Symbol {
-                selector: kndo::SymbolSelector::Member { owner, name },
-                ..
-            } => format!("{owner}.{name}"),
+            kndo::Subject::Symbol { selector, .. } => selector.render(),
             other => format!("{other:?}"),
         };
         format!("{} {name}", f.category.as_str())
@@ -840,7 +833,10 @@ fn builtin_conduct_proofs() {
     ingested(
         "../kndo-adapter-java/tests/fixtures/coverage-jacoco/project",
         &[],
-        &["untested Classify.neverRan", "untested Dark.untouched"],
+        &[
+            "untested Classify.neverRan(int)",
+            "untested Dark.untouched(int)",
+        ],
     );
     ingested(
         "../kndo-adapter-go/tests/fixtures/coverage-gocover/project",
@@ -1289,10 +1285,7 @@ fn agent_format_matches_its_committed_golden() {
                 Confidence::Probable,
                 Subject::Symbol {
                     path: ProjectPath::new("src/store.py"),
-                    selector: SymbolSelector::Member {
-                        owner: SmolStr::new("Store"),
-                        name: SmolStr::new("_drop"),
-                    },
+                    selector: SymbolSelector::member("Store", "_drop"),
                     span: Span::new(120, 180),
                 },
                 "",
@@ -1308,7 +1301,7 @@ fn agent_format_matches_its_committed_golden() {
                 Confidence::Probable,
                 Subject::Symbol {
                     path: ProjectPath::new("src/scope.swift"),
-                    selector: SymbolSelector::Free(SmolStr::new("Helper")),
+                    selector: SymbolSelector::free("Helper"),
                     span: Span::new(0, 64),
                 },
                 "",
@@ -1337,7 +1330,7 @@ fn agent_format_matches_its_committed_golden() {
             Confidence::Certain,
             Subject::Symbol {
                 path: ProjectPath::new("src/gone.py"),
-                selector: SymbolSelector::Free(SmolStr::new("_gone")),
+                selector: SymbolSelector::free("_gone"),
                 span: Span::new(5, 25),
             },
             "",

@@ -43,7 +43,7 @@
         "kind": "symbol",
         "path": "src/pkg/util.py",
         "selector": {
-          "Free": "_ghost"
+          "name": "_ghost"
         },
         "span": {
           "start": 92,

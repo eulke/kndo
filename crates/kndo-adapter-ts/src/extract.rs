@@ -218,7 +218,7 @@ fn declare(
                 // whole body as one would make every member reference a
                 // "signature" reference.
                 if let Some(body) = node.child_by_field_name("body") {
-                    out.signature(
+                    out.signature_span(
                         id,
                         Span {
                             start: node.start_byte() as u32,

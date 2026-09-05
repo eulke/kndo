@@ -1,11 +1,11 @@
 # visibility-ladder-and-nested-members: each rung of Java's visibility ladder against the scope its uses require, with nested members judged under their owner.
 
 [[alive]]
-subject = "src/main/java/com/foo/Widget.java#Widget.a"
+subject = "src/main/java/com/foo/Widget.java#Widget.a()"
 why = "used only within this file (main) — already the tightest rung for its level"
 
 [[alive]]
-subject = "src/main/java/com/foo/Widget.java#Widget.b"
+subject = "src/main/java/com/foo/Widget.java#Widget.b()"
 why = "used from main() and Sibling (same package) — required scope is Unit, which matches its own declared level exactly"
 
 [[dead]]
@@ -14,24 +14,24 @@ category = "internal-only"
 why = "a package-private nested class instantiated only from Widget.main in its own file"
 
 [[dead]]
-subject = "src/main/java/com/foo/Widget.java#Inner.go"
+subject = "src/main/java/com/foo/Widget.java#Inner.go()"
 category = "internal-only"
 why = "a package-private nested member called only from Widget.main in its own file"
 
 [[dead]]
-subject = "src/main/java/com/foo/Widget.java#Inner.helper"
+subject = "src/main/java/com/foo/Widget.java#Inner.helper()"
 category = "internal-only"
 why = "a package-private nested member called only from Inner.go in its own file"
 
 [[known_gap]]
-subject = "src/main/java/com/foo/Widget.java#Widget.c"
+subject = "src/main/java/com/foo/Widget.java#Widget.c()"
 expect = "dead"
 category = "internal-only"
 why = "used only from Sibling (same package, different file) — required is Unit, strictly narrower than protected's declared Public — should flag package-private would suffice"
 fix = "M8.b/M8.c java (J8)"
 
 [[known_gap]]
-subject = "src/main/java/com/foo/Widget.java#Widget.d"
+subject = "src/main/java/com/foo/Widget.java#Widget.d()"
 expect = "dead"
 category = "internal-only"
 why = "same evidence as c(), but declared public — should flag package-private would suffice"

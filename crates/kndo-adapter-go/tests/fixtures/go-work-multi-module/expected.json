@@ -49,7 +49,7 @@
         "kind": "symbol",
         "path": "moda/api.go",
         "selector": {
-          "Free": "deadHelper"
+          "name": "deadHelper"
         },
         "span": {
           "start": 397,

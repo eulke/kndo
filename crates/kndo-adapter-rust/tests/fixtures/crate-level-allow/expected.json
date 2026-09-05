@@ -46,7 +46,7 @@
         "kind": "symbol",
         "path": "src/inner.rs",
         "selector": {
-          "Free": "stale"
+          "name": "stale"
         },
         "span": {
           "start": 0,

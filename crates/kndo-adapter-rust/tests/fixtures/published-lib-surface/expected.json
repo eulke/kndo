@@ -46,7 +46,7 @@
         "kind": "symbol",
         "path": "src/api.rs",
         "selector": {
-          "Free": "private_dead"
+          "name": "private_dead"
         },
         "span": {
           "start": 86,

@@ -16,7 +16,7 @@
 use super::{AbstentionReason, Analysis, AnalysisContext, RunContext, dependency};
 use crate::navigate;
 use kndo_contract::finding::{Finding, Severity};
-use kndo_contract::subject::{Subject, SymbolSelector};
+use kndo_contract::subject::Subject;
 use kndo_contract::vocab::{Category, Confidence};
 
 pub struct Unused;
@@ -57,26 +57,16 @@ impl Analysis for Unused {
                 ));
                 continue;
             }
-            for (d_ix, d) in f.evidence.declarations.iter().enumerate() {
+            for (id, _) in f.evidence.declarations_with_ids() {
+                let d_ix = id.index();
                 if !navigate::keepers(g, index, i, d_ix, 1).is_empty() {
                     continue;
                 }
-                let selector = match d.owner {
-                    Some(owner) => SymbolSelector::Member {
-                        owner: f.evidence.declarations[owner.index()].name.clone(),
-                        name: d.name.clone(),
-                    },
-                    None => SymbolSelector::Free(d.name.clone()),
-                };
                 out.push(Finding::new(
                     Category::UNUSED,
                     Severity::Warning,
                     Confidence::Certain,
-                    Subject::Symbol {
-                        path: f.path.clone(),
-                        selector,
-                        span: d.span,
-                    },
+                    f.evidence.subject_of(&f.path, id),
                     "",
                     "nothing references, roots, or imports this declaration",
                 ));

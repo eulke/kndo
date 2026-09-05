@@ -43,7 +43,7 @@
         "kind": "symbol",
         "path": "src/index.ts",
         "selector": {
-          "Free": "unusedHelper"
+          "name": "unusedHelper"
         },
         "span": {
           "start": 350,

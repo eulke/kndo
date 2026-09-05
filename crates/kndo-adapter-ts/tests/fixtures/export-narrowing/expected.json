@@ -54,7 +54,7 @@
         "kind": "symbol",
         "path": "lib.js",
         "selector": {
-          "Free": "local"
+          "name": "local"
         },
         "span": {
           "start": 50,

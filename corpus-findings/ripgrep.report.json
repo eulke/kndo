@@ -124,10 +124,8 @@
         "kind": "symbol",
         "path": "crates/index/src/index.rs",
         "selector": {
-          "Member": {
-            "owner": "Handle",
-            "name": "read_write_mut"
-          }
+          "owner": "Handle",
+          "name": "read_write_mut"
         },
         "span": {
           "start": 5354,
@@ -149,10 +147,8 @@
         "kind": "symbol",
         "path": "crates/index/src/index.rs",
         "selector": {
-          "Member": {
-            "owner": "Handle",
-            "name": "read_write"
-          }
+          "owner": "Handle",
+          "name": "read_write"
         },
         "span": {
           "start": 5092,
@@ -174,7 +170,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_invert_match"
+          "name": "test_invert_match"
         },
         "span": {
           "start": 116611,
@@ -196,7 +192,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_help"
+          "name": "test_help"
         },
         "span": {
           "start": 86764,
@@ -218,7 +214,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_line_buffered"
+          "name": "test_line_buffered"
         },
         "span": {
           "start": 122005,
@@ -240,7 +236,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_no_messages"
+          "name": "test_no_messages"
         },
         "span": {
           "start": 156479,
@@ -262,7 +258,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_block_buffered"
+          "name": "test_block_buffered"
         },
         "span": {
           "start": 18550,
@@ -284,7 +280,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_ignore_case"
+          "name": "test_ignore_case"
         },
         "span": {
           "start": 101474,
@@ -306,7 +302,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_ignore_file_case_insensitive"
+          "name": "test_ignore_file_case_insensitive"
         },
         "span": {
           "start": 104969,
@@ -328,7 +324,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_max_count"
+          "name": "test_max_count"
         },
         "span": {
           "start": 131154,
@@ -350,7 +346,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_multiline_dotall"
+          "name": "test_multiline_dotall"
         },
         "span": {
           "start": 142251,
@@ -372,7 +368,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_smart_case"
+          "name": "test_smart_case"
         },
         "span": {
           "start": 199110,
@@ -394,7 +390,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_hidden"
+          "name": "test_hidden"
         },
         "span": {
           "start": 88834,
@@ -416,7 +412,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_heading"
+          "name": "test_heading"
         },
         "span": {
           "start": 84984,
@@ -438,7 +434,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_no_ignore_parent"
+          "name": "test_no_ignore_parent"
         },
         "span": {
           "start": 153546,
@@ -460,7 +456,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_stats"
+          "name": "test_stats"
         },
         "span": {
           "start": 210150,
@@ -482,7 +478,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_type_clear"
+          "name": "test_type_clear"
         },
         "span": {
           "start": 224311,
@@ -504,7 +500,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_fixed_strings"
+          "name": "test_fixed_strings"
         },
         "span": {
           "start": 73954,
@@ -526,7 +522,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_crlf"
+          "name": "test_crlf"
         },
         "span": {
           "start": 45742,
@@ -548,7 +544,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_trim"
+          "name": "test_trim"
         },
         "span": {
           "start": 218145,
@@ -570,7 +566,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_mmap"
+          "name": "test_mmap"
         },
         "span": {
           "start": 136458,
@@ -592,7 +588,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_iglob"
+          "name": "test_iglob"
         },
         "span": {
           "start": 99652,
@@ -614,7 +610,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_no_ignore_dot"
+          "name": "test_no_ignore_dot"
         },
         "span": {
           "start": 147099,
@@ -636,7 +632,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_threads"
+          "name": "test_threads"
         },
         "span": {
           "start": 215671,
@@ -658,7 +654,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_null_data"
+          "name": "test_null_data"
         },
         "span": {
           "start": 164569,
@@ -680,7 +676,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_text"
+          "name": "test_text"
         },
         "span": {
           "start": 213801,
@@ -702,7 +698,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_type_list"
+          "name": "test_type_list"
         },
         "span": {
           "start": 228395,
@@ -724,7 +720,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_engine"
+          "name": "test_engine"
         },
         "span": {
           "start": 55984,
@@ -746,7 +742,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_binary"
+          "name": "test_binary"
         },
         "span": {
           "start": 16437,
@@ -768,7 +764,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_line_number"
+          "name": "test_line_number"
         },
         "span": {
           "start": 123387,
@@ -790,7 +786,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_follow"
+          "name": "test_follow"
         },
         "span": {
           "start": 75538,
@@ -812,7 +808,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_trace"
+          "name": "test_trace"
         },
         "span": {
           "start": 217066,
@@ -834,7 +830,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_no_ignore_files"
+          "name": "test_no_ignore_files"
         },
         "span": {
           "start": 149498,
@@ -856,7 +852,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_pcre2"
+          "name": "test_pcre2"
         },
         "span": {
           "start": 174427,
@@ -878,7 +874,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_with_filename_no"
+          "name": "test_with_filename_no"
         },
         "span": {
           "start": 237434,
@@ -900,7 +896,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_regex_size_limit"
+          "name": "test_regex_size_limit"
         },
         "span": {
           "start": 187022,
@@ -922,7 +918,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_no_ignore_exclude"
+          "name": "test_no_ignore_exclude"
         },
         "span": {
           "start": 148316,
@@ -944,7 +940,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_no_unicode"
+          "name": "test_no_unicode"
         },
         "span": {
           "start": 161416,
@@ -966,7 +962,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_one_file_system"
+          "name": "test_one_file_system"
         },
         "span": {
           "start": 166444,
@@ -988,7 +984,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_no_line_number"
+          "name": "test_no_line_number"
         },
         "span": {
           "start": 124766,
@@ -1010,7 +1006,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_no_ignore_messages"
+          "name": "test_no_ignore_messages"
         },
         "span": {
           "start": 152136,
@@ -1032,7 +1028,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_stop_on_nonmatch"
+          "name": "test_stop_on_nonmatch"
         },
         "span": {
           "start": 211493,
@@ -1054,7 +1050,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_include_zero"
+          "name": "test_include_zero"
         },
         "span": {
           "start": 106594,
@@ -1076,7 +1072,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_field_match_separator"
+          "name": "test_field_match_separator"
         },
         "span": {
           "start": 61740,
@@ -1098,7 +1094,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_pcre2_version"
+          "name": "test_pcre2_version"
         },
         "span": {
           "start": 176040,
@@ -1120,7 +1116,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_multiline"
+          "name": "test_multiline"
         },
         "span": {
           "start": 140061,
@@ -1142,7 +1138,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_sortr"
+          "name": "test_sortr"
         },
         "span": {
           "start": 207884,
@@ -1164,7 +1160,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_no_require_git"
+          "name": "test_no_require_git"
         },
         "span": {
           "start": 159254,
@@ -1186,7 +1182,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_no_ignore_global"
+          "name": "test_no_ignore_global"
         },
         "span": {
           "start": 150766,
@@ -1208,7 +1204,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_no_pcre2_unicode"
+          "name": "test_no_pcre2_unicode"
         },
         "span": {
           "start": 157624,
@@ -1230,7 +1226,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_no_ignore"
+          "name": "test_no_ignore"
         },
         "span": {
           "start": 145216,
@@ -1252,7 +1248,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_files_without_match"
+          "name": "test_files_without_match"
         },
         "span": {
           "start": 72344,
@@ -1274,7 +1270,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_version"
+          "name": "test_version"
         },
         "span": {
           "start": 232510,
@@ -1296,7 +1292,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_max_columns_preview"
+          "name": "test_max_columns_preview"
         },
         "span": {
           "start": 129409,
@@ -1318,7 +1314,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_count_matches"
+          "name": "test_count_matches"
         },
         "span": {
           "start": 43849,
@@ -1340,7 +1336,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_only_matching"
+          "name": "test_only_matching"
         },
         "span": {
           "start": 167677,
@@ -1362,7 +1358,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_before_context"
+          "name": "test_before_context"
         },
         "span": {
           "start": 12598,
@@ -1384,7 +1380,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_word_regexp"
+          "name": "test_word_regexp"
         },
         "span": {
           "start": 239246,
@@ -1406,7 +1402,7 @@
         "kind": "symbol",
         "path": "crates/core/flags/defs.rs",
         "selector": {
-          "Free": "test_no_ignore_vcs"
+          "name": "test_no_ignore_vcs"
         },
         "span": {
           "start": 155263,
@@ -1428,10 +1424,8 @@
         "kind": "symbol",
         "path": "crates/core/flags/lowargs.rs",
         "selector": {
-          "Member": {
-            "owner": "FieldContextSeparator",
-            "name": "new"
-          }
+          "owner": "FieldContextSeparator",
+          "name": "new"
         },
         "span": {
           "start": 20911,
@@ -1453,10 +1447,8 @@
         "kind": "symbol",
         "path": "crates/core/flags/lowargs.rs",
         "selector": {
-          "Member": {
-            "owner": "FieldMatchSeparator",
-            "name": "new"
-          }
+          "owner": "FieldMatchSeparator",
+          "name": "new"
         },
         "span": {
           "start": 21979,
@@ -1478,7 +1470,7 @@
         "kind": "symbol",
         "path": "crates/globset/src/lib.rs",
         "selector": {
-          "Free": "matches_all_prefix"
+          "name": "matches_all_prefix"
         },
         "span": {
           "start": 37971,
@@ -1500,7 +1492,7 @@
         "kind": "symbol",
         "path": "crates/globset/src/lib.rs",
         "selector": {
-          "Free": "matches_all_extensions"
+          "name": "matches_all_extensions"
         },
         "span": {
           "start": 37392,
@@ -1522,7 +1514,7 @@
         "kind": "symbol",
         "path": "crates/globset/src/lib.rs",
         "selector": {
-          "Free": "matches_all_suffix"
+          "name": "matches_all_suffix"
         },
         "span": {
           "start": 38295,
@@ -1544,10 +1536,8 @@
         "kind": "symbol",
         "path": "crates/globset/src/lib.rs",
         "selector": {
-          "Member": {
-            "owner": "ExtensionStrategy",
-            "name": "matches_into"
-          }
+          "owner": "ExtensionStrategy",
+          "name": "matches_into"
         },
         "span": {
           "start": 26279,
@@ -1569,10 +1559,8 @@
         "kind": "symbol",
         "path": "crates/globset/src/lib.rs",
         "selector": {
-          "Member": {
-            "owner": "GlobSetMatchStrategy",
-            "name": "matches_all"
-          }
+          "owner": "GlobSetMatchStrategy",
+          "name": "matches_all"
         },
         "span": {
           "start": 23165,
@@ -1594,7 +1582,7 @@
         "kind": "symbol",
         "path": "crates/globset/src/lib.rs",
         "selector": {
-          "Free": "matches_all_basename_literals"
+          "name": "matches_all_basename_literals"
         },
         "span": {
           "start": 37089,
@@ -1616,7 +1604,7 @@
         "kind": "symbol",
         "path": "crates/ignore/src/dir.rs",
         "selector": {
-          "Free": "gitignore"
+          "name": "gitignore"
         },
         "span": {
           "start": 41667,
@@ -1638,7 +1626,7 @@
         "kind": "symbol",
         "path": "crates/ignore/src/dir.rs",
         "selector": {
-          "Free": "ignore"
+          "name": "ignore"
         },
         "span": {
           "start": 43423,
@@ -1660,7 +1648,7 @@
         "kind": "symbol",
         "path": "crates/ignore/src/dir.rs",
         "selector": {
-          "Free": "gitignore_with_jj"
+          "name": "gitignore_with_jj"
         },
         "span": {
           "start": 42106,
@@ -1682,7 +1670,7 @@
         "kind": "symbol",
         "path": "crates/ignore/src/dir.rs",
         "selector": {
-          "Free": "errored_partial"
+          "name": "errored_partial"
         },
         "span": {
           "start": 47145,
@@ -1704,7 +1692,7 @@
         "kind": "symbol",
         "path": "crates/ignore/src/overrides.rs",
         "selector": {
-          "Free": "gitignore"
+          "name": "gitignore"
         },
         "span": {
           "start": 7834,
@@ -1726,10 +1714,8 @@
         "kind": "symbol",
         "path": "crates/ignore/src/types.rs",
         "selector": {
-          "Member": {
-            "owner": "TypesBuilder",
-            "name": "negate"
-          }
+          "owner": "TypesBuilder",
+          "name": "negate"
         },
         "span": {
           "start": 12615,
@@ -1751,10 +1737,8 @@
         "kind": "symbol",
         "path": "crates/ignore/src/walk.rs",
         "selector": {
-          "Member": {
-            "owner": "WalkBuilder",
-            "name": "sort_by_file_name"
-          }
+          "owner": "WalkBuilder",
+          "name": "sort_by_file_name"
         },
         "span": {
           "start": 33300,
@@ -1776,7 +1760,7 @@
         "kind": "symbol",
         "path": "crates/ignore/tests/gitignore_matched_path_or_any_parents_tests.rs",
         "selector": {
-          "Free": "test_files_in_deep"
+          "name": "test_files_in_deep"
         },
         "span": {
           "start": 1665,
@@ -1798,10 +1782,8 @@
         "kind": "symbol",
         "path": "crates/index/src/literal.rs",
         "selector": {
-          "Member": {
-            "owner": "GramQuery",
-            "name": "from_set_and"
-          }
+          "owner": "GramQuery",
+          "name": "from_set_and"
         },
         "span": {
           "start": 4080,
@@ -1823,10 +1805,8 @@
         "kind": "symbol",
         "path": "crates/index/src/literal.rs",
         "selector": {
-          "Member": {
-            "owner": "GramQuery",
-            "name": "and"
-          }
+          "owner": "GramQuery",
+          "name": "and"
         },
         "span": {
           "start": 2768,
@@ -1848,7 +1828,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "max_columns_with_count_preview_no_match"
+          "name": "max_columns_with_count_preview_no_match"
         },
         "span": {
           "start": 90015,
@@ -1870,7 +1850,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "per_match_multi_line2"
+          "name": "per_match_multi_line2"
         },
         "span": {
           "start": 114557,
@@ -1892,7 +1872,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "invert_multi_line"
+          "name": "invert_multi_line"
         },
         "span": {
           "start": 128773,
@@ -1914,7 +1894,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "per_match_multi_line3"
+          "name": "per_match_multi_line3"
         },
         "span": {
           "start": 115513,
@@ -1936,7 +1916,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "no_heading_multiple"
+          "name": "no_heading_multiple"
         },
         "span": {
           "start": 78341,
@@ -1958,7 +1938,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "max_columns_multi_line_preview"
+          "name": "max_columns_multi_line_preview"
         },
         "span": {
           "start": 93252,
@@ -1980,7 +1960,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "replacement"
+          "name": "replacement"
         },
         "span": {
           "start": 120308,
@@ -2002,7 +1982,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "only_matching_max_columns_preview_multi_line2"
+          "name": "only_matching_max_columns_preview_multi_line2"
         },
         "span": {
           "start": 111826,
@@ -2024,7 +2004,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "context_break_multiple_no_heading"
+          "name": "context_break_multiple_no_heading"
         },
         "span": {
           "start": 69976,
@@ -2046,7 +2026,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "max_columns_with_count_preview_one_match"
+          "name": "max_columns_with_count_preview_one_match"
         },
         "span": {
           "start": 90842,
@@ -2068,7 +2048,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "per_match_multi_line1_only_first_line"
+          "name": "per_match_multi_line1_only_first_line"
         },
         "span": {
           "start": 116490,
@@ -2090,7 +2070,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "invert_context_multi_line"
+          "name": "invert_context_multi_line"
         },
         "span": {
           "start": 130685,
@@ -2112,7 +2092,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "byte_offset"
+          "name": "byte_offset"
         },
         "span": {
           "start": 86062,
@@ -2134,7 +2114,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "per_match"
+          "name": "per_match"
         },
         "span": {
           "start": 112801,
@@ -2156,7 +2136,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "only_matching_multi_line2"
+          "name": "only_matching_multi_line2"
         },
         "span": {
           "start": 106338,
@@ -2178,7 +2158,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "replacement_multi_line_combine_lines"
+          "name": "replacement_multi_line_combine_lines"
         },
         "span": {
           "start": 122866,
@@ -2200,7 +2180,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "heading_multiple"
+          "name": "heading_multiple"
         },
         "span": {
           "start": 79583,
@@ -2222,7 +2202,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "max_columns_with_count_preview_two_matches"
+          "name": "max_columns_with_count_preview_two_matches"
         },
         "span": {
           "start": 91660,
@@ -2244,7 +2224,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "max_columns_with_count"
+          "name": "max_columns_with_count"
         },
         "span": {
           "start": 89268,
@@ -2266,7 +2246,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "invert_context_only_matching"
+          "name": "invert_context_only_matching"
         },
         "span": {
           "start": 131767,
@@ -2288,7 +2268,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "max_matches_multi_line4"
+          "name": "max_matches_multi_line4"
         },
         "span": {
           "start": 104178,
@@ -2310,7 +2290,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "only_matching_max_columns_preview_multi_line1"
+          "name": "only_matching_max_columns_preview_multi_line1"
         },
         "span": {
           "start": 109823,
@@ -2332,10 +2312,8 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Member": {
-            "owner": "StandardImpl",
-            "name": "from_context"
-          }
+          "owner": "StandardImpl",
+          "name": "from_context"
         },
         "span": {
           "start": 33815,
@@ -2357,7 +2335,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "invert"
+          "name": "invert"
         },
         "span": {
           "start": 127943,
@@ -2379,7 +2357,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "per_match_multi_line2_only_first_line"
+          "name": "per_match_multi_line2_only_first_line"
         },
         "span": {
           "start": 117455,
@@ -2401,7 +2379,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "line_number_multi_line"
+          "name": "line_number_multi_line"
         },
         "span": {
           "start": 83437,
@@ -2423,7 +2401,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "max_matches_multi_line1"
+          "name": "max_matches_multi_line1"
         },
         "span": {
           "start": 101989,
@@ -2445,7 +2423,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "path_terminator"
+          "name": "path_terminator"
         },
         "span": {
           "start": 76057,
@@ -2467,7 +2445,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "replacement_only_matching"
+          "name": "replacement_only_matching"
         },
         "span": {
           "start": 126232,
@@ -2489,7 +2467,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "replacement_per_match"
+          "name": "replacement_per_match"
         },
         "span": {
           "start": 126984,
@@ -2511,7 +2489,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "max_matches"
+          "name": "max_matches"
         },
         "span": {
           "start": 94208,
@@ -2533,7 +2511,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "replacement_max_columns_preview1"
+          "name": "replacement_max_columns_preview1"
         },
         "span": {
           "start": 124419,
@@ -2555,7 +2533,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "invert_context_only_matching_multi_line"
+          "name": "invert_context_only_matching_multi_line"
         },
         "span": {
           "start": 132748,
@@ -2577,7 +2555,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "per_match_multi_line1"
+          "name": "per_match_multi_line1"
         },
         "span": {
           "start": 113646,
@@ -2599,7 +2577,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "byte_offset_multi_line"
+          "name": "byte_offset_multi_line"
         },
         "span": {
           "start": 86795,
@@ -2621,7 +2599,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "only_matching_max_columns_preview"
+          "name": "only_matching_max_columns_preview"
         },
         "span": {
           "start": 107952,
@@ -2643,7 +2621,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "only_matching"
+          "name": "only_matching"
         },
         "span": {
           "start": 104888,
@@ -2665,7 +2643,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/standard.rs",
         "selector": {
-          "Free": "per_match_multi_line3_only_first_line"
+          "name": "per_match_multi_line3_only_first_line"
         },
         "span": {
           "start": 118347,
@@ -2687,7 +2665,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/summary.rs",
         "selector": {
-          "Free": "path_with_match_found"
+          "name": "path_with_match_found"
         },
         "span": {
           "start": 36402,
@@ -2709,7 +2687,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/summary.rs",
         "selector": {
-          "Free": "count_matches"
+          "name": "count_matches"
         },
         "span": {
           "start": 35827,
@@ -2731,7 +2709,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/summary.rs",
         "selector": {
-          "Free": "count_path_with_zero"
+          "name": "count_path_with_zero"
         },
         "span": {
           "start": 32264,
@@ -2753,7 +2731,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/summary.rs",
         "selector": {
-          "Free": "path_without_match_found"
+          "name": "path_without_match_found"
         },
         "span": {
           "start": 37544,
@@ -2775,7 +2753,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/summary.rs",
         "selector": {
-          "Free": "path_without_match_not_found"
+          "name": "path_without_match_not_found"
         },
         "span": {
           "start": 38126,
@@ -2797,7 +2775,7 @@
         "kind": "symbol",
         "path": "crates/printer/src/summary.rs",
         "selector": {
-          "Free": "path_without_match_error"
+          "name": "path_without_match_error"
         },
         "span": {
           "start": 30217,
@@ -2819,10 +2797,8 @@
         "kind": "symbol",
         "path": "crates/regex/src/literal.rs",
         "selector": {
-          "Member": {
-            "owner": "Extractor",
-            "name": "extract_class_bytes"
-          }
+          "owner": "Extractor",
+          "name": "extract_class_bytes"
         },
         "span": {
           "start": 13711,
@@ -2844,7 +2820,7 @@
         "kind": "symbol",
         "path": "crates/regex/src/matcher.rs",
         "selector": {
-          "Free": "line_terminator_crlf"
+          "name": "line_terminator_crlf"
         },
         "span": {
           "start": 23125,
@@ -2866,7 +2842,7 @@
         "kind": "symbol",
         "path": "crates/regex/src/matcher.rs",
         "selector": {
-          "Free": "word"
+          "name": "word"
         },
         "span": {
           "start": 21744,
@@ -2888,7 +2864,7 @@
         "kind": "symbol",
         "path": "crates/regex/src/matcher.rs",
         "selector": {
-          "Free": "case_smart"
+          "name": "case_smart"
         },
         "span": {
           "start": 23965,
@@ -2910,7 +2886,7 @@
         "kind": "symbol",
         "path": "crates/searcher/src/line_buffer.rs",
         "selector": {
-          "Free": "buffer_binary_convert4"
+          "name": "buffer_binary_convert4"
         },
         "span": {
           "start": 34534,
@@ -2932,10 +2908,8 @@
         "kind": "symbol",
         "path": "crates/searcher/src/searcher/core.rs",
         "selector": {
-          "Member": {
-            "owner": "Core",
-            "name": "sink_other_context"
-          }
+          "owner": "Core",
+          "name": "sink_other_context"
         },
         "span": {
           "start": 19460,
@@ -2957,7 +2931,7 @@
         "kind": "symbol",
         "path": "crates/searcher/src/searcher/glue.rs",
         "selector": {
-          "Free": "context_sherlock2"
+          "name": "context_sherlock2"
         },
         "span": {
           "start": 30157,
@@ -2979,7 +2953,7 @@
         "kind": "symbol",
         "path": "crates/searcher/src/searcher/glue.rs",
         "selector": {
-          "Free": "multi_line_overlap2"
+          "name": "multi_line_overlap2"
         },
         "span": {
           "start": 16782,
@@ -3001,7 +2975,7 @@
         "kind": "symbol",
         "path": "crates/searcher/src/searcher/glue.rs",
         "selector": {
-          "Free": "context_sherlock5"
+          "name": "context_sherlock5"
         },
         "span": {
           "start": 37745,
@@ -3023,7 +2997,7 @@
         "kind": "symbol",
         "path": "crates/searcher/src/searcher/glue.rs",
         "selector": {
-          "Free": "context_sherlock3"
+          "name": "context_sherlock3"
         },
         "span": {
           "start": 34269,
@@ -3045,7 +3019,7 @@
         "kind": "symbol",
         "path": "crates/searcher/src/searcher/glue.rs",
         "selector": {
-          "Free": "context_sherlock4"
+          "name": "context_sherlock4"
         },
         "span": {
           "start": 36017,
@@ -3067,7 +3041,7 @@
         "kind": "symbol",
         "path": "crates/searcher/src/searcher/glue.rs",
         "selector": {
-          "Free": "context_code3"
+          "name": "context_code3"
         },
         "span": {
           "start": 46283,
@@ -3089,7 +3063,7 @@
         "kind": "symbol",
         "path": "crates/searcher/src/searcher/glue.rs",
         "selector": {
-          "Free": "context_sherlock_invert2"
+          "name": "context_sherlock_invert2"
         },
         "span": {
           "start": 31903,
@@ -3111,7 +3085,7 @@
         "kind": "symbol",
         "path": "crates/searcher/src/searcher/glue.rs",
         "selector": {
-          "Free": "context_sherlock6"
+          "name": "context_sherlock6"
         },
         "span": {
           "start": 40033,
@@ -3133,10 +3107,8 @@
         "kind": "symbol",
         "path": "crates/searcher/src/testutil.rs",
         "selector": {
-          "Member": {
-            "owner": "TesterConfig",
-            "name": "search_slice"
-          }
+          "owner": "TesterConfig",
+          "name": "search_slice"
         },
         "span": {
           "start": 24706,
@@ -3150,7 +3122,7 @@
       "message": "structural clone of crates/searcher/src/testutil.rs:TesterConfig.search_reader"
     },
     {
-      "id": "kndo-b9549168ee53",
+      "id": "kndo-1834eafb76c0",
       "category": "duplicate",
       "severity": "info",
       "confidence": "certain",
@@ -3158,10 +3130,9 @@
         "kind": "symbol",
         "path": "tests/util.rs",
         "selector": {
-          "Member": {
-            "owner": "Dir",
-            "name": "link_dir"
-          }
+          "owner": "Dir",
+          "name": "link_dir",
+          "nth": 1
         },
         "span": {
           "start": 7222,
@@ -3183,7 +3154,7 @@
         "kind": "symbol",
         "path": "crates/matcher/tests/util.rs",
         "selector": {
-          "Free": "RegexCaptures"
+          "name": "RegexCaptures"
         },
         "span": {
           "start": 2257,

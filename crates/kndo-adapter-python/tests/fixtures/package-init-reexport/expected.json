@@ -43,7 +43,7 @@
         "kind": "symbol",
         "path": "src/pkg/impl.py",
         "selector": {
-          "Free": "_stranded"
+          "name": "_stranded"
         },
         "span": {
           "start": 60,

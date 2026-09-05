@@ -107,7 +107,7 @@
         "kind": "symbol",
         "path": "src/flask/app.py",
         "selector": {
-          "Free": "_make_timedelta"
+          "name": "_make_timedelta"
         },
         "span": {
           "start": 2489,
@@ -129,7 +129,7 @@
         "kind": "symbol",
         "path": "src/flask/cli.py",
         "selector": {
-          "Free": "_path_is_ancestor"
+          "name": "_path_is_ancestor"
         },
         "span": {
           "start": 23572,
@@ -162,7 +162,7 @@
         "kind": "symbol",
         "path": "tests/test_json.py",
         "selector": {
-          "Free": "_has_encoding"
+          "name": "_has_encoding"
         },
         "span": {
           "start": 6853,
@@ -176,7 +176,7 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
-      "id": "kndo-8de2affcf5ae",
+      "id": "kndo-93abd1d960a2",
       "category": "duplicate",
       "severity": "info",
       "confidence": "certain",
@@ -184,35 +184,9 @@
         "kind": "symbol",
         "path": "src/flask/sansio/app.py",
         "selector": {
-          "Member": {
-            "owner": "App",
-            "name": "template_global"
-          }
-        },
-        "span": {
-          "start": 31172,
-          "end": 32136
-        }
-      },
-      "lines": {
-        "start": 779,
-        "end": 807
-      },
-      "message": "structural clone of src/flask/sansio/app.py:App.template_filter"
-    },
-    {
-      "id": "kndo-8eb168bb58aa",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "src/flask/sansio/app.py",
-        "selector": {
-          "Member": {
-            "owner": "App",
-            "name": "template_test"
-          }
+          "owner": "App",
+          "name": "template_test",
+          "nth": 2
         },
         "span": {
           "start": 29207,
@@ -223,35 +197,34 @@
         "start": 720,
         "end": 753
       },
-      "message": "structural clone of src/flask/sansio/app.py:App.template_filter"
+      "message": "structural clone of src/flask/sansio/app.py:App.template_filter#3"
     },
     {
-      "id": "kndo-861ae29d6053",
+      "id": "kndo-fa86bb082280",
       "category": "duplicate",
       "severity": "info",
       "confidence": "certain",
       "subject": {
         "kind": "symbol",
-        "path": "src/flask/sansio/blueprints.py",
+        "path": "src/flask/sansio/app.py",
         "selector": {
-          "Member": {
-            "owner": "Blueprint",
-            "name": "app_template_test"
-          }
+          "owner": "App",
+          "name": "template_global",
+          "nth": 2
         },
         "span": {
-          "start": 20052,
-          "end": 21026
+          "start": 31172,
+          "end": 32136
         }
       },
       "lines": {
-        "start": 504,
-        "end": 529
+        "start": 779,
+        "end": 807
       },
-      "message": "structural clone of src/flask/sansio/app.py:App.template_filter"
+      "message": "structural clone of src/flask/sansio/app.py:App.template_filter#3"
     },
     {
-      "id": "kndo-b0b3e1ec77a4",
+      "id": "kndo-67647adf6af8",
       "category": "duplicate",
       "severity": "info",
       "confidence": "certain",
@@ -259,10 +232,9 @@
         "kind": "symbol",
         "path": "src/flask/sansio/blueprints.py",
         "selector": {
-          "Member": {
-            "owner": "Blueprint",
-            "name": "app_template_filter"
-          }
+          "owner": "Blueprint",
+          "name": "app_template_filter",
+          "nth": 2
         },
         "span": {
           "start": 18014,
@@ -273,10 +245,10 @@
         "start": 450,
         "end": 473
       },
-      "message": "structural clone of src/flask/sansio/app.py:App.template_filter"
+      "message": "structural clone of src/flask/sansio/app.py:App.template_filter#3"
     },
     {
-      "id": "kndo-c6c91ffcd7b3",
+      "id": "kndo-c474a9183e1e",
       "category": "duplicate",
       "severity": "info",
       "confidence": "certain",
@@ -284,10 +256,33 @@
         "kind": "symbol",
         "path": "src/flask/sansio/blueprints.py",
         "selector": {
-          "Member": {
-            "owner": "Blueprint",
-            "name": "app_template_global"
-          }
+          "owner": "Blueprint",
+          "name": "app_template_test",
+          "nth": 2
+        },
+        "span": {
+          "start": 20052,
+          "end": 21026
+        }
+      },
+      "lines": {
+        "start": 504,
+        "end": 529
+      },
+      "message": "structural clone of src/flask/sansio/app.py:App.template_filter#3"
+    },
+    {
+      "id": "kndo-d22f345eb6f4",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "src/flask/sansio/blueprints.py",
+        "selector": {
+          "owner": "Blueprint",
+          "name": "app_template_global",
+          "nth": 2
         },
         "span": {
           "start": 22120,
@@ -298,7 +293,7 @@
         "start": 562,
         "end": 587
       },
-      "message": "structural clone of src/flask/sansio/app.py:App.template_filter"
+      "message": "structural clone of src/flask/sansio/app.py:App.template_filter#3"
     },
     {
       "id": "kndo-f634d7f89050",
@@ -331,7 +326,7 @@
         "kind": "symbol",
         "path": "tests/test_basic.py",
         "selector": {
-          "Free": "test_teardown_request_handler_debug_mode"
+          "name": "test_teardown_request_handler_debug_mode"
         },
         "span": {
           "start": 22088,
@@ -353,7 +348,7 @@
         "kind": "symbol",
         "path": "tests/test_basic.py",
         "selector": {
-          "Free": "test_static_url_path_with_ending_slash"
+          "name": "test_static_url_path_with_ending_slash"
         },
         "span": {
           "start": 38701,
@@ -375,7 +370,7 @@
         "kind": "symbol",
         "path": "tests/test_cli.py",
         "selector": {
-          "Free": "test_help_echo_loading_error"
+          "name": "test_help_echo_loading_error"
         },
         "span": {
           "start": 10916,
@@ -397,7 +392,7 @@
         "kind": "symbol",
         "path": "tests/test_templating.py",
         "selector": {
-          "Free": "test_no_escaping"
+          "name": "test_no_escaping"
         },
         "span": {
           "start": 2063,

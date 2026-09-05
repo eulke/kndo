@@ -43,7 +43,7 @@
         "kind": "symbol",
         "path": "src/logic.py",
         "selector": {
-          "Free": "_stale"
+          "name": "_stale"
         },
         "span": {
           "start": 63,

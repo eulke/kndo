@@ -65,6 +65,8 @@ interface types {
         reach: reach,
         owner: option<u32>,
         exported-as: option<string>,
+        /// Mirrors `Declaration::signature`.
+        signature: option<string>,
     }
 
     /// Mirrors `RefKind`.

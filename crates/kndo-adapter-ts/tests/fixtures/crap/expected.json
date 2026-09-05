@@ -38,7 +38,7 @@
         "kind": "symbol",
         "path": "risky.ts",
         "selector": {
-          "Free": "classifyInput"
+          "name": "classifyInput"
         },
         "span": {
           "start": 7,

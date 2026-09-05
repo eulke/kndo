@@ -38,7 +38,7 @@
         "kind": "symbol",
         "path": "calc.go",
         "selector": {
-          "Free": "NeverRan"
+          "name": "NeverRan"
         },
         "span": {
           "start": 199,

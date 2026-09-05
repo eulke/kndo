@@ -26,7 +26,6 @@
 use super::{Analysis, AnalysisContext, RunContext};
 use kndo_contract::evidence::{EvidenceStream, ImportShape, Reach, RootTarget, SymbolKind};
 use kndo_contract::finding::{Finding, Severity};
-use kndo_contract::subject::{Subject, SymbolSelector};
 use kndo_contract::vocab::{Category, Confidence};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -186,7 +185,8 @@ impl Analysis for InternalOnly {
                     .ok()
                     .map(|ix| f.scoped_regions[ix].1.as_slice())
             };
-            for (d_ix, d) in f.evidence.declarations.iter().enumerate() {
+            for (id, d) in f.evidence.declarations_with_ids() {
+                let d_ix = id.index();
                 // The pool an unqualified use must fall inside for this
                 // declaration to be reachable at all. `Some(files)` bounds it;
                 // `None` is the published-surface rung, judged by total
@@ -322,13 +322,6 @@ impl Analysis for InternalOnly {
                 if used_beyond {
                     continue;
                 }
-                let selector = match d.owner {
-                    Some(owner) => SymbolSelector::Member {
-                        owner: f.evidence.declarations[owner.index()].name.clone(),
-                        name: d.name.clone(),
-                    },
-                    None => SymbolSelector::Free(d.name.clone()),
-                };
                 let noun = match d.kind {
                     SymbolKind::Function | SymbolKind::Method => "function",
                     SymbolKind::Type => "type",
@@ -352,11 +345,7 @@ impl Analysis for InternalOnly {
                     Category::INTERNAL_ONLY,
                     Severity::Info,
                     Confidence::Probable,
-                    Subject::Symbol {
-                        path: f.path.clone(),
-                        selector,
-                        span: d.span,
-                    },
+                    f.evidence.subject_of(&f.path, id),
                     "",
                     message,
                 ));

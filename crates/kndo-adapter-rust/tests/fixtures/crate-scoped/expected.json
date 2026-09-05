@@ -46,7 +46,7 @@
         "kind": "symbol",
         "path": "src/util.rs",
         "selector": {
-          "Free": "crate_ghost"
+          "name": "crate_ghost"
         },
         "span": {
           "start": 167,

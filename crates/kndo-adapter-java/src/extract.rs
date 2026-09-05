@@ -360,6 +360,7 @@ fn handle_method(item: Node<'_>, source: &[u8], ctx: &Ctx, out: &mut EvidenceSin
     if let Some(owner) = ctx.owner {
         out.member_of(id, owner);
     }
+    out.signature(id, signature_of(item, source));
     if item.child_by_field_name("body").is_some() {
         out.metrics(id, function_metrics(item, source));
     }
@@ -384,6 +385,46 @@ fn handle_method(item: Node<'_>, source: &[u8], ctx: &Ctx, out: &mut EvidenceSin
         );
     }
     markers_of(item, source, id, out);
+}
+
+/// Java's own spelling of what tells two methods of one name apart — the
+/// parameter TYPES as written, `(int, List<String>, T...)` — which the JLS
+/// calls the signature. Never the parameter names (renaming one does not make
+/// a new method) and never the return type (two methods differing only there
+/// cannot coexist). Empty parameters are `()`: a method is never confused with
+/// a field of its name.
+fn signature_of(item: Node<'_>, source: &[u8]) -> String {
+    let mut types: Vec<String> = Vec::new();
+    if let Some(params) = item.child_by_field_name("parameters") {
+        let mut c = params.walk();
+        for p in params.named_children(&mut c) {
+            match p.kind() {
+                "formal_parameter" => {
+                    if let Some(t) = p.child_by_field_name("type") {
+                        types.push(tk::normalize_whitespace(tk::text(t, source)));
+                    }
+                }
+                // `String... args`: the grammar names no fields here, so the
+                // type is the child that is neither modifiers nor the name.
+                "spread_parameter" => {
+                    let mut pc = p.walk();
+                    if let Some(t) = p
+                        .named_children(&mut pc)
+                        .find(|n| !matches!(n.kind(), "modifiers" | "variable_declarator"))
+                    {
+                        types.push(format!(
+                            "{}...",
+                            tk::normalize_whitespace(tk::text(t, source))
+                        ));
+                    }
+                }
+                // An explicit receiver (`Foo this`) is not a parameter.
+                "receiver_parameter" | "line_comment" | "block_comment" => {}
+                _ => types.push(tk::normalize_whitespace(tk::text(p, source))),
+            }
+        }
+    }
+    format!("({})", types.join(", "))
 }
 
 fn handle_field(item: Node<'_>, source: &[u8], ctx: &Ctx, out: &mut EvidenceSink) {

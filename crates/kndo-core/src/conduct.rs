@@ -8,7 +8,7 @@
 use crate::graph::{Graph, GraphFile};
 use kndo_contract::evidence::{Root, RootTarget};
 use kndo_contract::finding::Finding;
-use kndo_contract::subject::{Subject, SymbolSelector};
+use kndo_contract::subject::Subject;
 use kndo_contract::vocab::{Category, ProjectPath};
 use serde::Serialize;
 use smol_str::SmolStr;
@@ -342,24 +342,11 @@ fn target_subject(graph: &Graph, target: &ConductTarget) -> Option<Subject> {
         }
         ConductTarget::Symbol { path, name } => {
             let ix = file_index(graph, path)?;
-            let decl = graph.files[ix]
-                .evidence
-                .declarations
-                .iter()
-                .find(|d| d.name == name.as_str())?;
-            Some(Subject::Symbol {
-                path: path.clone(),
-                selector: match decl.owner {
-                    Some(owner) => SymbolSelector::Member {
-                        owner: graph.files[ix].evidence.declarations[owner.index()]
-                            .name
-                            .clone(),
-                        name: decl.name.clone(),
-                    },
-                    None => SymbolSelector::Free(decl.name.clone()),
-                },
-                span: decl.span,
-            })
+            // The query contract's resolver, so a plugin names a symbol the
+            // way a user does — and an ambiguous name resolves to nothing
+            // rather than to whichever declaration came first.
+            let id = crate::query::declaration_named(graph, ix, name).ok()??;
+            Some(graph.files[ix].evidence.subject_of(path, id))
         }
     }
 }

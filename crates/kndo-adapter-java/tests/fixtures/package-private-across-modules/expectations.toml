@@ -4,10 +4,10 @@
 # `src/test` mirror rule can reach, since these are separate modules.
 
 [[alive]]
-subject = "lib/src/main/java/com/foo/Widget.java#Widget.internals"
+subject = "lib/src/main/java/com/foo/Widget.java#Widget.internals()"
 why = "the tests module compiles against the library and calls it"
 
 [[dead]]
-subject = "lib/src/main/java/com/foo/Widget.java#Widget.forgotten"
+subject = "lib/src/main/java/com/foo/Widget.java#Widget.forgotten()"
 category = "unused"
 why = "package-private and named nowhere in either module"

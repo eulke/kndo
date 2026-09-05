@@ -423,7 +423,10 @@ gate-pinned agent grammar) answered from the SAME navigation index the `unused`
 judgment runs on: `navigate::keepers` is the one spelling of the keep rules, so
 `used-by` lists exactly the evidence the judge counted, and the gate certifies it —
 used-by comes back empty precisely where unused accused. Selectors are the Subject
-vocabulary (`path`, `path#name`, `path#Owner.member`); listings are capped with
+vocabulary (`path`, `path#name`, `path#Owner.member`, and for a language that
+spells one, the signature that tells overloads apart — `path#Owner.member(int, String)`,
+or `#2` for the second of two nothing else distinguishes); a bare name resolves when
+unique and an ambiguous one lists the exact addresses to retry with; listings are capped with
 explicit elision; a bad selector is its own not-found, never its siblings' failure;
 `next:` affordances close every agent response. `trace` is a liveness proof (the
 rooted file, each hop's edge with its recorded confidence, the in-file keeper last —

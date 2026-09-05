@@ -46,7 +46,7 @@
         "kind": "symbol",
         "path": "src/main/kotlin/com/pkga/Util.kt",
         "selector": {
-          "Free": "fileGhost"
+          "name": "fileGhost"
         },
         "span": {
           "start": 335,
@@ -68,7 +68,7 @@
         "kind": "symbol",
         "path": "src/main/kotlin/com/pkga/Util.kt",
         "selector": {
-          "Free": "lonely"
+          "name": "lonely"
         },
         "span": {
           "start": 309,

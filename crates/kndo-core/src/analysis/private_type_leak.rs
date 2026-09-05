@@ -24,7 +24,6 @@
 use super::{Analysis, AnalysisContext, has_root_of};
 use kndo_contract::evidence::{Reach, RefKind, RootKind};
 use kndo_contract::finding::{Finding, Severity};
-use kndo_contract::subject::{Subject, SymbolSelector};
 use kndo_contract::vocab::{Category, Confidence};
 
 pub struct PrivateTypeLeak;
@@ -49,7 +48,7 @@ impl Analysis for PrivateTypeLeak {
                 continue;
             }
             let decls = &f.evidence.declarations;
-            for d in decls {
+            for (id, d) in f.evidence.declarations_with_ids() {
                 let Some(sig) = d.signature_span else {
                     continue;
                 };
@@ -70,22 +69,11 @@ impl Analysis for PrivateTypeLeak {
                     if !chain_is_private(decls, leaked) {
                         continue;
                     }
-                    let selector = match d.owner {
-                        Some(owner) => SymbolSelector::Member {
-                            owner: decls[owner.index()].name.clone(),
-                            name: d.name.clone(),
-                        },
-                        None => SymbolSelector::Free(d.name.clone()),
-                    };
                     out.push(Finding::new(
                         Category::PRIVATE_TYPE_LEAK,
                         Severity::Warning,
                         Confidence::Certain,
-                        Subject::Symbol {
-                            path: f.path.clone(),
-                            selector,
-                            span: d.span,
-                        },
+                        f.evidence.subject_of(&f.path, id),
                         r.name.as_str(),
                         format!(
                             "exported, but its signature references `{}`, which is private — \
