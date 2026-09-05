@@ -624,6 +624,25 @@ impl Session {
             .map(|f| (f.path.clone(), line_starts(&f.content)))
             .collect();
         let findings = fill_lines(findings, &line_index);
+        // Identity is unique per run by construction — every subject a file
+        // can hold twice carries its position. A collision here is an engine
+        // defect, caught where every test would see it.
+        debug_assert!(
+            {
+                let ids: std::collections::BTreeSet<&str> =
+                    findings.iter().map(|f| f.id.as_str()).collect();
+                ids.len() == findings.len()
+            },
+            "two findings share an identity: {:?}",
+            {
+                let mut seen = std::collections::BTreeSet::new();
+                findings
+                    .iter()
+                    .filter(|f| !seen.insert(f.id.as_str()))
+                    .map(|f| f.subject.render())
+                    .collect::<Vec<_>>()
+            }
+        );
         timings.analyze = analyze_start.elapsed();
         let retained_line_index = line_index;
 

@@ -3,7 +3,7 @@ use kndo_contract::evidence::{
     Reach, RefKind, RootKind, RootTarget, SymbolKind,
 };
 use kndo_contract::subject::{FindingId, Subject, SymbolSelector};
-use kndo_contract::vocab::{Category, ProjectPath, Span, SubjectKind};
+use kndo_contract::vocab::{Category, Confidence, ProjectPath, Span, SubjectKind};
 
 #[test]
 fn sink_attaches_metrics_and_membership_by_id() {
@@ -272,4 +272,69 @@ fn a_selector_is_unique_within_its_file_by_construction() {
         .map(|id| FindingId::derive(&Category::UNUSED, &ev.subject_of(&path, id), ""))
         .collect();
     assert_eq!(ids.len(), 5, "five declarations, five identities");
+}
+
+#[test]
+fn an_import_written_twice_is_two_subjects() {
+    use kndo_contract::evidence::{EvidenceStreams, ImportShape, ImportTarget};
+    let mut sink = EvidenceSink::new(100, EvidenceStreams::none());
+    for start in [0, 30] {
+        sink.import(
+            ImportTarget::Relative("./x".into()),
+            ImportShape::SideEffect,
+            Span::new(start, start + 10),
+            Confidence::Certain,
+        );
+    }
+    sink.import(
+        ImportTarget::Relative("./y".into()),
+        ImportShape::SideEffect,
+        Span::new(60, 70),
+        Confidence::Certain,
+    );
+    let ev = sink.finish();
+    assert_eq!(
+        [ev.imports[0].nth, ev.imports[1].nth, ev.imports[2].nth],
+        [0, 1, 0]
+    );
+
+    let path = ProjectPath::new("src/a.js");
+    let first = ev.import_subject(&path, 0);
+    let again = ev.import_subject(&path, 1);
+    assert_eq!(first.label(), "import './x'");
+    assert_eq!(again.label(), "import './x' #2");
+    assert_ne!(
+        FindingId::derive(&Category::UNRESOLVED, &first, ""),
+        FindingId::derive(&Category::UNRESOLVED, &again, ""),
+        "two statements, two identities"
+    );
+}
+
+#[test]
+fn a_suppression_carries_what_it_allows_and_its_position() {
+    let allow = |nth| Subject::Suppression {
+        path: ProjectPath::new("src/a.js"),
+        categories: vec![Category::UNUSED],
+        nth,
+        span: Span::new(0, 10),
+    };
+    assert_eq!(allow(0).label(), "allow unused");
+    assert_eq!(allow(1).label(), "allow unused #2");
+    assert_eq!(allow(0).render(), "src/a.js — allow unused");
+    assert_ne!(
+        FindingId::derive(&Category::STALE, &allow(0), ""),
+        FindingId::derive(&Category::STALE, &allow(1), ""),
+        "the position is identity, with no discriminator to carry it"
+    );
+    let other = Subject::Suppression {
+        path: ProjectPath::new("src/a.js"),
+        categories: vec![Category::DUPLICATE],
+        nth: 0,
+        span: Span::new(0, 10),
+    };
+    assert_ne!(
+        FindingId::derive(&Category::STALE, &allow(0), ""),
+        FindingId::derive(&Category::STALE, &other, ""),
+        "what an allow allows is part of what it is"
+    );
 }

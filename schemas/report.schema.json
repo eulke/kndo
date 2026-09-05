@@ -882,12 +882,18 @@
           ]
         },
         {
-          "description": "One import statement, addressed by the specifier AS WRITTEN — identity\nsurvives the code moving (the span is carried for lines, never for\nidentity, the same rule Symbol follows).",
+          "description": "One import statement, addressed by the specifier AS WRITTEN — identity\nsurvives the code moving (the span is carried for lines, never for\nidentity, the same rule Symbol follows) — and, for a file that writes\nthe same specifier twice, by its position among those.",
           "type": "object",
           "properties": {
             "kind": {
               "type": "string",
               "const": "import"
+            },
+            "nth": {
+              "description": "Position among the file's imports of this specifier, in source\norder; zero for the common case. Assigned by the evidence sink.",
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
             },
             "path": {
               "$ref": "#/$defs/ProjectPath"
@@ -907,11 +913,23 @@
           ]
         },
         {
+          "description": "One `kndo:allow` pragma, addressed by what it allows and, for a file\nthat writes the same allow twice, by its position among those.",
           "type": "object",
           "properties": {
+            "categories": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Category"
+              }
+            },
             "kind": {
               "type": "string",
               "const": "suppression"
+            },
+            "nth": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
             },
             "path": {
               "$ref": "#/$defs/ProjectPath"
@@ -923,6 +941,7 @@
           "required": [
             "kind",
             "path",
+            "categories",
             "span"
           ]
         }

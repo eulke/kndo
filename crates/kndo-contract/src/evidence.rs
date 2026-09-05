@@ -292,6 +292,16 @@ pub enum ImportTarget {
     Package(SmolStr),
 }
 
+impl ImportTarget {
+    /// The specifier as the author wrote it, whatever its form — the one
+    /// spelling a subject carries and a position is counted over.
+    pub fn as_written(&self) -> &str {
+        match self {
+            ImportTarget::Relative(s) | ImportTarget::Package(s) => s.as_str(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, ContractFingerprint)]
 pub struct ImportBinding {
     pub imported: SmolStr,
@@ -353,6 +363,11 @@ pub struct Import {
     pub span: Span,
     pub confidence: Confidence,
     pub timing: Timing,
+    /// Position among this file's imports of the same target as written, in
+    /// source order. Computed by the sink when the evidence is finished,
+    /// never set by an adapter: a file that imports `./x` twice states two
+    /// imports, and a finding on each must be two findings.
+    pub nth: u32,
 }
 
 /// Closed by design: the role taxonomy (production/test/tooling) is a reporting
@@ -544,6 +559,20 @@ impl FileEvidence {
             path: path.clone(),
             selector: self.selector_of(id),
             span: self.declarations[id.index()].span,
+        }
+    }
+
+    /// The finding subject for one import statement, by its index in
+    /// `imports` — THE place an import becomes a subject, so its specifier
+    /// and its position among same-specifier imports are never re-spelled
+    /// by an analysis.
+    pub fn import_subject(&self, path: &ProjectPath, index: usize) -> Subject {
+        let import = &self.imports[index];
+        Subject::Import {
+            path: path.clone(),
+            specifier: SmolStr::new(import.target.as_written()),
+            nth: import.nth,
+            span: import.span,
         }
     }
 }
@@ -783,6 +812,7 @@ impl EvidenceSink {
             span,
             confidence,
             timing,
+            nth: 0,
         });
     }
 
@@ -878,6 +908,15 @@ impl EvidenceSink {
     /// name and signature — zero for nearly all, and the only thing keeping
     /// two apart where the language spells nothing else.
     pub fn finish(mut self) -> FileEvidence {
+        let mut seen_targets: std::collections::HashMap<String, u32> =
+            std::collections::HashMap::new();
+        for import in &mut self.out.imports {
+            let n = seen_targets
+                .entry(import.target.as_written().to_string())
+                .or_insert(0);
+            import.nth = *n;
+            *n += 1;
+        }
         let mut seen: std::collections::HashMap<(Option<SmolStr>, SmolStr, Option<SmolStr>), u32> =
             std::collections::HashMap::new();
         let owner_names: Vec<Option<SmolStr>> = self

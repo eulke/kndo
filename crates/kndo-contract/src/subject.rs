@@ -37,6 +37,15 @@ fn is_zero(n: &u32) -> bool {
     *n == 0
 }
 
+/// `#k` for the k-th of several a file holds under one spelling; nothing for
+/// the first, so the common case reads and hashes as it always did.
+fn with_position(mut spelling: String, nth: u32) -> String {
+    if nth > 0 {
+        spelling.push_str(&format!(" #{}", nth + 1));
+    }
+    spelling
+}
+
 impl SymbolSelector {
     /// A free declaration known to be the only one of its name — a hand-built
     /// subject in a test or a plugin. Evidence never goes through here: a
@@ -109,14 +118,24 @@ pub enum Subject {
     },
     /// One import statement, addressed by the specifier AS WRITTEN — identity
     /// survives the code moving (the span is carried for lines, never for
-    /// identity, the same rule Symbol follows).
+    /// identity, the same rule Symbol follows) — and, for a file that writes
+    /// the same specifier twice, by its position among those.
     Import {
         path: ProjectPath,
         specifier: SmolStr,
+        /// Position among the file's imports of this specifier, in source
+        /// order; zero for the common case. Assigned by the evidence sink.
+        #[serde(default, skip_serializing_if = "is_zero")]
+        nth: u32,
         span: Span,
     },
+    /// One `kndo:allow` pragma, addressed by what it allows and, for a file
+    /// that writes the same allow twice, by its position among those.
     Suppression {
         path: ProjectPath,
+        categories: Vec<Category>,
+        #[serde(default, skip_serializing_if = "is_zero")]
+        nth: u32,
         span: Span,
     },
 }
@@ -129,20 +148,48 @@ impl Subject {
     pub fn render(&self) -> String {
         match self {
             Subject::File { path } | Subject::Directory { path } => path.as_str().to_string(),
-            Subject::Symbol { path, selector, .. } => {
-                format!("{} — {}", path.as_str(), selector.render())
-            }
             Subject::Package { manifest, name } => format!("{} ({name})", manifest.as_str()),
             Subject::Dependency {
                 owner_manifest,
                 name,
             } => format!("{} ({name})", owner_manifest.as_str()),
-            Subject::Import {
-                path, specifier, ..
-            } => {
-                format!("{} — import '{specifier}'", path.as_str())
+            Subject::Symbol { path, .. }
+            | Subject::Import { path, .. }
+            | Subject::Suppression { path, .. } => {
+                format!("{} — {}", path.as_str(), self.label())
             }
-            Subject::Suppression { path, .. } => format!("{} — allow", path.as_str()),
+        }
+    }
+
+    /// What this subject is WITHIN its path — the part a display puts after
+    /// the path and a line: a symbol's selector, `import 'x'`, `allow unused`,
+    /// each with `#k` when a file holds the same spelling more than once.
+    /// Empty for a file or a directory, which are their path.
+    pub fn label(&self) -> String {
+        match self {
+            Subject::Import { specifier, nth, .. } => {
+                with_position(format!("import '{specifier}'"), *nth)
+            }
+            _ => self.identity_part(),
+        }
+    }
+
+    /// What identity hashes beside the category, the kind and the path: the
+    /// same spelling `label` shows, minus display dressing an import wears —
+    /// so an identity never moves for a wording change, and two subjects of
+    /// one file that read alike differ here by their position.
+    pub fn identity_part(&self) -> String {
+        match self {
+            Subject::File { .. } | Subject::Directory { .. } => String::new(),
+            Subject::Symbol { selector, .. } => selector.render(),
+            Subject::Package { name, .. } | Subject::Dependency { name, .. } => name.to_string(),
+            Subject::Import { specifier, nth, .. } => with_position(specifier.to_string(), *nth),
+            Subject::Suppression {
+                categories, nth, ..
+            } => {
+                let listed: Vec<&str> = categories.iter().map(Category::as_str).collect();
+                with_position(format!("allow {}", listed.join(", ")), *nth)
+            }
         }
     }
 
@@ -192,13 +239,7 @@ impl FindingId {
         part(category.as_str());
         part(subject.kind().as_str());
         part(subject.path().as_str());
-        let symbol = match subject {
-            Subject::Symbol { selector, .. } => selector.render(),
-            Subject::Package { name, .. } | Subject::Dependency { name, .. } => name.to_string(),
-            Subject::Import { specifier, .. } => specifier.to_string(),
-            _ => String::new(),
-        };
-        part(&symbol);
+        part(&subject.identity_part());
         part(discriminator);
         let hex: String = h.finalize().as_bytes()[..6]
             .iter()

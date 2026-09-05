@@ -17,7 +17,6 @@
 use super::{Analysis, AnalysisContext};
 use kndo_contract::evidence::ImportTarget;
 use kndo_contract::finding::{Finding, Severity};
-use kndo_contract::subject::Subject;
 use kndo_contract::vocab::Category;
 
 pub struct Unresolved;
@@ -44,7 +43,9 @@ impl Analysis for Unresolved {
             if !cx.measured[i] {
                 continue;
             }
-            for (import, targets) in f.evidence.imports.iter().zip(&f.import_targets) {
+            for (index, (import, targets)) in
+                f.evidence.imports.iter().zip(&f.import_targets).enumerate()
+            {
                 if !targets.is_empty() {
                     continue;
                 }
@@ -83,11 +84,7 @@ impl Analysis for Unresolved {
                     Category::UNRESOLVED,
                     Severity::Error,
                     import.confidence,
-                    Subject::Import {
-                        path: f.path.clone(),
-                        specifier: spec.clone(),
-                        span: import.span,
-                    },
+                    f.evidence.import_subject(&f.path, index),
                     "",
                     format!(
                         "import of '{spec}' resolves to no file — a broken path or a \

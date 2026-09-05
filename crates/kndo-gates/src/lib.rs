@@ -59,6 +59,10 @@ pub const GATES: &[Gate] = &[
         invariant: "every fixture's expectations.toml holds: dead reported, alive unreported, known gaps still open",
     },
     Gate {
+        name: "finding_identity_is_unique",
+        invariant: "no two findings in any pinned report share an identity — every subject a file can hold twice carries its position",
+    },
+    Gate {
         name: "contract_changes_are_loud",
         invariant: "a changed pinned report, fingerprint or graph semantics version is named in DECISIONS.md by the same commits",
     },

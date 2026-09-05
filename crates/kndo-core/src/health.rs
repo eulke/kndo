@@ -278,6 +278,8 @@ mod tests {
                 Severity::Warning,
                 Subject::Suppression {
                     path: ProjectPath::new("a.py"),
+                    categories: vec![Category::UNUSED],
+                    nth: 0,
                     span: Span::new(0, 5),
                 },
             ),

@@ -1737,3 +1737,55 @@ fn relative_link_targets(text: &str) -> Vec<String> {
     }
     targets
 }
+
+#[test]
+fn finding_identity_is_unique() {
+    // Every subject a file can hold more than once under one spelling carries
+    // its position, so no two findings of a run share an identity. Checked
+    // over every pinned report — the corpus and every conformance fixture —
+    // because a new subject kind that forgets its position would collide
+    // there first, silently, and a baseline would then silence findings it
+    // never named.
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut reports: Vec<std::path::PathBuf> = Vec::new();
+    for entry in std::fs::read_dir(root.join("corpus-findings")).expect("corpus-findings") {
+        let path = entry.expect("entry").path();
+        if path.extension().is_some_and(|e| e == "json") {
+            reports.push(path);
+        }
+    }
+    for krate in std::fs::read_dir(root.join("crates")).expect("crates") {
+        let fixtures = krate.expect("crate").path().join("tests/fixtures");
+        let Ok(dirs) = std::fs::read_dir(&fixtures) else {
+            continue;
+        };
+        for dir in dirs {
+            let expected = dir.expect("fixture").path().join("expected.json");
+            if expected.is_file() {
+                reports.push(expected);
+            }
+        }
+    }
+    assert!(reports.len() > 50, "the pinned reports are where they were");
+    let mut collisions: Vec<String> = Vec::new();
+    for report in &reports {
+        let text = std::fs::read_to_string(report).expect("a pinned report reads");
+        let value: serde_json::Value =
+            serde_json::from_str(&text).expect("a pinned report is JSON");
+        let mut seen: std::collections::BTreeMap<&str, u32> = std::collections::BTreeMap::new();
+        for finding in value["findings"].as_array().into_iter().flatten() {
+            *seen
+                .entry(finding["id"].as_str().unwrap_or(""))
+                .or_insert(0) += 1;
+        }
+        for (id, n) in seen {
+            if n > 1 {
+                collisions.push(format!("{}: {id} ×{n}", report.display()));
+            }
+        }
+    }
+    assert!(
+        collisions.is_empty(),
+        "findings sharing one identity — a subject kind without its position: {collisions:#?}"
+    );
+}

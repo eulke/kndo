@@ -1222,3 +1222,11 @@ changed what findings are CALLED, not which exist. Java states signatures, so
 its `#k` cases are only the ones no signature can split — two `ImmutableSortedMap.of(K, V, …)`
 whose parameter types spell identically; Kotlin and Swift state none yet and
 lean on position until their adapters migrate.
+
+### Identity, the rest of the family (2026-09-06)
+
+Imports written twice and allows written twice now carry their position, like
+overloads do; a gate over every pinned report refuses two findings with one
+identity. Corpus: zero identities moved, zero duplicated, every row unchanged.
+This slice changed no verdict; it made the class of defect impossible to
+reintroduce without a red gate.

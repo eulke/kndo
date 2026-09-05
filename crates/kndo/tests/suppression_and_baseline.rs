@@ -24,12 +24,14 @@ fn line_scope_suppresses_next_line_and_stale_is_a_finding() {
     );
     p.file(
         "src/index.js",
-        "// kndo:allow unused -- transitional\nfunction dead() {}\nexport function api() { return 1; }\n// kndo:allow unused\nexport function used() { return api(); }\n",
+        "// kndo:allow unused -- transitional\nfunction dead() {}\nexport function api() { return 1; }\n// kndo:allow unused\nexport function used() { return api(); }\n// kndo:allow unused\nexport function alsoUsed() { return api(); }\n",
     );
 
     let (_, snap) = run(&p);
-    // `dead` is suppressed by the first pragma; the second suppresses nothing and
-    // is stale; `unused` still judges the rest of the graph.
+    // `dead` is suppressed by the first pragma; the second and third suppress
+    // nothing and are stale — two findings, each its own, because an allow is
+    // addressed by what it allows and its position among such allows;
+    // `unused` still judges the rest of the graph.
     assert!(
         !snap
             .findings
@@ -44,8 +46,12 @@ fn line_scope_suppresses_next_line_and_stale_is_a_finding() {
         .iter()
         .filter(|f| f.category == Category::STALE)
         .collect();
-    assert_eq!(stale.len(), 1, "{:#?}", snap.findings);
+    assert_eq!(stale.len(), 2, "{:#?}", snap.findings);
     assert!(matches!(stale[0].subject, Subject::Suppression { .. }));
+    assert_ne!(stale[0].id, stale[1].id, "two stale allows, two identities");
+    let mut labels: Vec<String> = stale.iter().map(|f| f.subject.label()).collect();
+    labels.sort();
+    assert_eq!(labels, ["allow unused #2", "allow unused #3"]);
 }
 
 #[test]

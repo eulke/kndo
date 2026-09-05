@@ -115,10 +115,12 @@ pub fn spell(subject: &Subject) -> String {
         } => format!("dep:{}:{}", owner_manifest.as_str(), name),
         Subject::Package { manifest, name } => format!("pkg:{}:{}", manifest.as_str(), name),
         Subject::Directory { path } => format!("dir:{}", path.as_str()),
-        Subject::Import {
-            path, specifier, ..
-        } => format!("import:{}:{}", path.as_str(), specifier),
-        Subject::Suppression { path, .. } => format!("suppression:{}", path.as_str()),
+        // The identity part, not the display label: `import:src/a.js:./x`
+        // keeps its spelling, and a second such import is `./x #2`.
+        Subject::Import { path, .. } | Subject::Suppression { path, .. } => {
+            let kind = subject.kind().as_str();
+            format!("{kind}:{}:{}", path.as_str(), subject.identity_part())
+        }
     }
 }
 

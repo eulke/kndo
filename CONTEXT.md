@@ -141,7 +141,10 @@ about.
 **Subject**:
 What a finding is about: a file, a symbol, a package, a dependency, a directory, an
 import statement, a suppression. Rendered one way everywhere a subject is shown or
-addressed; the parts are never re-spelled by a consumer.
+addressed; the parts are never re-spelled by a consumer. A subject a file can hold
+more than once under one spelling — an overload, the same import written twice, the
+same allow written twice — carries its **position** among those, so two of them are
+two subjects.
 
 **Selector**:
 The address of one declaration inside its file: its owner (when it is a member), its
@@ -161,8 +164,10 @@ _Avoid_: arity, overload key
 
 **Identity**:
 What makes a finding the same finding across runs: its category and its subject —
-never its span, so moving code changes nothing. Baselines and suppressions match on
-it, and `fixed` is what a baseline holds and a run no longer does.
+never its span, so moving code changes nothing. Unique within a run by construction:
+no analysis needs a discriminator to keep two subjects apart. Baselines and
+suppressions match on it, and `fixed` is what a baseline holds and a run no longer
+does.
 
 **Root**:
 What anchors liveness: a unit's entry, a test, a launched file, a declaration a

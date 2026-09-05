@@ -146,7 +146,19 @@ pub fn apply(
     // Stale allows — only over categories this run actually JUDGED (the flicker
     // rule: an abstained or not-yet-built category makes its allows un-judgeable,
     // never stale).
-    let mut stale_ordinal: BTreeMap<ProjectPath, u32> = BTreeMap::new();
+    // A pragma's position among the file's pragmas that allow the same
+    // categories — counted over EVERY pragma, stale or not, so fixing an
+    // earlier one never re-addresses a later one. The same rule a
+    // declaration's selector follows, at this subject's own seam.
+    let mut nth_of: Vec<u32> = vec![0; pragmas.len()];
+    let mut seen: BTreeMap<(&ProjectPath, &[Category]), u32> = BTreeMap::new();
+    for (ix, pragma) in pragmas.iter().enumerate() {
+        let n = seen
+            .entry((&pragma.path, pragma.categories.as_slice()))
+            .or_insert(0);
+        nth_of[ix] = *n;
+        *n += 1;
+    }
     for (ix, pragma) in pragmas.iter().enumerate() {
         if matched[ix] > 0 {
             continue;
@@ -164,22 +176,17 @@ pub fn apply(
             .map(Category::as_str)
             .collect::<Vec<_>>()
             .join(", ");
-        // Ordinal among this file's stale allows: the Suppression subject has no
-        // selector, so two stale allows in one file would otherwise share an id —
-        // and baselining one would silently baseline every later one.
-        let ordinal = *stale_ordinal
-            .entry(pragma.path.clone())
-            .and_modify(|n| *n += 1)
-            .or_insert(0u32);
         kept.push(Finding::new(
             Category::STALE,
             Severity::Warning,
             Confidence::Certain,
             Subject::Suppression {
                 path: pragma.path.clone(),
+                categories: pragma.categories.clone(),
+                nth: nth_of[ix],
                 span: pragma.span,
             },
-            &format!("{listed}#{ordinal}"),
+            "",
             format!("this allow suppresses nothing ({listed})"),
         ));
     }

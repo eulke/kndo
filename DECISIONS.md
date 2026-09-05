@@ -3479,3 +3479,47 @@ move; the host now also replays a reference's receiver, which the previous
 slice had added to the wire and the replay had dropped. `kndo:java` 8 → 9 for
 the signatures it emits. One fixture is added, `overloads-are-two-declarations`,
 pinning two dead overloads as two findings.
+
+## 2026-09-06 — Identity closes as a family: every subject a file can hold twice carries its position, and a gate holds the line
+
+**What the previous entry left open.** It fixed the symbol, the measured case,
+and named two siblings it did not touch: `stale` kept its own ordinal in the
+finding's discriminator (correct for uniqueness, invisible to the render and
+the address space), and an import written twice in one file gave `unresolved`
+two findings with one identity — zero in the corpus, latent everywhere. Two
+mechanisms for one concept, and no rule stopping a third subject kind from
+colliding silently.
+
+**The rule, stated once.** A subject a file can hold more than once under one
+spelling carries its **position** among those — an overload, the same import
+written twice, the same allow written twice — so two of them are two subjects.
+Identity is unique within a run by construction, and no analysis needs a
+discriminator to keep two subjects apart. The glossary says so under Subject
+and Identity.
+
+**The two siblings, at their own seams.** `Import.nth` is computed by the
+evidence sink at `finish()`, over the target as written, and
+`FileEvidence::import_subject` is the one place an import becomes a subject —
+`unresolved` calls it and re-spells nothing. `Subject::Suppression` now
+carries what it allows and its position among the file's allows of the same
+categories, counted over EVERY pragma rather than only the stale ones, so
+fixing an earlier allow never re-addresses a later one; the ordinal left the
+discriminator, which is empty again and means what it should. `Subject::label`
+is the one spelling a display puts after the path — `import './x' #2`,
+`allow unused #2` — and `identity_part` is what identity hashes: the same,
+minus the display dressing an import wears, so an import's identity is the
+specifier it always was and nothing moved for a wording change.
+
+**The gate.** `finding_identity_is_unique` reads every pinned report — the
+corpus and every conformance fixture — and refuses two findings with one id;
+a `debug_assert` at the point the run's findings are final catches the same
+thing in every test. A subject kind that forgets its position now fails
+loudly where a baseline would have gone quiet.
+
+**Measurement.** Nine repositories: zero identities moved (vite's 17 import
+findings keep theirs, since a first import hashes as before), zero
+duplicated, every row unchanged; no report file changed on disk. A stale
+allow's identity moves — it now carries what it allows and no discriminator —
+and no pinned report holds one. The contract fingerprint moves for the
+import's position; the report schema for the two subjects; the CI workflow
+for the gate. The two fixtures with import subjects are byte-identical.

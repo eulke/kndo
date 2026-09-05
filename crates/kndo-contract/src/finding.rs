@@ -85,11 +85,13 @@ impl Finding {
     /// rendering, with `:line` after the path when the engine resolved one.
     pub fn location(&self) -> String {
         match (&self.subject, self.lines) {
-            (Subject::Symbol { path, selector, .. }, Some(lines)) => {
-                format!("{}:{} — {}", path.as_str(), lines.start, selector.render())
-            }
-            (Subject::Suppression { path, .. }, Some(lines)) => {
-                format!("{}:{} — allow", path.as_str(), lines.start)
+            (Subject::Symbol { path, .. } | Subject::Suppression { path, .. }, Some(lines)) => {
+                format!(
+                    "{}:{} — {}",
+                    path.as_str(),
+                    lines.start,
+                    self.subject.label()
+                )
             }
             _ => self.subject.render(),
         }
