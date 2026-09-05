@@ -83,9 +83,7 @@ impl Analysis for InternalOnly {
             for (import, targets) in f.evidence.imports.iter().zip(&f.import_targets) {
                 for &t in targets {
                     match &import.shape {
-                        ImportShape::Bindings(bs)
-                        | ImportShape::Reexport(bs)
-                        | ImportShape::TypeOnly(bs) => {
+                        ImportShape::Bindings(bs) | ImportShape::Reexport(bs) => {
                             for b in bs {
                                 bound_all.insert((t, b.imported.as_str()));
                                 if from_reachable {

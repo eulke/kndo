@@ -269,7 +269,6 @@ pub enum ImportShape {
     /// The target's whole exported surface re-exported (`export * from`): consumers
     /// cannot see through it, so it keeps that surface alive.
     ReexportAll,
-    TypeOnly(Vec<ImportBinding>),
     /// Everything the target exports, imported unbound (`use x::*`): nothing names
     /// what was taken, so the whole surface stays alive.
     Glob,
@@ -279,12 +278,36 @@ pub enum ImportShape {
     Mention,
 }
 
+/// WHEN an import runs — a fact the adapter reads off the syntax, never a
+/// judgment. `Load`: at module load, in the order the language links
+/// (`import x`, `require()` at top level, `use`, `mod`). `Lazy`: when the code
+/// around it executes — a dynamic `import()`, a `require()` inside a function
+/// or a branch, a Python import in a function body. `Erased`: never — the
+/// import exists for the type checker alone (`import type`, a `TYPE_CHECKING`
+/// block). Reachability keeps every timing (a type used is a type kept); the
+/// `cyclic` analysis judges load-time edges only, because an initialization
+/// hazard needs initialization. Grows if a language teaches a fourth moment;
+/// a consumer's wildcard arm reads an unknown timing as `Lazy` — reached,
+/// never a hazard.
+#[non_exhaustive]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize, ContractFingerprint,
+)]
+#[serde(rename_all = "lowercase")]
+pub enum Timing {
+    #[default]
+    Load,
+    Lazy,
+    Erased,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, ContractFingerprint)]
 pub struct Import {
     pub target: ImportTarget,
     pub shape: ImportShape,
     pub span: Span,
     pub confidence: Confidence,
+    pub timing: Timing,
 }
 
 /// Closed by design: the role taxonomy (production/test/tooling) is a reporting
@@ -546,8 +569,25 @@ impl EvidenceSink {
         });
     }
 
+    /// An import that runs at load time — the common case, and the default the
+    /// growth contract promises: an adapter that never learned about timing
+    /// reports what every adapter reported before it existed.
     pub fn import(
         &mut self,
+        target: ImportTarget,
+        shape: ImportShape,
+        span: Span,
+        confidence: Confidence,
+    ) {
+        self.import_at(Timing::Load, target, shape, span, confidence);
+    }
+
+    /// An import with its moment stated — see [`Timing`]. A type-only import is
+    /// spelled as its bindings at `Erased`: what it binds is the same evidence,
+    /// when it runs is the only difference.
+    pub fn import_at(
+        &mut self,
+        timing: Timing,
         target: ImportTarget,
         shape: ImportShape,
         span: Span,
@@ -559,6 +599,7 @@ impl EvidenceSink {
             shape,
             span,
             confidence,
+            timing,
         });
     }
 

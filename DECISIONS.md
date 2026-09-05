@@ -2887,3 +2887,51 @@ with this entry.
    against them and accused when nothing names it. Expected on gin: zero new
    accusations, 406 declarations with an owner. The same shape Swift and Java
    already have: the whole graph tells the story, reach decides the accusation.
+
+## 2026-09-05 — M8.a: expectations are pins, contract changes are loud, imports carry their moment
+
+**Expectations.** Every conformance fixture now carries `expectations.toml`
+beside its byte pin: `dead` (must be reported), `alive` (must not be accused
+by `unused`/`internal-only`, or by the named category) and `known_gap` (the
+claim the tree cannot honor yet, with the fix that will). The
+`fixture_expectations_hold` gate checks them against the run, and a known gap
+fails the day the tree closes it, so the ledger cannot rot. The eleven
+fixtures whose comments contradicted their pins are now gaps with their audit
+ids — js-ts `cjs-dead-object-export`, `cjs-interop`, `dynamic-import-scan`,
+`namespace-members`; go `internal-only-unit`, `go-work-phantom-dep`; swift
+`dispatch-and-extension`, `visibility-ladder-and-internal-default`; java
+`coverage-jacoco`, `visibility-ladder-and-nested-members`; kotlin
+`dead-code-same-package` — plus the apple `apple-bundles` PreviewProvider pair
+the audit's Swift row 20 named. Subjects use the query contract's spelling, so
+`kndo describe` and an expectation name a thing identically; a spelling nothing
+declares is refused. The `contract_changes_are_loud` gate closes the other
+half: a commit range that changes a pinned report, the contract fingerprint or
+`GRAPH_SEMANTICS_VERSION` must append to DECISIONS.md and name what moved (the
+fixture, or `<crate> fixtures`, or `every conformance fixture`); CI diffs the
+pull request's base..head with a full checkout.
+
+**Timing.** `Import` gains `timing: Timing` — `Load`, `Lazy`, `Erased` — a fact
+the adapter reads off the syntax: a static import, a top-level `require`, a
+`use` or `mod` load; a dynamic `import()`, a guarded or function-scoped
+`require`, a Python import inside a function run later; `import type` and a
+`TYPE_CHECKING` block never. The sink grows `import_at`; `import` stays and
+means load-time, so an adapter that never learned the field reports what it
+always did. `ImportShape::TypeOnly` is gone — a type-only import is its
+bindings at `Erased`, the same evidence with only its moment different; the
+wire keeps `type-only` until the ABI's next version carries the field, and
+the host and SDK translate. The consumer is `cyclic`: strongly connected
+components over load-time edges only, because an initialization hazard needs
+initialization; reachability keeps every timing (a type used is a type kept).
+Conformance: `type-only-cycle` (js-ts) and `type-checking-cycle` (python), each
+pinning the erased/lazy pair silent and its value-import control accused; the
+kmock language speaks `lazy-import`/`erased-import` for the engine test.
+
+**Measurement.** vite cyclic 31 → 28 (the type-only `module-runner` loop
+gone, the 88-file `node/` tangle down to its 48-file value core plus one
+2-file pair it had swallowed, three dynamic-import loops in test fixtures and
+the playground gone); flask 3 → 3 with the 20-file knot down to 9 load-time
+files, `json/__init__.py ↔ provider.py` surfacing on its own, the celery
+example's function-scoped loop gone, and the `__init__.py → app.py` loop
+`Certain` instead of `Possible`. Every other repo byte-identical; every
+existing fixture byte-identical (the fingerprint moved for the field; the
+reports did not). The contract fingerprint is regenerated once for the slice.

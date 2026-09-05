@@ -32,12 +32,12 @@
     ]
   },
   "health": {
-    "implicated": 484,
+    "implicated": 482,
     "subjects": 5599,
     "by_category": [
       {
         "category": "cyclic",
-        "findings": 31
+        "findings": 28
       },
       {
         "category": "private-type-leak",
@@ -826,7 +826,7 @@
       {
         "name": "vite",
         "manifest": "packages/vite/package.json",
-        "implicated": 79,
+        "implicated": 77,
         "subjects": 2719
       }
     ]
@@ -1173,26 +1173,26 @@
       "message": "import of './imports.js' resolves to no file — a broken path or a rename that missed this call site"
     },
     {
-      "id": "kndo-3f9d5eef3cd4",
+      "id": "kndo-330ee435e9ac",
       "category": "cyclic",
       "severity": "warning",
       "confidence": "certain",
       "subject": {
         "kind": "file",
-        "path": "packages/vite/src/module-runner/createImportMeta.ts"
+        "path": "packages/vite/src/node/build.ts"
       },
-      "message": "8 files form an import cycle: packages/vite/src/module-runner/createImportMeta.ts → packages/vite/src/module-runner/types.ts → packages/vite/src/module-runner/sourcemap/interceptor.ts → packages/vite/src/module-runner/runner.ts → packages/vite/src/module-runner/createImportMeta.ts"
+      "message": "48 files form an import cycle: packages/vite/src/node/build.ts → packages/vite/src/node/config.ts → packages/vite/src/node/build.ts"
     },
     {
-      "id": "kndo-4170b6bef782",
+      "id": "kndo-57500c4edf6f",
       "category": "cyclic",
       "severity": "warning",
       "confidence": "certain",
       "subject": {
         "kind": "file",
-        "path": "packages/vite/src/node/baseEnvironment.ts"
+        "path": "packages/vite/src/node/packages.ts"
       },
-      "message": "88 files form an import cycle: packages/vite/src/node/baseEnvironment.ts → packages/vite/src/node/config.ts → packages/vite/src/node/baseEnvironment.ts"
+      "message": "2 files form an import cycle: packages/vite/src/node/packages.ts → packages/vite/src/node/utils.ts → packages/vite/src/node/packages.ts"
     },
     {
       "id": "kndo-3c360200052c",
@@ -1204,17 +1204,6 @@
         "path": "packages/vite/src/node/ssr/runtime/__tests__/fixtures/circular/circular-a.js"
       },
       "message": "2 files form an import cycle: packages/vite/src/node/ssr/runtime/__tests__/fixtures/circular/circular-a.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/circular/circular-b.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/circular/circular-a.js"
-    },
-    {
-      "id": "kndo-af213e2df259",
-      "category": "cyclic",
-      "severity": "warning",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic/entry-cyclic.js"
-      },
-      "message": "2 files form an import cycle: packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic/entry-cyclic.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic/entry.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic/entry-cyclic.js"
     },
     {
       "id": "kndo-a6e1160e2cd8",
@@ -1303,17 +1292,6 @@
         "path": "packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test9/dep.js"
       },
       "message": "2 files form an import cycle: packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test9/dep.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test9/index.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/cyclic2/test9/dep.js"
-    },
-    {
-      "id": "kndo-44d6ba92502c",
-      "category": "cyclic",
-      "severity": "warning",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "packages/vite/src/node/ssr/runtime/__tests__/fixtures/hmr-evaluated-import-race/evaluated.js"
-      },
-      "message": "2 files form an import cycle: packages/vite/src/node/ssr/runtime/__tests__/fixtures/hmr-evaluated-import-race/evaluated.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/hmr-evaluated-import-race/shared.js → packages/vite/src/node/ssr/runtime/__tests__/fixtures/hmr-evaluated-import-race/evaluated.js"
     },
     {
       "id": "kndo-1c8f3a1961a1",
@@ -1446,17 +1424,6 @@
         "path": "playground/html/inline/common.js"
       },
       "message": "3 files form an import cycle: playground/html/inline/common.js → playground/html/inline/dep1.js → playground/html/inline/common.js"
-    },
-    {
-      "id": "kndo-ef7de1a81363",
-      "category": "cyclic",
-      "severity": "warning",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "playground/multiple-entrypoints/entrypoints/a0.js"
-      },
-      "message": "25 files form an import cycle: playground/multiple-entrypoints/entrypoints/a0.js → playground/multiple-entrypoints/entrypoints/a1.js → playground/multiple-entrypoints/entrypoints/a0.js"
     },
     {
       "id": "kndo-bb0e3eb99c44",

@@ -1,6 +1,7 @@
 use kndo_adapter_python::PythonAdapter;
 use kndo_contract::evidence::{
     FileEvidence, ImportShape, ImportTarget, Reach, RefKind, RootKind, RootTarget, SymbolKind,
+    Timing,
 };
 use kndo_contract::vocab::Confidence;
 use kndo_testkit::{declaration_named, extract_evidence};
@@ -217,6 +218,70 @@ def handler():
             ".debughelpers",
         ],
         "each nested statement lands, bindings probe their submodule paths"
+    );
+}
+
+#[test]
+fn imports_carry_the_moment_they_run() {
+    let e = ev(
+        "src/app/mod.py",
+        r#"import os
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .types import Hint
+else:
+    Hint = None
+    from .runtime import Real
+
+try:
+    import speedups
+except ImportError:
+    speedups = None
+
+class C:
+    import json
+
+def handler():
+    from .debughelpers import explain
+    explain()
+"#,
+    );
+    let timing = |s: &str| {
+        e.imports
+            .iter()
+            .find(|i| match &i.target {
+                ImportTarget::Package(p) | ImportTarget::Relative(p) => p == s,
+                _ => false,
+            })
+            .unwrap_or_else(|| panic!("no import {s}"))
+            .timing
+    };
+    assert_eq!(timing("os"), Timing::Load);
+    assert_eq!(
+        timing(".types"),
+        Timing::Erased,
+        "TYPE_CHECKING is False at run time"
+    );
+    assert_eq!(
+        timing(".runtime"),
+        Timing::Load,
+        "the else branch of the guard runs"
+    );
+    assert_eq!(
+        timing("speedups"),
+        Timing::Load,
+        "a module-level try runs at load"
+    );
+    assert_eq!(
+        timing("json"),
+        Timing::Load,
+        "a class body runs while the module loads"
+    );
+    assert_eq!(
+        timing(".debughelpers"),
+        Timing::Lazy,
+        "a function body runs later"
     );
 }
 

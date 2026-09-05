@@ -1,5 +1,9 @@
 //! Import cycles: strongly connected components of size ≥ 2 over resolved
-//! import edges — never over `sees`, whose regions are mutual by construction.
+//! LOAD-TIME import edges — never over `sees`, whose regions are mutual by
+//! construction, and never over a lazy or erased import: an initialization
+//! hazard needs initialization, and a dynamic `import()`, a function-scoped
+//! `require`, an `import type` or a `TYPE_CHECKING` block runs after linking or
+//! never ([`kndo_contract::evidence::Timing`]).
 //! ONE finding per cycle, anchored at the lexicographically-first participant,
 //! with the shortest loop through the anchor spelled in the message as the
 //! evidence chain.
@@ -16,6 +20,7 @@
 //! real as its weakest link, the same honesty rule `trace` applies to paths.
 
 use super::{Analysis, AnalysisContext};
+use kndo_contract::evidence::Timing;
 use kndo_contract::finding::{Finding, Severity};
 use kndo_contract::subject::Subject;
 use kndo_contract::vocab::{Category, Confidence};
@@ -40,17 +45,25 @@ impl Analysis for Cyclic {
             .collect();
         // Self-edges out: a file importing itself (Python's `from . import x`
         // inside `__init__.py` resolves to the package's own file) is not a
-        // cycle BETWEEN modules, and it must not shadow the real loop.
+        // cycle BETWEEN modules, and it must not shadow the real loop. Only
+        // load-time imports draw an edge here; an unknown timing reads as lazy.
         let adjacency: Vec<Vec<u32>> = g
             .files
             .iter()
             .enumerate()
             .map(|(i, f)| {
-                f.imports
+                let mut out: Vec<u32> = f
+                    .evidence
+                    .imports
                     .iter()
-                    .copied()
+                    .zip(&f.import_targets)
+                    .filter(|(import, _)| matches!(import.timing, Timing::Load))
+                    .flat_map(|(_, targets)| targets.iter().copied())
                     .filter(|&t| t != i as u32)
-                    .collect()
+                    .collect();
+                out.sort_unstable();
+                out.dedup();
+                out
             })
             .collect();
         let adjacency: Vec<&[u32]> = adjacency.iter().map(|v| v.as_slice()).collect();
@@ -178,7 +191,7 @@ fn import_confidence(g: &crate::graph::Graph, from: u32, to: u32) -> Option<Conf
         .imports
         .iter()
         .zip(&f.import_targets)
-        .filter(|(_, targets)| targets.contains(&to))
+        .filter(|(import, targets)| matches!(import.timing, Timing::Load) && targets.contains(&to))
         .map(|(import, _)| import.confidence)
         .max()
 }

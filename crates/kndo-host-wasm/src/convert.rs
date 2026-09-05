@@ -264,7 +264,15 @@ pub(crate) fn replay_evidence(
         sink.reference(SmolStr::new(r.name), ref_kind(r.kind), span(r.span));
     }
     for i in evidence.imports {
-        sink.import(
+        // The wire still spells a type-only import as its own shape; natively
+        // that is its bindings at `Erased` — the timing the ABI's next version
+        // carries as a field.
+        let timing = match i.shape {
+            awire::ImportShape::TypeOnly(_) => ev::Timing::Erased,
+            _ => ev::Timing::Load,
+        };
+        sink.import_at(
+            timing,
             match i.target {
                 awire::ImportTarget::Relative(s) => ev::ImportTarget::Relative(SmolStr::new(s)),
                 awire::ImportTarget::Package(s) => ev::ImportTarget::Package(SmolStr::new(s)),
@@ -277,7 +285,7 @@ pub(crate) fn replay_evidence(
                 awire::ImportShape::SideEffect => ev::ImportShape::SideEffect,
                 awire::ImportShape::Reexport(b) => ev::ImportShape::Reexport(bindings(b)),
                 awire::ImportShape::ReexportAll => ev::ImportShape::ReexportAll,
-                awire::ImportShape::TypeOnly(b) => ev::ImportShape::TypeOnly(bindings(b)),
+                awire::ImportShape::TypeOnly(b) => ev::ImportShape::Bindings(bindings(b)),
                 awire::ImportShape::Glob => ev::ImportShape::Glob,
             },
             span(i.span),

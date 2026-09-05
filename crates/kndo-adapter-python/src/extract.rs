@@ -352,11 +352,41 @@ fn reach_of(name: &str) -> Reach {
 
 /// `import a.b`, `import a as x` / `from pkg import a, b as c`,
 /// `from . import x`, `from .mod import *`. Absolute dotted paths travel as
+/// When an import statement runs: inside a function body, when the function
+/// does (`Lazy`); inside the consequence of an `if TYPE_CHECKING:` (or
+/// `typing.TYPE_CHECKING`) test, never (`Erased` — the name is False at run
+/// time); anywhere else, at module load — a class body, a `try`, a module-level
+/// `if` all execute while the module initializes.
+fn import_timing(item: Node<'_>, source: &[u8]) -> kndo_contract::evidence::Timing {
+    use kndo_contract::evidence::Timing;
+    let mut node = item;
+    while let Some(parent) = node.parent() {
+        match parent.kind() {
+            "function_definition" | "lambda" => return Timing::Lazy,
+            "if_statement" => {
+                let guarded = parent
+                    .child_by_field_name("condition")
+                    .is_some_and(|c| tk::text(c, source).contains("TYPE_CHECKING"));
+                let in_consequence = parent
+                    .child_by_field_name("consequence")
+                    .is_some_and(|block| block.id() == node.id());
+                if guarded && in_consequence {
+                    return Timing::Erased;
+                }
+            }
+            _ => {}
+        }
+        node = parent;
+    }
+    Timing::Load
+}
+
 /// Package targets; relative ones keep their leading dots for the resolver.
 /// Every from-import binding also emits a submodule probe (see below).
 fn imports(item: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
     use kndo_contract::evidence::{ImportBinding, ImportShape, ImportTarget};
     let span = tk::span(item);
+    let timing = import_timing(item, source);
     match item.kind() {
         "import_statement" => {
             let mut c = item.walk();
@@ -379,7 +409,8 @@ fn imports(item: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
                     }
                     _ => continue,
                 };
-                out.import(
+                out.import_at(
+                    timing,
                     ImportTarget::Package(SmolStr::new(module)),
                     ImportShape::Namespace {
                         local: SmolStr::new(local),
@@ -451,7 +482,8 @@ fn imports(item: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
                     } else {
                         ImportTarget::Package(SmolStr::new(&probe))
                     };
-                    out.import(
+                    out.import_at(
+                        timing,
                         probe_target,
                         ImportShape::Namespace {
                             local: b.local.clone(),
@@ -466,7 +498,7 @@ fn imports(item: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
             } else {
                 ImportShape::Bindings(bindings)
             };
-            out.import(target, shape, span, Confidence::Certain);
+            out.import_at(timing, target, shape, span, Confidence::Certain);
         }
         _ => {}
     }

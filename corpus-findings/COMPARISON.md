@@ -685,6 +685,26 @@ Self-import edges (Python's `from . import x` inside `__init__.py`) are not
 cycles between modules and neither seed an SCC nor shadow a real loop's
 rendering.
 
+**Timing (2026-09-05).** An import now carries WHEN it runs (`Timing`: load,
+lazy, erased), and `cyclic` walks load-time edges only — an initialization
+hazard needs initialization, and `import type`, a dynamic `import()`, a
+function-scoped `require` or a `TYPE_CHECKING` block runs after linking or
+never. vite 31 → 28: the 8-file `module-runner` loop was closed by type-only
+hops and is gone; the 88-file `node/` tangle anchored at `baseEnvironment.ts`
+shrinks to the 48-file value-import loop anchored at `build.ts`, and the
+`packages.ts ↔ …` pair it had swallowed surfaces as its own 2-file loop; three
+loops that existed only through dynamic imports — the `entry-cyclic` and
+`hmr-evaluated-import-race` runtime test fixtures and the 25-file
+`playground/multiple-entrypoints` fan — are no longer hazards. The three that
+remain in vite's own cycle fixtures are value imports, which is what those
+fixtures test. flask stays at 3 with every loop reshaped by the same rule: the
+20-file knot is 9 files of load-time imports (the other 11 were joined by
+`TYPE_CHECKING` and function-scoped imports), `json/__init__.py ↔ provider.py`
+surfaces as its own load-time pair, the celery example's loop ran through a
+function-scoped import and is gone, and the `__init__.py → app.py` loop is now
+`Certain` because its shortest loop no longer rides a `Possible` submodule
+probe. Nothing else in the corpus moved: reachability keeps every timing.
+
 
 ## private-type-leak (2026-08-31)
 

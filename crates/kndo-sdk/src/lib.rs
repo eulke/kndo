@@ -162,12 +162,17 @@ fn import_to_wire(import: &ev::Import) -> wire::Import {
             _ => wire::ImportTarget::Package(String::new()),
         },
         shape: match &import.shape {
+            // The wire's type-only shape is the native `Erased` timing on
+            // bindings; every other timing crosses as load-time until the ABI's
+            // next version carries the field.
+            ev::ImportShape::Bindings(b) if matches!(import.timing, ev::Timing::Erased) => {
+                wire::ImportShape::TypeOnly(bindings_to_wire(b))
+            }
             ev::ImportShape::Bindings(b) => wire::ImportShape::Bindings(bindings_to_wire(b)),
             ev::ImportShape::Namespace { local } => wire::ImportShape::Namespace(local.to_string()),
             ev::ImportShape::SideEffect => wire::ImportShape::SideEffect,
             ev::ImportShape::Reexport(b) => wire::ImportShape::Reexport(bindings_to_wire(b)),
             ev::ImportShape::ReexportAll => wire::ImportShape::ReexportAll,
-            ev::ImportShape::TypeOnly(b) => wire::ImportShape::TypeOnly(bindings_to_wire(b)),
             ev::ImportShape::Glob => wire::ImportShape::Glob,
             // An unknown shape keeps everything alive — SideEffect is that posture.
             _ => wire::ImportShape::SideEffect,

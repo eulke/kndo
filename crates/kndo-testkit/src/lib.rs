@@ -21,7 +21,8 @@ use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{
     CoverageRecords, DeclarationId, DiagnosticLevel, EvidenceSink, EvidenceStream, EvidenceStreams,
     ImportBinding, ImportShape, ImportTarget, Reach, RefKind, RootKind, RootTarget, SymbolKind,
-    };
+    Timing,
+};
 use kndo_contract::extension::{ConductSink, ContentAccess, Extension, ExtensionSpec, GraphAccess};
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use std::collections::BTreeMap;
@@ -58,6 +59,18 @@ impl MockExtension {
             on_report: None,
             on_ingest: None,
         }
+    }
+
+    /// The kmock language declaring import cycles a hazard — what a test of the
+    /// `cyclic` analysis speaks, since the plain mock tolerates them.
+    pub fn hazardous() -> Self {
+        let mut mock = MockExtension::new();
+        mock.spec = ExtensionSpec::builder("kmock", 1)
+            .suffixes(&["kmock"])
+            .emits(EvidenceStreams::of(&[EvidenceStream::Comments]))
+            .import_cycles(kndo_contract::extension::CycleTolerance::Hazard)
+            .build();
+        mock
     }
 
     /// A conduct/ingestion mock: no language, the given spec, and whatever the
@@ -178,7 +191,7 @@ impl Extension for MockExtension {
                         Some(span),
                     ),
                 }
-            } else if let Some(rest) = line.strip_prefix("import ") {
+            } else if let Some((timing, rest)) = timed_import(line) {
                 let (specifier, shape) = match rest.split_once('{') {
                     Some((spec, names)) => {
                         let bindings = names
@@ -195,7 +208,8 @@ impl Extension for MockExtension {
                     }
                     None => (rest.trim(), ImportShape::SideEffect),
                 };
-                out.import(
+                out.import_at(
+                    timing,
                     ImportTarget::Relative(specifier.into()),
                     shape,
                     span,
@@ -227,6 +241,21 @@ impl Extension for MockExtension {
             Resolution::Unresolved
         }
     }
+}
+
+/// `import ./x`, `lazy-import ./x`, `erased-import ./x` — the three moments an
+/// import can run, spelled as kmock lines.
+fn timed_import(line: &str) -> Option<(Timing, &str)> {
+    line.strip_prefix("import ")
+        .map(|rest| (Timing::Load, rest))
+        .or_else(|| {
+            line.strip_prefix("lazy-import ")
+                .map(|rest| (Timing::Lazy, rest))
+        })
+        .or_else(|| {
+            line.strip_prefix("erased-import ")
+                .map(|rest| (Timing::Erased, rest))
+        })
 }
 
 fn lines_with_spans(text: &str) -> Vec<(&str, Span)> {

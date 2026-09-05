@@ -1,0 +1,16 @@
+# Type-only imports never close an import cycle; value imports do.
+
+[[dead]]
+subject = "src/a.ts"
+category = "cyclic"
+why = "a value import in both directions is an initialization cycle, anchored at the first participant"
+
+[[alive]]
+subject = "src/index.ts"
+category = "cyclic"
+why = "shape.ts reaches back only through `import type`, which every emitter erases"
+
+[[alive]]
+subject = "src/shape.ts"
+category = "cyclic"
+why = "the erased edge is not a hazard"

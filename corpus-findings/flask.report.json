@@ -55,17 +55,6 @@
   },
   "findings": [
     {
-      "id": "kndo-e044057ecd0b",
-      "category": "cyclic",
-      "severity": "warning",
-      "confidence": "possible",
-      "subject": {
-        "kind": "file",
-        "path": "examples/celery/src/task_app/__init__.py"
-      },
-      "message": "2 files form an import cycle: examples/celery/src/task_app/__init__.py → examples/celery/src/task_app/views.py → examples/celery/src/task_app/__init__.py"
-    },
-    {
       "id": "kndo-b23118770f12",
       "category": "cyclic",
       "severity": "warning",
@@ -85,7 +74,18 @@
         "kind": "file",
         "path": "src/flask/__init__.py"
       },
-      "message": "20 files form an import cycle: src/flask/__init__.py → src/flask/app.py → src/flask/__init__.py"
+      "message": "9 files form an import cycle: src/flask/__init__.py → src/flask/app.py → src/flask/__init__.py"
+    },
+    {
+      "id": "kndo-1ffc8568d487",
+      "category": "cyclic",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "src/flask/json/__init__.py"
+      },
+      "message": "2 files form an import cycle: src/flask/json/__init__.py → src/flask/json/provider.py → src/flask/json/__init__.py"
     },
     {
       "id": "kndo-b48bc44863cd",

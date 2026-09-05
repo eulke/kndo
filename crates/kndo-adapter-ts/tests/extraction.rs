@@ -3,7 +3,7 @@
 
 use kndo_adapter_ts::TypeScriptAdapter;
 use kndo_contract::evidence::{
-    FileEvidence, ImportShape, ImportTarget, Reach, RefKind, SymbolKind,
+    FileEvidence, ImportShape, ImportTarget, Reach, RefKind, SymbolKind, Timing,
 };
 use kndo_contract::vocab::Confidence;
 
@@ -136,10 +136,20 @@ export * from "./all";
         &relative("./side-effect").shape,
         ImportShape::SideEffect
     ));
+    // `import type` binds like any import and never runs: its bindings at `Erased`.
+    let types = relative("./types");
     assert!(matches!(
-        &relative("./types").shape,
-        ImportShape::TypeOnly(bs) if bs.len() == 1 && bs[0].imported == "T"
+        &types.shape,
+        ImportShape::Bindings(bs) if bs.len() == 1 && bs[0].imported == "T"
     ));
+    assert_eq!(types.timing, Timing::Erased);
+    assert!(
+        ev.imports
+            .iter()
+            .filter(|i| !matches!(&i.target, ImportTarget::Relative(t) if t == "./types"))
+            .all(|i| i.timing == Timing::Load),
+        "every static import runs at load"
+    );
     assert!(
         ev.imports
             .iter()
@@ -153,6 +163,45 @@ export * from "./all";
         other => panic!("reexport shape: {other:?}"),
     }
     assert!(matches!(&relative("./all").shape, ImportShape::ReexportAll));
+}
+
+#[test]
+fn dynamic_loads_carry_their_moment() {
+    let ev = extract(
+        "src/d.ts",
+        r#"
+const eager = require("./eager");
+export async function later() {
+  const m = await import("./later");
+  if (m) { const c = require("./conditional"); }
+  return m;
+}
+import("./top-level-dynamic");
+"#,
+    );
+    let timing = |s: &str| {
+        ev.imports
+            .iter()
+            .find(|i| matches!(&i.target, ImportTarget::Relative(t) if t == s))
+            .unwrap_or_else(|| panic!("no import {s}"))
+            .timing
+    };
+    assert_eq!(timing("./eager"), Timing::Load, "a top-level require loads");
+    assert_eq!(
+        timing("./later"),
+        Timing::Lazy,
+        "import() runs when evaluated"
+    );
+    assert_eq!(
+        timing("./conditional"),
+        Timing::Lazy,
+        "a guarded require runs later"
+    );
+    assert_eq!(
+        timing("./top-level-dynamic"),
+        Timing::Lazy,
+        "even at the top level, import() runs after the static graph linked"
+    );
 }
 
 #[test]

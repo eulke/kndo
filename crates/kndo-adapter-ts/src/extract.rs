@@ -6,7 +6,7 @@
 
 use kndo_contract::evidence::{
     DeclarationId, EvidenceSink, ImportBinding, ImportShape, ImportTarget, Reach, RefKind,
-    SymbolKind,
+    SymbolKind, Timing,
 };
 use kndo_contract::vocab::{Confidence, Span};
 use kndo_toolkit as tk;
@@ -437,12 +437,20 @@ fn import_statement(stmt: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
                 // A namespace binding keeps the target's whole surface, which
                 // subsumes any default binding beside it.
                 Some(local) => ImportShape::Namespace { local },
-                None if type_only => ImportShape::TypeOnly(bindings),
                 None => ImportShape::Bindings(bindings),
             }
         }
     };
-    out.import(target, shape, tk::span(stmt), Confidence::Certain);
+    // `import type` is erased by every emitter, so it can never take part in
+    // an initialization cycle; an inline `type` specifier leaves the statement
+    // itself in place (`import {} from "x"` still loads "x"), so it stays a
+    // load-time import.
+    let timing = if type_only {
+        Timing::Erased
+    } else {
+        Timing::Load
+    };
+    out.import_at(timing, target, shape, tk::span(stmt), Confidence::Certain);
 }
 
 fn reexport_statement(stmt: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
@@ -554,12 +562,20 @@ fn dynamic_import(call: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
     // A load the file itself makes conditional — inside a function, a branch,
     // a guard, a `||` fallback — is the optional-dependency idiom: `Probable`,
     // a use that keeps its target alive and never an accusation's ground.
-    let confidence = if is_conditional(call) {
+    let conditional = is_conditional(call);
+    let confidence = if conditional {
         Confidence::Probable
     } else {
         Confidence::Certain
     };
-    out.import(target, shape, tk::span(call), confidence);
+    // `import()` runs when evaluated, after the static graph linked; a
+    // `require()` runs at load only at the top level of the module.
+    let timing = if is_import || conditional {
+        Timing::Lazy
+    } else {
+        Timing::Load
+    };
+    out.import_at(timing, target, shape, tk::span(call), confidence);
 }
 
 fn is_conditional(call: Node<'_>) -> bool {

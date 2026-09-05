@@ -1,0 +1,3 @@
+[project]
+name = "type-checking-cycle"
+version = "0.1.0"

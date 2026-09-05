@@ -124,9 +124,7 @@ impl Index {
                         span: import.span,
                     };
                     match &import.shape {
-                        ImportShape::Bindings(bs)
-                        | ImportShape::Reexport(bs)
-                        | ImportShape::TypeOnly(bs) => {
+                        ImportShape::Bindings(bs) | ImportShape::Reexport(bs) => {
                             for b in bs {
                                 bound.entry((t, b.imported.clone())).or_default().push(site);
                             }

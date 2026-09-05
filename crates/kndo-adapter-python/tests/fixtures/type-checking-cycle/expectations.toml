@@ -1,0 +1,16 @@
+# TYPE_CHECKING and function-scoped imports never close an import cycle; module-level ones do.
+
+[[dead]]
+subject = "src/pkg/c.py"
+category = "cyclic"
+why = "module-level imports in both directions are an initialization cycle, anchored at the first participant"
+
+[[alive]]
+subject = "src/pkg/a.py"
+category = "cyclic"
+why = "a.py reaches b.py only under TYPE_CHECKING (erased) and inside a function (lazy)"
+
+[[alive]]
+subject = "src/pkg/b.py"
+category = "cyclic"
+why = "the loop back through a.py never runs at load"
