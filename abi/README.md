@@ -8,7 +8,7 @@ declared, in whatever combination —
 
 | Cluster | Spec fields | Hooks | Gate |
 | --- | --- | --- | --- |
-| extraction | `suffixes`, `claims`, `emits`, `manifests`, `narrowable-scopes` | `extract`, `resolve`, `roots`, `packages`, `manifest-dependencies`, `sees` | claims |
+| extraction | `suffixes`, `claims`, `emits`, `manifests`, `narrowable-scopes`, `import-cycles`, `dispatch` | `extract`, `resolve`, `roots`, `packages`, `manifest-dependencies`, `sees` | claims |
 | conduct | `activation`, `mutates-graph`, `dependencies`, `requested-file-access`, `rules` | `contribute-roots`, `report-findings` | activation (+ `mutates-graph` for roots) |
 | ingestion | `reads-reports` | `ingest` | activation |
 
@@ -59,7 +59,9 @@ is dead bytes, never dead design).
 Everything your extraction sink writes is replayed host-side through another
 real `EvidenceSink` under your spec's declared streams — clamps,
 undeclared-stream drops and the pairing rule apply to you exactly as to a
-built-in. Everything your conduct sink writes lands under the engine's own
+built-in. Markers cross as written and mean what your spec's `dispatch` rules
+say, matched host-side; an import's timing crosses as the field it is.
+Everything your conduct sink writes lands under the engine's own
 containment: findings under `ext:<coordinate>/<rule>` for rules your spec
 declared, roots only if your spec says `mutates-graph` (which also bypasses the
 persisted graph cache while you are active) — anything misdirected drops with a

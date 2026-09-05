@@ -605,11 +605,7 @@ pub struct ExtensionSpecParts {
     pub dependency_importers: Vec<SmolStr>,
     /// Wire components cannot declare builtins yet; defaults to none.
     pub dependency_builtins: DependencyBuiltins,
-    /// Wire components cannot declare `Hazard` yet — the world speaks no cycle
-    /// vocabulary; defaults to `Tolerated` (silence) like every other absence.
     pub import_cycles: CycleTolerance,
-    /// Wire components cannot declare rules yet; defaults to none — their
-    /// markers, once the wire carries them, derive nothing.
     pub dispatch: Vec<DispatchRule>,
     pub claims: Vec<SmolStr>,
     pub emits: EvidenceStreams,

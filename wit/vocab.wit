@@ -31,6 +31,7 @@ interface types {
     enum evidence-stream {
         comments,
         metrics,
+        markers,
     }
 
     /// Mirrors `SymbolKind`; `other` carries the adapter's own word verbatim.
@@ -91,15 +92,23 @@ interface types {
         local: string,
     }
 
-    /// Mirrors `ImportShape`.
+    /// Mirrors `ImportShape`. A type-only import is its bindings at the
+    /// `erased` timing — the shape says what is bound, the timing when.
     variant import-shape {
         bindings(list<import-binding>),
         namespace(string),
         side-effect,
         reexport(list<import-binding>),
         reexport-all,
-        type-only(list<import-binding>),
         glob,
+    }
+
+    /// Mirrors `Timing` — when an import runs: at module load, when the code
+    /// around it does, or never (the type checker alone).
+    enum timing {
+        load,
+        lazy,
+        erased,
     }
 
     record %import {
@@ -107,6 +116,7 @@ interface types {
         shape: import-shape,
         span: span,
         confidence: confidence,
+        timing: timing,
     }
 
     enum root-kind {
@@ -125,6 +135,23 @@ interface types {
         target: root-target,
         kind: root-kind,
         confidence: confidence,
+    }
+
+    /// Mirrors `MarkerTarget`; `declaration` is the same index spelling as
+    /// `owner`.
+    variant marker-target {
+        file,
+        declaration(u32),
+    }
+
+    /// Mirrors `Marker`: an attribute, annotation, decorator or pragma as
+    /// written — path and top-level arguments — on a declaration or the file.
+    /// What it means is the spec's dispatch rules, matched host-side.
+    record marker {
+        on: marker-target,
+        path: string,
+        args: list<string>,
+        span: span,
     }
 
     /// Mirrors `CommentSpan`: where a comment is, and where its text is. The engine
@@ -169,9 +196,42 @@ interface types {
         references: list<reference>,
         imports: list<%import>,
         roots: list<root>,
+        markers: list<marker>,
         comments: list<comment-span>,
         metrics: list<metric-entry>,
         diagnostics: list<diagnostic>,
+    }
+
+    /// Mirrors `CycleTolerance` — whether an import cycle among this
+    /// language's files is a hazard worth a finding.
+    enum cycle-tolerance {
+        tolerated,
+        hazard,
+    }
+
+    /// Mirrors `Trigger` — what a dispatch rule watches for: a marker whose
+    /// path matches the pattern (`*` matches any run) and, when given, an
+    /// argument matching `arg`.
+    record marker-trigger {
+        path: string,
+        arg: option<string>,
+    }
+
+    variant trigger {
+        marker(marker-trigger),
+    }
+
+    /// Mirrors `Effect` — a root of a color, or an exemption from `unused`.
+    variant effect {
+        root(root-kind),
+        exempt,
+    }
+
+    /// Mirrors `DispatchRule`.
+    record dispatch-rule {
+        when: trigger,
+        then: effect,
+        confidence: confidence,
     }
 
     /// Mirrors `ExtensionSpec` — the ONE manifest for every capability, claims
@@ -189,6 +249,10 @@ interface types {
         /// Scope tokens with a strictly narrower rung to demote to — the
         /// language fact behind internal-only; empty keeps it silent.
         narrowable-scopes: list<string>,
+        /// Whether import cycles are a hazard here — `cyclic` reads it.
+        import-cycles: cycle-tolerance,
+        /// What the language's markers mean — the host's dispatch reads it.
+        dispatch: list<dispatch-rule>,
         claims: list<string>,
         emits: list<evidence-stream>,
         manifests: list<string>,

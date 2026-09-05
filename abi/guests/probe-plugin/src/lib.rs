@@ -9,8 +9,8 @@
 
 use kndo_contract::evidence::RootKind;
 use kndo_contract::extension::{
-    Activation, ActivationRule, ConductSink, ContentAccess, Extension, ExtensionSpec, GraphAccess,
-    MutatesGraph, ConductSeverity, ConductTarget,
+    Activation, ActivationRule, ConductSeverity, ConductSink, ConductTarget, ContentAccess,
+    Extension, ExtensionSpec, GraphAccess, MutatesGraph,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use std::sync::LazyLock;

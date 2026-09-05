@@ -10,12 +10,11 @@
 use crate::bindings::kndo::vocab::types as awire;
 use kndo_contract::adapter::{PackageEntry, ProjectRoot, Resolution};
 use kndo_contract::evidence::{
-    self as ev, DiagnosticLevel, EvidenceSink, EvidenceStream, EvidenceStreams, FileEvidence,
-    RootKind,
+    self as ev, DiagnosticLevel, EvidenceSink, EvidenceStream, EvidenceStreams, RootKind,
 };
 use kndo_contract::extension::{
-    Activation, ActivationRule, ConductSeverity, ConductTarget, DeclaredSymbol, ExtensionSpec,
-    ExtensionSpecParts, RuleDescriptor,
+    Activation, ActivationRule, ConductSeverity, ConductTarget, CycleTolerance, DeclaredSymbol,
+    DispatchRule, Effect, ExtensionSpec, ExtensionSpecParts, RuleDescriptor, Trigger,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use smol_str::SmolStr;
@@ -55,10 +54,13 @@ pub(crate) fn extension_spec(spec: awire::ExtensionSpec) -> ExtensionSpec {
             .map(SmolStr::new)
             .collect(),
         claims: spec.claims.into_iter().map(SmolStr::new).collect(),
-        // The wire world speaks no cycle or narrowing vocabulary; absence
-        // defaults to silence, like every other undeclared capability.
-        import_cycles: Default::default(),
-        dispatch: Vec::new(),
+        import_cycles: match spec.import_cycles {
+            awire::CycleTolerance::Tolerated => CycleTolerance::Tolerated,
+            awire::CycleTolerance::Hazard => CycleTolerance::Hazard,
+        },
+        dispatch: spec.dispatch.into_iter().map(dispatch_rule).collect(),
+        // The wire world speaks no narrowing or dependency vocabulary yet;
+        // absence defaults to silence, like every other undeclared capability.
         export_narrowing: Default::default(),
         dependency_scoping: Default::default(),
         dependency_identity: Default::default(),
@@ -71,6 +73,7 @@ pub(crate) fn extension_spec(spec: awire::ExtensionSpec) -> ExtensionSpec {
                 .map(|s| match s {
                     awire::EvidenceStream::Comments => EvidenceStream::Comments,
                     awire::EvidenceStream::Metrics => EvidenceStream::Metrics,
+                    awire::EvidenceStream::Markers => EvidenceStream::Markers,
                 })
                 .collect::<Vec<_>>(),
         ),
@@ -111,6 +114,22 @@ pub(crate) fn extension_spec(spec: awire::ExtensionSpec) -> ExtensionSpec {
         reads_reports: spec.reads_reports.into_iter().map(SmolStr::new).collect(),
     }
     .into()
+}
+
+fn dispatch_rule(rule: awire::DispatchRule) -> DispatchRule {
+    DispatchRule {
+        when: match rule.when {
+            awire::Trigger::Marker(m) => Trigger::Marker {
+                path: SmolStr::new(m.path),
+                arg: m.arg.map(SmolStr::new),
+            },
+        },
+        then: match rule.then {
+            awire::Effect::Root(kind) => Effect::Root(root_kind(kind)),
+            awire::Effect::Exempt => Effect::Exempt,
+        },
+        confidence: confidence(rule.confidence),
+    }
 }
 
 pub(crate) fn project_root(root: awire::ProjectRoot) -> ProjectRoot {
@@ -215,16 +234,14 @@ fn bindings(b: Vec<awire::ImportBinding>) -> Vec<ev::ImportBinding> {
         .collect()
 }
 
-/// Wire evidence through a real sink. `declares` comes from the loaded spec — the
-/// pairing rule's host end — and every index the wire carries is bounds-checked
-/// into a sink-issued id or dropped with a diagnostic.
-pub(crate) fn replay_evidence(
-    evidence: awire::FileEvidence,
-    file_len: u32,
-    declares: EvidenceStreams,
-) -> FileEvidence {
-    let mut sink = EvidenceSink::new(file_len, declares);
-
+/// Wire evidence replayed into the ENGINE'S sink — the one the engine primed
+/// with the spec's declared streams, so the pairing rule and every clamp apply
+/// to the wire exactly as to native writes, and every index the wire carries
+/// is bounds-checked into a sink-issued id or dropped with a diagnostic. One
+/// sink, not a validating copy then a field-by-field transfer: a transfer
+/// enumerates fields by hand, and the first field it forgot (an import's
+/// timing) was dropped in silence.
+pub(crate) fn replay_evidence(evidence: awire::FileEvidence, sink: &mut EvidenceSink) {
     let ids: Vec<_> = evidence
         .declarations
         .iter()
@@ -265,15 +282,12 @@ pub(crate) fn replay_evidence(
         sink.reference(SmolStr::new(r.name), ref_kind(r.kind), span(r.span));
     }
     for i in evidence.imports {
-        // The wire still spells a type-only import as its own shape; natively
-        // that is its bindings at `Erased` — the timing the ABI's next version
-        // carries as a field.
-        let timing = match i.shape {
-            awire::ImportShape::TypeOnly(_) => ev::Timing::Erased,
-            _ => ev::Timing::Load,
-        };
         sink.import_at(
-            timing,
+            match i.timing {
+                awire::Timing::Load => ev::Timing::Load,
+                awire::Timing::Lazy => ev::Timing::Lazy,
+                awire::Timing::Erased => ev::Timing::Erased,
+            },
             match i.target {
                 awire::ImportTarget::Relative(s) => ev::ImportTarget::Relative(SmolStr::new(s)),
                 awire::ImportTarget::Package(s) => ev::ImportTarget::Package(SmolStr::new(s)),
@@ -286,7 +300,6 @@ pub(crate) fn replay_evidence(
                 awire::ImportShape::SideEffect => ev::ImportShape::SideEffect,
                 awire::ImportShape::Reexport(b) => ev::ImportShape::Reexport(bindings(b)),
                 awire::ImportShape::ReexportAll => ev::ImportShape::ReexportAll,
-                awire::ImportShape::TypeOnly(b) => ev::ImportShape::Bindings(bindings(b)),
                 awire::ImportShape::Glob => ev::ImportShape::Glob,
             },
             span(i.span),
@@ -309,6 +322,28 @@ pub(crate) fn replay_evidence(
             },
         };
         sink.root(target, root_kind(r.kind), confidence(r.confidence));
+    }
+    for m in evidence.markers {
+        let on = match m.on {
+            awire::MarkerTarget::File => ev::MarkerTarget::File,
+            awire::MarkerTarget::Declaration(ix) => match ids.get(ix as usize) {
+                Some(id) => ev::MarkerTarget::Declaration(*id),
+                None => {
+                    sink.diagnostic(
+                        DiagnosticLevel::Warn,
+                        format!("marker declaration index {ix} out of range (component defect)"),
+                        None,
+                    );
+                    continue;
+                }
+            },
+        };
+        sink.marker(
+            on,
+            SmolStr::new(m.path),
+            m.args.into_iter().map(SmolStr::new).collect(),
+            span(m.span),
+        );
     }
     for c in evidence.comments {
         sink.comment(span(c.span), span(c.text));
@@ -345,5 +380,4 @@ pub(crate) fn replay_evidence(
             d.span.map(span),
         );
     }
-    sink.finish()
 }

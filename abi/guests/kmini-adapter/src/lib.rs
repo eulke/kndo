@@ -14,18 +14,28 @@
 //! use ./file             an import of ./file.kmini (side-effect shape)
 //! use ./file name        an import binding `name` from ./file.kmini
 //! use pkg                a bare import of a manifest-declared package
+//! lazy use …             the same import, run when the code around it does
+//! type use …             the same import, for the type checker alone
+//! @path arg …            a marker on the next declaration (`@test`, `@keep`)
+//! @! path arg …          a marker on the whole file
 //! # text                 a comment (the Comments stream)
 //! ```
+//! What a marker means is the spec's dispatch rules — `@test` roots a Test
+//! entry, `@keep` exempts from `unused` — matched host-side like every
+//! language's; and kmini declares its import cycles a hazard, so `cyclic`
+//! judges its load-time edges.
 //! A `kmini.pkg` manifest declares `name <package>`, `entry <path>`, and
 //! `dep <name>` lines. Files `x.kmini` and `x_part.kmini` are one compilation
 //! unit — a pure function of path and file set, as the contract demands.
 
 use kndo_contract::adapter::{PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{
-    EvidenceSink, EvidenceStream, EvidenceStreams, ImportBinding, ImportShape, ImportTarget, Reach,
-    RefKind, RootKind, RootTarget, SymbolKind,
+    EvidenceSink, EvidenceStream, EvidenceStreams, ImportBinding, ImportShape, ImportTarget,
+    MarkerTarget, Reach, RefKind, RootKind, RootTarget, SymbolKind, Timing,
 };
-use kndo_contract::extension::{Extension, ExtensionSpec};
+use kndo_contract::extension::{
+    CycleTolerance, DispatchRule, Effect, Extension, ExtensionSpec, Trigger,
+};
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use smol_str::SmolStr;
 
@@ -35,14 +45,35 @@ pub struct KminiAdapter {
 
 impl Default for KminiAdapter {
     fn default() -> Self {
+        let rule = |when: Trigger, then: Effect| DispatchRule {
+            when,
+            then,
+            confidence: Confidence::Certain,
+        };
         KminiAdapter {
-            spec: ExtensionSpec::builder("kmini", 1)
+            // 2: markers, dispatch rules, import timing and cycle tolerance.
+            spec: ExtensionSpec::builder("kmini", 2)
                 .suffixes(&["kmini"])
-                .emits(EvidenceStreams::of(&[EvidenceStream::Comments]))
+                .emits(EvidenceStreams::of(&[
+                    EvidenceStream::Comments,
+                    EvidenceStream::Markers,
+                ]))
                 .manifests(&["**/kmini.pkg"])
+                .import_cycles(CycleTolerance::Hazard)
+                .dispatch(vec![
+                    rule(Trigger::marker("test"), Effect::Root(RootKind::Test)),
+                    rule(Trigger::marker("keep"), Effect::Exempt),
+                ])
                 .build(),
         }
     }
+}
+
+/// `@path arg arg` → the marker's path and arguments.
+fn marker_parts(text: &str) -> (&str, Vec<SmolStr>) {
+    let mut words = text.split_whitespace();
+    let path = words.next().unwrap_or("");
+    (path, words.map(SmolStr::new).collect())
 }
 
 fn line_spans(content: &[u8]) -> impl Iterator<Item = (u32, &str)> {
@@ -63,6 +94,17 @@ fn manifest_lines(content: &[u8]) -> impl Iterator<Item = (&str, &str)> {
         .map(|(k, v)| (k, v.trim()))
 }
 
+/// `use …`, `lazy use …`, `type use …` — the three moments an import runs.
+fn timed_use(line: &str) -> Option<(Timing, &str)> {
+    let (head, rest) = line.split_once(' ')?;
+    match head {
+        "use" => Some((Timing::Load, rest)),
+        "lazy" => Some((Timing::Lazy, rest.strip_prefix("use ")?)),
+        "type" => Some((Timing::Erased, rest.strip_prefix("use ")?)),
+        _ => None,
+    }
+}
+
 /// `x.kmini` ⇄ `x_part.kmini`, when both exist.
 fn mate_of(path: &ProjectPath) -> Option<ProjectPath> {
     let stem = path.as_str().strip_suffix(".kmini")?;
@@ -78,22 +120,39 @@ impl Extension for KminiAdapter {
     }
 
     fn extract(&self, file: &SourceFile<'_>, out: &mut EvidenceSink) {
+        // `@…` lines mark the declaration that follows them.
+        let mut pending: Vec<(String, Vec<SmolStr>, Span)> = Vec::new();
         for (start, line) in line_spans(file.content) {
             let span = Span::new(start, start + line.len() as u32);
             let trimmed = line.trim();
+            let declared = if let Some(name) = trimmed.strip_prefix("pub fn ") {
+                Some(out.declaration(name.trim(), SymbolKind::Function, span, Reach::Exported))
+            } else if let Some(name) = trimmed.strip_prefix("fn ") {
+                Some(out.declaration(name.trim(), SymbolKind::Function, span, Reach::Private))
+            } else {
+                None
+            };
+            if let Some(id) = declared {
+                for (path, args, span) in pending.drain(..) {
+                    out.marker(MarkerTarget::Declaration(id), path, args, span);
+                }
+                continue;
+            }
             if trimmed == "entry" {
                 out.root(
                     RootTarget::WholeFile,
                     RootKind::Production,
                     Confidence::Certain,
                 );
-            } else if let Some(name) = trimmed.strip_prefix("pub fn ") {
-                out.declaration(name.trim(), SymbolKind::Function, span, Reach::Exported);
-            } else if let Some(name) = trimmed.strip_prefix("fn ") {
-                out.declaration(name.trim(), SymbolKind::Function, span, Reach::Private);
+            } else if let Some(rest) = trimmed.strip_prefix("@!") {
+                let (path, args) = marker_parts(rest);
+                out.marker(MarkerTarget::File, path, args, span);
+            } else if let Some(rest) = trimmed.strip_prefix('@') {
+                let (path, args) = marker_parts(rest);
+                pending.push((path.to_string(), args, span));
             } else if let Some(name) = trimmed.strip_prefix("call ") {
                 out.reference(name.trim(), RefKind::Call, span);
-            } else if let Some(rest) = trimmed.strip_prefix("use ") {
+            } else if let Some((timing, rest)) = timed_use(trimmed) {
                 let mut parts = rest.split_whitespace();
                 let Some(specifier) = parts.next() else {
                     continue;
@@ -110,7 +169,7 @@ impl Extension for KminiAdapter {
                     }]),
                     None => ImportShape::SideEffect,
                 };
-                out.import(target, shape, span, Confidence::Certain);
+                out.import_at(timing, target, shape, span, Confidence::Certain);
             } else if let Some(text) = trimmed.strip_prefix('#') {
                 let text_start = span.end - text.trim_start().len() as u32;
                 out.comment(span, Span::new(text_start, span.end));
@@ -181,9 +240,7 @@ impl Extension for KminiAdapter {
     ) -> Vec<kndo_contract::adapter::DependencyDeclaration> {
         manifest_lines(manifest.content)
             .filter(|(k, _)| *k == "dep")
-            .map(|(_, v)| {
-                kndo_contract::adapter::DependencyDeclaration::name_only(SmolStr::new(v))
-            })
+            .map(|(_, v)| kndo_contract::adapter::DependencyDeclaration::name_only(SmolStr::new(v)))
             .collect()
     }
 

@@ -1097,27 +1097,43 @@ fn abi_compat_matrix() {
         .expect("analyze")
     };
 
-    // The adapter world: extraction, manifest roots, guest-side resolution.
+    // The adapter world: extraction, manifest roots, guest-side resolution —
+    // and the M8.a vocabulary: a marker the guest's rules exempt (`@keep`),
+    // one they root (`@test`), and an import's moment (a lazy loop is no
+    // hazard; the load-time one through lib.kmini is).
     let p = TempProject::new();
     p.file("kmini.pkg", "name kit\nentry lib.kmini\n");
-    p.file("lib.kmini", "pub fn shared\nfn helper\ncall helper\n");
+    p.file(
+        "lib.kmini",
+        "pub fn shared\nfn helper\ncall helper\nuse ./app\n",
+    );
     p.file(
         "app.kmini",
-        "entry\nuse ./lib shared\ncall shared\nfn local_dead\n",
+        "entry\nuse ./lib shared\ncall shared\nfn local_dead\n@keep\nfn parked\n@test\nfn check\n\
+         lazy use ./late later\ncall later\n",
     );
+    p.file("late.kmini", "pub fn later\nlazy use ./app\n");
     p.file("orphan.kmini", "fn floats\n");
     let snap = session(&p, Vec::new());
     let accused: Vec<String> = snap
         .findings
         .iter()
-        .map(|f| format!("{:?}", f.subject))
+        .map(|f| format!("{} {:?}", f.category.as_str(), f.subject))
         .collect();
     assert!(
         accused.iter().any(|s| s.contains("local_dead"))
             && accused.iter().any(|s| s.contains("orphan.kmini"))
             && !accused.iter().any(|s| s.contains("shared"))
-            && !accused.iter().any(|s| s.contains("helper")),
-        "the pinned adapter still drives real reachability: {accused:#?}"
+            && !accused.iter().any(|s| s.contains("helper"))
+            && !accused.iter().any(|s| s.contains("parked"))
+            && !accused.iter().any(|s| s.contains("check"))
+            && !accused.iter().any(|s| s.contains("later")),
+        "the pinned adapter still drives real reachability, markers and rules: {accused:#?}"
+    );
+    let cycles: Vec<&String> = accused.iter().filter(|s| s.starts_with("cyclic")).collect();
+    assert!(
+        cycles.len() == 1 && !cycles[0].contains("late.kmini"),
+        "the pinned adapter's load-time loop is the one hazard: {accused:#?}"
     );
 
     // The plugin world: a contributed root, a scoped read, described drops.

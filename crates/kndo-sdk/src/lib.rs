@@ -20,7 +20,8 @@ use kndo_contract::evidence::{
 };
 use kndo_contract::extension::{
     Activation, ActivationRule, ConductSeverity, ConductSink, ConductTarget, ContentAccess,
-    DeclaredSymbol, Extension, ExtensionSpec, GraphAccess,
+    CycleTolerance, DeclaredSymbol, DispatchRule, Effect, Extension, ExtensionSpec, GraphAccess,
+    Trigger,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use smol_str::SmolStr;
@@ -51,6 +52,15 @@ pub fn spec_to_wire(spec: &ExtensionSpec) -> wire::ExtensionSpec {
             .narrowable_scopes()
             .iter()
             .map(|s| s.to_string())
+            .collect(),
+        import_cycles: match spec.import_cycles() {
+            CycleTolerance::Tolerated => wire::CycleTolerance::Tolerated,
+            CycleTolerance::Hazard => wire::CycleTolerance::Hazard,
+        },
+        dispatch: spec
+            .dispatch_rules()
+            .iter()
+            .map(dispatch_rule_to_wire)
             .collect(),
         claims: spec.claims().iter().map(|s| s.to_string()).collect(),
         // The declared set itself is the wire spelling — no second list to
@@ -99,10 +109,27 @@ fn activation_to_wire(activation: &Activation) -> wire::Activation {
     }
 }
 
+fn dispatch_rule_to_wire(rule: &DispatchRule) -> wire::DispatchRule {
+    wire::DispatchRule {
+        when: match &rule.when {
+            Trigger::Marker { path, arg } => wire::Trigger::Marker(wire::MarkerTrigger {
+                path: path.to_string(),
+                arg: arg.as_ref().map(|a| a.to_string()),
+            }),
+        },
+        then: match rule.then {
+            Effect::Root(kind) => wire::Effect::Root(root_kind_to_wire(kind)),
+            Effect::Exempt => wire::Effect::Exempt,
+        },
+        confidence: confidence_to_wire(rule.confidence),
+    }
+}
+
 fn stream_to_wire(stream: EvidenceStream) -> Option<wire::EvidenceStream> {
     match stream {
         EvidenceStream::Comments => Some(wire::EvidenceStream::Comments),
         EvidenceStream::Metrics => Some(wire::EvidenceStream::Metrics),
+        EvidenceStream::Markers => Some(wire::EvidenceStream::Markers),
         // A stream this SDK build predates cannot cross this wire: omitted from
         // the declaration, so host-side pairing stays truthful (writes to it
         // would drop with a diagnostic rather than lie).
@@ -162,12 +189,6 @@ fn import_to_wire(import: &ev::Import) -> wire::Import {
             _ => wire::ImportTarget::Package(String::new()),
         },
         shape: match &import.shape {
-            // The wire's type-only shape is the native `Erased` timing on
-            // bindings; every other timing crosses as load-time until the ABI's
-            // next version carries the field.
-            ev::ImportShape::Bindings(b) if matches!(import.timing, ev::Timing::Erased) => {
-                wire::ImportShape::TypeOnly(bindings_to_wire(b))
-            }
             ev::ImportShape::Bindings(b) => wire::ImportShape::Bindings(bindings_to_wire(b)),
             ev::ImportShape::Namespace { local } => wire::ImportShape::Namespace(local.to_string()),
             ev::ImportShape::SideEffect => wire::ImportShape::SideEffect,
@@ -179,6 +200,13 @@ fn import_to_wire(import: &ev::Import) -> wire::Import {
         },
         span: span_to_wire(import.span),
         confidence: confidence_to_wire(import.confidence),
+        timing: match import.timing {
+            ev::Timing::Load => wire::Timing::Load,
+            ev::Timing::Erased => wire::Timing::Erased,
+            // Lazy, and any moment this SDK build predates: reached, never a
+            // hazard — the contract's own reading of an unknown timing.
+            _ => wire::Timing::Lazy,
+        },
     }
 }
 
@@ -226,6 +254,25 @@ pub fn evidence_to_wire(evidence: &FileEvidence) -> wire::FileEvidence {
                 },
                 kind: root_kind_to_wire(r.kind),
                 confidence: confidence_to_wire(r.confidence),
+            })
+            .collect(),
+        markers: evidence
+            .markers
+            .iter()
+            .map(|m| wire::Marker {
+                on: match &m.on {
+                    ev::MarkerTarget::File => wire::MarkerTarget::File,
+                    ev::MarkerTarget::Declaration(id) => {
+                        wire::MarkerTarget::Declaration(id.index() as u32)
+                    }
+                    // A target this SDK build predates marks the file: the
+                    // rules see it, and a file marker can only add roots or a
+                    // reported blanket — never an accusation.
+                    _ => wire::MarkerTarget::File,
+                },
+                path: m.path.to_string(),
+                args: m.args.iter().map(|a| a.to_string()).collect(),
+                span: span_to_wire(m.span),
             })
             .collect(),
         comments: evidence

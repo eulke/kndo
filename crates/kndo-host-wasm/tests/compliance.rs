@@ -167,6 +167,74 @@ fn the_wasm_adapter_world_is_a_first_class_language() {
 }
 
 #[test]
+fn markers_timing_and_rules_cross_the_wire() {
+    // The evidence the contract grew in M8.a, end to end through a component:
+    // a marker the guest's rules root (`@test`), one they exempt (`@keep`), and
+    // an import's moment — a load-time loop is a hazard, a lazy one is not.
+    // Every judgment here is the host's: the guest reported syntax and data.
+    use kndo_core::query::{Answer, Outcome, Request, Verb};
+    let p = TempProject::new();
+    p.file("kmini.pkg", "name kit\nentry app.kmini\n");
+    p.file(
+        "app.kmini",
+        "entry\nuse ./lib shared\ncall shared\n@keep\nfn parked\nfn stale\n@test\nfn check\n\
+         lazy use ./late later\ncall later\n",
+    );
+    p.file("lib.kmini", "pub fn shared\nuse ./app\n");
+    p.file("late.kmini", "pub fn later\nlazy use ./app\n");
+    let snap = kmini_session(&p, CacheLocation::Off, Vec::new())
+        .analyze(RunMode::Full)
+        .expect("analyze");
+    assert!(
+        finding_on(&snap, "stale")
+            .iter()
+            .any(|f| f.starts_with("unused")),
+        "the unmarked dead symbol is still judged: {:#?}",
+        snap.findings
+    );
+    assert!(
+        finding_on(&snap, "parked").is_empty() && finding_on(&snap, "check").is_empty(),
+        "the exempted and the test-rooted symbols are kept: {:#?}",
+        snap.findings
+    );
+    assert!(
+        finding_on(&snap, "later").is_empty(),
+        "a lazy import still reaches and binds: {:#?}",
+        snap.findings
+    );
+    let cycles: Vec<String> = snap
+        .findings
+        .iter()
+        .filter(|f| f.category.as_str() == "cyclic")
+        .map(|f| format!("{:?} {}", f.subject, f.message))
+        .collect();
+    assert_eq!(
+        cycles.len(),
+        1,
+        "one load-time loop, app ↔ lib: {cycles:#?}"
+    );
+    assert!(
+        cycles[0].contains("app.kmini") && !cycles[0].contains("late.kmini"),
+        "the lazy loop through late.kmini is no hazard: {cycles:#?}"
+    );
+    let keepers = |selector: &str| -> Vec<String> {
+        let response = snap.query(&Request {
+            verb: Verb::UsedBy,
+            inputs: vec![selector.to_string()],
+            options: Default::default(),
+        });
+        match &response.results[0] {
+            Outcome::Ok {
+                answer: Answer::UsedBy(a),
+            } => a.kept_by.iter().map(|e| e.kind.to_string()).collect(),
+            _ => panic!("used-by {selector}: not an answer"),
+        }
+    };
+    assert_eq!(keepers("app.kmini#parked"), ["exempt"]);
+    assert_eq!(keepers("app.kmini#check"), ["dispatch:test"]);
+}
+
+#[test]
 fn wasm_extraction_is_deterministic_and_cache_transparent() {
     let p = TempProject::new();
     p.file("kmini.pkg", "name kit\nentry lib.kmini\n");

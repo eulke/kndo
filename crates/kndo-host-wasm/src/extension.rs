@@ -246,17 +246,10 @@ impl Extension for WasmExtension {
             guest.call_extract(store, file.path.as_str(), file.content)
         });
         match result {
-            Ok(evidence) => {
-                // Replayed through a second sink under the spec's declared
-                // streams, then copied into the engine's — the pairing rule and
-                // every clamp apply to the wire exactly as to native writes.
-                let replayed = convert::replay_evidence(
-                    evidence,
-                    file.content.len() as u32,
-                    self.spec.emits().clone(),
-                );
-                copy_into(replayed, out);
-            }
+            // Replayed into the engine's own sink, primed with this spec's
+            // declared streams — the pairing rule and every clamp apply to the
+            // wire exactly as to native writes.
+            Ok(evidence) => convert::replay_evidence(evidence, out),
             Err(violation) => out.diagnostic(
                 DiagnosticLevel::Warn,
                 violation.unwrap_or_else(|| {
@@ -403,49 +396,6 @@ impl Extension for WasmExtension {
 
 /// Replayed evidence into the engine's sink — the copy is index-faithful because
 /// the replay sink issued ids in declaration order, same as this pass does.
-fn copy_into(evidence: kndo_contract::evidence::FileEvidence, out: &mut EvidenceSink) {
-    let ids: Vec<_> = evidence
-        .declarations
-        .iter()
-        .map(|d| out.declaration(d.name.clone(), d.kind.clone(), d.span, d.reach.clone()))
-        .collect();
-    for (ix, d) in evidence.declarations.iter().enumerate() {
-        if let Some(owner) = d.owner {
-            out.member_of(ids[ix], ids[owner.index()]);
-        }
-        if let Some(alias) = &d.exported_as {
-            out.exported_as(ids[ix], alias.clone());
-        }
-    }
-    for r in evidence.references {
-        out.reference(r.name, r.kind, r.span);
-    }
-    for i in evidence.imports {
-        out.import(i.target, i.shape, i.span, i.confidence);
-    }
-    for r in evidence.roots {
-        let target = match r.target {
-            kndo_contract::evidence::RootTarget::WholeFile => {
-                kndo_contract::evidence::RootTarget::WholeFile
-            }
-            kndo_contract::evidence::RootTarget::Declaration(id) => {
-                kndo_contract::evidence::RootTarget::Declaration(ids[id.index()])
-            }
-            other => other,
-        };
-        out.root(target, r.kind, r.confidence);
-    }
-    for c in evidence.comments {
-        out.comment(c.span, c.text);
-    }
-    for (id, m) in evidence.metrics {
-        out.metrics(ids[id.index()], m);
-    }
-    for d in evidence.diagnostics {
-        out.diagnostic(d.level, d.message, d.span);
-    }
-}
-
 /// The honesty line a trapped conduct call leaves on its contribution: the
 /// violated gate's own words when one fired, or the anonymous-trap wording
 /// (fuel, memory, a guest panic) — never silence.

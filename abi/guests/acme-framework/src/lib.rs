@@ -11,8 +11,8 @@ use kndo_contract::evidence::{
     EvidenceSink, EvidenceStreams, Reach, RootKind, RootTarget, SymbolKind,
 };
 use kndo_contract::extension::{
-    Activation, ActivationRule, ConductSink, ContentAccess, Extension, ExtensionSpec, GraphAccess,
-    MutatesGraph, ConductTarget,
+    Activation, ActivationRule, ConductSink, ConductTarget, ContentAccess, Extension,
+    ExtensionSpec, GraphAccess, MutatesGraph,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use std::sync::LazyLock;

@@ -3003,3 +3003,36 @@ dogfood gained one self-retiring allow: the engine tests' shared helpers in
 `test-only` analysis reads a file only tests reach as production code until
 M8.b's file roles land — the allow turns `stale` that day and the dogfood
 gate says so.
+
+## 2026-09-05 — M8.a closes: the ABI toll carries timing, markers and dispatch rules
+
+The wire mirrors the contract again, field for field. `%import` gains
+`timing` and the `type-only` shape is gone (a type-only import is its bindings
+at `erased`, the same evidence with only its moment different — the host's and
+the SDK's translations retire with it); `file-evidence` gains `markers`;
+`evidence-stream` gains `markers`; `extension-spec` gains `import-cycles` and
+`dispatch` — the two facts a component needs for its markers and its timing to
+have a consumer (without `hazard`, a lazy edge crossing the wire could never be
+told from a load-time one by any judgment). The host replays markers through
+the real sink like every other write, indices validated into ids or dropped
+with a diagnostic, and turns wire rules into the spec's `DispatchRule`s, so a
+component's markers are dispatched by the same engine module as a built-in's.
+In-place growth of the records, as the pre-freeze policy allows; the four
+reference pins under `abi/compat/` are rebuilt in the same commit via
+`cargo xtask pin-abi`. The toll found a vice on its way: the host replayed
+wire evidence through a validating sink and then TRANSFERRED it into the
+engine's sink field by field — and that hand-written transfer had already
+dropped every import's timing in silence, invisible only because no
+component declared `hazard`. The transfer is gone: the wire replays straight
+into the engine's own sink, primed with the same declared streams, so there
+is one enumeration of the evidence and it lives in the contract. The `kmini` reference guest (version 2) speaks
+`@path` and `@!` marker lines, `lazy use`/`type use`, declares `Markers`,
+`hazard` and two rules (`@test` roots Test, `@keep` exempts); the compliance
+suite drives all of it fresh from source, and the compat matrix drives it from
+the pinned bytes — a keep, a dispatched Test root, a lazy loop that is no
+hazard beside a load-time loop that is, and `used-by` answering `exempt` and
+`dispatch:test` for evidence that crossed the wire. Still not on the wire, each
+defaulting to silence as before: export narrowing, dependency scoping,
+identity, importers and builtins — M8.b's contract reshapes reach and retires
+narrowing, so their toll waits for that shape. No pinned report moves: the
+change is the wire's alone.
