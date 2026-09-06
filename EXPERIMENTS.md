@@ -42,6 +42,38 @@ Blocked (v1): evaluating it requires the provider's own manifest, which lives ou
 the discovered tree (`node_modules/` is not walked). Needs a design for external
 manifest visibility before any measurement.
 
+### See-through namespace imports and glob pooled by name — measured 2026-09-06
+Measurement (instrument over the corpus, tree at `ad81711`): declarations in reachable
+files kept by a whole-surface importer ALONE — no root, no reference in the pool, no
+binding, no witness, no published surface, no exemption — number 63 of 101,240. vite 42
+(39 behind side-effect imports of playground fixtures, 3 behind `export *`), vapor 16
+behind Swift module imports (a module import has no qualifier to see through), Exposed 4
+behind Kotlin star imports, ripgrep 1; flask (648 namespace imports), gin (518), lodash,
+Alamofire and guava: 0. A side-effect import is an opaque importer by design and 39 of
+the 63 stand behind one, so seeing through namespace and glob imports can retire at most
+20 (vapor 16, Exposed 4), and seeing through a re-export chain at most 4 more (vite 3,
+ripgrep 1 — that row reads `bindings+reexport-all` because rust emits a `Bindings` and a
+`Namespace` import over one `use` span, the recorded import-shape debt, and only the
+namespace twin is a surface importer). Proposed disposition, the owner's to take: the
+keeper that reads `Reference::on` against a namespace import's local, and the glob pool
+by name, land in M8.c beside the first adapter emitting qualifiers and are measured
+there again.
+
+### Path aliases — measured 2026-09-06
+Measurement (vite, the only corpus repository declaring any): 57 import sites of
+`#types/*` and `#dep-types/*` (package.json `imports`, subpath patterns onto
+`./types/*.d.ts` and `./src/types/*.d.ts`), one tsconfig `paths` entry in the main
+package (`vite/module-runner`), one in the playground (`~utils`), three import maps in
+playground pages. The ts resolver cuts a specifier at `#`, so the 57 edges vanish
+silently today; the findings that could move sit on the files they point at — at most
+4 (one `unused` under `packages/vite/types/`, three under `src/module-runner/`). vite's
+12 `undeclared` are `resolve.alias` entries of `vite.config` files: a program, not a
+manifest, and no alias evidence would read it. Proposed disposition, the owner's to
+take: `ManifestSink::alias` with `Project.aliases` and the specifier rewrite before
+`resolve` land in the js-ts slice of M8.c, where package.json and tsconfig become
+manifest evidence; go.mod `replace` and Sass load paths join when their adapters
+migrate.
+
 ## Open candidates (never decided in v1)
 
 ### Dependency-hygiene family (undeclared / unresolved / version-skew) — measured 2026-08-31

@@ -4147,3 +4147,58 @@ member of a public type in a published unit is silent as `public` is —
 narrowing it is a library author's call the pool cannot make. The
 subtypes are walked by simple name: two same-named types in different
 packages share heirs, which widens a pool and never narrows one.
+
+## 2026-09-06 — M8.b closes: the milestone against its plan, the two items the corpus moved to M8.c, and the one knob two slices owed
+
+**What the plan asked, and what stands.** Fourteen numbered slices and the
+identity toll delivered M8.b: manifests read once into `ManifestEvidence` and
+assembled into `Project` (units, roots, excludes, entries, friends,
+publication, aggregating group); the published surface as a unit's fact rather
+than nine adapters' whole-file root; supertypes as promises and members on them
+as witnesses; namespaces under their source root, with a rung carrying its
+language's word; units and classpath-spanning packages; a member reached
+through an access, never by spelling its name; `internal-only` reading the
+ladder alone, with `narrowable_scopes` and `export_narrowing` retired; file
+roles from the unit's kind, which is how `test-only` and `untested` now take
+their colors; the 200-byte duplicate floor; discovery ignores (the hidden
+opt-in the walk already had needed nothing); embedded regions extracted by
+their own language; structured `Reach` with the owner's cap; and `Heirs` for
+`protected`. Of the plan's list, one line is unbuilt on purpose — path aliases
+— and one keeper is unbuilt on purpose — glob pooled by name and seeing
+through a namespace import. Both were measured before being moved, not
+skipped: `EXPERIMENTS.md` carries each with its number.
+
+**The two, with their numbers.** Declarations in reachable files kept by a
+whole-surface importer ALONE across the nine corpus repositories: 63 of
+101,240, and 39 of those stand behind a side-effect import, which is an opaque
+importer by design. So the entire reachable prize for seeing through namespace
+and glob imports is 20 findings (vapor 16, Exposed 4), and re-export chains 4
+more. Path aliases: vite is the only repository that declares any — 57 import
+sites of `#types/*` and `#dep-types/*`, two `tsconfig` `paths` entries, three
+import maps — and at most 4 findings sit on the files they address. Neither
+number justifies a contract in the engine milestone; both are demanded by the
+adapter that owns the syntax, so they land in M8.c beside it (js-ts for
+aliases, the first qualifier-emitting adapter for the keeper) and are measured
+there again. Recorded so nobody rebuilds them from the design document alone.
+
+**The knob two slices owed.** `GRAPH_SEMANTICS_VERSION` did not move in M8.b,
+and twice it should have: `3c8aa92` put `Project` and each file's unit into the
+graph and anchored entry roots, and `b259942` added the published flag and
+rewrote the keepers around it — new assembled fields in both, which is the
+knob's own stated trigger. Neither commit moved the contract fingerprint (the
+manifest types carry no fingerprint derive) nor any extension spec, so nothing
+else in the graph cache key moved either: a warm on-disk graph from before
+them answers for the same tree afterward. The payload is bincode, positional
+and not self-describing, so a shape change usually fails to deserialize and
+degrades to a miss — but "usually" is not a contract, and the accident is not
+the statement. One bump closes both: the graph semantics go 17 → 18 here,
+where the milestone can name what earned it. No fixture and no finding moves;
+the change is the cache key.
+
+**What M8.c takes first.** Rust, in four slices: the engine learning that a
+mount nests a namespace (so `Namespace { up }` and `Named` pools stop being
+unbounded and `seen_from` can die for the language that has the deepest module
+tree); the adapter emitting mounts and its Cargo targets as units; paths inside
+macro token trees, the audit's largest Certain false-positive class; and
+`#[path]` in non-mod-rs files with `include!`. Each with its corpus number
+against ripgrep and this repository's own dogfood.
