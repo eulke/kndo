@@ -3,11 +3,11 @@
     "schema": "kndo-v2/m6",
     "mode": "full",
     "files_discovered": 2736,
-    "files_claimed": 1946,
+    "files_claimed": 1939,
     "extensions": [
       {
         "id": "kndo:css",
-        "files": 233,
+        "files": 231,
         "published_surface": "exports",
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
@@ -23,7 +23,7 @@
       },
       {
         "id": "kndo:js-ts",
-        "files": 1558,
+        "files": 1553,
         "published_surface": "entries",
         "import_cycles": "hazard",
         "dependency_scoping": "scoped",
@@ -43,8 +43,8 @@
     ]
   },
   "health": {
-    "implicated": 482,
-    "subjects": 5599,
+    "implicated": 480,
+    "subjects": 5590,
     "by_category": [
       {
         "category": "cyclic",
@@ -56,15 +56,15 @@
       },
       {
         "category": "unused",
-        "findings": 434
+        "findings": 432
       }
     ],
     "by_package": [
       {
         "name": "",
         "manifest": "",
-        "implicated": 339,
-        "subjects": 2046
+        "implicated": 338,
+        "subjects": 2044
       },
       {
         "name": "@vite/test-config-entry",
@@ -823,22 +823,10 @@
         "subjects": 162
       },
       {
-        "name": "my-pkg",
-        "manifest": "packages/vite/src/node/__tests__/fixtures/glob-exports/node_modules/my-pkg/package.json",
-        "implicated": 0,
-        "subjects": 3
-      },
-      {
-        "name": "sass-pkg-with-index",
-        "manifest": "packages/vite/src/node/__tests__/plugins/fixtures/sass-package-resolution/node_modules/sass-pkg-with-index/package.json",
-        "implicated": 1,
-        "subjects": 2
-      },
-      {
         "name": "vite",
         "manifest": "packages/vite/package.json",
         "implicated": 77,
-        "subjects": 2719
+        "subjects": 2717
       }
     ]
   },
@@ -2494,17 +2482,6 @@
       "message": "no root anchors this file and no reachable file imports it"
     },
     {
-      "id": "kndo-022576e27f88",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "packages/vite/src/node/__tests__/plugins/fixtures/sass-package-resolution/node_modules/sass-pkg-with-index/index.scss"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
       "id": "kndo-c7891ec3a210",
       "category": "unused",
       "severity": "warning",
@@ -3998,17 +3975,6 @@
       "subject": {
         "kind": "file",
         "path": "playground/glob-import/root/dir/nested/bar.js"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-e8eef2e5cc34",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "playground/glob-import/root/dir/node_modules/hoge.js"
       },
       "message": "no root anchors this file and no reachable file imports it"
     },
@@ -10137,7 +10103,7 @@
       "reason": "owned-files-are-tests",
       "scope": {
         "manifests": {
-          "unjudged": 28
+          "unjudged": 27
         }
       }
     },
@@ -10177,7 +10143,7 @@
       "reason": "owned-files-are-tests",
       "scope": {
         "manifests": {
-          "unjudged": 28
+          "unjudged": 27
         }
       }
     },
@@ -10192,7 +10158,7 @@
       },
       "scope": {
         "files": {
-          "unmeasured": 388
+          "unmeasured": 386
         }
       }
     },
@@ -10232,7 +10198,7 @@
       "reason": "owned-files-are-tests",
       "scope": {
         "manifests": {
-          "unjudged": 28
+          "unjudged": 27
         }
       }
     },

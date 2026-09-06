@@ -1,0 +1,19 @@
+# committed-node-modules: what npm's tool never compiles — a `node_modules` directory checked into the tree — is discovered and never claimed: the package's files carry no evidence, its `package.json` declares no package, dependency or entry of this project, and its unclaimed `.scss` casts no doubt on the project's own dependency judgments. The pinned report holds the project's own findings alone.
+
+[[dead]]
+subject = "index.ts#helper"
+category = "unused"
+why = "unexported and never called — the one finding of the project's own code"
+
+[[alive]]
+subject = "index.ts#pad"
+why = "exported through the package's main entry"
+
+[[dead]]
+subject = "dep:package.json:right-pad"
+category = "unused"
+why = "declared and never imported — judged at all only because the `.scss` under node_modules, a suffix the adapter reads packages from, is one it never compiles and so casts no doubt"
+
+[[alive]]
+subject = "dep:package.json:left-pad"
+why = "declared and imported by index.ts — the copy under node_modules is where npm installed it, not a package of this project"

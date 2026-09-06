@@ -1,0 +1,9 @@
+{
+  "name": "committed-node-modules",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "dependencies": {
+    "left-pad": "1.0.0",
+    "right-pad": "1.0.0"
+  }
+}

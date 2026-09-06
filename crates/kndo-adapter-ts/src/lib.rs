@@ -101,6 +101,9 @@ impl TypeScriptAdapter {
             // partially-initialized modules at run time.
             kndo_contract::extension::CycleTolerance::Hazard,
         )
+        // npm's installed dependencies are never the project's own source,
+        // committed or not.
+        .ignores(&["**/node_modules/**"])
         // GitHub Actions steps hand files to the same runtimes npm scripts do.
         .launchers(&[
             "**/.github/workflows/*.yml",

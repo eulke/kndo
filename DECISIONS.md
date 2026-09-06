@@ -3764,3 +3764,85 @@ shape, no conformance fixture and no adapter version moves — the wire's file
 evidence never carried a length, since the host replays it through a sink
 that knows the content's. Both floors stay constants beside the analysis
 until the config registry names them.
+
+## 2026-09-06 — M8.b.12: what a language's own tool never compiles is discovered and never claimed — and the corpus says `testdata` is not one
+
+**The capability.** An extension declares `ignores`: globs of the paths its
+language's own tool never compiles, segment-literal (`*` stays inside one
+path segment, so `**/_*.go` is a file whose name begins with `_`, never a
+file under a directory that does). Three named consumers in core, one rule:
+the claim pass leaves a file under one unclaimed — no evidence, no judgment —
+the manifest pass leaves a manifest under one unread — a dependency's
+`package.json` inside `node_modules` declares nothing about the project — and
+the dependency eligibility rule lets an unclaimed file under one cast no
+doubt on its manifest's judgments, since the adapter itself left it unread.
+Discovery is untouched: the file stays in the tree, so an import pointing at
+it is scope, not breakage. The default is none; the WIT spec record carries
+the field and the compat guests are re-pinned.
+
+**The rule is the tool's, never a guess.** Go declares `**/vendor/**` (copies
+of other modules, compiled as the dependencies they are) and `**/_*.go` (a
+file the tool does not list even among its ignored files); JavaScript, HTML
+and CSS declare `**/node_modules/**`; Python declares `**/site-packages/**`
+— the interpreter's own directory, which no package can be named, and which
+every environment holds whatever the environment is called (a `venv` glob
+would be a name convention, and `.venv` is hidden from discovery anyway).
+Not declared, deliberately: a JVM or Cargo output directory, because a
+package may be named `target` or `build`; and a manifest's excludes, which
+are that unit's membership, not the tree's.
+
+**Measured twice, and the first measurement corrected the design.** The first
+declaration for Go also named `**/testdata/**` and `**/_*/**`, as the
+`go help packages` sentence reads; the corpus answered with one finding
+ADDED on gin: an `undeclared` dependency of the module on its own
+`github.com/gin-gonic/gin/testdata/protoexample`, imported by three test
+files. Against go 1.24.7 in a scratch module: an explicit import of
+`testdata/gen` builds, an explicit import of `_scratch/old` builds, `./...`
+lists neither, and a `_draft.go` beside a package's files is absent from
+`GoFiles` and from `IgnoredGoFiles` alike. So a `testdata` or `_`-prefixed
+directory is skipped by patterns and compiled by imports — claimed, as
+before — and only `_`-prefixed files and `vendor` are never compiled. The
+second measurement then showed two vite findings retired for the wrong
+reason: two `test-only` dependency verdicts on
+`packages/vite/src/node/__tests__/package.json` vanished because the
+`.scss` files of a committed `node_modules` fixture, unclaimed now, cast
+`unclaimed-importers` doubt on the manifest that owns them. Hence the third
+consumer: what the adapter never compiles imports nothing on its behalf.
+
+**Numbers.** Nine repositories, one moves: vite 689 → 687, seven files
+unclaimed (five JavaScript, two SCSS, every one under a committed
+`node_modules`), two `unused` file findings retired —
+`playground/glob-import/root/dir/node_modules/hoge.js` and
+`packages/vite/src/node/__tests__/plugins/fixtures/sass-package-resolution/node_modules/sass-pkg-with-index/index.scss`
+— zero added, zero changed in place. gin is byte-identical under the
+corrected declaration (99 claimed, 108 findings); its one file under
+`testdata` is a generated protobuf that is imported, claimed and exempt.
+flask, guava, Exposed, ripgrep, vapor, Alamofire and lodash are
+byte-identical: nothing under a declared ignore is checked into them.
+
+**Fixtures and knobs.** Two conformance cases, both new: `tool-ignored-paths`
+in the kndo-adapter-go fixtures (10 discovered, 5 claimed: `_draft.go` and
+the vendored module unclaimed, the imported `testdata` and `_scratch`
+packages claimed and resolved, and the module accused of no dependency on
+itself) and `committed-node-modules` in the kndo-adapter-ts fixtures (5
+discovered, 1 claimed: the package's files unclaimed, its manifest unread,
+and its `.scss` casting no doubt, so the project's own unused dependency is
+still judged). The engine test speaks kmock with `**/vendor/**`: the
+vendored file is discovered and unclaimed, its manifest declares no unit,
+the import into it is not `unresolved`, and the same tree without the
+declaration is judged whole. No existing fixture moves. The same evidence now
+assembles into a different graph — unclaimed files, unread manifests, the
+adapter's ignores on each manifest's declarations — so
+`GRAPH_SEMANTICS_VERSION` moves 16 → 17; no adapter version moves (the
+evidence a claimed file yields is unchanged), and the contract fingerprint
+does not move.
+
+**Open, with the measurement that would decide each.** `describe` on an
+ignored path answers as for any unclaimed file; naming the ignore and its
+declarer is a query-surface change for when a frontend asks. Conduct
+activation reads every discovered path, ignores included — a framework
+template's `Info.plist` under `node_modules` could activate `kndo:info-plist`
+— and the corpus holds no such tree. A `testdata` package reached from tests
+alone would read `test-only` today; whether it is test material by the
+tool's layout is a file-role question, and gin's only `testdata` package is
+generated, so nothing measures it yet.

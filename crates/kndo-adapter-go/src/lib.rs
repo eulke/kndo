@@ -37,6 +37,12 @@ impl GoAdapter {
                 // resolution artifact here.
                 kndo_contract::extension::CycleTolerance::Tolerated,
             )
+            // The go tool's own rule: a file beginning with `_` is in no
+            // package it builds, and `vendor` holds copies of other modules,
+            // compiled as the dependencies they are. A `testdata` or
+            // `_`-prefixed directory is not one: `./...` skips it, and an
+            // import from a package compiles it.
+            .ignores(&["**/vendor/**", "**/_*.go"])
             // Capitalization is the whole ladder: nothing sits below the
             // package, so a package-private name used only in its file has
             // nowhere narrower to go and `internal-only` stays silent for it.

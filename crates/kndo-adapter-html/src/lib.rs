@@ -40,6 +40,8 @@ impl HtmlAdapter {
             // evidence streams: nothing here carries a pragma or a metric.
             spec: ExtensionSpec::builder("kndo:html", 1)
                 .suffixes(&["html", "htm"])
+                // A page inside npm's installed dependencies is a dependency's.
+                .ignores(&["**/node_modules/**"])
                 .build(),
             js: TypeScriptAdapter::new(),
         }

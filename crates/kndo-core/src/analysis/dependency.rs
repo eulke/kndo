@@ -6,8 +6,9 @@
 //!
 //! A manifest is judged when its adapter derives package identity from
 //! specifiers, no unclaimed file its adapter says could import sits inside its
-//! package, at least one owned file is reached, and not every owned file is a
-//! test. Each failed condition is a named abstention, never a silent skip.
+//! package (outside the paths the adapter never compiles), at least one owned
+//! file is reached, and not every owned file is a test. Each failed condition
+//! is a named abstention, never a silent skip.
 
 use super::{AbstentionReason, AbstentionScope, AnalysisContext, Reachability, RunContext};
 use crate::graph::{Graph, ManifestDeclarations};
@@ -43,11 +44,15 @@ pub(super) fn eligibility(graph: &Graph, reach: &Reachability) -> Vec<Option<Abs
             if md.identity == kndo_contract::extension::DependencyIdentity::Underivable {
                 return Some(AbstentionReason::SpecifierIdentityUnderivable);
             }
+            // What the adapter never compiles imports nothing on its behalf:
+            // a dependency's `.vue` under `node_modules` is unread by design.
+            let ignored = crate::extract::ignore_set(&md.ignores);
             let suffixes: BTreeSet<SmolStr> = unclaimed
                 .iter()
                 .filter(|(p, suffix, owner)| {
                     md.importers.iter().any(|s| s.eq_ignore_ascii_case(suffix))
                         && md.owns(p, *owner)
+                        && !ignored.is_match(p)
                 })
                 .map(|(_, suffix, _)| SmolStr::new(suffix.to_ascii_lowercase()))
                 .collect();

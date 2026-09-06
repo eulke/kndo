@@ -52,6 +52,19 @@ adapter says nothing:
   manifest's: a library does unless it says otherwise, an executable or a test
   set never. `used-by` shows an export kept by its unit's publication as
   `published`.
+- **Ignores**: the paths the language's own tool never compiles — a Go file
+  whose name begins with `_` is in no package, Go's `vendor` holds copies of
+  other modules, npm never builds `node_modules`, and the interpreter's
+  `site-packages` holds installed packages, never the project's. A file
+  under one is discovered, so an import pointing at it is not broken, and
+  never claimed: no evidence, no unit, no verdict — and a manifest under one
+  (a dependency's `package.json`, a vendored module's `go.mod`) declares
+  nothing about the project. The rule is the tool's own, measured: a Go
+  `testdata` or `_`-prefixed directory is not one, since `./...` skips it
+  but an import compiles it (gin imports its `testdata/protoexample` from
+  three test files); an output directory a JVM or Cargo build writes is not
+  one, since a package may be named `target` or `build`; and what a manifest
+  excludes is that unit's membership, not the tree's.
 - **Cycle tolerance** for `cyclic`: a hazard in JavaScript, TypeScript and
   Python (initialization order bites at run time), tolerated in Rust, Go, Java,
   Kotlin and Swift (the compiler or the package model makes cycles benign).

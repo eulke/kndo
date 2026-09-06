@@ -48,8 +48,11 @@ yourself.
 Which files are analyzed is decided by the tree: `.gitignore` and `.ignore`
 are honored exactly as git and ripgrep honor them, and nothing else — no global
 excludes, no `.git/info/exclude`, no ignore files above the root — so two
-checkouts of one tree discover the same files. Add an `.ignore` for paths git
-tracks but kndo should not judge (vendored source, fixture corpora). Hidden
+checkouts of one tree discover the same files. What a language's own tool
+never compiles — Go's `vendor` copies, npm's `node_modules`, the interpreter's
+`site-packages` — is discovered and never judged, because the adapter
+declares it (see [Languages](languages.md)); add an `.ignore` for the rest git
+tracks but kndo should not judge (a fixture corpus, a frozen copy). Hidden
 entries are skipped, except a dot-directory an adapter reads launchers or
 manifests from (`.github/`, for the JavaScript adapter's workflow rule).
 

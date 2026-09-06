@@ -318,6 +318,9 @@ interface types {
         manifests: list<string>,
         /// Files read for roots only — never packages, dependencies or mentions.
         launchers: list<string>,
+        /// Paths the language's own tool never compiles: discovered, never
+        /// claimed by this extension.
+        ignores: list<string>,
         conducts: bool,
         activation: activation,
         mutates-graph: bool,

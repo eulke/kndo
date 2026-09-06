@@ -1,0 +1,38 @@
+# tool-ignored-paths: what the go tool never compiles — a `_`-prefixed file, the module copies under `vendor/` — is discovered and never claimed: no evidence, no unit, no verdict, and the vendored module's `go.mod` declares no package of this project. A `testdata` or `_`-prefixed directory is NOT one: `./...` skips it, and an import compiles it — so its files are claimed and the import resolves. The pinned report holds the project's own findings alone.
+
+[[dead]]
+subject = "sub/sub.go#stale"
+category = "unused"
+why = "unexported and never called — the one finding of the project's own production code, judged the same beside files the tool would skip"
+
+[[alive]]
+subject = "main.go#main"
+why = "the executable's entry, calling into the vendored module, the project's own package and the `_scratch` package"
+
+[[alive]]
+subject = "sub/sub.go#Format"
+why = "called from main.go through the module path"
+
+[[alive]]
+subject = "_scratch/old.go#Old"
+category = "unused"
+why = "a `_`-prefixed directory is skipped by `./...` and compiled by the import main.go makes — claimed, resolved, reached"
+
+[[alive]]
+subject = "dep:go.mod:example.com/tool/_scratch"
+category = "undeclared"
+why = "the import resolves to the module's own `_scratch` package; only an unclaimed directory would turn it into a dependency no manifest declares"
+
+[[alive]]
+subject = "testdata/gen/gen.go#Never"
+category = "unused"
+why = "a `testdata` package is compiled by the import main_test.go makes — claimed and resolved, never a missing package"
+
+[[alive]]
+subject = "dep:go.mod:example.com/tool/testdata/gen"
+category = "undeclared"
+why = "the import resolves to the module's own `testdata` package — gin imports its `testdata/protoexample` from three test files, and ignoring the directory accused the module of an undeclared dependency on itself"
+
+[[alive]]
+subject = "dep:go.mod:example.com/dep"
+why = "required by go.mod and imported by main.go — the vendored copy under vendor/ is where the tool reads it from, not a package of this project"

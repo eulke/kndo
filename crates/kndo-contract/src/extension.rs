@@ -597,6 +597,7 @@ pub struct ExtensionSpec {
     emits: EvidenceStreams,
     manifests: Vec<SmolStr>,
     launchers: Vec<SmolStr>,
+    ignores: Vec<SmolStr>,
     // -- conduct --
     /// Whether this spec went through the conduct stage at all. Data, not
     /// inference: an empty-but-conducting spec (an always-on ingester before its
@@ -637,6 +638,7 @@ impl ExtensionSpec {
                 emits: EvidenceStreams::none(),
                 manifests: Vec::new(),
                 launchers: Vec::new(),
+                ignores: Vec::new(),
                 // Inert neutrals for an extraction-only extension: activation
                 // gates only conduct and ingestion, and with no conduct declared
                 // there is nothing for these to gate.
@@ -745,6 +747,14 @@ impl ExtensionSpec {
         &self.launchers
     }
 
+    /// Paths this language's own tool never compiles — see
+    /// [`ExtensionSpecBuilder::ignores`]. The claim pass and the manifest pass
+    /// are the consumers: a file under one is discovered and never claimed by
+    /// this extension, and a manifest under one is never read.
+    pub fn ignores(&self) -> &[SmolStr] {
+        &self.ignores
+    }
+
     /// Whether this spec declares conduct or ingestion at all — the engine's
     /// round runs over exactly the extensions for which this is true, and only
     /// those appear as contributions in the report.
@@ -816,6 +826,7 @@ pub struct ExtensionSpecParts {
     pub emits: EvidenceStreams,
     pub manifests: Vec<SmolStr>,
     pub launchers: Vec<SmolStr>,
+    pub ignores: Vec<SmolStr>,
     pub conducts: bool,
     pub activation: Activation,
     pub mutates_graph: bool,
@@ -858,6 +869,7 @@ impl From<ExtensionSpecParts> for ExtensionSpec {
             emits: parts.emits,
             manifests: parts.manifests,
             launchers: parts.launchers,
+            ignores: parts.ignores,
             conducts: parts.conducts,
             activation: parts.activation,
             mutates_graph: parts.mutates_graph,
@@ -1000,6 +1012,18 @@ impl ExtensionSpecBuilder {
     /// is also what lets discovery enter it. Omitted ⇒ none.
     pub fn launchers(mut self, globs: &[&'static str]) -> Self {
         self.spec.launchers = globs.iter().map(|g| SmolStr::new_static(g)).collect();
+        self
+    }
+
+    /// Declare the paths this language's own tool never compiles, as globs —
+    /// Go's `_`-prefixed files and its `vendor` copies, npm's `node_modules`,
+    /// the interpreter's `site-packages`. A file under one is
+    /// discovered — an import pointing at it is not broken — but never claimed
+    /// by this extension, and a manifest under one declares nothing: no
+    /// evidence, no unit, no judgment. The rule is the tool's, never a guess
+    /// about output directories a package might be named after. Omitted ⇒ none.
+    pub fn ignores(mut self, globs: &[&'static str]) -> Self {
+        self.spec.ignores = globs.iter().map(|g| SmolStr::new_static(g)).collect();
         self
     }
 

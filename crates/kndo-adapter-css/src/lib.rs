@@ -34,6 +34,8 @@ impl CssAdapter {
             spec: ExtensionSpec::builder("kndo:css", 1)
                 .suffixes(&["css", "scss"])
                 .emits(EvidenceStreams::of(&[EvidenceStream::Comments]))
+                // A sheet inside npm's installed dependencies is a dependency's.
+                .ignores(&["**/node_modules/**"])
                 .build(),
         }
     }

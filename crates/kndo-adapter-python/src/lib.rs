@@ -45,7 +45,7 @@ pub struct PythonAdapter {
 impl PythonAdapter {
     pub fn new() -> Self {
         PythonAdapter {
-            spec: kndo_toolkit::source_adapter_spec(
+            spec: kndo_toolkit::source_adapter_builder(
                 "kndo:python",
                 1,
                 &["py"],
@@ -57,7 +57,13 @@ impl PythonAdapter {
                 // Circular imports raise at import time (partially-initialized
                 // module AttributeError) — the classic Python hazard.
                 kndo_contract::extension::CycleTolerance::Hazard,
-            ),
+            )
+            // The interpreter's own directory for installed packages — no
+            // package can be named `site-packages` — is never the project's
+            // source; an environment is found by it, whatever the environment
+            // is called, and a hidden `.venv` never enters discovery at all.
+            .ignores(&["**/site-packages/**"])
+            .build(),
         }
     }
 }

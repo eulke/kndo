@@ -82,6 +82,7 @@ pub(crate) fn extension_spec(spec: awire::ExtensionSpec) -> ExtensionSpec {
         ),
         manifests: spec.manifests.into_iter().map(SmolStr::new).collect(),
         launchers: spec.launchers.into_iter().map(SmolStr::new).collect(),
+        ignores: spec.ignores.into_iter().map(SmolStr::new).collect(),
         conducts: spec.conducts,
         activation: match spec.activation {
             awire::Activation::Always => Activation::Always,

@@ -1297,3 +1297,16 @@ Zero findings added, zero changed in place, every other repository
 byte-identical. Function clones are untouched: the smallest the token floor
 admits are real, so the byte floor belongs to files, measured outside their
 comments.
+
+### Discovery ignores: what the tool never compiles (2026-09-06)
+
+| repo | before | after | what moved |
+|---|---|---|---|
+| vite | 689 | 687 | 7 files under a committed `node_modules` unclaimed (5 JavaScript, 2 SCSS); 2 `unused` file findings on them retired |
+| gin | 108 | 108 | byte-identical under the corrected declaration; the first declaration (`testdata` ignored) added a false `undeclared` on the module's own `testdata/protoexample`, imported by three test files |
+
+Zero findings added, zero changed in place, every other repository
+byte-identical. Two vite `test-only` dependency findings that the first run
+retired came back once an unclaimed file under an ignore stopped casting
+`unclaimed-importers` doubt on its manifest: they were an artifact of the
+mechanism, not a judgment.

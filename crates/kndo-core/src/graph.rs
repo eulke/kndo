@@ -21,7 +21,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Bump when the SAME evidence assembles into a DIFFERENT graph — resolution
 /// candidate changes, reachability semantics, new assembled fields. Folded into the
 /// graph cache key beside the contract fingerprint and the adapter set.
-pub const GRAPH_SEMANTICS_VERSION: u32 = 16;
+pub const GRAPH_SEMANTICS_VERSION: u32 = 17;
 
 #[derive(Serialize, Deserialize)]
 pub struct GraphFile {
@@ -205,6 +205,12 @@ pub struct ManifestDeclarations {
     /// deduplicated indices into `Graph::files`. `owned` tells the package's
     /// own users from cross-package ones.
     pub users: Vec<Vec<u32>>,
+    /// The paths this manifest's adapter never compiles
+    /// ([`ExtensionSpec::ignores`]): an unclaimed file under one casts no doubt
+    /// on the judgment, since the adapter itself left it unread.
+    ///
+    /// [`ExtensionSpec::ignores`]: kndo_contract::extension::ExtensionSpec::ignores
+    pub ignores: Vec<SmolStr>,
 }
 
 impl ManifestDeclarations {
@@ -307,6 +313,7 @@ impl Graph {
             owned: Vec<u32>,
             judged: Vec<bool>,
             users: Vec<Vec<u32>>,
+            ignores: Vec<SmolStr>,
         }
         let mut judged: Vec<Judged> = Vec::with_capacity(self.manifest_declarations.len());
         for md in &self.manifest_declarations {
@@ -327,6 +334,7 @@ impl Graph {
                     owned: Vec::new(),
                     judged: vec![false; md.declarations.len()],
                     users: vec![Vec::new(); md.declarations.len()],
+                    ignores: Vec::new(),
                 });
                 continue;
             };
@@ -401,6 +409,7 @@ impl Graph {
                 owned,
                 judged: claims,
                 users,
+                ignores: adapter.spec().ignores().to_vec(),
             });
         }
         for (md, j) in self.manifest_declarations.iter_mut().zip(judged) {
@@ -414,6 +423,7 @@ impl Graph {
             md.owned = j.owned;
             md.judged = j.judged;
             md.users = j.users;
+            md.ignores = j.ignores;
         }
     }
 }
@@ -600,6 +610,7 @@ impl ManifestDeclarations {
             owned: Vec::new(),
             judged: Vec::new(),
             users: Vec::new(),
+            ignores: Vec::new(),
         }
     }
 }
@@ -898,10 +909,14 @@ pub(crate) fn for_each_matching(
             b.build().ok()
         })
         .collect();
+    // A manifest under a path the adapter's tool never compiles is somebody
+    // else's — a dependency's `package.json` inside `node_modules` declares
+    // nothing about this project.
+    let ignored = crate::extract::ignore_sets(adapters);
     for file in files {
-        for (adapter, set) in adapters.iter().zip(&manifest_sets) {
+        for ((adapter, set), ignores) in adapters.iter().zip(&manifest_sets).zip(&ignored) {
             let Some(set) = set else { continue };
-            if !set.is_match(file.path.as_str()) {
+            if !set.is_match(file.path.as_str()) || ignores.is_match(file.path.as_str()) {
                 continue;
             }
             f(

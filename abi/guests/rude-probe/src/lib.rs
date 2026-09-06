@@ -29,6 +29,7 @@ impl bindings::Guest for RudeProbe {
             emits: Vec::new(),
             manifests: Vec::new(),
             launchers: Vec::new(),
+            ignores: Vec::new(),
             conducts: false,
             activation: wire::Activation::Always,
             mutates_graph: false,

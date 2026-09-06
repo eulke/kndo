@@ -141,8 +141,10 @@ A specifier prefix the build system rewrites to directories (`tsconfig` paths, S
 load paths, `go.mod` replace, an import map).
 
 **Ignore**:
-A path the language's own tool never compiles (`testdata/`, `vendor/`, `_dir/`), or
-a manifest excludes. Discovered, never claimed.
+A path the language's own tool never compiles (`vendor/`, `_file.go`, `node_modules/`,
+`site-packages/`), declared by the language as globs. Discovered, never claimed, and a
+manifest under it declares nothing. What a manifest excludes is its unit's membership,
+not an ignore.
 
 ### Judgment
 
