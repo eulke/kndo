@@ -183,8 +183,9 @@ suppressions match on it, and `fixed` is what a baseline holds and a run no long
 does.
 
 **Root**:
-What anchors liveness: a unit's entry, a test, a launched file, a declaration a
-dispatch rule names. Roots carry a color: production, test or tooling.
+What anchors liveness: a unit's entry, every file of a test or tooling unit (its kind is
+its role), a test, a launched file, a declaration a dispatch rule names, the published
+surface. Roots carry a color: production, test or tooling.
 
 **Color**:
 Which roots reach a file: production, test, tooling. Verdicts read colors.

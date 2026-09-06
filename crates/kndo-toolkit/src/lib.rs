@@ -295,17 +295,24 @@ pub mod jvm_manifest {
     /// says nothing here yet, and that absence is typed: no unit means the
     /// engine falls back to what each file's own declaration implies.
     ///
-    /// A module is two units. Its main set names no source root unless the
-    /// pom spells one, so it compiles its manifest's own directory minus any
-    /// deeper unit's — which is right for a layout like guava's, whose real
-    /// `<sourceDirectory>` sits in an inherited parent pom this shallow read
-    /// does not follow. Its test set (`src/test/java` and `src/test/kotlin`
-    /// unless the pom spells `<testSourceDirectory>`) compiles against the
-    /// main set and is its friend: Kotlin's `internal` is visible to it, as
-    /// package-private is through the namespace span. A directory nobody
-    /// checked out is a transcription, and a unit no file belongs to is
-    /// harmless.
-    pub fn structure(manifest: &SourceFile<'_>, out: &mut kndo_contract::manifest::ManifestSink) {
+    /// A module is two units. Its main set names no source root: it compiles
+    /// its manifest's own directory minus the test set's, because what the
+    /// build adds to the main set (a plugin's generated sources, a GWT
+    /// super-source) is not enumerable from the pom, and over-inclusion in
+    /// main is the keep-alive direction. Its test set is what the pom STATES:
+    /// its own `<testSourceDirectory>`, else the nearest ancestor's along
+    /// `<parent>` (Maven's inheritance — guava's `test` directories live in
+    /// the root pom), else `src/test/java` and `src/test/kotlin`; plus every
+    /// directory the pom's `build-helper-maven-plugin` adds as a test source.
+    /// The test set compiles against the main set and is its friend: Kotlin's
+    /// `internal` is visible to it, as package-private is through the
+    /// namespace span. A directory nobody checked out is a transcription, and
+    /// a unit no file belongs to is harmless.
+    pub fn structure(
+        manifest: &SourceFile<'_>,
+        cx: &kndo_contract::adapter::ResolveContext<'_>,
+        out: &mut kndo_contract::manifest::ManifestSink,
+    ) {
         let path = manifest.path.as_str();
         if !path.ends_with("pom.xml") {
             return;
@@ -367,22 +374,20 @@ pub mod jvm_manifest {
             .collect();
         depends_on.sort_unstable();
         depends_on.dedup();
-        let declared_dir = |tag: &str| -> Option<SmolStr> {
-            children(project, "build")
-                .into_iter()
-                .next()
-                .and_then(|b| children(b, tag).into_iter().next())
-                .map(str::trim)
-                .filter(|d| !d.is_empty())
-                .map(|d| SmolStr::new(join(d.trim_end_matches('/'))))
-        };
-        let test_roots: Vec<SmolStr> = match declared_dir("testSourceDirectory") {
-            Some(dir) => vec![dir],
+        let mut test_roots: Vec<SmolStr> = match test_source_directory(project, path, cx) {
+            Some(dir) => vec![SmolStr::new(join(&dir))],
             None => vec![
                 SmolStr::new(join("src/test/java")),
                 SmolStr::new(join("src/test/kotlin")),
             ],
         };
+        test_roots.extend(
+            helper_added_test_sources(project)
+                .into_iter()
+                .map(|d| SmolStr::new(join(&d))),
+        );
+        test_roots.sort_unstable();
+        test_roots.dedup();
         let mut test_depends_on = depends_on.clone();
         test_depends_on.push(SmolStr::new(name));
         test_depends_on.sort_unstable();
@@ -390,7 +395,7 @@ pub mod jvm_manifest {
         out.unit(kndo_contract::manifest::Unit {
             name: SmolStr::new(name),
             kind: kndo_contract::manifest::UnitKind::Library,
-            roots: declared_dir("sourceDirectory").into_iter().collect(),
+            roots: Vec::new(),
             excludes: Vec::new(),
             entries: Vec::new(),
             depends_on,
@@ -415,6 +420,118 @@ pub mod jvm_manifest {
     /// what keeps `<parent>`'s own `<artifactId>` and
     /// `<dependencyManagement>`'s `<dependencies>` out of a project's
     /// direct children, where reading them would be a bug.
+    /// A pom's own `<build><testSourceDirectory>`, else the nearest ancestor's
+    /// along `<parent>` — Maven's inheritance, read through the context. A
+    /// relative directory, to be joined under the INHERITING pom's own
+    /// directory: `<testSourceDirectory>test</testSourceDirectory>` in a
+    /// parent means each child's `test`. A value the pom computes
+    /// (`${…}` beyond the basedir) is unreadable here and counts as unstated.
+    fn test_source_directory(
+        project: &str,
+        path: &str,
+        cx: &kndo_contract::adapter::ResolveContext<'_>,
+    ) -> Option<String> {
+        let declared = |body: &str| -> Option<String> {
+            let raw = children(body, "build")
+                .into_iter()
+                .next()
+                .and_then(|b| children(b, "testSourceDirectory").into_iter().next())?
+                .trim()
+                .to_string();
+            let raw = raw
+                .strip_prefix("${project.basedir}/")
+                .or_else(|| raw.strip_prefix("${basedir}/"))
+                .unwrap_or(&raw)
+                .trim_end_matches('/')
+                .to_string();
+            (!raw.is_empty() && !raw.contains("${")).then_some(raw)
+        };
+        if let Some(dir) = declared(project) {
+            return Some(dir);
+        }
+        let mut body = project.to_string();
+        let mut at = path.to_string();
+        let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        while let Some(parent) = parent_pom(&body, &at) {
+            if !seen.insert(parent.clone()) {
+                return None;
+            }
+            let content = cx.manifest(&kndo_contract::vocab::ProjectPath::new(&parent))?;
+            let text = std::str::from_utf8(content).ok()?;
+            body = children(text, "project").into_iter().next()?.to_string();
+            if let Some(dir) = declared(&body) {
+                return Some(dir);
+            }
+            at = parent;
+        }
+        None
+    }
+
+    /// The pom a `<parent>` element points at, as a project path: its
+    /// `<relativePath>` when spelled (a directory means its `pom.xml`; an
+    /// empty one means "only the repository", so no pom here), else Maven's
+    /// default `../pom.xml`.
+    fn parent_pom(project: &str, path: &str) -> Option<String> {
+        let parent = children(project, "parent").into_iter().next()?;
+        let relative = match children(parent, "relativePath").into_iter().next() {
+            Some(spelled) => {
+                let spelled = spelled.trim();
+                if spelled.is_empty() {
+                    return None;
+                }
+                if spelled.ends_with(".xml") {
+                    spelled.to_string()
+                } else {
+                    format!("{}/pom.xml", spelled.trim_end_matches('/'))
+                }
+            }
+            None => "../pom.xml".to_string(),
+        };
+        crate::join_relative(crate::parent_dir(path), &relative)
+    }
+
+    /// The directories the pom's `build-helper-maven-plugin` adds to the
+    /// test set (`add-test-source` executions' `<sources>`), relative to the
+    /// pom's directory.
+    fn helper_added_test_sources(project: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        for build in children(project, "build") {
+            for plugins in children(build, "plugins") {
+                for plugin in children(plugins, "plugin") {
+                    let is_helper = children(plugin, "artifactId")
+                        .into_iter()
+                        .next()
+                        .is_some_and(|a| a.trim() == "build-helper-maven-plugin");
+                    if !is_helper {
+                        continue;
+                    }
+                    for executions in children(plugin, "executions") {
+                        for execution in children(executions, "execution") {
+                            let adds_tests = children(execution, "goals")
+                                .into_iter()
+                                .flat_map(|g| children(g, "goal"))
+                                .any(|g| g.trim() == "add-test-source");
+                            if !adds_tests {
+                                continue;
+                            }
+                            for configuration in children(execution, "configuration") {
+                                for sources in children(configuration, "sources") {
+                                    for source in children(sources, "source") {
+                                        let dir = source.trim().trim_end_matches('/');
+                                        if !dir.is_empty() && !dir.contains("${") {
+                                            out.push(dir.to_string());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        out
+    }
+
     fn children<'a>(body: &'a str, name: &str) -> Vec<&'a str> {
         let mut out = Vec::new();
         let mut depth = 0usize;

@@ -102,10 +102,10 @@ impl Extension for JavaAdapter {
     fn extract_manifest(
         &self,
         manifest: &SourceFile<'_>,
-        _cx: &ResolveContext<'_>,
+        cx: &ResolveContext<'_>,
         out: &mut kndo_contract::manifest::ManifestSink,
     ) {
-        kndo_toolkit::jvm_manifest::structure(manifest, out);
+        kndo_toolkit::jvm_manifest::structure(manifest, cx, out);
     }
 
     fn packages(

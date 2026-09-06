@@ -1267,3 +1267,19 @@ Maven's inherited source directories wait for M8.d. The instrument — guava wit
 All 16 verified in the sources, every one an improvement. The published
 surface is the engine's statement now, and the adapters' copies can be deleted
 with a number behind each.
+
+### File roles: the unit's kind, read where Maven puts it (2026-09-06)
+
+| guava | before | after |
+|---|---|---|
+| findings | 9,721 | 9,593 |
+| `untested` | 147 | 17 |
+| `internal-only` | 3,184 | 3,186 |
+
+The 130 retired `untested` are benchmark and test files the pom calls test
+sources — colored production by a path convention that never saw guava's
+`test` and `benchmark` directories, now test roots by their unit's kind. The
+two added advisories are collision-driven both ways and true. Every other
+repository byte-identical. Instrument: with java's directory conventions
+deleted, every fixture with a pom is byte-identical, and guava moves only by
+the seven GWT super-source files already decomposed.

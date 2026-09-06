@@ -261,3 +261,51 @@ fn an_export_of_an_unpublished_unit_may_narrow() {
     let snap = common::analyze(&p, vec![Box::new(laddered_jar())]);
     assert!(advice(&snap).is_empty(), "{:?}", advice(&snap));
 }
+
+#[test]
+fn a_units_kind_gives_its_files_their_role() {
+    // A test set's files are what the runner discovers and a tooling set's
+    // are built to build something else: each is rooted by its unit's kind,
+    // entry or not, and hands out its exports to its runner.
+    let p = TempProject::new();
+    p.file(
+        "kmock.pkg",
+        "unit core library roots=src entries=src/lib.kmock\n\
+         unit suite test roots=tests entries=tests/api.kmock\n\
+         unit tools tooling roots=tools\n",
+    )
+    .file("src/lib.kmock", "pub fn api\n")
+    .file("tests/api.kmock", "import ./../src/lib { api }\ncall api\n")
+    .file("tests/helper.kmock", "pub fn fixture\n")
+    .file("tools/gen.kmock", "pub fn generate\n");
+    let snap = run(&p);
+    let roots = |path: &str| -> Vec<String> {
+        snap.graph
+            .files
+            .iter()
+            .find(|f| f.path.as_str() == path)
+            .map(|f| {
+                f.roots()
+                    .map(|r| format!("{:?}/{:?}", r.kind, r.confidence))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    assert_eq!(roots("tests/helper.kmock"), ["Test/Certain"]);
+    assert_eq!(roots("tools/gen.kmock"), ["Tooling/Certain"]);
+    assert!(
+        roots("src/lib.kmock") == ["Production/Certain"],
+        "a library's files are reached through its entries and its surface: {:?}",
+        roots("src/lib.kmock")
+    );
+    assert!(
+        reported(&snap, &Category::UNUSED).is_empty(),
+        "{:?}",
+        reported(&snap, &Category::UNUSED)
+    );
+    assert_eq!(
+        common::keeper_kinds(&snap, "tests/helper.kmock#fixture"),
+        ["entry-surface"],
+        "a test set's exports are its runner's"
+    );
+}

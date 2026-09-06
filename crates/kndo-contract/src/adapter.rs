@@ -76,6 +76,7 @@ impl DependencyDeclaration {
 pub struct ResolveContext<'a> {
     known_files: &'a BTreeSet<ProjectPath>,
     packages: Option<&'a std::collections::BTreeMap<SmolStr, PackageEntry>>,
+    manifests: Option<&'a std::collections::BTreeMap<ProjectPath, &'a [u8]>>,
 }
 
 impl<'a> ResolveContext<'a> {
@@ -83,6 +84,7 @@ impl<'a> ResolveContext<'a> {
         ResolveContext {
             known_files,
             packages: None,
+            manifests: None,
         }
     }
 
@@ -93,7 +95,29 @@ impl<'a> ResolveContext<'a> {
         ResolveContext {
             known_files,
             packages: Some(packages),
+            manifests: None,
         }
+    }
+
+    /// The context a manifest reader gets: every discovered manifest's content
+    /// beside its own, for a build system that composes manifests — a Maven
+    /// pom inherits its parent's build settings. Manifests only: a reader
+    /// never reads source.
+    pub fn with_manifests(
+        known_files: &'a BTreeSet<ProjectPath>,
+        manifests: &'a std::collections::BTreeMap<ProjectPath, &'a [u8]>,
+    ) -> Self {
+        ResolveContext {
+            known_files,
+            packages: None,
+            manifests: Some(manifests),
+        }
+    }
+
+    /// The content of another discovered manifest — `None` outside a manifest
+    /// read, and for a path no adapter claims as a manifest.
+    pub fn manifest(&self, path: &ProjectPath) -> Option<&'a [u8]> {
+        self.manifests?.get(path).copied()
     }
 
     pub fn contains(&self, path: &ProjectPath) -> bool {

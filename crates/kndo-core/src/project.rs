@@ -145,7 +145,19 @@ pub fn read_manifests(
     adapters: &[Box<dyn Extension>],
     known: &BTreeSet<ProjectPath>,
 ) -> Vec<ManifestRead> {
-    let cx = ResolveContext::new(known);
+    // Every manifest's content beside every other's: a reader whose build
+    // system composes manifests (a Maven pom and its parent) reads the
+    // others through the context, never from disk.
+    let mut manifest_paths: BTreeSet<ProjectPath> = BTreeSet::new();
+    crate::graph::for_each_manifest(files, adapters, |_, f| {
+        manifest_paths.insert(f.path.clone());
+    });
+    let manifests: BTreeMap<ProjectPath, &[u8]> = files
+        .iter()
+        .filter(|f| manifest_paths.contains(&f.path))
+        .map(|f| (f.path.clone(), f.content.as_slice()))
+        .collect();
+    let cx = ResolveContext::with_manifests(known, &manifests);
     let mut by_path: std::collections::BTreeMap<ProjectPath, (ManifestEvidence, Vec<SmolStr>)> =
         std::collections::BTreeMap::new();
     let mut read = |adapter: &dyn Extension, file: SourceFile<'_>, whole: bool| {

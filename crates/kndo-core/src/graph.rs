@@ -12,6 +12,7 @@ use crate::extract::ClaimedFile;
 use kndo_contract::adapter::{PackageEntry, Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{FileEvidence, ImportTarget, Reach, Root, RootKind, RootTarget};
 use kndo_contract::extension::{Extension, PublishedSurface};
+use kndo_contract::manifest::UnitKind;
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
@@ -20,7 +21,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Bump when the SAME evidence assembles into a DIFFERENT graph — resolution
 /// candidate changes, reachability semantics, new assembled fields. Folded into the
 /// graph cache key beside the contract fingerprint and the adapter set.
-pub const GRAPH_SEMANTICS_VERSION: u32 = 15;
+pub const GRAPH_SEMANTICS_VERSION: u32 = 16;
 
 #[derive(Serialize, Deserialize)]
 pub struct GraphFile {
@@ -945,6 +946,21 @@ fn anchor_manifest_roots(
     // reports it as a manifest root with a confidence of its own.
     for (file, kind) in project.entry_roots() {
         anchor(file, kind, Confidence::Certain);
+    }
+    // A unit's kind gives its files their role: a test set's files are what
+    // the runner discovers, a tooling or example set's are built to build
+    // something else — the manifest said which set the directory is, hence
+    // Certain. A library's files are reached through its published surface
+    // and an executable's through its entries, so neither anchors here.
+    for gf in graph_files.iter() {
+        let Some(unit) = gf.unit else { continue };
+        let kind = match project.units[unit as usize].kind {
+            UnitKind::Test | UnitKind::Bench => RootKind::Test,
+            UnitKind::Tooling | UnitKind::Example => RootKind::Tooling,
+            UnitKind::Library | UnitKind::Executable => continue,
+            _ => RootKind::Tooling,
+        };
+        anchor(&gf.path, kind, Confidence::Certain);
     }
     for read in reads {
         for root in &read.evidence.roots {

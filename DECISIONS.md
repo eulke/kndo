@@ -3664,3 +3664,55 @@ the report schema are unchanged — manifest evidence is not fingerprinted and n
 report shape moved — and every conformance fixture is byte-identical: the two
 java fixtures with a `src/test/java` tree gain a test unit whose files keep
 the color and the pool they had.
+
+## 2026-09-06 — M8.b.10: a unit's kind is its files' role, and Maven's test directory is read where Maven puts it
+
+**The rule.** A test set's files are what the runner discovers and a tooling
+or example set's are built to build something else, so every file of a `Test`
+or `Bench` unit is a whole-file test root and every file of a `Tooling` or
+`Example` unit a tooling root — `Certain`, because the manifest said which set
+the directory is. A library's files are reached through its published surface
+and an executable's through its entries, so neither anchors here. This is the
+engine's statement of what five adapters spelled as a `src/test/…` path rule,
+and the last of the three conventions the audit found in every adapter
+(library mode, test directories, test names) to find its home in the unit
+model; the name rule stays a convention, since it says nothing a manifest says.
+
+**Reading Maven where Maven puts it.** guava keeps its tests in `test` and its
+benchmarks in `benchmark`, and says so in the ROOT pom
+(`<testSourceDirectory>test</testSourceDirectory>`, inherited by every module)
+and in the build helper (`add-test-source` of `benchmark`). A reader that sees
+one pom at a time can know neither, so `ResolveContext` now hands a manifest
+reader every discovered manifest's content — manifests only, never source —
+and the Maven reader inherits `<testSourceDirectory>` along `<parent>`
+(`<relativePath>` when spelled, a directory meaning its `pom.xml`, an empty one
+meaning no reactor lookup; `../pom.xml` otherwise) and adds the build helper's
+test sources. The main set stays the manifest's whole directory minus the test
+set's: what the build adds to main is not enumerable from the pom, and
+over-inclusion there is the keep-alive direction — the `<sourceDirectory>`
+narrowing the previous entry introduced is withdrawn for that reason.
+
+**Measurement.** guava 9,721 → 9,593; every other repository byte-identical.
+Retired: 130 `untested` — 128 benchmark files across `guava-tests` and its
+Android mirror that the convention had colored production and the pom calls
+test sources, plus two under `guava-gwt/test`. Added: 2 `internal-only`,
+`NonPublicConstantIgnored.INSTANCE` in `ArbitraryInstancesTest` and its
+mirror — a package-private constant a reflection test reads through the
+class, now in a test unit whose package node no longer pools main's files: the
+main-file `.INSTANCE` accesses that had silenced it were a name collision, and
+the nine same-file `INSTANCE` namesakes that count as its own use are another;
+the advice (a non-public constant may be `private`) holds, and the collision
+is the name-only own-use test's residual, not the unit model's. The
+instrument — java's `src/test/java` rule AND its library-mode root deleted, on
+the engine's roles and publication alone — leaves every conformance fixture
+byte-identical but one, `maven-gradle-dependency-skip`, whose Gradle half has
+no unit yet; guava differs from this run by the seven GWT super-source files
+the previous entry decomposed and by nothing else — `BenchmarkHelpers.chooseSize`,
+the previous instrument's other case, is a test set's export now and its
+runner's. Wherever a pom exists, the adapter's two directory conventions are
+the engine's; M8.c deletes them, and Gradle's units (M8.d) close the last
+fixture.
+
+**Knobs.** `GRAPH_SEMANTICS_VERSION` 15 → 16: the same manifests anchor more.
+The contract fingerprint, the report schema and every conformance fixture are
+unchanged.
