@@ -989,6 +989,25 @@ fn references_and_comments(
                     attribute_path_imports(n, source, use_locals, &mut seen_paths, out);
                     return;
                 }
+                // A macro invocation's arguments are raw tokens: the paths in
+                // them are uses like any other, and only a token run can read
+                // them. The identifiers inside still land as references on
+                // their own visits.
+                "token_tree" => {
+                    // Inferred, not parsed: a run of tokens looks like a path
+                    // and usually is one, but a macro template's `$crate::x`
+                    // resolves at every expansion site rather than here, so
+                    // the edge keeps things alive and never accuses a
+                    // manifest of a dependency it does not declare.
+                    token_tree_path_imports(
+                        n,
+                        source,
+                        use_locals,
+                        Confidence::Possible,
+                        &mut seen_paths,
+                        out,
+                    );
+                }
                 _ => {}
             }
             if !matches!(
@@ -1101,7 +1120,7 @@ fn path_import(
     {
         return;
     }
-    emit_path_import(&segments, tk::span(node), seen, out);
+    emit_path_import(&segments, tk::span(node), Confidence::Certain, seen, out);
 }
 
 /// The language's own scalar and string types, which paths may head (`u64::MAX`).
@@ -1113,11 +1132,84 @@ const PRIMITIVE_TYPES: &[&str] = &[
 /// Registered tool namespaces an attribute path may head: not crates.
 const TOOL_ATTRIBUTES: &[&str] = &["rustfmt", "clippy", "rustdoc", "miri", "diagnostic"];
 
+/// Every `::`-joined run of identifier tokens inside one token tree, as a path
+/// import. A token tree is where the grammar stops parsing and starts handing
+/// over raw tokens — inside an attribute (`#[derive(thiserror::Error)]`) and
+/// inside a macro invocation (`println!("{}", util::helper())`) alike — so a
+/// path there has no `scoped_identifier` node to read and would otherwise be
+/// invisible to everything but the bare names it ends in. The head filter is
+/// [`path_import`]'s: a type, a primitive, a tool namespace or a name this
+/// file's `use` already binds continues something in scope and names no module.
+///
+/// Direct children only: a nested tree (`f(a::b())` inside `println!`) is its
+/// own token tree, visited on its own.
+fn token_tree_path_imports(
+    tree: Node<'_>,
+    source: &[u8],
+    use_locals: &BTreeSet<String>,
+    confidence: Confidence,
+    seen: &mut BTreeSet<String>,
+    out: &mut EvidenceSink,
+) {
+    let mut run: Vec<String> = Vec::new();
+    let mut start = 0u32;
+    let mut end = 0u32;
+    let mut after_separator = false;
+    let mut flush = |run: &mut Vec<String>, start: u32, end: u32| {
+        let head = run.first().map(String::as_str).unwrap_or("");
+        if run.len() >= 2
+            && !head.starts_with(|c: char| c.is_ascii_uppercase())
+            && !PRIMITIVE_TYPES.contains(&head)
+            && !TOOL_ATTRIBUTES.contains(&head)
+            && !use_locals.contains(head)
+        {
+            emit_path_import(
+                run,
+                kndo_contract::vocab::Span::new(start, end),
+                confidence,
+                seen,
+                out,
+            );
+        }
+        run.clear();
+    };
+    let mut cursor = tree.walk();
+    for token in tree.children(&mut cursor) {
+        // A path's tokens TOUCH: `a::b` is one, `#a ::b` is an interpolation
+        // beside an absolute path, and only the byte positions tell them apart
+        // once the grammar has stopped parsing.
+        let joined = token.start_byte() as u32 == end;
+        match token.kind() {
+            "identifier" => {
+                if !after_separator || !joined {
+                    // Whatever stood before ends here, and this token heads
+                    // the next path rather than being swallowed by it.
+                    flush(&mut run, start, end);
+                    start = token.start_byte() as u32;
+                }
+                end = token.end_byte() as u32;
+                run.push(tk::text(token, source).to_string());
+                after_separator = false;
+            }
+            "::" if !run.is_empty() && !after_separator && joined => {
+                end = token.end_byte() as u32;
+                after_separator = true;
+            }
+            _ => {
+                flush(&mut run, start, end);
+                after_separator = false;
+            }
+        }
+    }
+    flush(&mut run, start, end);
+}
+
 /// One deduplicated import per distinct path, binding every segment after the
 /// leading keywords.
 fn emit_path_import(
     segments: &[String],
     span: kndo_contract::vocab::Span,
+    confidence: Confidence,
     seen: &mut BTreeSet<String>,
     out: &mut EvidenceSink,
 ) {
@@ -1143,7 +1235,7 @@ fn emit_path_import(
         target_for(segments),
         ImportShape::Bindings(bindings),
         span,
-        Confidence::Certain,
+        confidence,
     );
 }
 
@@ -1163,40 +1255,7 @@ fn attribute_path_imports(
     tk::walk(attr, &mut |n| match n.kind() {
         "scoped_identifier" => path_import(n, source, use_locals, seen, out),
         "token_tree" => {
-            let mut run: Vec<String> = Vec::new();
-            let mut start = 0u32;
-            let mut end = 0u32;
-            let mut after_separator = false;
-            let mut flush = |run: &mut Vec<String>, start: u32, end: u32| {
-                let head = run.first().map(String::as_str).unwrap_or("");
-                if run.len() >= 2
-                    && !head.starts_with(|c: char| c.is_ascii_uppercase())
-                    && !TOOL_ATTRIBUTES.contains(&head)
-                    && !use_locals.contains(head)
-                {
-                    emit_path_import(run, kndo_contract::vocab::Span::new(start, end), seen, out);
-                }
-                run.clear();
-            };
-            let mut cursor = n.walk();
-            for token in n.children(&mut cursor) {
-                match token.kind() {
-                    "identifier" if run.is_empty() || after_separator => {
-                        if run.is_empty() {
-                            start = token.start_byte() as u32;
-                        }
-                        end = token.end_byte() as u32;
-                        run.push(tk::text(token, source).to_string());
-                        after_separator = false;
-                    }
-                    "::" if !run.is_empty() && !after_separator => after_separator = true,
-                    _ => {
-                        flush(&mut run, start, end);
-                        after_separator = false;
-                    }
-                }
-            }
-            flush(&mut run, start, end);
+            token_tree_path_imports(n, source, use_locals, Confidence::Certain, seen, out)
         }
         _ => {}
     });

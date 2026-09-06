@@ -4328,3 +4328,61 @@ re-export, and a bare item now names its namespace). The graph semantics go
 19 → 20: the same evidence assembles differently now that a unit walks down
 its module tree. The contract fingerprint and the schemas do not move — the
 shapes landed with the engine slice before this one.
+
+## 2026-09-06 — M8.c.3: a path inside a macro's tokens is a use — measured at zero findings, kept for what it says, and marked as inferred
+
+**What the audit measured, and what it measures now.** The nine-adapter audit
+called qualified paths inside macro invocations rust's largest `Certain`
+false-positive class, verified on two probes: `println!("{}", util::helper())`
+left `helper` `unused certain`, kept by nothing. Reproduced today, before any
+change here: nothing is accused. The mount model retired the class — a `pub`
+item of a privately mounted module now reaches its parent's namespace, and the
+bare names a token tree already yields are inside that pool. The class was
+never about macros; it was about `pub` meaning "exported" with no pool to be
+used from.
+
+**What the reconstruction still earns.** A macro's arguments are handed over as
+raw tokens, so `b::pull()` inside `println!` draws no EDGE: `used-by`, `trace`
+and reachability see a bare name and nothing else, and a cross-crate use spelled
+only inside a macro is invisible as an edge. Reading `::`-joined runs the way
+attributes already do adds 3 import edges on ripgrep (309 → 312) and moves no
+finding, on any corpus repository, in any category. It ships for what it says
+rather than for what it counts: an adapter reports what the file spells, and the
+file spells a path.
+
+**Two defects the shared scan carried.** Folding the macro side into the
+attribute scan exposed both, and both were live in shipped attribute reading.
+An identifier that broke a run was DROPPED instead of starting the next one, so
+`Box::<dyn std::error::Error + Send>` read as `error::Error` — a crate nobody
+declares. And a run bridged a gap, so a template's `#name ::krate::Trait` read
+as `name::krate::Trait`. The first run of the corpus with the old scan added
+four false `undeclared` on ripgrep (`flags`, `time`, `thread`, `error`) and one
+on this repository's own `quote!` templates (`impl_generics`). A path's tokens
+touch: adjacency by byte position tells `a::b` from `a ::b`, and an identifier
+that cannot continue a run heads the next one.
+
+**Inferred, not parsed.** A run of tokens looks like a path and usually is one,
+but a macro template's `$crate::x` resolves at every expansion site rather than
+where it is written, and a proc-macro's `quote!` names crates its own manifest
+has no reason to declare. So macro runs carry `Confidence::Possible`: the edge
+keeps things alive and answers `used-by`, and dependency hygiene — which reads
+`Certain` imports alone — never accuses a manifest on evidence the grammar did
+not parse. Attribute runs stay `Certain`, because a derive path really does
+name the crate that must be declared.
+
+**Where the scan lives.** Not the toolkit: it is knowledge of one grammar's
+`token_tree`, so it stays beside that grammar as one adapter-private function
+both callers share. The second copy promoted, one floor down from where the
+milestone plan guessed it would.
+
+**Deferred with its number: qualified references for rust.** `Reference::on`
+and the `Qualifiers` stream sharpen one thing — `internal-only` on members,
+where a bare name elsewhere must stop counting as a use. ripgrep carries one
+`internal-only` finding in total and none on a member; this repository's own
+tree carries none. The population is zero, and a mis-emitted receiver would
+turn real member uses invisible and invent advice. The keeper that will demand
+qualifiers is the see-through one already carried in `EXPERIMENTS.md`, and its
+20 findings sit in vapor (16) and Exposed (4) — Swift and Kotlin, not Rust. So
+rust waits for a consumer with a number, and this entry is the number it waited
+on. `kndo:rust` bumps to 11; no fixture, no fingerprint and no graph semantics
+move.

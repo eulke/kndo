@@ -80,11 +80,11 @@ fn dispatch_rules() -> Vec<DispatchRule> {
 impl RustAdapter {
     pub fn new() -> Self {
         RustAdapter {
-            // 10: a module is its mount chain, and a crate is what Cargo
-            // compiles — the manifest states both.
+            // 11: a path inside a macro's token tree is an import like any
+            // other qualified path.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:rust",
-                10,
+                11,
                 &["rs"],
                 &["**/Cargo.toml"],
                 // Modules within a crate reference each other freely — legal,

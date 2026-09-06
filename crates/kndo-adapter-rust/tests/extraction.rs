@@ -6,6 +6,7 @@ use kndo_adapter_rust::RustAdapter;
 use kndo_contract::evidence::{
     FileEvidence, ImportShape, ImportTarget, MarkerTarget, Reach, RootTarget, SymbolKind,
 };
+use kndo_contract::vocab::Confidence;
 
 fn extract(path: &str, source: &str) -> FileEvidence {
     kndo_testkit::extract_evidence(&RustAdapter::new(), path, source)
@@ -685,5 +686,83 @@ fn f(_: WireSymbolKind, _: &dyn Display, _: &dyn Serialize) {}
             .iter()
             .any(|s| s.starts_with("wire::") || s.starts_with("fmt::")),
         "no crate is named after a local: {specs:?}"
+    );
+}
+
+#[test]
+fn a_path_inside_a_macro_invocation_is_a_use_like_any_other() {
+    // The grammar hands a macro's arguments over as raw tokens, so a path in
+    // them has no node to read: only the token run finds it.
+    let ev = extract(
+        "src/main.rs",
+        r#"
+fn main() {
+    println!("{}", util::helper());
+    assert!(other::deep::flag());
+    let _ = vec![Vec::with_capacity(1)];
+}
+"#,
+    );
+    let bound = |specifier: &str| -> Vec<String> {
+        match &import(&ev, specifier).shape {
+            ImportShape::Bindings(bs) => bs.iter().map(|b| b.imported.to_string()).collect(),
+            other => panic!("{specifier}: {other:?}"),
+        }
+    };
+    assert_eq!(bound("util::helper"), ["util", "helper"]);
+    assert_eq!(bound("other::deep::flag"), ["other", "deep", "flag"]);
+    // Inferred from tokens, not parsed: the edge keeps things alive and never
+    // accuses a manifest.
+    assert_eq!(import(&ev, "util::helper").confidence, Confidence::Possible);
+    // A path headed by a type continues something already in scope, and the
+    // `use` that brought it carries the import.
+    assert!(
+        !ev.imports.iter().any(|i| matches!(
+            &i.target,
+            ImportTarget::Package(s) | ImportTarget::Relative(s) if s.contains("Vec")
+        )),
+        "a type-headed path names no module"
+    );
+}
+
+#[test]
+fn a_token_run_is_a_path_only_where_the_tokens_touch() {
+    // Two macro shapes the grammar hands over as flat tokens: a template
+    // interpolation beside an absolute path (`#name ::krate::Trait`), and a
+    // path behind a keyword (`Box::<dyn std::error::Error>`). Reading either
+    // as one run invents a crate — `name::krate` and `error::Error` — and
+    // accuses a manifest of not declaring it.
+    let ev = extract(
+        "src/lib.rs",
+        r#"
+fn f() {
+    emit!(impl #name ::krate::Trait for T {});
+    let _ = err!(Box::<dyn std::error::Error + Send>::from("x"));
+}
+"#,
+    );
+    let specifiers: Vec<String> = ev
+        .imports
+        .iter()
+        .filter_map(|i| match &i.target {
+            ImportTarget::Package(s) | ImportTarget::Relative(s) => Some(s.to_string()),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        specifiers.contains(&"krate::Trait".to_string()),
+        "{specifiers:?}"
+    );
+    assert!(
+        specifiers.contains(&"std::error::Error".to_string()),
+        "{specifiers:?}"
+    );
+    assert!(
+        !specifiers.iter().any(|s| s.starts_with("name::")),
+        "a gap between the tokens ends the path: {specifiers:?}"
+    );
+    assert!(
+        !specifiers.iter().any(|s| s.starts_with("error::")),
+        "the run resumes at the identifier that broke it: {specifiers:?}"
     );
 }

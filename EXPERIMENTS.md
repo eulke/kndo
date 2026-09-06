@@ -57,7 +57,9 @@ ripgrep 1 — that row reads `bindings+reexport-all` because rust emits a `Bindi
 namespace twin is a surface importer). Proposed disposition, the owner's to take: the
 keeper that reads `Reference::on` against a namespace import's local, and the glob pool
 by name, land in M8.c beside the first adapter emitting qualifiers and are measured
-there again.
+there again. The prize sits in vapor and Exposed, so Swift and Kotlin are that first
+adapter: rust emitting qualifiers was measured separately at zero (2026-09-06,
+`internal-only` on ripgrep: one finding, none on a member) and waits for this keeper.
 
 ### Path aliases — measured 2026-09-06
 Measurement (vite, the only corpus repository declaring any): 57 import sites of

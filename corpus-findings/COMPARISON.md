@@ -1376,3 +1376,19 @@ byte-identical — rust claims none of them. v1's oracle is no comparison here:
 it read `pub` as exported everywhere, kept every `pub mod` surface alive, and
 named a test fn inside `mod tests` without its module, so its ripgrep numbers
 answer a different question in all three respects.
+
+### Paths inside macro tokens: three edges, no finding (2026-09-06)
+
+| repo | before | after | what moved |
+|---|---|---|---|
+| ripgrep | 151 | 151 | nothing — 3 import edges appear (309 → 312), no category moves |
+
+The audit's largest `Certain` false-positive class for rust — a `pub` item
+reached only through a macro argument — was retired by the mount model before
+this change and does not reproduce. What the reconstruction adds is the edge:
+`used-by` and `trace` now answer for a cross-crate path spelled only inside a
+macro. Marked `Possible`, so dependency hygiene never accuses a manifest on a
+path the grammar did not parse; the first, uncorrected run of this scan added
+four false `undeclared` on ripgrep and one on this repository, which is what
+sent the confidence down and the two run defects up. Every other corpus
+repository is byte-identical, as rust claims none of them.
