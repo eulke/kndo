@@ -40,6 +40,7 @@ pub fn extract(
         source,
         generated,
         main_root_kind: main_root_kind(path),
+        mod_rs: crate::resolve::is_mod_rs(path),
         types: BTreeMap::new(),
         free_declarations: BTreeMap::new(),
         impls: Vec::new(),
@@ -86,8 +87,9 @@ pub fn extract(
     }
     let free_declarations = std::mem::take(&mut cx.free_declarations);
     let use_locals = std::mem::take(&mut cx.use_locals);
+    let redirects = std::mem::take(&mut cx.redirects);
     macro_template_roots(root, source, &free_declarations, out);
-    references_and_comments(root, source, &use_locals, out);
+    references_and_comments(root, source, &use_locals, &redirects, out);
 }
 
 /// Names a `macro_rules!` template references are resolved at every EXPANSION
@@ -140,6 +142,9 @@ struct ItemPass<'a, 'o> {
     source: &'a [u8],
     generated: bool,
     main_root_kind: RootKind,
+    /// Whether this file's child modules live in its own directory — which is
+    /// where a top-level `#[path]` is anchored. See [`redirect_specifier`].
+    mod_rs: bool,
     /// Type name → its declaration, for wiring `impl` members to their owner.
     types: BTreeMap<String, DeclarationId>,
     /// Every free declaration by name, for the macro-template pass: names a
@@ -147,10 +152,11 @@ struct ItemPass<'a, 'o> {
     /// site, so they root rather than count as file-local uses.
     free_declarations: BTreeMap<String, DeclarationId>,
     impls: Vec<Node<'a>>,
-    /// `#[path = "…"]`-redirected module names → their real path segments. `use`
-    /// paths through the alias substitute these (`use self::imp::*` where `mod imp`
-    /// points at `disabled.rs`) — one variant per redirect, since cfg gates can
-    /// declare the same alias twice.
+    /// `#[path = "…"]`-redirected module names → the whole specifier each one
+    /// resolves against, anchor included (see [`ItemPass::redirect_specifier`]).
+    /// Every path through the alias substitutes it — a `use` leaf and an
+    /// expression path alike — with one variant per redirect, since cfg gates
+    /// can declare the same alias twice.
     redirects: BTreeMap<String, Vec<Vec<String>>>,
     uses: Vec<(Node<'a>, Vec<String>)>,
     /// Every local name a `use` in this file binds — the roots a qualified
@@ -210,6 +216,24 @@ impl<'a> ItemPass<'a, '_> {
         for attr in attrs {
             self.marker(*attr, MarkerTarget::Declaration(id));
         }
+    }
+
+    /// The module path a `#[path = "…"]` redirect resolves against, as
+    /// segments. The Reference anchors a top-level `#[path]` at the DIRECTORY
+    /// THE SOURCE FILE LIVES IN — which for a non-mod-rs file is one module
+    /// above where its children live, hence the `super`. Inside an inline
+    /// module block the anchor is the module's own directory, which is what
+    /// `self` plus the stack already names.
+    fn redirect_specifier(&self, redirect: &[String]) -> Vec<String> {
+        let mut segments = Vec::new();
+        if self.stack.is_empty() && !self.mod_rs {
+            segments.push("super".to_string());
+        } else {
+            segments.push("self".to_string());
+            segments.extend(self.stack.iter().cloned());
+        }
+        segments.extend(redirect.iter().cloned());
+        segments
     }
 
     fn item(&mut self, item: Node<'a>) {
@@ -311,11 +335,11 @@ impl<'a> ItemPass<'a, '_> {
                             segments.extend(self.stack.iter().cloned());
                             match attrs.iter().find_map(|a| path_attribute(*a, self.source)) {
                                 Some(redirect) => {
+                                    segments = self.redirect_specifier(&redirect);
                                     self.redirects
                                         .entry(name.to_string())
                                         .or_default()
-                                        .push(redirect.clone());
-                                    segments.extend(redirect);
+                                        .push(segments.clone());
                                 }
                                 None => segments.push(name.to_string()),
                             }
@@ -494,8 +518,10 @@ impl<'a> ItemPass<'a, '_> {
             {
                 Some(variants) => {
                     for v in variants {
-                        let mut segments = leaf.segments[..keyword_run].to_vec();
-                        segments.extend(v.iter().cloned());
+                        // The redirect carries its own anchor — the file's
+                        // directory or the module's — so the leaf's leading
+                        // keywords, which named the alias's place, go with it.
+                        let mut segments = v.clone();
                         segments.extend(leaf.segments[keyword_run + 1..].iter().cloned());
                         expanded.push(UseLeaf {
                             segments,
@@ -959,6 +985,7 @@ fn references_and_comments(
     root: Node<'_>,
     source: &[u8],
     use_locals: &BTreeSet<String>,
+    redirects: &BTreeMap<String, Vec<Vec<String>>>,
     out: &mut EvidenceSink,
 ) {
     let mut seen_paths: BTreeSet<String> = BTreeSet::new();
@@ -972,7 +999,7 @@ fn references_and_comments(
                     return;
                 }
                 "scoped_identifier" | "scoped_type_identifier" => {
-                    path_import(n, source, use_locals, &mut seen_paths, out);
+                    path_import(n, source, use_locals, redirects, &mut seen_paths, out);
                     // Fall through is deliberate in spirit: the identifiers inside the
                     // path still land as references via their own visits.
                     return;
@@ -986,9 +1013,13 @@ fn references_and_comments(
                 // "f")`, `serde(with = "m")`): every identifier-shaped word is a use.
                 "attribute_item" | "inner_attribute_item" => {
                     attribute_string_references(n, source, out);
-                    attribute_path_imports(n, source, use_locals, &mut seen_paths, out);
+                    attribute_path_imports(n, source, use_locals, redirects, &mut seen_paths, out);
                     return;
                 }
+                // `include!("gen/tables.rs")` pastes another file's items
+                // into this one — an edge, drawn before the token run below
+                // reads the same tree for paths.
+                "macro_invocation" => include_import(n, source, out),
                 // A macro invocation's arguments are raw tokens: the paths in
                 // them are uses like any other, and only a token run can read
                 // them. The identifiers inside still land as references on
@@ -1092,6 +1123,7 @@ fn path_import(
     node: Node<'_>,
     source: &[u8],
     use_locals: &BTreeSet<String>,
+    redirects: &BTreeMap<String, Vec<Vec<String>>>,
     seen: &mut BTreeSet<String>,
     out: &mut EvidenceSink,
 ) {
@@ -1120,6 +1152,16 @@ fn path_import(
     {
         return;
     }
+    // `#[path = "odd.rs"] mod odd;` then `odd::run()`: the alias names the file
+    // the attribute redirected it to, wherever the path is written.
+    if let Some(variants) = redirects.get(head) {
+        for variant in variants {
+            let mut redirected = variant.clone();
+            redirected.extend(segments[1..].iter().cloned());
+            emit_path_import(&redirected, tk::span(node), Confidence::Certain, seen, out);
+        }
+        return;
+    }
     emit_path_import(&segments, tk::span(node), Confidence::Certain, seen, out);
 }
 
@@ -1131,6 +1173,59 @@ const PRIMITIVE_TYPES: &[&str] = &[
 
 /// Registered tool namespaces an attribute path may head: not crates.
 const TOOL_ATTRIBUTES: &[&str] = &["rustfmt", "clippy", "rustdoc", "miri", "diagnostic"];
+
+/// The file an `include!` pastes in, as an edge. Its items become the
+/// including file's, so nothing names what was taken and the whole surface
+/// stays alive — a glob's posture, and the honest one until a consumer needs
+/// the difference. The argument is a FILE path relative to this file's own
+/// directory, which is the one specifier of this adapter's grammar that names
+/// a file (see `resolve`); a computed one (`concat!(env!("OUT_DIR"), …)`)
+/// names a file outside the tree and draws nothing. `include_str!` and
+/// `include_bytes!` name data no adapter claims.
+fn include_import(node: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
+    let Some(name) = node.child_by_field_name("macro") else {
+        return;
+    };
+    if tk::text(name, source) != "include" {
+        return;
+    }
+    // One string literal, and nothing else: `include!(concat!(env!("OUT_DIR"),
+    // "/x.rs"))` names a file the build writes outside the tree, and reading
+    // the first string inside it would invent `./OUT_DIR`.
+    let mut cursor = node.walk();
+    let Some(tree) = node
+        .children(&mut cursor)
+        .find(|c| c.kind() == "token_tree")
+    else {
+        return;
+    };
+    let mut inner = tree.walk();
+    let arguments: Vec<Node<'_>> = tree.named_children(&mut inner).collect();
+    let [literal] = arguments.as_slice() else {
+        return;
+    };
+    if literal.kind() != "string_literal" {
+        return;
+    }
+    let mut content = None;
+    tk::walk(*literal, &mut |n| {
+        if content.is_none() && n.kind() == "string_content" {
+            content = Some(tk::text(n, source).to_string());
+        }
+    });
+    let Some(path) = content else {
+        return;
+    };
+    if path.is_empty() || path.contains("..") {
+        return;
+    }
+    out.import(
+        ImportTarget::Relative(SmolStr::new(format!("./{path}"))),
+        ImportShape::Include,
+        tk::span(node),
+        Confidence::Certain,
+    );
+}
 
 /// Every `::`-joined run of identifier tokens inside one token tree, as a path
 /// import. A token tree is where the grammar stops parsing and starts handing
@@ -1249,11 +1344,12 @@ fn attribute_path_imports(
     attr: Node<'_>,
     source: &[u8],
     use_locals: &BTreeSet<String>,
+    redirects: &BTreeMap<String, Vec<Vec<String>>>,
     seen: &mut BTreeSet<String>,
     out: &mut EvidenceSink,
 ) {
     tk::walk(attr, &mut |n| match n.kind() {
-        "scoped_identifier" => path_import(n, source, use_locals, seen, out),
+        "scoped_identifier" => path_import(n, source, use_locals, redirects, seen, out),
         "token_tree" => {
             token_tree_path_imports(n, source, use_locals, Confidence::Certain, seen, out)
         }

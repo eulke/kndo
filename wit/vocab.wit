@@ -126,7 +126,9 @@ interface types {
         reexport(list<import-binding>),
         reexport-all,
         glob,
+        // `include` is a WIT keyword; the % escape keeps the wire name.
         mount(mount-point),
+        %include,
     }
 
     /// Mirrors `Timing` — when an import runs: at module load, when the code

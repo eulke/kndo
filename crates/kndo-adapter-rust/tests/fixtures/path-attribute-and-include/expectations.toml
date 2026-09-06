@@ -1,0 +1,22 @@
+# path-attribute-and-include: a `#[path]` in a non-mod-rs file is anchored at the file's own directory (the Reference's rule), the alias names that file in an expression path too, and an `include!` pastes a file in — its private names readable in the includer, and what nobody names still dead.
+
+[[alive]]
+subject = "src/odd.rs"
+why = "`#[path = \"odd.rs\"]` inside src/a.rs names src/odd.rs — relative to a.rs's own directory, not to the directory its child modules live in"
+
+[[alive]]
+subject = "src/odd.rs#run"
+why = "a.rs calls it as odd::run(), and an expression path substitutes the redirect the same way a `use` does"
+
+[[alive]]
+subject = "src/gen/tables.rs"
+why = "main.rs includes it: an edge like any import"
+
+[[alive]]
+subject = "src/gen/tables.rs#TABLE"
+why = "private to its own file, and main.rs pastes that file in — sight, not a surface"
+
+[[dead]]
+subject = "src/gen/tables.rs#SPARE"
+category = "unused"
+why = "the includer pastes the file in and names this one nowhere: sight keeps nothing by itself"

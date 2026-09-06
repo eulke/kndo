@@ -766,3 +766,67 @@ fn f() {
         "the run resumes at the identifier that broke it: {specifiers:?}"
     );
 }
+
+#[test]
+fn a_path_attribute_is_anchored_where_the_reference_anchors_it() {
+    // The Reference: a top-level `#[path]` is relative to the DIRECTORY THE
+    // SOURCE FILE LIVES IN. For a mod-rs file that is where its children live;
+    // for any other file it is one module above them.
+    let non_mod_rs = extract(
+        "src/a.rs",
+        "#[path = \"odd.rs\"]\nmod odd;\n\nfn f() { odd::run(); }\n",
+    );
+    assert!(
+        matches!(&import(&non_mod_rs, "super::odd").shape, ImportShape::Mount { namespace, .. }
+            if namespace == "odd")
+    );
+    // And the alias names that same file wherever it is written, not only in a
+    // `use`: an expression path substitutes the redirect too.
+    assert!(
+        matches!(
+            &import(&non_mod_rs, "super::odd::run").shape,
+            ImportShape::Bindings(_)
+        ),
+        "{:?}",
+        non_mod_rs
+            .imports
+            .iter()
+            .map(|i| format!("{:?}", i.target))
+            .collect::<Vec<_>>()
+    );
+
+    let mod_rs = extract("src/a/mod.rs", "#[path = \"odd.rs\"]\nmod odd;\n");
+    assert!(
+        matches!(
+            &import(&mod_rs, "self::odd").shape,
+            ImportShape::Mount { .. }
+        ),
+        "a mod-rs file's children live in its own directory"
+    );
+}
+
+#[test]
+fn an_include_pastes_a_file_in() {
+    let ev = extract("src/main.rs", "include!(\"gen/tables.rs\");\n");
+    let edge = import(&ev, "./gen/tables.rs");
+    assert!(
+        matches!(edge.shape, ImportShape::Include),
+        "{:?}",
+        edge.shape
+    );
+    assert!(matches!(&edge.target, ImportTarget::Relative(_)));
+    // A computed path names a file outside the tree, and `include_str!` names
+    // data no adapter claims: neither draws an edge.
+    let computed = extract(
+        "src/main.rs",
+        "include!(concat!(env!(\"OUT_DIR\"), \"/x.rs\"));\ninclude_str!(\"notes.txt\");\n",
+    );
+    assert!(
+        !computed
+            .imports
+            .iter()
+            .any(|i| matches!(i.shape, ImportShape::Include)),
+        "{:?}",
+        computed.imports.len()
+    );
+}

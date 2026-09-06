@@ -185,8 +185,10 @@ impl Index {
                         }
                         // A mount hands out nothing: it says where the target
                         // sits in the forest, and the parent names what it
-                        // holds by qualifying it — a reference of its own.
-                        ImportShape::Mount { .. } => {}
+                        // holds by qualifying it — a reference of its own. An
+                        // include hands out nothing either: the graph reads it
+                        // as sight, which is stronger and exact.
+                        ImportShape::Mount { .. } | ImportShape::Include => {}
                         _ => surface_importers[t as usize].push(site),
                     }
                 }

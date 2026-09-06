@@ -22,6 +22,8 @@
 //!                      `heirs+ns` (those and its namespace), `inherited` (its
 //!                      owner's), `pub`
 //! package a.b          the namespace this file declares itself into
+//! include ./a          `./a`'s content becomes part of this file: its names are
+//!                      readable here whatever reach they carry
 //! mount a ./a          `./a` becomes the child namespace `a` of this file's,
 //!                      fenced by the mount's own reach (`pub mount a ./a`,
 //!                      `unit mount a ./a`; unstated, this file's namespace)
@@ -428,6 +430,13 @@ impl Extension for MockExtension {
                         Some(span),
                     ),
                 }
+            } else if let Some(specifier) = line.strip_prefix("include ") {
+                out.import(
+                    ImportTarget::Relative(specifier.trim().into()),
+                    ImportShape::Include,
+                    span,
+                    Confidence::Certain,
+                );
             } else if let Some((reach, segment, specifier)) = mount_line(line) {
                 out.import(
                     ImportTarget::Relative(specifier.into()),

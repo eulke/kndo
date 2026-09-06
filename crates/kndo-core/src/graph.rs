@@ -10,7 +10,9 @@ use crate::cache::EvidenceCache;
 use crate::discover::DiscoveredFile;
 use crate::extract::ClaimedFile;
 use kndo_contract::adapter::{PackageEntry, Resolution, ResolveContext, SourceFile};
-use kndo_contract::evidence::{FileEvidence, ImportTarget, Reach, Root, RootKind, RootTarget};
+use kndo_contract::evidence::{
+    FileEvidence, ImportShape, ImportTarget, Reach, Root, RootKind, RootTarget,
+};
 use kndo_contract::extension::{Extension, PublishedSurface};
 use kndo_contract::manifest::UnitKind;
 use kndo_contract::vocab::{Confidence, ProjectPath};
@@ -787,6 +789,26 @@ fn mount_and_publish(
                 f.unit = Some(u);
             }
         }
+    }
+    // An include pastes the target's content in, so the including file sees
+    // every name the target declares, whatever reach it carries — the sight
+    // the adapters' unit mates already spell, from a different statement.
+    for (i, f) in files.iter_mut().enumerate() {
+        let included: Vec<u32> = f
+            .evidence
+            .imports
+            .iter()
+            .zip(&f.import_targets)
+            .filter(|(import, _)| matches!(import.shape, ImportShape::Include))
+            .flat_map(|(_, targets)| targets.iter().copied())
+            .filter(|&t| t as usize != i)
+            .collect();
+        if included.is_empty() {
+            continue;
+        }
+        f.sees.extend(included);
+        f.sees.sort_unstable();
+        f.sees.dedup();
     }
     for f in files.iter_mut() {
         let surface = adapter_by_id(adapters, &f.adapter)

@@ -1392,3 +1392,16 @@ path the grammar did not parse; the first, uncorrected run of this scan added
 four false `undeclared` on ripgrep and one on this repository, which is what
 sent the confidence down and the two run defects up. Every other corpus
 repository is byte-identical, as rust claims none of them.
+
+### `#[path]`, aliases and includes: three false positives with no corpus population (2026-09-06)
+
+| repo | before | after | what moved |
+|---|---|---|---|
+| every repository | — | — | nothing |
+
+`include!` appears in no rust file of the corpus, and ripgrep's only `#[path]`
+sits in a `mod.rs`, the case that already worked — so the three `Certain`
+false positives the audit verified (a redirected module reported `unused`, its
+alias reported `undeclared`, an included file reported `unused`) have no corpus
+population at all. The probes and the `path-attribute-and-include` fixture are
+the measurement; the corpus number is zero by construction, and stays zero.

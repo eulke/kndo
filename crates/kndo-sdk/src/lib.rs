@@ -286,6 +286,7 @@ fn import_to_wire(import: &ev::Import) -> wire::Import {
             ev::ImportShape::Reexport(b) => wire::ImportShape::Reexport(bindings_to_wire(b)),
             ev::ImportShape::ReexportAll => wire::ImportShape::ReexportAll,
             ev::ImportShape::Glob => wire::ImportShape::Glob,
+            ev::ImportShape::Include => wire::ImportShape::Include,
             ev::ImportShape::Mount { namespace, reach } => {
                 wire::ImportShape::Mount(wire::MountPoint {
                     namespace: namespace.to_string(),

@@ -1,8 +1,10 @@
-//! A mount nests a namespace: the file a `mod x;` names is a child of the one
-//! that mounts it, its private names are readable everywhere under it, and the
-//! mount's own reach fences everything below — a `pub` item of a privately
-//! mounted module is nameable in the mounting namespace and nowhere else, not
-//! on any unit's published surface.
+//! The two structural imports. A mount nests a namespace: the file a `mod x;`
+//! names is a child of the one that mounts it, its private names are readable
+//! everywhere under it, and the mount's own reach fences everything below — a
+//! `pub` item of a privately mounted module is nameable in the mounting
+//! namespace and nowhere else, not on any unit's published surface. An include
+//! pastes one file into another: the including file sees every name the
+//! included one declares, whatever reach it carries.
 
 mod common;
 
@@ -132,4 +134,26 @@ fn a_unit_reach_pools_the_tree_when_no_manifest_named_the_unit() {
         ("unit".to_string(), "unit".to_string())
     );
     assert_eq!(keeper_kinds(&snap, "lib.kmock#wide"), ["reference"]);
+}
+
+#[test]
+fn an_include_makes_the_target_content_this_file_s_own() {
+    let p = TempProject::new();
+    p.file(
+        "kmock.pkg",
+        "unit core library roots=src entries=src/lib.kmock\n",
+    )
+    .file("src/lib.kmock", "include ./gen\ncall helper\n")
+    // Private to its own file — and the file including it reads it anyway,
+    // because the language pastes the content in rather than importing it.
+    .file("src/gen.kmock", "ns fn helper\nns fn nobody\n");
+    let snap = common::analyze(&p, vec![Box::new(publishing())]);
+
+    assert_eq!(keeper_kinds(&snap, "src/gen.kmock#helper"), ["reference"]);
+    let unused = reported(&snap, &Category::UNUSED);
+    assert_eq!(
+        unused,
+        ["src/gen.kmock — nobody"],
+        "sight is not a surface: what the includer never names is still dead"
+    );
 }

@@ -19,6 +19,18 @@ pub fn resolve(from: &ProjectPath, specifier: &str, cx: &ResolveContext<'_>) -> 
         Some(split) => split,
         None => return Resolution::Unresolved,
     };
+    // `./path/to.rs` — an `include!`, whose argument is a FILE path relative to
+    // the including file's directory, not a module path. The one specifier of
+    // this adapter's grammar that names a file rather than a module.
+    if let Some(rest) = specifier.strip_prefix("./") {
+        let dir = parent_dir_owned(from.as_str());
+        let file = ProjectPath::new(join(&dir, rest));
+        return if cx.contains(&file) {
+            Resolution::File(file)
+        } else {
+            Resolution::Unresolved
+        };
+    }
     match *first {
         "crate" => {
             let base = crate_src_dir(from, cx);
@@ -199,6 +211,29 @@ fn dir_equiv(from: &ProjectPath, cx: &ResolveContext<'_>) -> String {
 
 /// `tests/foo.rs`, `benches/foo.rs`, `examples/foo.rs`, `src/bin/foo.rs` — each its
 /// own crate root, so its modules live beside it.
+/// Whether this file is a "mod-rs" source file in the Reference's sense — a
+/// crate root (`lib.rs`, `main.rs`, a build script, a single-file target) or a
+/// `mod.rs` — whose child modules live in its OWN directory. Every other file's
+/// children live in a directory named after it, one level below the file. Read
+/// without a context, because extraction has none: the package-relative strip
+/// [`dir_equiv`] makes only matters for a nested package, and a directory named
+/// `tests` inside one is a single-file target's home either way.
+pub(crate) fn is_mod_rs(path: &kndo_contract::vocab::ProjectPath) -> bool {
+    let path = path.as_str();
+    let name = path.rsplit('/').next().unwrap_or(path);
+    if matches!(name, "lib.rs" | "main.rs" | "mod.rs" | "build.rs") {
+        return true;
+    }
+    ["tests/", "benches/", "examples/", "src/bin/"]
+        .iter()
+        .any(|prefix| {
+            let at = path
+                .strip_prefix(prefix)
+                .or_else(|| path.split_once(&format!("/{prefix}")).map(|(_, rest)| rest));
+            at.is_some_and(|rest| !rest.contains('/'))
+        })
+}
+
 fn is_single_file_crate(rel: &str) -> bool {
     for prefix in ["tests/", "benches/", "examples/", "src/bin/"] {
         if let Some(rest) = rel.strip_prefix(prefix)

@@ -78,6 +78,11 @@ adapter says nothing:
   three test files); an output directory a JVM or Cargo build writes is not
   one, since a package may be named `target` or `build`; and what a manifest
   excludes is that unit's membership, not the tree's.
+- **Includes**: where a language pastes one file's content into another
+  (Rust's `include!`), the import says so and the engine reads it as sight: the
+  including file sees every name the included one declares, whatever reach it
+  carries, and nothing is handed out — what the includer never names is still
+  dead.
 - **Mounts**: where a language names its namespaces by ATTACHING files to
   each other rather than by a clause each file writes, the import that does it
   says so — Rust's `mod x;` makes `x.rs` the child namespace `x` of the

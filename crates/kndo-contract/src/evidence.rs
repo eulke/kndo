@@ -492,6 +492,12 @@ pub enum ImportShape {
         namespace: SmolStr,
         reach: Reach,
     },
+    /// The target's content becomes part of THIS file (`include!`): its
+    /// declarations are nameable here whatever reach they carry, because the
+    /// language pastes them in rather than importing them. Read as SIGHT — the
+    /// including file sees the included one — never as a surface handed out,
+    /// which is the difference from a glob.
+    Include,
 }
 
 /// WHEN an import runs — a fact the adapter reads off the syntax, never a

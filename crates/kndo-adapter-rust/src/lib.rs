@@ -80,11 +80,11 @@ fn dispatch_rules() -> Vec<DispatchRule> {
 impl RustAdapter {
     pub fn new() -> Self {
         RustAdapter {
-            // 11: a path inside a macro's token tree is an import like any
-            // other qualified path.
+            // 12: a `#[path]` redirect is anchored where the Reference says
+            // and substituted in every path, and an `include!` draws its edge.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:rust",
-                11,
+                12,
                 &["rs"],
                 &["**/Cargo.toml"],
                 // Modules within a crate reference each other freely — legal,

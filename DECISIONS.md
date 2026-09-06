@@ -4386,3 +4386,53 @@ qualifiers is the see-through one already carried in `EXPERIMENTS.md`, and its
 rust waits for a consumer with a number, and this entry is the number it waited
 on. `kndo:rust` bumps to 11; no fixture, no fingerprint and no graph semantics
 move.
+
+## 2026-09-06 — M8.c.4: a `#[path]` is anchored where the Reference anchors it, an alias is an alias everywhere, and an `include` is sight
+
+**Three Certain false positives the audit verified, none of them on the
+corpus.** `include!` appears in no rust file of the corpus; the one `#[path]`
+ripgrep writes sits in a `mod.rs`, which already worked. So the corpus cannot
+measure this slice, and the probes and fixtures are the measurement: a project
+with `#[path = "odd.rs"] mod odd;` inside `src/a.rs` reported `src/odd.rs`
+`unused certain`, an `undeclared` on the alias, and — with an `include!` —
+its target `unused certain` too. All three are gone; the corpus is
+byte-identical in every repository, which is what a change with no corpus
+population must look like.
+
+**The anchor.** The Reference is explicit: a `#[path]` outside an inline module
+block is relative to the DIRECTORY THE SOURCE FILE LIVES IN. For a mod-rs file
+(a crate root, a `mod.rs`) that is where its child modules live, so `self`
+names it; for any other file the children live one directory DEEPER, so the
+same place is one module up. The adapter now spells the difference — `super`
+where the file is not mod-rs — and the rule reads off the file name alone, the
+way the resolver's own directory rule does.
+
+**An alias is an alias everywhere.** The redirect table held raw path segments
+and only `use` leaves consulted it, so `odd::run()` — an expression path —
+resolved against a module named `odd` that does not exist. It now holds the
+whole specifier, anchor included, and every path substitutes it: a `use` leaf,
+an expression path, an attribute path. One table, one anchor, three readers.
+
+**An include is sight, not a surface.** `include!("gen/tables.rs")` pastes a
+file's items into the includer, so its private names are readable there. Two
+shapes were wrong before the right one: no edge at all left the target
+`unused` at file level, and a glob edge moved the same false positive down to
+each item, since a whole-surface importer cannot name what is private to its
+target. `ImportShape::Include` says what the language does, and the engine
+reads it as SIGHT — the includer joins the target's viewers, which is the
+relation the adapters' unit mates already spell from a different statement.
+Nothing is handed out: a name the includer never writes is still dead, which
+the fixture pins beside the one it does write. The argument is a file path
+relative to the including file, so this adapter's specifier grammar gains one
+form (`./gen/tables.rs`) that names a file rather than a module; a computed
+argument (`concat!(env!("OUT_DIR"), …)`) names a file the build writes outside
+the tree and draws nothing.
+
+**Knobs and pins.** The contract fingerprint moves (`ImportShape` grows
+`Include`); the WIT variant grows `%include` — the name is a WIT keyword, so
+the escape keeps the wire spelling — and the compat guests are re-pinned;
+`kndo:rust` bumps to 12. The report and query schemas do not move. One fixture
+lands, `path-attribute-and-include`, pinning all three rules and the silence
+between them, and kmock grows an `include` line so the engine rule has a
+conformance case of its own. No existing fixture moves and no corpus finding
+moves.
