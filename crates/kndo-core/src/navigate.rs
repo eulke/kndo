@@ -134,6 +134,10 @@ pub enum Keeper {
     /// no call site can be required to exist, because the caller holds the
     /// SUPERTYPE.
     Witness { of: SmolStr },
+    /// The unit compiling this file publishes its exported API, and this
+    /// declaration is on it: the outside world is the consumer no call site
+    /// can show.
+    Published { unit: SmolStr },
 }
 
 impl Index {
@@ -292,24 +296,22 @@ impl Index {
 
     /// The pool a declaration of `reach` in `file` is nameable from — see
     /// [`Pool`]. A namespace is bounded by the scope forest; a unit by the
-    /// adapter until a manifest names it; a token only ever by the adapter.
+    /// forest where a manifest named it and by the adapter until one does; a
+    /// token only ever by the adapter.
     pub fn pool_of<'a>(&'a self, graph: &'a Graph, file: usize, reach: &Reach) -> Pool<'a> {
         let bounded = |files: Option<&'a [u32]>| match files {
             Some(files) => Pool::Files(files),
             None => Pool::Published,
         };
+        let f = &graph.files[file];
         match reach {
             Reach::Private => Pool::Own,
             Reach::Namespace { up } => bounded(self.scopes.namespace_pool(file, *up)),
-            Reach::Unit | Reach::Scoped { .. } => {
-                let f = &graph.files[file];
-                bounded(
-                    f.regions
-                        .binary_search_by(|(r, _)| r.cmp(reach))
-                        .ok()
-                        .map(|ix| f.regions[ix].1.as_slice()),
-                )
-            }
+            Reach::Unit => match f.unit {
+                Some(u) => Pool::Files(self.scopes.unit_pool(u)),
+                None => bounded(region_of(f, reach)),
+            },
+            Reach::Scoped { .. } => bounded(region_of(f, reach)),
             _ => Pool::Published,
         }
     }
@@ -338,6 +340,24 @@ impl Capped {
     }
 }
 
+/// The files the claiming adapter enumerated for `reach` at this file, if it
+/// could bound it — see [`crate::graph::GraphFile::regions`].
+fn region_of<'a>(f: &'a crate::graph::GraphFile, reach: &Reach) -> Option<&'a [u32]> {
+    f.regions
+        .binary_search_by(|(r, _)| r.cmp(reach))
+        .ok()
+        .map(|ix| f.regions[ix].1.as_slice())
+}
+
+/// The unit whose published surface this file is on, by name — see
+/// [`crate::graph::GraphFile::published`].
+fn publishing_unit(graph: &Graph, f: &crate::graph::GraphFile) -> Option<SmolStr> {
+    if !f.published {
+        return None;
+    }
+    f.unit.map(|u| graph.project.units[u as usize].name.clone())
+}
+
 /// Everything keeping one declaration alive, capped at `limit`. The rules are
 /// `unused`'s, spelled once:
 ///
@@ -350,6 +370,9 @@ impl Capped {
 ///   whole-surface importer keeps them. They ride their owner's handed-out
 ///   surface — unless their own region is bounded (an `internal` method of a
 ///   public class) or they are `Private` (never handed out).
+/// - A published unit hands its exported surface to the outside world: an
+///   exported declaration there is kept by its consumers no call site can
+///   show, and a member rides its owner's the way it rides an entry's.
 /// - An import binding the module-system name (or exported alias) keeps a free
 ///   declaration whatever its reach — the adapter resolved that edge as legal.
 /// - An exemption the source asked for outranks every question: it is listed
@@ -440,6 +463,14 @@ pub fn keepers(
         let owner_surface_exported =
             matches!(index.pool_of(graph, file, surface_reach), Pool::Published);
         if handed_out
+            && owner_surface_exported
+            && region.is_none()
+            && let Some(unit) = publishing_unit(graph, f)
+            && kept.push(Keeper::Published { unit })
+        {
+            return kept.out;
+        }
+        if handed_out
             && entry_surface
             && owner_surface_exported
             && region.is_none()
@@ -502,6 +533,12 @@ pub fn keepers(
             if counts && kept.push(Keeper::SurfaceImport { site }) {
                 return kept.out;
             }
+        }
+        if exported
+            && let Some(unit) = publishing_unit(graph, f)
+            && kept.push(Keeper::Published { unit })
+        {
+            return kept.out;
         }
         if exported && entry_surface && kept.push(Keeper::EntrySurface) {
             return kept.out;

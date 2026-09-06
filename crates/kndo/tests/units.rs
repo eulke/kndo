@@ -105,3 +105,159 @@ fn a_manifest_root_carries_its_own_confidence_and_a_unit_entry_is_certain() {
     );
     assert!(reported(&snap, &Category::UNUSED).is_empty());
 }
+
+/// The kmock language whose units publish every export, like a jar.
+fn publishing_exports() -> MockExtension {
+    MockExtension::with(|spec| {
+        spec.published_surface(kndo_contract::extension::PublishedSurface::Exports)
+    })
+}
+
+#[test]
+fn a_friend_unit_may_name_a_units_own_reach() {
+    let lib = "pub fn api\nunit fn helper\n";
+    let suite = "import ./../src/lib { api }\ncall api\ncall helper\n";
+    // Declared a friend: the suite's bare `helper` is the library's.
+    let p = TempProject::new();
+    p.file(
+        "kmock.pkg",
+        "unit lib library roots=src entries=src/lib.kmock\n\
+         unit suite test roots=tests entries=tests/t.kmock needs=lib friends=lib\n",
+    )
+    .file("src/lib.kmock", lib)
+    .file("tests/t.kmock", suite);
+    let snap = run(&p);
+    assert!(
+        reported(&snap, &Category::UNUSED).is_empty(),
+        "{:?}",
+        reported(&snap, &Category::UNUSED)
+    );
+    // Not a friend: the suite cannot name it, so its `helper` is somebody
+    // else's and the library's stays dead.
+    let p = TempProject::new();
+    p.file(
+        "kmock.pkg",
+        "unit lib library roots=src entries=src/lib.kmock\n\
+         unit suite test roots=tests entries=tests/t.kmock needs=lib\n",
+    )
+    .file("src/lib.kmock", lib)
+    .file("tests/t.kmock", suite);
+    let snap = run(&p);
+    assert_eq!(
+        reported(&snap, &Category::UNUSED),
+        ["src/lib.kmock — helper"]
+    );
+}
+
+#[test]
+fn a_published_units_exports_are_the_outside_worlds() {
+    let entry = "import ./util { other }\ncall other\n";
+    let util = "pub fn other\npub fn spare\n";
+    // A library publishes every export in this ecosystem: `spare` is kept by
+    // the consumers no call site can show, and the keeper says so.
+    let p = TempProject::new();
+    p.file(
+        "kmock.pkg",
+        "unit core library roots=src entries=src/lib.kmock\n",
+    )
+    .file("src/lib.kmock", entry)
+    .file("src/util.kmock", util);
+    let snap = common::analyze(&p, vec![Box::new(publishing_exports())]);
+    assert!(
+        reported(&snap, &Category::UNUSED).is_empty(),
+        "{:?}",
+        reported(&snap, &Category::UNUSED)
+    );
+    assert_eq!(
+        common::keeper_kinds(&snap, "src/util.kmock#spare"),
+        ["published"]
+    );
+    // The manifest keeps the library private: nobody outside consumes it.
+    let p = TempProject::new();
+    p.file(
+        "kmock.pkg",
+        "unit core library roots=src entries=src/lib.kmock publish=no\n",
+    )
+    .file("src/lib.kmock", entry)
+    .file("src/util.kmock", util);
+    let snap = common::analyze(&p, vec![Box::new(publishing_exports())]);
+    assert_eq!(
+        reported(&snap, &Category::UNUSED),
+        ["src/util.kmock — spare"]
+    );
+    // An executable hands out no API, published or not.
+    let p = TempProject::new();
+    p.file(
+        "kmock.pkg",
+        "unit app executable roots=src entries=src/lib.kmock publish=yes\n",
+    )
+    .file("src/lib.kmock", entry)
+    .file("src/util.kmock", util);
+    let snap = common::analyze(&p, vec![Box::new(publishing_exports())]);
+    assert_eq!(
+        reported(&snap, &Category::UNUSED),
+        ["src/util.kmock — spare"]
+    );
+    // And where the ecosystem publishes through entries, a library's
+    // non-entry export is nobody's outside either.
+    let p = TempProject::new();
+    p.file(
+        "kmock.pkg",
+        "unit core library roots=src entries=src/lib.kmock\n",
+    )
+    .file("src/lib.kmock", entry)
+    .file("src/util.kmock", util);
+    let snap = run(&p);
+    assert_eq!(
+        reported(&snap, &Category::UNUSED),
+        ["src/util.kmock — spare"]
+    );
+}
+
+#[test]
+fn an_export_of_an_unpublished_unit_may_narrow() {
+    use kndo_contract::extension::{PublishedSurface, Rung, Step};
+    let laddered_jar = || {
+        MockExtension::with(|spec| {
+            spec.published_surface(PublishedSurface::Exports).ladder(&[
+                Step::for_free(Rung::File, "local"),
+                Step::new(Rung::Exported, "pub"),
+            ])
+        })
+    };
+    let entry = "import ./util { other }\ncall other\n";
+    let util = "pub fn other\npub fn helper\ncall helper\n";
+    let advice = |snap: &kndo::Snapshot| -> Vec<String> {
+        snap.findings
+            .iter()
+            .filter(|f| f.category == Category::INTERNAL_ONLY)
+            .map(|f| format!("{} — {}", f.subject.label(), f.message))
+            .collect()
+    };
+    // An executable's export is its own: used only in its file, it may narrow.
+    let p = TempProject::new();
+    p.file(
+        "kmock.pkg",
+        "unit app executable roots=src entries=src/main.kmock\n",
+    )
+    .file("src/main.kmock", entry)
+    .file("src/util.kmock", util);
+    let snap = common::analyze(&p, vec![Box::new(laddered_jar())]);
+    assert_eq!(
+        advice(&snap),
+        [
+            "helper — declared `pub`, but every use is within its own file and nothing else in \
+             the tree imports or names it — `local` would suffice for this function"
+        ]
+    );
+    // A published library's export is the outside world's, however it is used.
+    let p = TempProject::new();
+    p.file(
+        "kmock.pkg",
+        "unit core library roots=src entries=src/main.kmock\n",
+    )
+    .file("src/main.kmock", entry)
+    .file("src/util.kmock", util);
+    let snap = common::analyze(&p, vec![Box::new(laddered_jar())]);
+    assert!(advice(&snap).is_empty(), "{:?}", advice(&snap));
+}

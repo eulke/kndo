@@ -295,10 +295,16 @@ pub mod jvm_manifest {
     /// says nothing here yet, and that absence is typed: no unit means the
     /// engine falls back to what each file's own declaration implies.
     ///
-    /// The unit names no source root, so it compiles its manifest's own
-    /// directory minus any deeper manifest's — which is right for a layout
-    /// like guava's, whose real `<sourceDirectory>` sits in an inherited
-    /// parent pom this shallow read does not follow.
+    /// A module is two units. Its main set names no source root unless the
+    /// pom spells one, so it compiles its manifest's own directory minus any
+    /// deeper unit's — which is right for a layout like guava's, whose real
+    /// `<sourceDirectory>` sits in an inherited parent pom this shallow read
+    /// does not follow. Its test set (`src/test/java` and `src/test/kotlin`
+    /// unless the pom spells `<testSourceDirectory>`) compiles against the
+    /// main set and is its friend: Kotlin's `internal` is visible to it, as
+    /// package-private is through the namespace span. A directory nobody
+    /// checked out is a transcription, and a unit no file belongs to is
+    /// harmless.
     pub fn structure(manifest: &SourceFile<'_>, out: &mut kndo_contract::manifest::ManifestSink) {
         let path = manifest.path.as_str();
         if !path.ends_with("pom.xml") {
@@ -361,13 +367,45 @@ pub mod jvm_manifest {
             .collect();
         depends_on.sort_unstable();
         depends_on.dedup();
+        let declared_dir = |tag: &str| -> Option<SmolStr> {
+            children(project, "build")
+                .into_iter()
+                .next()
+                .and_then(|b| children(b, tag).into_iter().next())
+                .map(str::trim)
+                .filter(|d| !d.is_empty())
+                .map(|d| SmolStr::new(join(d.trim_end_matches('/'))))
+        };
+        let test_roots: Vec<SmolStr> = match declared_dir("testSourceDirectory") {
+            Some(dir) => vec![dir],
+            None => vec![
+                SmolStr::new(join("src/test/java")),
+                SmolStr::new(join("src/test/kotlin")),
+            ],
+        };
+        let mut test_depends_on = depends_on.clone();
+        test_depends_on.push(SmolStr::new(name));
+        test_depends_on.sort_unstable();
+        test_depends_on.dedup();
         out.unit(kndo_contract::manifest::Unit {
             name: SmolStr::new(name),
             kind: kndo_contract::manifest::UnitKind::Library,
-            roots: Vec::new(),
+            roots: declared_dir("sourceDirectory").into_iter().collect(),
             excludes: Vec::new(),
             entries: Vec::new(),
             depends_on,
+            friend_of: Vec::new(),
+            publication: kndo_contract::manifest::Publication::Unstated,
+        });
+        out.unit(kndo_contract::manifest::Unit {
+            name: SmolStr::new(format!("{name}:test")),
+            kind: kndo_contract::manifest::UnitKind::Test,
+            roots: test_roots,
+            excludes: Vec::new(),
+            entries: Vec::new(),
+            depends_on: test_depends_on,
+            friend_of: vec![SmolStr::new(name)],
+            publication: kndo_contract::manifest::Publication::Unstated,
         });
     }
 

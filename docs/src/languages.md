@@ -12,8 +12,8 @@ consumer in the engine.
 | `kndo:js-ts` | `ts` `tsx` `js` `jsx` `mjs` `cjs` `mts` `cts` | `package.json`; `.github/workflows/*.yml`, `action.yml` | manifest entries (`main`, `module`, `browser`, `bin`, `exports`, `imports`), files handed to a runtime by npm scripts and by workflow or action steps (`node`, `tsx`, `ts-node`, `bun`, `deno`), test files, config files, shebangs |
 | `kndo:rust` | `rs` | `Cargo.toml` | crate roots (`main.rs`, `lib.rs`, bins, examples, tests, benches); by dispatch rule: `#[test]`, `#[bench]`, `#[cfg(test)]`, `#[no_mangle]` and the other linkage attributes, `#[tokio::main]`-style entries; `#[allow(dead_code)]` and kin exempt |
 | `kndo:go` | `go` | `go.mod` | `package main`, `_test.go`; a package is one unit |
-| `kndo:java` | `java` | `pom.xml`, `build.gradle`, `build.gradle.kts`, `settings.gradle`, `settings.gradle.kts` | `main` methods, test sources, framework annotations through extensions |
-| `kndo:kotlin` | `kt` | the same JVM manifests | `main` functions, test sources |
+| `kndo:java` | `java` | `pom.xml`, `build.gradle`, `build.gradle.kts`, `settings.gradle`, `settings.gradle.kts` | `main` methods, test sources, framework annotations through extensions; a `pom.xml` module is two units, its main set and its test set, the test set compiling against main and a friend of it |
+| `kndo:kotlin` | `kt` | the same JVM manifests | `main` functions, test sources; `internal` reaches the unit and its friends |
 | `kndo:python` | `py` | `pyproject.toml`, `requirements.txt`, `requirements-*.txt` | scripts, `__main__`, test files, entry points |
 | `kndo:swift` | `swift` | `Package.swift` | executable targets, `@main`, test targets |
 | `kndo:html` | `html` `htm` | — | a document is its own root; `<script src>`, `<link href>` and inline module imports are its references |
@@ -48,7 +48,10 @@ adapter says nothing:
   — the default, under which an exported declaration is never advised to
   narrow) or only what its entries export (npm, where `main`/`exports` decide,
   so an `export` in a file no entry reaches is advised `unexported` when
-  nothing else in the tree names it).
+  nothing else in the tree names it). Whether a unit publishes at all is the
+  manifest's: a library does unless it says otherwise, an executable or a test
+  set never. `used-by` shows an export kept by its unit's publication as
+  `published`.
 - **Cycle tolerance** for `cyclic`: a hazard in JavaScript, TypeScript and
   Python (initialization order bites at run time), tolerated in Rust, Go, Java,
   Kotlin and Swift (the compiler or the package model makes cycles benign).

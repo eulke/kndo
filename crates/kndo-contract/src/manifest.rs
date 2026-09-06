@@ -83,6 +83,39 @@ pub struct Unit {
     /// declaring a dependency has not read the manifest declaring the unit,
     /// so it cannot spell a path it never saw.
     pub depends_on: Vec<SmolStr>,
+    /// The units whose unit-reaching names this one may use, named the same
+    /// way: a Kotlin test source set over its main, a Swift test target that
+    /// `@testable import`s. Friendship is the build system's statement and
+    /// never inferred — a Rust integration test is not a friend of the
+    /// library it tests, so Cargo never says it.
+    pub friend_of: Vec<SmolStr>,
+    /// Whether this unit's exported API is consumed outside the project — see
+    /// [`Publication`]; [`Unit::is_published`] is the one reading of it.
+    pub publication: Publication,
+}
+
+/// What a manifest says about a unit's consumers outside the project.
+/// Declared where the build system has a word for it (`publish = false`,
+/// `private: true`); `Unstated` where it is silent, under which a library is
+/// published and everything else is not.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub enum Publication {
+    Published,
+    Unpublished,
+    #[default]
+    Unstated,
+}
+
+impl Unit {
+    /// Does the outside world consume this unit's exported API? Only a
+    /// library hands one out: an executable's or a test's exports are its
+    /// own, whatever a registry says about the artifact. A library is
+    /// published unless the manifest says otherwise.
+    pub fn is_published(&self) -> bool {
+        self.kind == UnitKind::Library && self.publication != Publication::Unpublished
+    }
 }
 
 /// The finished evidence for one manifest. Built through [`ManifestSink`].
@@ -196,6 +229,8 @@ mod tests {
             excludes: Vec::new(),
             entries: Vec::new(),
             depends_on: Vec::new(),
+            friend_of: Vec::new(),
+            publication: Publication::Unstated,
         });
         sink.unit(Unit {
             name: "core".into(),
@@ -204,10 +239,35 @@ mod tests {
             excludes: Vec::new(),
             entries: vec![ProjectPath::new("src/lib.rs")],
             depends_on: Vec::new(),
+            friend_of: Vec::new(),
+            publication: Publication::Unstated,
         });
         let ev = sink.finish();
         assert_eq!(ev.units.len(), 1);
         assert_eq!(ev.units[0].name, "core");
         assert_eq!(ev.diagnostics.len(), 1);
+    }
+
+    #[test]
+    fn only_a_library_is_published_and_only_unless_the_manifest_says_otherwise() {
+        let unit = |kind: UnitKind, publication: Publication| Unit {
+            name: "u".into(),
+            kind,
+            roots: Vec::new(),
+            excludes: Vec::new(),
+            entries: Vec::new(),
+            depends_on: Vec::new(),
+            friend_of: Vec::new(),
+            publication,
+        };
+        assert!(unit(UnitKind::Library, Publication::Unstated).is_published());
+        assert!(unit(UnitKind::Library, Publication::Published).is_published());
+        assert!(!unit(UnitKind::Library, Publication::Unpublished).is_published());
+        assert!(!unit(UnitKind::Executable, Publication::Unstated).is_published());
+        assert!(
+            !unit(UnitKind::Executable, Publication::Published).is_published(),
+            "a published binary hands out no API"
+        );
+        assert!(!unit(UnitKind::Test, Publication::Unstated).is_published());
     }
 }

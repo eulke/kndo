@@ -3597,3 +3597,70 @@ findings moved — and the js-ts fixture `export-narrowing` is renamed
 Two known gaps in the swift ladder fixture (`Widget.d`, `Widget.e`) re-point
 at M8.d: a SwiftPM target publishes every export, so the Exported rung waits
 for the unit's own publication.
+
+## 2026-09-06 — M8.b.9: a unit's friends and its publication — the published surface is the engine's, and the instrument says the adapters' library-mode root can go
+
+**The two facts.** `Unit` states `friend_of` — the units whose unit-reaching
+names this one may use, named as the manifest spells them and resolved the way
+a dependency is, own manifest first — and `publication`: declared where the
+build system has a word for it, `Unstated` where it is silent, under which a
+library is published and nothing else is (a published binary hands out no API;
+`Unit::is_published` is the one reading). `ProjectUnit` carries both resolved;
+the scope forest gains its unit layer, and a `Reach::Unit` declaration pools
+over its unit's files plus its friends' wherever a manifest named the unit —
+the adapter's own enumeration stands in until one does.
+
+**The published surface is the engine's.** Five adapters spelled one
+convention as a whole-file production root on every non-test file — "library
+mode: any non-test class on the source path is importable surface" — a
+statement about the UNIT made in the wrong place and made everywhere,
+test-shaped names on the main path included. `GraphFile::published` now says
+it once: the file holds an exported top-level declaration of a published
+library unit, in a language whose units publish every export
+(`PublishedSurface::Exports`; under `Entries` the entries already anchor). It
+reaches the file as production, keeps each exported declaration through
+`Keeper::Published { unit }` — `published` in `used-by` — and exempts the file
+from `internal-only`'s Exported rung, which now also fires inside a unit that
+publishes nothing: an executable's `pub` used only in its own file is advised,
+a published library's never. Recomputed with the evidence, because it depends
+on the manifest and the content both.
+
+**The first producer.** The Maven reader emits two units per module: the main
+set (its `<sourceDirectory>` when spelled, else the manifest's directory) and
+`<artifactId>:test` (its `<testSourceDirectory>`, else `src/test/java` and
+`src/test/kotlin`), which compiles against main and is its friend — Kotlin's
+`internal` is visible to it, as package-private already is through the
+namespace span. kmock's manifest says `friends=` and `publish=`; the kmock
+ecosystem publishes through its entries, like npm, and `MockExtension::with`
+speaks the jar-like variant. Conformance: `crates/kndo/tests/units.rs` pins a
+friend's use against a stranger's, a published library's export against a
+private one's and an executable's, and the Exported rung inside an
+unpublished unit; `crates/kndo-toolkit/tests/jvm_structure.rs` pins the two
+units and the spelled directories.
+
+**Measurement, two ways.** The corpus: every report byte-identical — guava's
+modules keep their tests in separate artifacts and declare their directories
+in a parent pom this reader does not follow (M8.d), and the adapters'
+library-mode roots still stand, so the new keeper only ever agrees with them.
+The instrument: a copy of the tree with `kndo:java`'s library-mode root
+deleted, run over guava on the engine's publication alone. 9,721 → 9,716: 9
+added, 14 removed, nothing changed in place. The 14 removed belong to seven
+GWT super-source `Platform`/`TestPlatform` files, each a package-private class
+nobody imports and javac never compiles, that the convention had rooted as
+production — each loses its `unused` symbol finding and its `untested` file
+finding, and the seven `unused` FILE findings among the 9 added are those same
+files, judged as the dead files they are. The other two added are
+`BenchmarkHelpers.ListSizeDistribution.chooseSize`, in `guava-tests` and its
+Android mirror: a public method of a public enum nested in a package-private
+class, which nobody outside the package can name and nothing inside calls —
+the convention kept it as "importable surface", and it is not. All 16
+hand-verified in the sources. That is the licence M8.c needed: the java
+adapter's library-mode root is a deletion with a number behind it, and the
+other four (kotlin, swift, go, python) follow as their units land.
+
+**Knobs.** `GRAPH_SEMANTICS_VERSION` 14 → 15: the graph carries `published`,
+and its units carry `friend_of` and `published`. The contract fingerprint and
+the report schema are unchanged — manifest evidence is not fingerprinted and no
+report shape moved — and every conformance fixture is byte-identical: the two
+java fixtures with a `src/test/java` tree gain a test unit whose files keep
+the color and the pool they had.

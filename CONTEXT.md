@@ -94,11 +94,16 @@ _Avoid_: package (that word names the identity a bare specifier resolves to), mo
 **Friend**:
 A unit allowed to use another unit's unit-reaching names: a Kotlin test source set
 over its main, a Swift test target with `@testable import`. A Rust integration test
-crate is not a friend of the library it tests.
+crate is not a friend of the library it tests. The manifest states it, by name, and the
+engine resolves the name the way it resolves a dependency; a unit's pool is its files plus
+its friends'.
 
 **Published**:
 Whether a library unit's exported API is consumed outside the project. Declared
-(`publish = false`, `private: true`) or inferred when the manifest is silent.
+(`publish = false`, `private: true`) or inferred when the manifest is silent: a library is,
+nothing else is. Where the ecosystem publishes every export, an exported declaration of a
+published unit is kept by the outside world (the `published` keeper) and never advised to
+narrow; an unpublished unit's exports are its own.
 
 **Published surface**:
 Which exported declarations a unit hands to the outside: every export (a jar, a crate, a

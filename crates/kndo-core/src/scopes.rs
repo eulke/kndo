@@ -36,6 +36,11 @@ pub struct Scopes {
     /// compilation. Per file, because the DECLARATION's language decides who
     /// may name it, and one namespace can hold two languages' files.
     spans: Vec<bool>,
+    /// unit → the files a unit-reaching declaration in it pools over: the
+    /// unit's own files plus every friend's, ascending. The unit layer of the
+    /// forest, read where a manifest named the unit; until one does, the
+    /// adapter's own enumeration stands in.
+    unit_pool: Vec<Vec<u32>>,
 }
 
 impl Scopes {
@@ -87,7 +92,14 @@ impl Scopes {
             files,
             spanned,
             spans,
+            unit_pool: unit_pools(graph),
         }
+    }
+
+    /// The files a `Reach::Unit` declaration in `unit` pools over: the unit's
+    /// own and its friends'. Never empty for a unit some file belongs to.
+    pub fn unit_pool(&self, unit: u32) -> &[u32] {
+        &self.unit_pool[unit as usize]
     }
 
     /// The files a `Reach::Namespace { up }` declaration in `file` pools over.
@@ -108,6 +120,29 @@ impl Scopes {
             &self.files[node]
         })
     }
+}
+
+/// Each unit's files plus the files of every unit that is its friend — what
+/// a unit-reaching name may be used from, per the manifests' own statements.
+fn unit_pools(graph: &Graph) -> Vec<Vec<u32>> {
+    let units = graph.project.units.len();
+    let mut own: Vec<Vec<u32>> = vec![Vec::new(); units];
+    for (i, f) in graph.files.iter().enumerate() {
+        if let Some(u) = f.unit {
+            own[u as usize].push(i as u32);
+        }
+    }
+    let mut pools = own.clone();
+    for (viewer, unit) in graph.project.units.iter().enumerate() {
+        for &target in &unit.friend_of {
+            pools[target as usize].extend_from_slice(&own[viewer]);
+        }
+    }
+    for pool in &mut pools {
+        pool.sort_unstable();
+        pool.dedup();
+    }
+    pools
 }
 
 /// Which compilation a namespace node belongs to. Three cases and no fallback
@@ -214,6 +249,8 @@ mod tests {
                         excludes: Vec::new(),
                         entries: Vec::new(),
                         depends_on: needs.iter().map(|n| SmolStr::new(*n)).collect(),
+                        friend_of: Vec::new(),
+                        publication: Default::default(),
                     }],
                     ..ManifestEvidence::default()
                 },
@@ -252,6 +289,7 @@ mod tests {
                 evidence: sink.finish(),
                 sees: Vec::new(),
                 regions: Vec::new(),
+                published: false,
                 anchored: Vec::new(),
                 dispatched: Vec::new(),
                 exempt: Vec::new(),

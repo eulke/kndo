@@ -85,9 +85,10 @@ impl RunContext<'_> {
 }
 
 /// Does this file itself carry a root of `kind` — its own evidence, dispatch
-/// or an anchor?
+/// or an anchor — or, for production, the published surface it is on?
 pub fn has_root_of(graph: &Graph, file: usize, kind: RootKind) -> bool {
-    graph.files[file].roots().any(|r| r.kind == kind)
+    let f = &graph.files[file];
+    f.roots().any(|r| r.kind == kind) || (kind == RootKind::Production && f.published)
 }
 
 /// Is this file a test as a whole — a whole-file Test root, whoever said it?

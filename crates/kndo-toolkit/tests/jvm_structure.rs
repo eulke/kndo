@@ -88,7 +88,7 @@ fn an_aggregator_lists_its_members_and_compiles_nothing() {
 #[test]
 fn a_module_names_itself_its_dependencies_and_nothing_it_merely_contains() {
     let evidence = read("guava-tests/pom.xml", MODULE);
-    assert_eq!(evidence.units.len(), 1);
+    assert_eq!(evidence.units.len(), 2, "the main set and its test set");
     let unit = &evidence.units[0];
     assert_eq!(unit.name, "guava-tests", "not its parent's artifact id");
     assert_eq!(unit.kind, UnitKind::Library);
@@ -114,4 +114,48 @@ fn members_are_transcribed_under_the_manifests_own_directory() {
         "a nested reactor's member is nested too, which is what keeps the \
          two `guava` units apart"
     );
+}
+
+#[test]
+fn a_module_is_two_units_and_its_test_set_is_a_friend_that_compiles_against_main() {
+    let ev = read(
+        "core/pom.xml",
+        r#"<project>
+  <artifactId>core</artifactId>
+  <dependencies>
+    <dependency><groupId>g</groupId><artifactId>util</artifactId></dependency>
+  </dependencies>
+</project>"#,
+    );
+    assert_eq!(ev.units.len(), 2);
+    let main = &ev.units[0];
+    let test = &ev.units[1];
+    assert_eq!((main.name.as_str(), main.kind), ("core", UnitKind::Library));
+    assert!(
+        main.roots.is_empty(),
+        "no source root spelled: the manifest's own directory"
+    );
+    assert!(main.is_published());
+    assert_eq!(
+        (test.name.as_str(), test.kind),
+        ("core:test", UnitKind::Test)
+    );
+    assert_eq!(test.roots, ["core/src/test/java", "core/src/test/kotlin"]);
+    assert_eq!(test.depends_on, ["core", "util"]);
+    assert_eq!(test.friend_of, ["core"]);
+    assert!(!test.is_published());
+
+    // A pom that spells its directories is read at its word.
+    let ev = read(
+        "guava-tests/pom.xml",
+        r#"<project>
+  <artifactId>guava-tests</artifactId>
+  <build>
+    <sourceDirectory>src</sourceDirectory>
+    <testSourceDirectory>test</testSourceDirectory>
+  </build>
+</project>"#,
+    );
+    assert_eq!(ev.units[0].roots, ["guava-tests/src"]);
+    assert_eq!(ev.units[1].roots, ["guava-tests/test"]);
 }

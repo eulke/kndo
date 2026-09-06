@@ -11,7 +11,7 @@ use crate::discover::DiscoveredFile;
 use crate::extract::ClaimedFile;
 use kndo_contract::adapter::{PackageEntry, Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{FileEvidence, ImportTarget, Reach, Root, RootKind, RootTarget};
-use kndo_contract::extension::Extension;
+use kndo_contract::extension::{Extension, PublishedSurface};
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
@@ -20,7 +20,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Bump when the SAME evidence assembles into a DIFFERENT graph — resolution
 /// candidate changes, reachability semantics, new assembled fields. Folded into the
 /// graph cache key beside the contract fingerprint and the adapter set.
-pub const GRAPH_SEMANTICS_VERSION: u32 = 14;
+pub const GRAPH_SEMANTICS_VERSION: u32 = 15;
 
 #[derive(Serialize, Deserialize)]
 pub struct GraphFile {
@@ -44,6 +44,12 @@ pub struct GraphFile {
     /// as Exported (keep-alive). Same stability class as `sees` — a pure
     /// function of path, reach and file set.
     pub regions: Vec<(Reach, Vec<u32>)>,
+    /// This file holds an exported declaration of a published library unit, in
+    /// a language whose units publish every export: its surface is the outside
+    /// world's, which reaches the file as production and keeps each exported
+    /// declaration ([`crate::navigate::Keeper::Published`]). A function of the
+    /// manifest AND the content, so it is recomputed with the evidence.
+    pub published: bool,
     /// Roots anchored from OUTSIDE this file's content — a manifest naming it as an
     /// entry point (whole-file), a plugin naming it or one of its declarations. Kept
     /// apart from `evidence.roots` because evidence is cached by this file's content
@@ -88,9 +94,10 @@ impl GraphFile {
             .chain(&self.anchored)
     }
 
-    /// The one spelling of "something anchors this file".
+    /// The one spelling of "something anchors this file": a root, or the
+    /// published surface it is on.
     pub fn is_rooted(&self) -> bool {
-        self.roots().next().is_some()
+        self.roots().next().is_some() || self.published
     }
 }
 
@@ -437,6 +444,8 @@ pub fn assemble(
             let f = &files[c.file_index];
             let spec = adapters[c.adapter_index].spec();
             let dispatched = crate::dispatch::apply(&ev, spec.dispatch_rules());
+            let unit = project.unit_of(&f.path);
+            let published = publishes(spec.published_surface(), &project, unit, &ev);
             GraphFile {
                 path: f.path.clone(),
                 adapter: SmolStr::new(spec.coordinate()),
@@ -444,11 +453,12 @@ pub fn assemble(
                 evidence: ev,
                 sees: Vec::new(),
                 regions: Vec::new(),
+                published,
                 anchored: Vec::new(),
                 dispatched: dispatched.roots,
                 exempt: dispatched.exempt,
                 dispatch_notes: dispatched.notes,
-                unit: project.unit_of(&f.path),
+                unit,
                 imports: Vec::new(),
                 import_targets: Vec::new(),
                 unresolved_imports: 0,
@@ -671,6 +681,26 @@ fn regions_of(
     out
 }
 
+/// Is this file on its unit's published surface? Only where the language's
+/// units publish every export ([`PublishedSurface::Exports`] — under
+/// `Entries` the entries already anchor the surface), the unit is a
+/// published library, and the file declares something exported at the top
+/// level. The engine's own statement of what nine adapters spelled as a
+/// whole-file production root on every non-test file.
+fn publishes(
+    surface: PublishedSurface,
+    project: &crate::project::Project,
+    unit: Option<u32>,
+    evidence: &FileEvidence,
+) -> bool {
+    surface == PublishedSurface::Exports
+        && unit.is_some_and(|u| project.units[u as usize].published)
+        && evidence
+            .declarations
+            .iter()
+            .any(|d| d.owner.is_none() && matches!(d.reach, Reach::Exported))
+}
+
 /// One file's assembled edges, mirroring the `GraphFile` fields they land in.
 struct ResolvedEdges {
     imports: Vec<u32>,
@@ -803,8 +833,15 @@ pub fn patch(
         let evidence = crate::extract::extract_one(file, adapter, cache);
         let edges = resolve_file(&file.path, &evidence, adapter, &cx, &sorted_paths);
         let dispatched = crate::dispatch::apply(&evidence, adapter.spec().dispatch_rules());
+        let published = publishes(
+            adapter.spec().published_surface(),
+            &prev.project,
+            prev.files[ix].unit,
+            &evidence,
+        );
         let gf = &mut prev.files[ix];
         gf.regions = regions_of(&file.path, &evidence, adapter, &cx, &sorted_paths);
+        gf.published = published;
         gf.evidence = evidence;
         gf.dispatched = dispatched.roots;
         gf.exempt = dispatched.exempt;

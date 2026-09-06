@@ -33,16 +33,20 @@
 //! A `kmock.pkg` manifest states the project's structure, one unit per line:
 //!
 //! ```text
-//! unit name kind roots=a,b excludes=c entries=x.kmock,y.kmock needs=other
+//! unit name kind roots=a,b excludes=c entries=x.kmock,y.kmock needs=other friends=other publish=no
 //! member sub/kmock.pkg              a manifest this one aggregates
 //! run path.kmock                    a file this manifest runs (tooling)
 //! ```
 //!
 //! `kind` is one of library, executable, test, bench, example, tooling — the
 //! color a unit's entries anchor follows from it. `needs=` names units this
-//! one compiles against; the engine resolves each name among the manifests
-//! this one's aggregator lists, which is how two units of one name stay
-//! apart.
+//! one compiles against and `friends=` the units whose unit-reaching names it
+//! may use; the engine resolves each name among the manifests this one's
+//! aggregator lists, which is how two units of one name stay apart.
+//! `publish=yes|no` states the unit's publication; unstated, a library is
+//! published and nothing else is. The kmock ecosystem publishes through its
+//! entries, like npm; [`MockExtension::with`] speaks the variant that
+//! publishes every export, like a jar.
 
 pub mod expectations;
 
@@ -54,9 +58,9 @@ use kndo_contract::evidence::{
 };
 use kndo_contract::extension::{
     ConductSink, ContentAccess, DispatchRule, Extension, ExtensionSpec, ExtensionSpecBuilder,
-    GraphAccess, Step,
+    GraphAccess, PublishedSurface, Step,
 };
-use kndo_contract::manifest::{ManifestSink, Unit, UnitKind};
+use kndo_contract::manifest::{ManifestSink, Publication, Unit, UnitKind};
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -91,6 +95,8 @@ fn kmock_spec() -> ExtensionSpecBuilder {
             EvidenceStream::Qualifiers,
         ]))
         .manifests(&["**/kmock.pkg"])
+        // Entries publish, like npm: an export no entry reaches is internal.
+        .published_surface(PublishedSurface::Entries)
 }
 
 impl MockExtension {
@@ -131,6 +137,13 @@ impl MockExtension {
     /// is the whole project: every kmock file is one compilation.
     pub fn laddered(steps: &[Step]) -> Self {
         MockExtension::speaking(kmock_spec().ladder(steps).build())
+    }
+
+    /// The kmock language declaring more than the plain mock does — whatever
+    /// `declare` adds to its spec: a published surface of every export, a
+    /// ladder, both.
+    pub fn with(declare: impl FnOnce(ExtensionSpecBuilder) -> ExtensionSpecBuilder) -> Self {
+        MockExtension::speaking(declare(kmock_spec()).build())
     }
 
     fn speaking(spec: ExtensionSpec) -> Self {
@@ -423,6 +436,11 @@ impl Extension for MockExtension {
                     .map(|v| v.split(',').filter(|x| !x.is_empty()).collect())
                     .unwrap_or_default()
             };
+            let publication = match words.clone().find_map(|w| w.strip_prefix("publish=")) {
+                Some("yes") => Publication::Published,
+                Some("no") => Publication::Unpublished,
+                _ => Publication::Unstated,
+            };
             out.unit(Unit {
                 name: name.into(),
                 kind,
@@ -430,6 +448,8 @@ impl Extension for MockExtension {
                 excludes: list("excludes=").into_iter().map(Into::into).collect(),
                 entries: list("entries=").into_iter().map(ProjectPath::new).collect(),
                 depends_on: list("needs=").into_iter().map(Into::into).collect(),
+                friend_of: list("friends=").into_iter().map(Into::into).collect(),
+                publication,
             });
         }
     }

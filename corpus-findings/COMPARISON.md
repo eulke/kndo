@@ -1249,3 +1249,21 @@ keyword to type. Nine repositories, before → after:
 Zero findings added anywhere; every finding of every other category is
 byte-identical. Both retired classes were advice naming a keyword that does not
 exist — the defect a step's bearer and the owner extent make unrepresentable.
+
+### Friends and publication: the surface the engine now states (2026-09-06)
+
+The corpus is byte-identical: the adapters' library-mode roots still stand, and
+Maven's inherited source directories wait for M8.d. The instrument — guava with
+`kndo:java`'s library-mode root deleted, on the engine's publication alone:
+
+| guava | findings |
+|---|---|
+| the adapters' convention | 9,721 |
+| the engine's publication | 9,716 |
+| added | 9: seven GWT super-source files dead as files, `ListSizeDistribution.chooseSize` twice |
+| removed | 14: the same seven files' symbol and `untested` findings |
+| changed in place | 0 |
+
+All 16 verified in the sources, every one an improvement. The published
+surface is the engine's statement now, and the adapters' copies can be deleted
+with a number behind each.

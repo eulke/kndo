@@ -54,6 +54,14 @@ pub struct ProjectUnit {
     /// membership test is a binary search and the order is a function of the
     /// unit list alone.
     pub compiles_against: Vec<u32>,
+    /// The units whose unit-reaching names this one may use — the resolution
+    /// of [`kndo_contract::manifest::Unit::friend_of`], direct and ascending:
+    /// friendship is the build system's statement about one pair of units and
+    /// never carries over a third.
+    pub friend_of: Vec<u32>,
+    /// Whether the outside world consumes this unit's exported API —
+    /// [`kndo_contract::manifest::Unit::is_published`], read once.
+    pub published: bool,
 }
 
 impl ProjectUnit {
@@ -187,7 +195,7 @@ pub fn read_manifests(
 /// named dependency resolved to the unit it means.
 pub fn assemble(reads: &[ManifestRead]) -> Project {
     let mut units: Vec<ProjectUnit> = Vec::new();
-    let mut named: Vec<Vec<SmolStr>> = Vec::new();
+    let mut named: Vec<(Vec<SmolStr>, Vec<SmolStr>)> = Vec::new();
     for read in reads {
         let dir = read
             .manifest
@@ -218,8 +226,10 @@ pub fn assemble(reads: &[ManifestRead]) -> Project {
                 excludes,
                 entries,
                 compiles_against: Vec::new(),
+                friend_of: Vec::new(),
+                published: unit.is_published(),
             });
-            named.push(unit.depends_on.clone());
+            named.push((unit.depends_on.clone(), unit.friend_of.clone()));
         }
     }
     let mut order: Vec<usize> = (0..units.len()).collect();
@@ -234,32 +244,39 @@ pub fn assemble(reads: &[ManifestRead]) -> Project {
         }
         r
     };
-    let direct: Vec<Vec<u32>> = {
+    // Both relations a manifest states by NAME resolve the same way: the
+    // unit's own manifest first, then the nearest aggregator above it.
+    let (direct, friends): (Vec<Vec<u32>>, Vec<Vec<u32>>) = {
         let aggregators = Aggregators::of(reads);
         let by_manifest_and_name: BTreeMap<(&ProjectPath, &SmolStr), u32> = units
             .iter()
             .enumerate()
             .map(|(i, u)| ((&u.manifest, &u.name), rank[i]))
             .collect();
-        (0..units.len())
-            .map(|i| {
-                let mut out: Vec<u32> = named[i]
-                    .iter()
-                    .filter_map(|n| {
-                        aggregators.resolve(&units[i].manifest, n, &by_manifest_and_name)
-                    })
-                    .filter(|&d| d != rank[i])
-                    .collect();
-                out.sort_unstable();
-                out.dedup();
-                out
-            })
-            .collect()
+        let resolve_all = |i: usize, names: &[SmolStr]| -> Vec<u32> {
+            let mut out: Vec<u32> = names
+                .iter()
+                .filter_map(|n| aggregators.resolve(&units[i].manifest, n, &by_manifest_and_name))
+                .filter(|&d| d != rank[i])
+                .collect();
+            out.sort_unstable();
+            out.dedup();
+            out
+        };
+        (
+            (0..units.len())
+                .map(|i| resolve_all(i, &named[i].0))
+                .collect(),
+            (0..units.len())
+                .map(|i| resolve_all(i, &named[i].1))
+                .collect(),
+        )
     };
     let mut sorted: Vec<ProjectUnit> = order.iter().map(|&i| units[i].clone()).collect();
     let by_rank: Vec<Vec<u32>> = order.iter().map(|&i| direct[i].clone()).collect();
     for (i, unit) in sorted.iter_mut().enumerate() {
         unit.compiles_against = closure(i as u32, &by_rank);
+        unit.friend_of = friends[order[i]].clone();
     }
     Project { units: sorted }
 }
@@ -488,7 +505,60 @@ mod tests {
             excludes: excludes.iter().map(|e| SmolStr::new(*e)).collect(),
             entries: Vec::new(),
             depends_on: Vec::new(),
+            friend_of: Vec::new(),
+            publication: Default::default(),
         }
+    }
+
+    #[test]
+    fn a_friend_is_named_the_way_a_dependency_is_and_never_carries_over() {
+        let project = assemble(&[
+            aggregator("pom.xml", &["core/pom.xml", "other/pom.xml"]),
+            read(
+                "core/pom.xml",
+                vec![
+                    unit("core", UnitKind::Library, &["core/src/main/java"], &[]),
+                    Unit {
+                        friend_of: vec![SmolStr::new("core")],
+                        ..needing(
+                            unit("core:test", UnitKind::Test, &["core/src/test/java"], &[]),
+                            &["core"],
+                        )
+                    },
+                ],
+            ),
+            read(
+                "other/pom.xml",
+                vec![Unit {
+                    friend_of: vec![SmolStr::new("core:test")],
+                    ..needing(unit("other", UnitKind::Library, &["other"], &[]), &["core"])
+                }],
+            ),
+        ]);
+        let by_name = |n: &str| -> &ProjectUnit {
+            project
+                .units
+                .iter()
+                .find(|u| u.name.as_str() == n)
+                .expect("declared")
+        };
+        let core = project.units.iter().position(|u| u.name == "core").unwrap() as u32;
+        let core_test = project
+            .units
+            .iter()
+            .position(|u| u.name == "core:test")
+            .unwrap() as u32;
+        assert_eq!(by_name("core:test").friend_of, vec![core]);
+        assert_eq!(
+            by_name("other").friend_of,
+            vec![core_test],
+            "resolved through the aggregator like a dependency"
+        );
+        assert!(
+            by_name("core").friend_of.is_empty(),
+            "friendship is directional"
+        );
+        assert!(by_name("core").published && !by_name("core:test").published);
     }
 
     #[test]

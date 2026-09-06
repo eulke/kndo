@@ -17,11 +17,13 @@
 //! reference in ANY other claimed file, reachable or not, because an
 //! unreachable file still compiles against the export it spells (vite's
 //! `__tests_dts__` type-tests proved that vice). And it is judged only where
-//! the ecosystem publishes through entries
-//! ([`kndo_contract::extension::PublishedSurface::Entries`]): where every
-//! export is published, an exported declaration is the outside world's however
-//! it is used inside. A whole-file-rooted file is exempt on that rung: an
-//! entry's exports are that surface, and a test's are its runner's.
+//! the export is nobody's outside: an ecosystem that publishes through entries
+//! ([`kndo_contract::extension::PublishedSurface::Entries`]), or a unit that
+//! publishes nothing — an executable, a test set, a library its manifest keeps
+//! private. Where every export is published, an exported declaration is the
+//! outside world's however it is used inside. A whole-file-rooted file is
+//! exempt on that rung: an entry's exports are that surface, and a test's are
+//! its runner's.
 //!
 //! `Probable`/`Info`, derived from this analysis's own evidence: the residuals
 //! below `Certain` are reflection and dynamic access (out of static scope
@@ -151,15 +153,22 @@ impl Analysis for InternalOnly {
             if ladder.is_empty() {
                 continue;
             }
-            let entries_publish = caps.published_surface == PublishedSurface::Entries;
+            // An export is nobody's outside where the ecosystem publishes
+            // through entries, or where the unit compiling the file publishes
+            // nothing at all.
+            let export_is_internal = caps.published_surface == PublishedSurface::Entries
+                || f.unit
+                    .is_some_and(|u| !g.project.units[u as usize].published);
             // The whole file was namespace-imported: anything here may be used.
             // The Exported rung honors even an unreachable such importer.
             let bounded_open = !bound_names.contains(&(i as u32, ""));
             let exported_open = !bound_all.contains(&(i as u32, ""));
-            // An entry, test, or tooling file: its exports ARE an outside
-            // surface (a manifest's consumers, a runner), so the Exported rung
-            // stays silent for the whole file.
-            let whole_file_rooted = f.roots().any(|r| matches!(r.target, RootTarget::WholeFile));
+            // An entry, test, or tooling file, or a file on its unit's
+            // published surface: its exports ARE an outside surface (a
+            // manifest's consumers, a runner), so the Exported rung stays
+            // silent for the whole file.
+            let whole_file_rooted =
+                f.published || f.roots().any(|r| matches!(r.target, RootTarget::WholeFile));
             let rooted: BTreeSet<usize> = f
                 .roots()
                 .filter_map(|r| match &r.target {
@@ -190,7 +199,7 @@ impl Analysis for InternalOnly {
                     Reach::Exported => {
                         // Owned members wait for their own demand; the floor is
                         // the file's own top-level surface.
-                        if !entries_publish
+                        if !export_is_internal
                             || !exported_open
                             || whole_file_rooted
                             || d.owner.is_some()
