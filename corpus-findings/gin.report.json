@@ -2440,6 +2440,17 @@
         "end": 79
       },
       "message": "declared `exported`, but every use is within its own file — `unexported` would suffice for this function"
+    },
+    {
+      "id": "kndo-a751326ad542",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "testdata/protoexample/test.pb.go"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
     }
   ],
   "fixed": [],

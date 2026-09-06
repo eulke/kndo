@@ -285,14 +285,6 @@ pub enum Reach {
     /// ([`FileEvidence::effective_reach`]); with no owner to inherit from it
     /// reads as Exported, the keep-alive reading of an adapter's slip.
     Inherited,
-    /// Nameable beyond its file, only within a region the declaring adapter can
-    /// enumerate from paths and manifests — never from contents, and under the
-    /// adapter's own word, which no ladder can place. The path-derived
-    /// predecessor of `Namespace` and `Unit`, retired as each adapter declares
-    /// which of the two it meant.
-    Scoped {
-        scope: SmolStr,
-    },
     Exported,
 }
 
@@ -311,7 +303,7 @@ impl Reach {
             Reach::Unit { up: 0 } => Rung::Unit,
             Reach::Unit { .. } => Rung::Group,
             Reach::Exported => Rung::Exported,
-            Reach::Inherited | Reach::Scoped { .. } => return None,
+            Reach::Inherited => return None,
         })
     }
 
@@ -319,9 +311,9 @@ impl Reach {
     /// the owner above a member and for the mount above a file, which are the
     /// same question asked twice. `Inherited` is the cap exactly; a reach
     /// keeps itself where its rung is no wider and takes the cap's otherwise;
-    /// on one rung the address that climbs fewer levels wins. A token (an
-    /// adapter's own region) is compared as a namespace, the widest thing a
-    /// token has named.
+    /// on one rung the address that climbs fewer levels wins. An `Inherited`
+    /// CAP — a member under an owner the engine has not resolved — is compared
+    /// as a namespace, so the slip narrows rather than publishes.
     pub fn capped_by(&self, owner: &Reach) -> Reach {
         use crate::extension::Rung;
         if matches!(self, Reach::Inherited) {

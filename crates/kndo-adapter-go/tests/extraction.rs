@@ -1,6 +1,7 @@
-//! Extraction against inline sources: capitalization reach, entry and test roots,
-//! the never-declared method class, every import spelling, library-mode and
-//! generated-file rules, reference exclusions, and comment spans.
+//! Extraction against inline sources: the namespace the package clause names,
+//! capitalization reach, entry and test roots, the never-declared method class,
+//! every import spelling, the internal fence and generated-file rules,
+//! reference exclusions, and comment spans.
 
 use kndo_adapter_go::GoAdapter;
 use kndo_contract::evidence::{
@@ -37,20 +38,10 @@ var counter = 0
 "#,
     );
     assert_eq!(decl(&ev, "Public").reach, Reach::Exported);
-    assert_eq!(
-        decl(&ev, "private").reach,
-        Reach::Scoped {
-            scope: "package".into()
-        }
-    );
+    assert_eq!(decl(&ev, "private").reach, Reach::Namespace { up: 0 });
     assert_eq!(decl(&ev, "Config").kind, SymbolKind::Type);
     assert_eq!(decl(&ev, "Config").reach, Reach::Exported);
-    assert_eq!(
-        decl(&ev, "secret").reach,
-        Reach::Scoped {
-            scope: "package".into()
-        }
-    );
+    assert_eq!(decl(&ev, "secret").reach, Reach::Namespace { up: 0 });
     assert_eq!(decl(&ev, "MaxRetries").kind, SymbolKind::Constant);
     assert_eq!(decl(&ev, "counter").kind, SymbolKind::Variable);
 }
@@ -77,13 +68,28 @@ fn entry_and_test_roots() {
 
     let test = extract(
         "pkg/a_test.go",
-        "package pkg\n\nfunc TestA(t *testing.T) {}\n",
+        "package pkg\n\nfunc TestA(t *testing.T) {}\nfunc init() {}\n",
     );
     assert!(
         test.roots
             .iter()
             .any(|r| r.kind == RootKind::Test && matches!(r.target, RootTarget::WholeFile))
     );
+    // An `init` runs when the binary it is compiled into loads, and a
+    // `_test.go` file is compiled into the test binary alone: rooting it
+    // Production would flood the package's production color from its tests.
+    let init_ix = test
+        .declarations
+        .iter()
+        .position(|d| d.name == "init")
+        .unwrap();
+    let init_roots: Vec<RootKind> = test
+        .roots
+        .iter()
+        .filter(|r| matches!(r.target, RootTarget::Declaration(id) if id.index() == init_ix))
+        .map(|r| r.kind)
+        .collect();
+    assert_eq!(init_roots, [RootKind::Test]);
 }
 
 #[test]
@@ -115,7 +121,7 @@ import (
 "#,
     );
     // Evidence is faithful to the source: exactly the written imports, nothing
-    // synthetic — the package-as-unit fact lives in `sees`.
+    // synthetic — which files co-compile lives in `sees`.
     assert_eq!(ev.imports.len(), 4);
     assert!(matches!(
         &import(&ev, "fmt").shape,
@@ -209,18 +215,33 @@ func beta(values []int) int {
 }
 
 #[test]
-fn library_mode_internal_fence_and_generated_files() {
-    // A non-internal library package is importable by other modules: published
-    // surface, whole-file Production root.
-    let lib = extract("pkg/a.go", "package pkg\n\nfunc Public() {}\n");
-    assert!(
-        lib.roots
-            .iter()
-            .any(|r| r.kind == RootKind::Production && matches!(r.target, RootTarget::WholeFile))
-    );
-    // `internal/` is the language's own fence — no root.
+fn the_package_clause_and_the_directory_name_the_namespace() {
+    // The directory addresses the package, the clause names it: the pair is
+    // unique by construction, and the repetition of a conventional name is the
+    // price of never merging `a/b` + `package b` with `a` + `package b`.
+    let lib = extract("pkg/sub/a.go", "package sub\n\nfunc Public() {}\n");
+    assert_eq!(lib.namespace, ["pkg", "sub", "sub"]);
+    // A file no import reaches is still no root: what keeps a package alive is
+    // its exported surface and its importers, never its own existence.
+    assert!(lib.roots.is_empty());
+    // The directory says WHICH `util` this is, so two of them never pool.
+    let one = extract("a/util/h.go", "package util\n\nfunc h() {}\n");
+    let two = extract("b/util/h.go", "package util\n\nfunc h() {}\n");
+    assert_ne!(one.namespace, two.namespace);
+    // The external test package of a directory is a namespace of its own: it
+    // may name only what the package exports.
+    let external = extract("pkg/sub/a_test.go", "package sub_test\n");
+    assert_eq!(external.namespace, ["pkg", "sub", "sub_test"]);
+    // A file at the root declares the clause alone.
+    assert_eq!(extract("m.go", "package main\n").namespace, ["main"]);
+}
+
+#[test]
+fn the_internal_fence_and_generated_files() {
+    // `internal/` is the language's own fence: an exported name there reaches
+    // the tree above the fence and no further.
     let internal = extract("internal/util/h.go", "package util\n\nfunc Helper() {}\n");
-    assert!(internal.roots.is_empty());
+    assert_eq!(decl(&internal, "Helper").reach, Reach::Directory { up: 2 });
     // Generated code declares nothing accusable; its imports and references stay.
     let generated = extract(
         "pkg/api.pb.go",

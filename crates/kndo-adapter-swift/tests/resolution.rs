@@ -82,9 +82,7 @@ fn the_module_region_adds_every_test_tree() {
     assert!(
         a.seen_from(
             &path("Sources/App/A.swift"),
-            &Reach::Scoped {
-                scope: "package".into()
-            },
+            &Reach::Namespace { up: 0 },
             &cx
         )
         .is_none()

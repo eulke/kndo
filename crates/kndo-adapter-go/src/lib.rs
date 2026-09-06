@@ -1,12 +1,18 @@
-//! Go, through the tree-sitter-go grammar. The unit Go imports is the package — a
-//! directory of files sharing one namespace with no imports between siblings — so
-//! this adapter leans on the contract's unit features: imports resolve to
-//! [`Resolution::Files`] (every non-test `.go` in the package dir), and
-//! [`Extension::sees`] declares what each file sees without an import
-//! (a production file sees its non-test siblings; a test file sees the whole
-//! package), which the engine turns into reachability edges and pooled
-//! references. Capitalization IS the visibility: an upper-case initial is
-//! exported, anything else package-private.
+//! Go, through the tree-sitter-go grammar. What Go imports is the package — a
+//! directory of files sharing one namespace with no imports between siblings —
+//! and this adapter says so twice, because the package is two facts. It is a
+//! NAMESPACE, which extraction declares from the package clause and the
+//! directory, so a lower-case name reaches it and nothing wider. And its files
+//! CO-COMPILE, which [`Extension::sees`] declares from the file set (a
+//! production file sees its non-test siblings; a test file sees the whole
+//! package) — sight no file's own bytes could state, and the edge that carries
+//! reachability from an exported name to the file next to it. Imports resolve
+//! to [`Resolution::Files`], every non-test `.go` in the package dir.
+//! Capitalization IS the visibility: an upper-case initial is exported,
+//! anything else package-private.
+//!
+//! The unit is the MODULE: `go.mod` is the one manifest, it names what other
+//! modules import, and Go has no per-target section to split it.
 //!
 //! The adapter id is `go`, the same id v1 used for this territory, so oracle
 //! comparisons line up file-for-file.
@@ -15,9 +21,10 @@ mod extract;
 mod manifest;
 mod resolve;
 
-use kndo_contract::adapter::{PackageEntry, Resolution, ResolveContext, SourceFile};
-use kndo_contract::evidence::{EvidenceSink, Reach};
+use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
+use kndo_contract::evidence::EvidenceSink;
 use kndo_contract::extension::{Extension, ExtensionSpec, Rung, Step};
+use kndo_contract::manifest::ManifestSink;
 use kndo_contract::vocab::ProjectPath;
 
 pub struct GoAdapter {
@@ -27,10 +34,11 @@ pub struct GoAdapter {
 impl GoAdapter {
     pub fn new() -> Self {
         GoAdapter {
-            // 4: go.mod `// indirect` requirements declare `Transitive`.
+            // 6: the package clause names a namespace, an unexported name
+            // reaches it, and go.mod declares the module unit.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:go",
-                5,
+                6,
                 &["go"],
                 &["**/go.mod"],
                 // The compiler forbids import cycles: one could only be a
@@ -89,28 +97,16 @@ impl Extension for GoAdapter {
         resolve::resolve(from, specifier, cx)
     }
 
-    fn packages(&self, manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<PackageEntry> {
-        manifest::packages(manifest, cx)
-    }
-
-    fn manifest_dependencies(
+    fn extract_manifest(
         &self,
         manifest: &SourceFile<'_>,
-    ) -> Vec<kndo_contract::adapter::DependencyDeclaration> {
-        manifest::dependencies(manifest)
+        cx: &ResolveContext<'_>,
+        out: &mut ManifestSink,
+    ) {
+        manifest::structure(manifest, cx, out);
     }
 
     fn sees(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
         resolve::sees(path, cx)
-    }
-
-    fn seen_from(
-        &self,
-        path: &ProjectPath,
-        reach: &Reach,
-        cx: &ResolveContext<'_>,
-    ) -> Option<Vec<ProjectPath>> {
-        matches!(reach, Reach::Scoped { scope } if scope == "package")
-            .then(|| resolve::package_region(path, cx))
     }
 }

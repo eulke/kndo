@@ -11,7 +11,7 @@ consumer in the engine.
 |---|---|---|---|
 | `kndo:js-ts` | `ts` `tsx` `js` `jsx` `mjs` `cjs` `mts` `cts` | `package.json`; `.github/workflows/*.yml`, `action.yml` | manifest entries (`main`, `module`, `browser`, `bin`, `exports`, `imports`), files handed to a runtime by npm scripts and by workflow or action steps (`node`, `tsx`, `ts-node`, `bun`, `deno`), test files, config files, shebangs |
 | `kndo:rust` | `rs` | `Cargo.toml` | every cargo target as a unit entered through its own file (lib, bins, tests, benches, examples, build script), with `publish = false` read as "no consumer outside"; by dispatch rule: `#[test]`, `#[bench]`, `#[cfg(test)]`, `#[no_mangle]` and the other linkage attributes, `#[tokio::main]`-style entries; `#[allow(dead_code)]` and kin exempt |
-| `kndo:go` | `go` | `go.mod` | `package main`, `_test.go`; a package is one unit |
+| `kndo:go` | `go` | `go.mod` | `package main` + `func main`, every `init`, `_test.go` and the runner's `TestXxx`/`BenchmarkXxx`/`ExampleXxx`/`FuzzXxx`; the module `go.mod` names is one published library unit, and a package — the directory plus its package clause — is a namespace inside it, so nothing keeps a package's files alive but its exported surface and its importers |
 | `kndo:java` | `java` | `pom.xml`, `build.gradle`, `build.gradle.kts`, `settings.gradle`, `settings.gradle.kts` | `main` methods, test sources, framework annotations through extensions; a `pom.xml` module is two units, its main set and its test set, the test set compiling against main and a friend of it; the test set is what the pom states (its own `<testSourceDirectory>`, else the nearest parent's along `<parent>`, plus the build helper's added test sources), and every file in it is a test root by the unit's kind |
 | `kndo:kotlin` | `kt` | the same JVM manifests | `main` functions, test sources; `internal` reaches the unit and its friends |
 | `kndo:python` | `py` | `pyproject.toml`, `requirements.txt`, `requirements-*.txt` | scripts, `__main__`, test files, entry points |
@@ -57,7 +57,7 @@ adapter says nothing:
   between the declared rung and the one the uses need — Go below its package,
   Python anywhere — gets no advice at all.
 - **The published surface** for that analysis's Exported rung: whether a unit
-  publishes every export (a jar, a crate, a Go package, a Python distribution
+  publishes every export (a jar, a crate, a Go module, a Python distribution
   — the default, under which an exported declaration is never advised to
   narrow) or only what its entries export (npm, where `main`/`exports` decide,
   so an `export` in a file no entry reaches is advised `unexported` when
@@ -152,7 +152,8 @@ adapter says nothing:
 
 One graph: an HTML page reached from a manifest reaches the script it loads,
 which reaches the stylesheet it imports; a Swift file reached through a
-storyboard is production-reachable; a Go package's files are one unit. Packages
+storyboard is production-reachable; a Go package's files see each other with no
+import between them, so reaching one reaches the rest. Packages
 are owned by the nearest manifest, and health can be split per package.
 
 Files no adapter claims (images, data, unknown suffixes) are discovered but

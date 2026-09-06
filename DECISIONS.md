@@ -4436,3 +4436,99 @@ lands, `path-attribute-and-include`, pinning all three rules and the silence
 between them, and kmock grows an `include` line so the engine rule has a
 conformance case of its own. No existing fixture moves and no corpus finding
 moves.
+
+## 2026-09-06 — M8.c go 1/3: a package is a namespace, a module is a unit
+
+**What Go's package is, said twice.** Until now `kndo:go` spelled the package
+once, as `Reach::Scoped { scope: "package" }` — an adapter's own token, with a
+`seen_from` hook enumerating the directory for it. The package is really two
+facts and they live on different floors. It is a NAMESPACE, which extraction
+now declares from the file's own bytes: the directory that addresses the
+package plus the clause that names it. And its files CO-COMPILE, which stays
+in `sees`, a query over the file set no file's bytes could answer. With the
+namespace declared, `Reach::Namespace { up: 0 }` is what a lower-case name
+takes, `Scoped` loses its last emitter, and the variant leaves the contract —
+along with the ladder-less rung the pool machinery had to special-case.
+
+**The segments are directory THEN clause, always.** `pkg/sub` + `package sub`
+spells `["pkg", "sub", "sub"]`, and the repetition is the price of a unique
+key: dropping the clause where it repeats the directory's last segment would
+merge `a/b` + `package b` with `a` + `package b`, two different packages. It
+also gives the external test package its own node — `pkg/sub` + `package
+sub_test` is `["pkg", "sub", "sub_test"]` — which is stricter than the region
+`seen_from` returned, and correct: an external test file may name only what
+the package exports.
+
+**The unit is the module.** `go.mod` now emits one published `Library` unit
+over its own directory, entry-less (a Go module is entered through import
+paths, never through a file) with every requirement as `depends_on`. That
+retires the LIBRARY-MODE ROOT the audit filed as G11: `kndo:go` used to make
+every non-internal, non-main, non-test file a `Probable` Production whole-file
+root, so no file was ever unreachable and `test-only` was impossible at file
+level. What roots a file now is the published surface it is on — an exported
+top-level name in a published module — and its package siblings' sight of it.
+A package that exports nothing and nobody imports is reached by nothing, which
+is the true statement about it.
+
+**A test file is on no published surface.** Retiring the library root exposed
+an engine defect the go migration was the first to reach: `publishes` asked
+only whether a file declares an exported top-level name in a published library
+unit, and a `_test.go` file declaring `func TestWant` answered yes. Go is the
+case that finds it, because a Go module is ONE unit holding production and
+test files alike, where Cargo, Maven, Gradle and SwiftPM each give tests a unit
+of their own that is never published. The rule is the engine's and it is
+language-independent: a file that is a test as a whole is on no unit's surface,
+because no importer can name what it exports. Publication therefore moved after
+root anchoring — `mount_and_own` then `anchor_manifest_roots` then
+`publish_surfaces`, in the full path and the surgical patch path alike, so both
+read the same roots.
+
+**`init` roots the binary it is compiled into.** The runtime calls every `init`
+on package load, and the package a `_test.go` file loads into is the test
+binary. Rooting it Production (the audit's G5) painted every package whose
+tests use `init` production through the sight a test file has of its siblings —
+eight files in gin. It roots Test in a `_test.go` file now.
+
+**go.mod's grammar, read once.** Every directive has two spellings — `NAME
+value` and a parenthesised block — and `//` comments are legal anywhere. The
+module line was read by neither rule, so `module example.com/m // the API
+module` produced a module path with the comment in it and every own-subpackage
+import went `undeclared` (the audit's G7). One reader now answers `module`,
+`tool` and `require` alike; the `tool` lines it can now see become `mentions`,
+which is what a Go 1.24 tool dependency is — used with no import (G6).
+
+**Measured: gin 109 → 110, one true positive.** The added finding is
+`test-only testdata/protoexample/test.pb.go`, and the two changes compose to
+produce it: gin's `_test.go` files were production-coloured before, because
+each declares a `TestXxx` the module's published surface handed out, and the
+generated protobuf file they import inherited that colour. With test files off
+the surface they are test-only, and so is the only file they alone import —
+which is what `testdata/protoexample` is. Nothing was removed, and
+`internal-only` stays at 1 with `duplicate` at 108.
+
+Retiring the library root moved nothing else in gin, which is the honest
+reading of what that root was carrying: all seven of gin's packages declare an
+exported top-level name, so every file either roots on the module's published
+surface or is seen by a file that does. The two pools coincide there too — an
+external `_test` package cannot name a lower-case declaration, so nothing left
+the region `seen_from` used to return. The rest of the corpus is unmoved
+(Alamofire 538, Exposed 971, flask 29, guava 8254, lodash 18, ripgrep 151,
+vapor 199, vite 711): no other language's test files sit inside a published
+library unit, because every other build system gives tests a unit of their own.
+
+**What the corpus cannot show, the fixtures do.** Two land, and the previous
+build is the control on both. `module-unit-and-package-namespace` now reports
+`dead/dead.go` — a package of lower-case names nobody imports — where the
+previous build, having rooted that file, reported one declaration inside it;
+and it reports nothing on the module line the previous build called
+`undeclared example.com/demo/lib`, the comment-in-the-module-path defect.
+`test-file-init` now reports `internal/testutil/util.go` `test-only`, which the
+previous build reported as nothing at all. Every existing fixture is
+byte-identical: ten go projects, each with a `go.mod` and exported names, agree
+across the whole migration.
+
+**Knobs and pins.** The contract fingerprint moves (`Reach` loses `Scoped`);
+the WIT variant drops `scoped` and the compat guests are re-pinned;
+`GRAPH_SEMANTICS_VERSION` moves to 21 (the same evidence now assembles a
+different `published`); `kndo:go` bumps to 6. The report and query schemas do
+not move.

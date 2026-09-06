@@ -23,7 +23,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Bump when the SAME evidence assembles into a DIFFERENT graph — resolution
 /// candidate changes, reachability semantics, new assembled fields. Folded into the
 /// graph cache key beside the contract fingerprint and the adapter set.
-pub const GRAPH_SEMANTICS_VERSION: u32 = 20;
+pub const GRAPH_SEMANTICS_VERSION: u32 = 21;
 
 #[derive(Serialize, Deserialize)]
 pub struct GraphFile {
@@ -532,9 +532,9 @@ pub fn assemble(
             "import_targets is index-parallel to evidence.imports"
         );
     }
-    mount_and_publish(&mut graph_files, adapters, &project);
-
+    mount_and_own(&mut graph_files, &project);
     anchor_manifest_roots(files, adapters, &cx, &project, &reads, &mut graph_files);
+    publish_surfaces(&mut graph_files, adapters, &project);
 
     let manifest_declarations = collect_manifest_declarations(&reads);
     let mut discovered: Vec<ProjectPath> = files.iter().map(|f| f.path.clone()).collect();
@@ -705,7 +705,7 @@ fn regions_of(
         .declarations
         .iter()
         .map(|d| &d.reach)
-        .filter(|r| matches!(r, Reach::Scoped { .. } | Reach::Unit { up: 0 }))
+        .filter(|r| matches!(r, Reach::Unit { up: 0 }))
         .collect();
     reaches.sort();
     reaches.dedup();
@@ -725,15 +725,11 @@ fn regions_of(
     out
 }
 
-/// The mount forest over the whole file set, and the publication that reads it.
-/// Both are functions of every file's imports together, so both run once the
-/// edges are resolved — and both run again on the surgical patch path, where
+/// The mount forest over the whole file set, and the unit and sight that read
+/// it. All three are functions of every file's imports together, so they run
+/// once the edges are resolved — and again on the surgical patch path, where
 /// one file's `mod` line can move another file's fence.
-fn mount_and_publish(
-    files: &mut [GraphFile],
-    adapters: &[Box<dyn Extension>],
-    project: &crate::project::Project,
-) {
+fn mount_and_own(files: &mut [GraphFile], project: &crate::project::Project) {
     let mut edges: Vec<(u32, MountEdge)> = Vec::new();
     for (i, f) in files.iter().enumerate() {
         for (import, targets) in f.evidence.imports.iter().zip(&f.import_targets) {
@@ -810,11 +806,26 @@ fn mount_and_publish(
         f.sees.sort_unstable();
         f.sees.dedup();
     }
+}
+
+/// Which files sit on their unit's published surface. Read AFTER every root is
+/// on the file — the anchors included — because a file that is a test as a
+/// whole is on no surface: `go build` never compiles a `_test.go`, and no
+/// importer can name what it exports, whatever the module publishes.
+fn publish_surfaces(
+    files: &mut [GraphFile],
+    adapters: &[Box<dyn Extension>],
+    project: &crate::project::Project,
+) {
     for f in files.iter_mut() {
         let surface = adapter_by_id(adapters, &f.adapter)
             .spec()
             .published_surface();
-        f.published = publishes(surface, project, f.unit, &f.evidence, f.mount_cap.as_ref());
+        let is_a_test = f
+            .roots()
+            .any(|r| r.kind == RootKind::Test && matches!(r.target, RootTarget::WholeFile));
+        f.published =
+            !is_a_test && publishes(surface, project, f.unit, &f.evidence, f.mount_cap.as_ref());
     }
 }
 
@@ -862,7 +873,8 @@ fn mount_cap(files: &[GraphFile], file: usize) -> Option<Reach> {
 /// `Entries` the entries already anchor the surface), the unit is a
 /// published library, and the file declares something exported at the top
 /// level. The engine's own statement of what nine adapters spelled as a
-/// whole-file production root on every non-test file.
+/// whole-file production root on every non-test file; the test half of that
+/// sentence is [`publish_surfaces`]'s.
 fn publishes(
     surface: PublishedSurface,
     project: &crate::project::Project,
@@ -1050,7 +1062,8 @@ pub fn patch(
         );
     }
     let project = std::mem::take(&mut prev.project);
-    mount_and_publish(&mut prev.files, adapters, &project);
+    mount_and_own(&mut prev.files, &project);
+    publish_surfaces(&mut prev.files, adapters, &project);
     prev.project = project;
     Some(prev)
 }

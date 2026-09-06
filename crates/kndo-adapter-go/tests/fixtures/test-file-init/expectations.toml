@@ -1,0 +1,19 @@
+# test-file-init: what a `_test.go` file compiles into is the TEST binary, and
+# two rules follow. Its `init` runs when that binary loads, so it roots Test —
+# rooting it Production would paint the whole package production through the
+# sight a test file has of its siblings. And its exported names are on no
+# published surface: no importer can name `TestWant`, whatever the module
+# publishes. Together they let a package reached only from tests say so.
+
+[[dead]]
+subject = "internal/testutil/util.go"
+category = "test-only"
+why = "only lib's test file imports this package, and its own test file's init and exports no longer paint it production"
+
+[[alive]]
+subject = "internal/testutil/util.go#Want"
+why = "both test files name it — test-only is a colour, not an accusation of death"
+
+[[alive]]
+subject = "lib/lib.go#Exported"
+why = "the module is a published library unit, and this file is not a test"

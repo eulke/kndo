@@ -118,9 +118,11 @@ narrow; an unpublished unit's exports are its own.
 
 **Published surface**:
 Which exported declarations a unit hands to the outside: every export (a jar, a crate, a
-Go package, a Python distribution) or only what its entries export (npm). The ecosystem's
+Go module, a Python distribution) or only what its entries export (npm). The ecosystem's
 resolution rule, so the language declares it; `internal-only` never advises narrowing
-what is on it.
+what is on it. A file that is a test AS A WHOLE is on no unit's surface whatever it
+exports — no importer can name it — which matters where a unit holds production and test
+files together, as a Go module does.
 
 **Namespace**:
 The language's name-space node a file attaches to: a Java or Kotlin package by name,

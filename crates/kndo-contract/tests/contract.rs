@@ -445,9 +445,6 @@ fn a_reach_stands_on_a_rung_and_never_reaches_wider_than_its_owner() {
     let named = Reach::Named {
         namespace: vec!["crate".into(), "a".into()],
     };
-    let token = Reach::Scoped {
-        scope: "package".into(),
-    };
     for (reach, rung) in [
         (Reach::Owner, Some(Rung::Owner)),
         (Reach::File, Some(Rung::File)),
@@ -465,7 +462,6 @@ fn a_reach_stands_on_a_rung_and_never_reaches_wider_than_its_owner() {
         (Reach::Unit { up: 1 }, Some(Rung::Group)),
         (Reach::Exported, Some(Rung::Exported)),
         (Reach::Inherited, None),
-        (token.clone(), None),
     ] {
         assert_eq!(reach.rung(), rung, "{reach:?}");
     }
@@ -480,11 +476,11 @@ fn a_reach_stands_on_a_rung_and_never_reaches_wider_than_its_owner() {
         Reach::Unit { up: 0 }
     );
     assert_eq!(
-        Reach::Exported.capped_by(&token),
-        token,
-        "a token compares as a namespace, the widest thing a token has named"
+        Reach::Exported.capped_by(&Reach::Inherited),
+        Reach::Inherited,
+        "an unresolved owner caps as a namespace: the slip narrows, never publishes"
     );
-    assert_eq!(Reach::Owner.capped_by(&token), Reach::Owner);
+    assert_eq!(Reach::Owner.capped_by(&Reach::Inherited), Reach::Owner);
     let heirs = Reach::Heirs {
         and_namespace: false,
     };

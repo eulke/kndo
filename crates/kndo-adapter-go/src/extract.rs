@@ -1,13 +1,15 @@
 //! Extraction: one pass over top-level declarations, the import block, and a pruned
 //! full-tree walk for references and comments. Go-specific facts spelled here:
-//! capitalization is reach, `package main` + `func main` is the binary entry, and
-//! `_test.go` is the test runner's file. The package-as-unit fact lives in
-//! [`crate::resolve::sees`], not in evidence — what a file sees without an
-//! import depends on the file set, never on this file's bytes. Deliberately
-//! undeclared: struct fields, interface methods, and ALL methods — Go's interfaces
-//! are structural, so any method may satisfy one and be dispatched without its
-//! name ever appearing (`MarshalYAML`, `IsEmpty`); the grammar cannot prove a
-//! method dead, and never accuses what it cannot prove.
+//! the package clause NAMES the namespace, capitalization is reach,
+//! `package main` + `func main` is the binary entry, and `_test.go` is the test
+//! runner's file. Which files co-compile stays in [`crate::resolve::sees`] —
+//! that depends on the file set, never on this file's bytes — while the
+//! namespace the file declares itself into is its own statement and belongs
+//! here. Deliberately undeclared: struct fields, interface methods, and ALL
+//! methods — Go's interfaces are structural, so any method may satisfy one and
+//! be dispatched without its name ever appearing (`MarshalYAML`, `IsEmpty`);
+//! the grammar cannot prove a method dead, and never accuses what it cannot
+//! prove.
 
 use kndo_contract::evidence::{
     EvidenceSink, ImportShape, ImportTarget, Reach, RefKind, RootKind, RootTarget, SymbolKind,
@@ -30,17 +32,23 @@ pub fn extract(
     }
 
     let root = tree.root_node();
-    let package_main = package_name(root, source) == Some("main".to_string());
-    // Library mode: every non-internal, non-main, non-test package in a module is
-    // importable by other modules — published surface, whether or not anything in
-    // this repository imports it. `internal/` is the language's own "not importable
-    // from outside" fence, so it earns no root. Probable — convention, not this
-    // file's statement.
-    if !package_main && !is_test_file && !is_internal(path.as_str()) {
-        out.root(
-            RootTarget::WholeFile,
-            RootKind::Production,
-            Confidence::Probable,
+    let package = package_name(root, source);
+    let package_main = package.as_deref() == Some("main");
+    // The directory ADDRESSES the package — Go's import path is the directory
+    // — and the clause NAMES it, so the segments are both: two `util` packages
+    // in two directories are two namespaces, and a directory's `foo` and its
+    // external `foo_test` are two more. Appending the clause unconditionally
+    // is what makes the pair unique: dropping it where it repeats the
+    // directory's last segment would merge `a/b` + `package b` with `a` +
+    // `package b`. A file whose package clause the parse never produced
+    // declares none and stands alone — the keep-alive reading of a broken file.
+    if let Some(package) = &package {
+        let dir = path.as_str().rsplit_once('/').map_or("", |(d, _)| d);
+        out.namespace(
+            dir.split('/')
+                .filter(|c| !c.is_empty())
+                .chain(std::iter::once(package.as_str()))
+                .map(SmolStr::new),
         );
     }
     // The `// Code generated … DO NOT EDIT.` convention: generated code is the
@@ -83,10 +91,16 @@ pub fn extract(
                         );
                     }
                     if name == "init" {
-                        // The runtime calls every init on package load.
+                        // The runtime calls every init on package load — the
+                        // load of the binary this file is compiled into, which
+                        // for a `_test.go` file is the test binary alone.
                         out.root(
                             RootTarget::Declaration(id),
-                            RootKind::Production,
+                            if is_test_file {
+                                RootKind::Test
+                            } else {
+                                RootKind::Production
+                            },
                             Confidence::Certain,
                         );
                     }
@@ -166,10 +180,6 @@ fn runner_entry(name: &str) -> bool {
         })
 }
 
-fn is_internal(path: &str) -> bool {
-    path.starts_with("internal/") || path.contains("/internal/")
-}
-
 /// golang.org/s/generatedcode: a line `// Code generated … DO NOT EDIT.` before
 /// the package clause marks the whole file.
 fn is_generated(source: &[u8]) -> bool {
@@ -183,15 +193,14 @@ fn is_generated(source: &[u8]) -> bool {
 }
 
 /// Capitalization IS Go's visibility story: uppercase exports, lowercase
-/// reaches exactly the package — a bounded region, not a private name. The
-/// one fence beyond it is the path's: an exported name in a package under an
-/// `internal` directory is importable only from the tree rooted at that
-/// directory's parent, which is the directory `up` levels above the file's.
+/// reaches exactly the package — the namespace this file declared itself into,
+/// which has nothing nested under it. The one fence beyond it is the path's:
+/// an exported name in a package under an `internal` directory is importable
+/// only from the tree rooted at that directory's parent, which is the
+/// directory `up` levels above the file's.
 fn reach_of(name: &str, path: &str) -> Reach {
     if !name.chars().next().is_some_and(|c| c.is_uppercase()) {
-        return Reach::Scoped {
-            scope: smol_str::SmolStr::new_static("package"),
-        };
+        return Reach::Namespace { up: 0 };
     }
     match internal_fence(path) {
         Some(up) => Reach::Directory { up },

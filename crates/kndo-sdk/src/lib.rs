@@ -130,7 +130,6 @@ fn reach_to_wire(reach: &ev::Reach) -> wire::Reach {
             wire::Reach::Named(namespace.iter().map(|s| s.to_string()).collect())
         }
         ev::Reach::Inherited => wire::Reach::Inherited,
-        ev::Reach::Scoped { scope } => wire::Reach::Scoped(scope.to_string()),
         _ => wire::Reach::Exported,
     }
 }
@@ -147,9 +146,6 @@ fn reach_from_wire(reach: wire::Reach) -> ev::Reach {
             namespace: namespace.into_iter().map(SmolStr::new).collect(),
         },
         wire::Reach::Inherited => ev::Reach::Inherited,
-        wire::Reach::Scoped(scope) => ev::Reach::Scoped {
-            scope: SmolStr::new(scope),
-        },
         wire::Reach::Exported => ev::Reach::Exported,
     }
 }

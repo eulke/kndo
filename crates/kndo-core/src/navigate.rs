@@ -419,7 +419,6 @@ impl Index {
             Reach::Unit { up: 1 } => bounded(f.unit.and_then(|u| self.scopes.group_pool(u))),
             Reach::Directory { up } => bounded(self.scopes.directory_pool(file, *up)),
             Reach::Named { namespace } => bounded(self.scopes.named_pool(file, namespace)),
-            Reach::Scoped { .. } => bounded(region_of(f, reach)),
             // A unit's group beyond its aggregator, a reach that is its
             // owner's (resolved by the caller through the effective reach),
             // and any reach this build does not know: published surface.

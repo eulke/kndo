@@ -145,9 +145,7 @@ fn the_module_region_is_the_source_set_tree() {
     assert!(
         a.seen_from(
             &path("core/src/main/kotlin/com/a/A.kt"),
-            &Reach::Scoped {
-                scope: "package".into()
-            },
+            &Reach::Namespace { up: 0 },
             &cx
         )
         .is_none(),

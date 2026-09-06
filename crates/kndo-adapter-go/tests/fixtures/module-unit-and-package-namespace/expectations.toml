@@ -1,0 +1,27 @@
+# module-unit-and-package-namespace: go.mod declares ONE published library unit
+# over the module's tree, so an exported top-level name is the surface that
+# roots its file — and a package that exports nothing and nobody imports is
+# reached by nothing at all. Inside a package, the namespace is the pool: the
+# directory plus the package clause, which is what a lower-case name reaches.
+
+[[dead]]
+subject = "dead/dead.go"
+category = "unused"
+why = "a package with no exported name is on no surface, and nothing in the module imports it — the whole file is unreached"
+
+[[dead]]
+subject = "lib/helpers.go#neverUsed"
+category = "unused"
+why = "lower-case: its pool is the lib package, and no file of that package names it"
+
+[[alive]]
+subject = "lib/lib.go#Exported"
+why = "the module is a published library unit, so its exports need no caller in this repository"
+
+[[alive]]
+subject = "lib/helpers.go#helper"
+why = "the sibling file names it with no import — same package, same namespace"
+
+[[alive]]
+subject = "lib/helpers.go"
+why = "declaring no exported name is not being dead: the exported sibling sees this file, so the production flood reaches it"

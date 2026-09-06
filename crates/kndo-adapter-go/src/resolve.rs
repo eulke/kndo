@@ -7,6 +7,33 @@
 
 use kndo_contract::adapter::{Resolution, ResolveContext};
 use kndo_contract::vocab::ProjectPath;
+use kndo_toolkit as tk;
+
+/// Whether the caller wants the package as its importers compile it or as its
+/// own test binary does — the only axis on which "the `.go` files of one
+/// directory" has two answers.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Tests {
+    Included,
+    Excluded,
+}
+
+/// The `.go` files directly in `dir`, in path order.
+fn dir_files<'a>(dir: &str, tests: Tests, cx: &'a ResolveContext<'_>) -> Vec<&'a ProjectPath> {
+    let prefix = if dir.is_empty() {
+        String::new()
+    } else {
+        format!("{dir}/")
+    };
+    cx.files_with_prefix(&prefix)
+        .filter(|p| {
+            let rest = &p.as_str()[prefix.len()..];
+            rest.ends_with(".go")
+                && !rest.contains('/')
+                && (tests == Tests::Included || !rest.ends_with("_test.go"))
+        })
+        .collect()
+}
 
 /// The rest of this file's package — what its names see without an import. A
 /// production file sees its non-test siblings only; a test file sees the whole
@@ -15,21 +42,14 @@ use kndo_contract::vocab::ProjectPath;
 /// asymmetry is the point: tests consume the package, the package never consumes
 /// its tests, so the production color cannot leak through a test file.
 pub fn sees(path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
-    let dir = parent_dir(path.as_str());
-    let prefix = if dir.is_empty() {
-        String::new()
+    let tests = if path.as_str().ends_with("_test.go") {
+        Tests::Included
     } else {
-        format!("{dir}/")
+        Tests::Excluded
     };
-    let from_test = path.as_str().ends_with("_test.go");
-    cx.files_with_prefix(&prefix)
-        .filter(|p| {
-            let rest = &p.as_str()[prefix.len()..];
-            rest.ends_with(".go")
-                && !rest.contains('/')
-                && *p != path
-                && (from_test || !rest.ends_with("_test.go"))
-        })
+    dir_files(tk::parent_dir(path.as_str()), tests, cx)
+        .into_iter()
+        .filter(|p| *p != path)
         .cloned()
         .collect()
 }
@@ -42,76 +62,25 @@ pub fn resolve(_from: &ProjectPath, specifier: &str, cx: &ResolveContext<'_>) ->
         let prefix = &specifier[..prefix_end];
         if let Some(pkg) = cx.package(prefix) {
             let rest = &specifier[prefix_end..];
-            let dir = if rest.is_empty() {
-                pkg.dir.to_string()
-            } else {
-                join(&pkg.dir, rest.trim_start_matches('/'))
+            let Some(dir) = tk::join_relative(&pkg.dir, rest.trim_start_matches('/')) else {
+                return Resolution::Unresolved;
             };
-            return package_files(&dir, cx);
+            // Every non-test `.go` directly in the directory — the files that
+            // ARE the package as its importers see it: importing a package
+            // never pulls its tests.
+            let files: Vec<ProjectPath> = dir_files(&dir, Tests::Excluded, cx)
+                .into_iter()
+                .cloned()
+                .collect();
+            return if files.is_empty() {
+                Resolution::Unresolved
+            } else {
+                Resolution::Files(files)
+            };
         }
         match specifier[..prefix_end].rfind('/') {
             Some(i) => prefix_end = i,
             None => return Resolution::Unresolved,
         }
     }
-}
-
-/// Every non-test `.go` directly in `dir` — the files that ARE the package as its
-/// importers see it: importing a package never pulls its tests.
-fn package_files(dir: &str, cx: &ResolveContext<'_>) -> Resolution {
-    let prefix = if dir.is_empty() {
-        String::new()
-    } else {
-        format!("{dir}/")
-    };
-    let files: Vec<ProjectPath> = cx
-        .files_with_prefix(&prefix)
-        .filter(|p| {
-            let rest = &p.as_str()[prefix.len()..];
-            !rest.contains('/') && rest.ends_with(".go") && !rest.ends_with("_test.go")
-        })
-        .cloned()
-        .collect();
-    if files.is_empty() {
-        Resolution::Unresolved
-    } else {
-        Resolution::Files(files)
-    }
-}
-
-fn parent_dir(path: &str) -> String {
-    match path.rfind('/') {
-        Some(i) => path[..i].to_string(),
-        None => String::new(),
-    }
-}
-
-fn join(dir: &str, rest: &str) -> String {
-    if dir.is_empty() {
-        rest.to_string()
-    } else {
-        format!("{dir}/{rest}")
-    }
-}
-
-/// The package region: every `.go` file in the directory, tests included — a
-/// test can legally name a lowercase declaration, so the region is a superset
-/// of production sight.
-pub fn package_region(path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
-    let dir = parent_dir(path.as_str());
-    let prefix = if dir.is_empty() {
-        String::new()
-    } else {
-        format!("{dir}/")
-    };
-    let mut out: Vec<ProjectPath> = cx
-        .files_with_prefix(&prefix)
-        .filter(|p| {
-            let rest = &p.as_str()[prefix.len()..];
-            rest.ends_with(".go") && !rest.contains('/')
-        })
-        .cloned()
-        .collect();
-    out.sort();
-    out
 }

@@ -47,12 +47,10 @@ interface types {
         other(string),
     }
 
-    /// Mirrors `Reach`. `unit` is the unit's own reach (Kotlin's `internal`,
-    /// Rust's `pub(crate)`); `scoped` carries the adapter's own token for a
-    /// bounded region. For both, the host asks `seen-from` for the files and
-    /// judges by the set.
-    /// Mirrors `Reach`: `namespace`, `unit` and `directory` carry their
-    /// `up`, `named` the segments of the namespace it spells.
+    /// Mirrors `Reach`: `namespace`, `unit` and `directory` carry their `up`,
+    /// `named` the segments of the namespace it spells. `unit` is the unit's
+    /// own reach (Kotlin's `internal`, Rust's `pub(crate)`), and the host asks
+    /// `seen-from` for its files where no manifest has named the unit.
     variant reach {
         owner,
         file,
@@ -62,7 +60,6 @@ interface types {
         heirs(bool),
         named(list<string>),
         inherited,
-        scoped(string),
         exported,
     }
 

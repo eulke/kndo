@@ -1405,3 +1405,38 @@ false positives the audit verified (a redirected module reported `unused`, its
 alias reported `undeclared`, an included file reported `unused`) have no corpus
 population at all. The probes and the `path-attribute-and-include` fixture are
 the measurement; the corpus number is zero by construction, and stays zero.
+
+### Go on namespaces and units: the library-mode root retires (2026-09-06)
+
+| repo | before | after | what moved |
+|---|---|---|---|
+| gin | 109 | 110 | +1 `test-only` on `testdata/protoexample/test.pb.go` — a generated file only gin's tests import, which the test files' own colour hid |
+
+The package became a namespace declared from the package clause and the
+directory, the module became one published library unit, and `kndo:go`'s
+library-mode whole-file root — the `Probable` Production root it put on every
+non-internal, non-main, non-test file — retired. That root was carrying
+nothing gin needed: all seven of gin's packages declare an exported top-level
+name, so every file either roots on the module's published surface or is seen
+by a file that does. The single delta comes from the engine defect the
+migration exposed: a `_test.go` file declaring `func TestXxx` was riding the
+module's published surface as a production root, and every gin test file was
+production-coloured because of it. With test files off the surface (no
+importer can name what they export) the file they alone import is test-only,
+correctly.
+
+v1's oracle reported five `test-only` on gin, and none is the one v2 reports —
+they are five different subjects. Two are dependencies (`testify`,
+`reflect2`) whose message is "belongs in devDependencies": v2 declares go
+`DependencyScoping::Unscoped`, because go.mod has no dev section and the
+verdict has nowhere to move a requirement to, so naming npm's remedy for a Go
+manifest is v1's vice and v2's silence is deliberate. The other three are
+declarations — `test_helpers.go#waitForServerReady`, `utils.go#localhostIP`,
+`utils.go#localhostIPv6` — and v2's `test-only` has no declaration subject at
+all: it names files and dependencies. That is a v2 scope decision this slice
+does not touch; what the slice adds is the one file subject v1 never had, and
+what makes it possible is that a file is no longer painted production by its
+own test siblings. Alamofire, Exposed, flask, guava, lodash, ripgrep, vapor
+and vite are byte-identical: no other language's test files sit inside a
+published library unit, because every other build system gives tests a unit of
+their own.
