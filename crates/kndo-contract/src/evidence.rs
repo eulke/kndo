@@ -264,6 +264,16 @@ pub enum Reach {
     Directory {
         up: u32,
     },
+    /// Nameable within the declaration that owns it and within every subtype
+    /// of that owner, transitively — Java's, Kotlin's and TypeScript's
+    /// `protected` — and, with `and_namespace`, within the file's namespace
+    /// too (Java's, which adds the package). The pool is the owner's file,
+    /// the files declaring its subtypes (from the relations stream) and, so
+    /// asked, the namespace's files. A member of a published type in a
+    /// published unit is published surface under it, as under `Exported`.
+    Heirs {
+        and_namespace: bool,
+    },
     /// Nameable within the namespace spelled — Rust's `pub(in crate::a)` — as
     /// the segments of its path, which the engine resolves against the forest
     /// inside the file's own compilation.
@@ -297,6 +307,7 @@ impl Reach {
             Reach::File => Rung::File,
             Reach::Namespace { .. } | Reach::Named { .. } => Rung::Namespace,
             Reach::Directory { .. } => Rung::Directory,
+            Reach::Heirs { .. } => Rung::Heirs,
             Reach::Unit { up: 0 } => Rung::Unit,
             Reach::Unit { .. } => Rung::Group,
             Reach::Exported => Rung::Exported,

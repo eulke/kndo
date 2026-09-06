@@ -89,6 +89,12 @@ pub struct Index {
     /// Where a name may legally be used, as structure — see
     /// [`crate::scopes::Scopes`].
     scopes: crate::scopes::Scopes,
+    /// (file, the owner that fences a heirs member, with its namespace or
+    /// not) → the files a heirs-reaching member of that owner pools over:
+    /// the owner's file, the files declaring its subtypes transitively, and
+    /// the namespace's when granted. Computed for every fence some member
+    /// names, so a lookup never allocates.
+    heirs_pools: BTreeMap<(u32, u32, bool), Vec<u32>>,
 }
 
 /// The files from which an unqualified reference counts as a use of a
@@ -204,7 +210,7 @@ impl Index {
                 subtypes_of.entry(r.to.clone()).or_default().insert(from);
             }
         }
-        Index {
+        let mut index = Index {
             sites_by_name,
             bound,
             surface_importers,
@@ -214,7 +220,83 @@ impl Index {
             supertypes_of,
             subtypes_of,
             scopes: crate::scopes::Scopes::build(graph, capabilities),
+            heirs_pools: BTreeMap::new(),
+        };
+        index.heirs_pools = index.heirs_pools_of(graph);
+        index
+    }
+
+    /// Every fence a heirs-reaching member names, with its pool. The subtypes
+    /// are the relation walk's, by name and over every file, so a same-named
+    /// type elsewhere widens the pool — the keep-alive direction.
+    fn heirs_pools_of(&self, graph: &Graph) -> BTreeMap<(u32, u32, bool), Vec<u32>> {
+        let mut files_of_type: BTreeMap<&str, Vec<u32>> = BTreeMap::new();
+        for (i, f) in graph.files.iter().enumerate() {
+            for d in &f.evidence.declarations {
+                if d.kind == SymbolKind::Type {
+                    files_of_type
+                        .entry(d.name.as_str())
+                        .or_default()
+                        .push(i as u32);
+                }
+            }
         }
+        let mut out: BTreeMap<(u32, u32, bool), Vec<u32>> = BTreeMap::new();
+        for (i, f) in graph.files.iter().enumerate() {
+            for d in &f.evidence.declarations {
+                let (Reach::Heirs { and_namespace }, Some(owner)) = (&d.reach, d.owner) else {
+                    continue;
+                };
+                let key = (i as u32, owner.index() as u32, *and_namespace);
+                if out.contains_key(&key) {
+                    continue;
+                }
+                let fence = f.evidence.declarations[owner.index()].name.as_str();
+                let mut pool: Vec<u32> = vec![i as u32];
+                for heir in self.subtypes(fence) {
+                    if let Some(files) = files_of_type.get(heir.as_str()) {
+                        pool.extend_from_slice(files);
+                    }
+                }
+                if *and_namespace && let Some(namespace) = self.scopes.namespace_pool(i, 0) {
+                    pool.extend_from_slice(namespace);
+                }
+                pool.sort_unstable();
+                pool.dedup();
+                out.insert(key, pool);
+            }
+        }
+        out
+    }
+
+    /// The pool a declaration is nameable from, by its effective reach — see
+    /// [`Index::pool_of`] — with a heirs reach resolved against the owner
+    /// that fences it: the declaration carrying the reach, self first up the
+    /// owner chain, names the fence, whichever member inherits it.
+    pub fn pool_for<'a>(&'a self, graph: &'a Graph, file: usize, decl: usize) -> Pool<'a> {
+        let f = &graph.files[file];
+        let effective = f.evidence.effective_reach_at(decl);
+        let Reach::Heirs { and_namespace } = effective else {
+            return self.pool_of(graph, file, &effective);
+        };
+        let mut cursor = decl;
+        for _ in 0..=f.evidence.declarations.len() {
+            let d = &f.evidence.declarations[cursor];
+            if matches!(d.reach, Reach::Heirs { .. }) {
+                let Some(fence) = d.owner else {
+                    return Pool::Published;
+                };
+                return self
+                    .heirs_pools
+                    .get(&(file as u32, fence.index() as u32, and_namespace))
+                    .map_or(Pool::Published, |p| Pool::Files(p));
+            }
+            match d.owner {
+                Some(o) => cursor = o.index(),
+                None => return Pool::Published,
+            }
+        }
+        Pool::Published
     }
 
     /// The type this member's owner promised it to, if any: a supertype —
@@ -401,7 +483,7 @@ pub fn keepers(
     let effective = f.evidence.effective_reach_at(decl);
 
     // The pool a bounded reach names, or `None` for published surface.
-    let (exported, region) = match index.pool_of(graph, file, &effective) {
+    let (exported, region) = match index.pool_for(graph, file, decl) {
         Pool::Published => (true, None),
         Pool::Files(r) => (false, Some(r)),
         Pool::Own => (false, None),
@@ -469,11 +551,17 @@ pub fn keepers(
             Some(owner) => f.evidence.effective_reach(owner),
             None => effective.clone(),
         };
-        let owner_surface_exported =
-            matches!(index.pool_of(graph, file, &surface_reach), Pool::Published);
+        let owner_surface_exported = matches!(
+            index.pool_for(graph, file, d.owner.map_or(decl, |o| o.index())),
+            Pool::Published
+        );
+        // A heirs member rides its owner's published surface though its pool
+        // is bounded: a subtype outside the tree may name it, which no pool
+        // can hold.
+        let rides_published = region.is_none() || matches!(effective, Reach::Heirs { .. });
         if handed_out
             && owner_surface_exported
-            && region.is_none()
+            && rides_published
             && let Some(unit) = publishing_unit(graph, f)
             && kept.push(Keeper::Published { unit })
         {

@@ -1,4 +1,4 @@
-# visibility-ladder-and-nested-members: each rung of Java's visibility ladder against the scope its uses require, with nested members judged under their owner.
+# visibility-ladder-and-nested-members: each rung of Java's visibility ladder against the scope its uses require, with nested members judged under their owner. In the (unpublished) test set, `protected` reaches the owner, its subtypes and the package: used in the owner alone, `private` would suffice; used from the package and no subtype, `package-private` would; used from a subtype, its own word; used by nobody, `unused`. In the published main set a protected member of a public type is published surface, and no advice is given.
 
 [[alive]]
 subject = "src/main/java/com/foo/Widget.java#Widget.a()"
@@ -22,6 +22,25 @@ why = "a package-private nested member called only from Widget.main in its own f
 subject = "src/main/java/com/foo/Widget.java#Inner.helper()"
 category = "internal-only"
 why = "a package-private nested member called only from Inner.go in its own file"
+
+[[dead]]
+subject = "src/test/java/com/foo/Fixture.java#Fixture.seed()"
+category = "internal-only"
+why = "protected, used from Fixture.total alone — `private` would suffice"
+
+[[dead]]
+subject = "src/test/java/com/foo/Fixture.java#Fixture.packaged()"
+category = "internal-only"
+why = "protected, used from Neighbor in the same package as `Fixture.packaged()` and from no subtype — `package-private` would suffice"
+
+[[alive]]
+subject = "src/test/java/com/foo/Fixture.java#Fixture.shared()"
+why = "protected, used from FixtureSub, a subtype in another file — the reach its use needs"
+
+[[dead]]
+subject = "src/test/java/com/foo/Fixture.java#Fixture.nobody()"
+category = "unused"
+why = "protected in an unpublished test class, and nothing in the owner, its subtypes or the package names it"
 
 [[known_gap]]
 subject = "src/main/java/com/foo/Widget.java#Widget.c()"

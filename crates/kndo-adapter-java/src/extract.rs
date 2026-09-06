@@ -133,11 +133,11 @@ fn is_generated(source: &[u8]) -> bool {
     tk::generated_marked(source, tk::GENERATED_NEEDLES, &["//", "/*", "*"])
 }
 
-/// `public` → Exported; `protected` folds to Exported (subclasses are
-/// unboundable statically); `private` → the owner's, since Java spells it on
-/// members and nested types alone; NO modifier is the compiler's own package
-/// boundary, nameable inside the package this file declares.
-/// `implicit_public` (interface bodies) overrides absence.
+/// `public` → Exported; `protected` → the owner's heirs and the package,
+/// which is what Java's `protected` grants; `private` → the owner's, since
+/// Java spells it on members and nested types alone; NO modifier is the
+/// compiler's own package boundary, nameable inside the package this file
+/// declares. `implicit_public` (interface bodies) overrides absence.
 fn reach_of(item: Node<'_>, ctx: &Ctx) -> Reach {
     // No modifier is package-private: nameable inside the package this file
     // declares, and the engine pools it from that declaration.
@@ -155,7 +155,12 @@ fn reach_of(item: Node<'_>, ctx: &Ctx) -> Reach {
     let mut explicit = None;
     for child in modifiers.children(&mut c) {
         match child.kind() {
-            "public" | "protected" => explicit = Some(Reach::Exported),
+            "public" => explicit = Some(Reach::Exported),
+            "protected" => {
+                explicit = Some(Reach::Heirs {
+                    and_namespace: true,
+                })
+            }
             "private" => explicit = Some(Reach::Owner),
             _ => {}
         }

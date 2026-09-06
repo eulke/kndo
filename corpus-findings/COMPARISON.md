@@ -1339,3 +1339,23 @@ member of a private type changes nothing anyone outside the owner can
 name, so v2 does not. Exposed, flask, lodash, ripgrep and vite are
 byte-identical; ripgrep's trait items and `pub(super)` items change reach
 without changing judgment.
+
+### Heirs: `protected` judged by its owner, its subtypes and its package (2026-09-06)
+
+| repo | before | after | what moved |
+|---|---|---|---|
+| guava | 8,242 | 8,254 | +12 `internal-only`, six per tree (android, main), on `protected` members used within their owner alone: `AbstractIteratorTester.MultiExceptionListIterator`, `AbstractTableTest.cellValue` and `nullableCellValue`, `AbstractClosingFutureTest.assertFinalStepThrowsIllegalStateException` (test sets), `AbstractBaseGraph.nodePairInvalidatableSet` and `LineBuffer.handleLine` (main, both of package-private owners) — `private` would suffice |
+
+`protected` reaches the owner, its transitive subtypes and, in Java, the
+package; a heirs member of a public type in a published unit is published
+surface and silent, as `public` is. Alamofire, Exposed, flask, gin, lodash,
+ripgrep, vapor and vite are byte-identical in their findings. v1's 28
+`protected` findings on guava match none of the 12: 8 are published surface
+(guava-gwt's `ForwardingSortedMultiset`, failureaccess's
+`InternalFutureFailureAccess`), 8 are `SourceSinkTester` members used from
+its four subtypes, 8 are `OldAbstractFuture` members overridden by the
+same-file facade or kept by same-named accesses on other receivers, 2 are a
+caliper `@BeforeExperiment` entry, and its 2 `unused` on
+`SomeClassThatDoesNotUseNullable.protectedButDoesNotCheckNull` ride the
+owner's import binding in the test that subclasses it and exercises it by
+reflection.

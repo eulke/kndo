@@ -92,16 +92,20 @@ impl Analysis for PrivateTypeLeak {
     }
 }
 
-/// Every link of the owner chain, self included, is `Exported` — which is
-/// what an `Exported` effective reach says: an owner narrower than exported
-/// would have capped it.
+/// Every link of the owner chain, self included, is exported surface — which
+/// is what an `Exported` effective reach says: an owner narrower than
+/// exported would have capped it. A heirs member counts: what it promises,
+/// it promises to subtypes anywhere.
 fn chain_is_exported(
     decls: &[kndo_contract::evidence::Declaration],
     d: &kndo_contract::evidence::Declaration,
 ) -> bool {
     let mut cursor = d;
     loop {
-        if !matches!(cursor.reach, Reach::Exported | Reach::Inherited) {
+        if !matches!(
+            cursor.reach,
+            Reach::Exported | Reach::Inherited | Reach::Heirs { .. }
+        ) {
             return false;
         }
         match cursor.owner {

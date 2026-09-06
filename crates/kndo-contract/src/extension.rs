@@ -312,6 +312,10 @@ pub enum Rung {
     Namespace,
     /// Nameable inside a directory subtree (Go's `internal` fence).
     Directory,
+    /// Nameable inside its owner and every subtype of it (`protected`). Sits
+    /// above the namespace for the ladder's order, but is another axis: no
+    /// use pattern short of "its subtypes alone" fills it.
+    Heirs,
     /// Nameable inside its build unit (Kotlin's `internal`, Rust's
     /// `pub(crate)`).
     Unit,
@@ -429,6 +433,7 @@ impl From<Rung> for Step {
             Rung::File => "file",
             Rung::Namespace => "namespace",
             Rung::Directory => "directory",
+            Rung::Heirs => "subtypes",
             Rung::Unit => "unit",
             Rung::Group => "group",
             Rung::Exported => "exported",
@@ -469,6 +474,10 @@ impl Ladder {
         self.0
             .iter()
             .filter(|s| s.rung >= extent && s.rung < declared && s.bearer.admits(has_owner))
+            // Heirs is another axis, not a wider file or package: a member
+            // used in its file alone cannot fall to `protected`, only a
+            // member used from its subtypes alone can.
+            .filter(|s| s.rung != Rung::Heirs || extent == Rung::Heirs)
             .min_by_key(|s| s.rung)
     }
 

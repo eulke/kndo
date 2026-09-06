@@ -17,7 +17,9 @@
 //! REACH fn name        any declaration under a reach word: `owner`, `file`, `ns`
 //!                      (its namespace), `unit`, `group` (the unit's aggregate),
 //!                      `dir(N)` (N directories up), `named(a.b)` (a namespace by
-//!                      name), `inherited` (its owner's), `pub`
+//!                      name), `heirs` (its owner and the owner's subtypes),
+//!                      `heirs+ns` (those and its namespace), `inherited` (its
+//!                      owner's), `pub`
 //! package a.b          the namespace this file declares itself into
 //! extends Sub Base     `Sub` extends the type named `Base`
 //! implements Impl Face `Impl` implements the type named `Face`
@@ -620,7 +622,7 @@ fn declaration_line(line: &str) -> Option<(Reach, SymbolKind, &str)> {
 /// line. `unit` is nameable from every kmock file, the one unit the mock
 /// language compiles; `ns` from the namespace the file declares.
 fn reach_prefix(line: &str) -> (Option<Reach>, &str) {
-    let words: [(&str, Reach); 7] = [
+    let words: [(&str, Reach); 9] = [
         ("pub ", Reach::Exported),
         ("owner ", Reach::Owner),
         ("file ", Reach::File),
@@ -628,6 +630,18 @@ fn reach_prefix(line: &str) -> (Option<Reach>, &str) {
         ("unit ", Reach::Unit { up: 0 }),
         ("group ", Reach::Unit { up: 1 }),
         ("inherited ", Reach::Inherited),
+        (
+            "heirs+ns ",
+            Reach::Heirs {
+                and_namespace: true,
+            },
+        ),
+        (
+            "heirs ",
+            Reach::Heirs {
+                and_namespace: false,
+            },
+        ),
     ];
     for (word, reach) in words {
         if let Some(rest) = line.strip_prefix(word) {

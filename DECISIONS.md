@@ -4033,3 +4033,117 @@ not a subclass's: Java's and Kotlin's `protected` still fold to Exported,
 since subclasses are a relation the forest does not walk yet. TypeScript
 members read `Owner` whatever their modifier, as they read `Private` before
 — the modifier is the js-ts migration's to spell.
+
+## 2026-09-06 — M8.b.15: `protected` is the owner's, its subtypes' and, in Java, its package's — `Reach::Heirs` walks the relations, and a heirs member of a published type is published surface
+
+**The gap, measured before the design.** `Reach::Inherited` is the owner's
+reach, not a subclass's, so `protected` folded to `Exported` and was judged
+as `public`: never advised, kept wherever its owner was. guava declares
+3,615 `protected` members (512 in the published main sets, 1,306 in
+guava-tests and guava-testlib), Exposed 106, and v1's oracle names
+`protected` in 28 of its 20,244 guava findings (26 `internal-only`, 2
+`unused`). A bounded precision gap, and one slice's worth.
+
+**The vocabulary.** `Reach::Heirs { and_namespace }`: nameable inside the
+owner and every transitive subtype of it, plus the owner's namespace when
+the language grants it. Java emits `and_namespace: true` (`protected`
+grants the package too), Kotlin `false`; TypeScript members stay `Owner`
+whatever their modifier, the js-ts migration's to spell. `Rung::Heirs`
+sits between `Namespace` and `Unit`, and is another axis of the ladder
+rather than a rung between two: a member used from its package and no
+subtype is never narrowed to `protected`, and `Ladder::step_down` offers
+the heirs step only when the extent is the heirs' own. Java's ladder reads
+`private` (members), `package-private`, `protected` (members), `public`;
+Kotlin's `private` (members and free), `protected` (members), `internal`,
+`public`. `Reach::capped_by` treats it as any rung; `Reach::Inherited`
+remains the owner's exactly.
+
+**The pool walks the relations.** The navigator builds one pool per fence
+— the file, the owner that carries the heirs reach, its `and_namespace` —
+from the owner's file, the files declaring any transitive subtype (the
+`Extend` relation walk, by simple name over every file, so a same-named
+type elsewhere widens the pool: the keep-alive direction) and, when
+granted, the namespace pool. `Index::pool_for` resolves a declaration by
+its effective reach and, for a heirs reach, against the fence whichever
+member inherits it; `describe` renders `subtypes` and
+`subtypes+namespace`.
+
+**Published units.** In a unit that publishes its exports, a heirs member
+of an owner whose effective reach is `Exported` is published surface: a
+subtype outside the tree may name it, which no pool can hold. The keepers
+keep it (`Keeper::Published`, riding its owner's surface though its own
+pool is bounded), and `internal-only` says nothing, as it says nothing of
+`public`. In an unpublished unit — a test set, an application — the pool
+judges: used in the owner alone, `private` would suffice; used from the
+package and no subtype (Java), `package-private` would; used from a
+subtype, `protected` is the reach its use needs and there is no finding;
+used by nobody, `unused`.
+
+**Four rules the measurement taught.** The first run added 8 "`protected`
+would suffice" on Exposed's `internal` members used within their file: the
+ladder had read heirs as a rung between file and unit, and it is another
+axis (rule one, above). It accused the fixture's `Fixture.shared()`, used
+from a subtype in the same package, of `package-private`: a use from a
+subtype pins `protected`, whatever package the subtype sits in (rule two:
+the heirs' extent when every user file declares a subtype, the package's
+only when none does). It advised `package-private` on guava's
+`AbstractIterator.endOfData`, whose owner is package-private: the owner's
+cap already holds every use, so only an extent below the effective reach's
+rung is advice (rule three). And it advised `package-private` on guava's
+`*Test.create()` methods from same-named accesses on other classes
+(`ArrayListMultimap.create()` in the same package): positive advice rests
+on uses that are this declaration's for sure — an access whose receiver is
+the owner or a subtype by name — and a use with any other receiver keeps
+the member alive and says nothing about where it is used (rule four).
+
+**Measured.** guava 8,242 → 8,254: twelve `internal-only`, six in each of
+the android and main trees, every one a `protected` member used within its
+owner alone — `AbstractIteratorTester.MultiExceptionListIterator` (a nested
+class of a package-private testlib class), `AbstractTableTest.cellValue`
+and `nullableCellValue`,
+`AbstractClosingFutureTest.assertFinalStepThrowsIllegalStateException`
+(guava-tests), `AbstractBaseGraph.nodePairInvalidatableSet` and
+`LineBuffer.handleLine` (the published main set, both of package-private
+owners, whose effective reach is the package and whose owner alone is
+below it). Alamofire, Exposed, flask, gin, lodash, ripgrep, vapor and
+vite are byte-identical in their findings; Exposed's and guava's run
+headers gain the `protected` step. v1's 28 decompose without a match: its
+8 on guava-gwt's `ForwardingSortedMultiset` and failureaccess's
+`InternalFutureFailureAccess` are published surface (v1 judged visibility
+without a unit's publication); its 8 on `SourceSinkTester`'s fields and
+`getLines` are used from the four subtypes (v1 never walked subtypes, and
+called them "weaker matches"); its 8 on `OldAbstractFuture` are members
+the same-file facade overrides (`set`, `setException`: a promised surface)
+or that same-named accesses on other receivers in the package keep
+(`interruptTask`, `wasInterrupted`: rule four); its 2 on
+`WhitespaceMatcherBenchmark.setUp` are a caliper `@BeforeExperiment`
+entry, kept by name dispatch until a rule pack says so; its 2 `unused` on
+`SomeClassThatDoesNotUseNullable.protectedButDoesNotCheckNull` ride the
+owner's import binding in `NullPointerTesterTest`, which subclasses it and
+exercises it by reflection.
+
+**Fixtures and knobs.** `visibility-ladder-and-nested-members` gains a test
+set (`Fixture`, `FixtureSub`, `Neighbor`) that pins all four verdicts:
+`Fixture.seed()` used from the owner alone (`private` would suffice),
+`Fixture.packaged()` used from `Neighbor` in the package and no subtype
+(`package-private` would), `Fixture.shared()` used from the subtype
+`FixtureSub` (alive, no advice), `Fixture.nobody()` (`unused`);
+`Widget.c()` and `d()` stay known gaps. Every one of the kndo-adapter-java fixtures
+and kndo-adapter-kotlin fixtures re-pins because its run header lists the
+ladder, which gained the `protected` step; no other judgment moves. The
+contract fingerprint moves (`Reach::Heirs`, `Rung::Heirs`); the report
+and query schemas move (the `heirs` rung); the WIT `reach` variant gains
+`heirs(bool)` and the compat guests are re-pinned; `kndo:java` bumps to 11
+and `kndo:kotlin` to 6; the graph semantics do not move. The engine tests
+speak `heirs` and `heirs+ns` through kmock and pin the pool (owner,
+subtype, package; a user from a package the member does not reach is a
+stranger that keeps it and draws no advice) and the surface (a heirs
+member of a published type is kept by `published`; of a file-private type,
+`unused`); the contract test pins the axis.
+
+**Open, and named as such.** `Reach::Inherited` is still the owner's;
+TypeScript members read `Owner` whatever their modifier; a `protected`
+member of a public type in a published unit is silent as `public` is —
+narrowing it is a library author's call the pool cannot make. The
+subtypes are walked by simple name: two same-named types in different
+packages share heirs, which widens a pool and never narrows one.

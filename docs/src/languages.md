@@ -39,6 +39,7 @@ adapter says nothing:
   `pub(crate)`) or the group of units one manifest aggregates (Swift's
   `package`), a directory (an exported Go name under `internal/`, fenced at
   that directory's parent), a namespace by name (Rust's `pub(in crate::a)`),
+  its owner and the owner's subtypes (`protected`; Java's adds the package),
   its owner's exactly (a Rust trait item), or exported. The engine pools by
   the *effective* reach — the declared one after every owner above caps it,
   so a public member of a file-private class reaches the file and is never
@@ -46,9 +47,10 @@ adapter says nothing:
 - **The visibility ladder** for `internal-only`: the reaches a language can
   spell, narrowest first, each under that language's own word for it and,
   where a keyword exists for members or for top-level declarations alone,
-  saying so — Java declares `private` (members), `package-private`, `public`;
-  Kotlin `private` twice (the class on a member, the file on a top-level
-  declaration), `internal`, `public`; Rust `private`, `pub(crate)`, `pub`;
+  saying so — Java declares `private` (members), `package-private`,
+  `protected` (members), `public`; Kotlin `private` twice (the class on a
+  member, the file on a top-level declaration), `protected` (members),
+  `internal`, `public`; Rust `private`, `pub(crate)`, `pub`;
   TypeScript `unexported` (top level) and `export`. The engine judges by the
   rung and reports by the word: a package-private member used only inside its
   class reads "`private` would suffice", a `pub(crate)` function used only in

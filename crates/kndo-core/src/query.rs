@@ -1526,6 +1526,12 @@ fn render_reach(reach: &kndo_contract::evidence::Reach) -> String {
         Reach::Unit { up: 1 } => "group".to_string(),
         Reach::Unit { up } => format!("unit+{up}"),
         Reach::Directory { up } => format!("directory+{up}"),
+        Reach::Heirs {
+            and_namespace: false,
+        } => "subtypes".to_string(),
+        Reach::Heirs {
+            and_namespace: true,
+        } => "subtypes+namespace".to_string(),
         Reach::Named { namespace } => format!("named:{}", namespace.join(".")),
         Reach::Inherited => "inherited".to_string(),
         Reach::Scoped { scope } => format!("scoped:{scope}"),

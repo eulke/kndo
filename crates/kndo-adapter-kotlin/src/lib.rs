@@ -35,10 +35,11 @@ impl KotlinAdapter {
     pub fn new() -> Self {
         KotlinAdapter {
             // 4: `internal` is the unit's reach, not a token.
-            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:kotlin", 5, &["kt"])
+            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:kotlin", 6, &["kt"])
                 .ladder(&[
                     Step::for_members(Rung::Owner, "private"),
                     Step::for_free(Rung::File, "private"),
+                    Step::for_members(Rung::Heirs, "protected"),
                     Step::new(Rung::Unit, "internal"),
                     Step::new(Rung::Exported, "public"),
                 ])

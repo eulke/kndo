@@ -23,6 +23,11 @@
             "word": "package-private"
           },
           {
+            "rung": "heirs",
+            "word": "protected",
+            "bearer": "member"
+          },
+          {
             "rung": "exported",
             "word": "public"
           }

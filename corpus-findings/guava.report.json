@@ -31,6 +31,11 @@
             "word": "package-private"
           },
           {
+            "rung": "heirs",
+            "word": "protected",
+            "bearer": "member"
+          },
+          {
             "rung": "exported",
             "word": "public"
           }
@@ -135682,6 +135687,29 @@
       "message": "declared `package-private`, but every use is within `AbstractIteratorTester` — `private` would suffice for this declaration"
     },
     {
+      "id": "kndo-a4b6f4789294",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-testlib/src/com/google/common/collect/testing/AbstractIteratorTester.java",
+        "selector": {
+          "owner": "AbstractIteratorTester",
+          "name": "MultiExceptionListIterator"
+        },
+        "span": {
+          "start": 5560,
+          "end": 9948
+        }
+      },
+      "lines": {
+        "start": 138,
+        "end": 273
+      },
+      "message": "declared `protected`, but every use is within `AbstractIteratorTester` — `private` would suffice for this type"
+    },
+    {
       "id": "kndo-c2076d379c40",
       "category": "internal-only",
       "severity": "info",
@@ -142358,6 +142386,54 @@
       "message": "declared `package-private`, but every use is within `AbstractImmutableSetTest` — `private` would suffice for this type"
     },
     {
+      "id": "kndo-162c2b003074",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/test/com/google/common/collect/AbstractTableTest.java",
+        "selector": {
+          "owner": "AbstractTableTest",
+          "name": "nullableCellValue",
+          "signature": "(Character)"
+        },
+        "span": {
+          "start": 5952,
+          "end": 6077
+        }
+      },
+      "lines": {
+        "start": 165,
+        "end": 168
+      },
+      "message": "declared `protected`, but every use is within `AbstractTableTest` — `private` would suffice for this method"
+    },
+    {
+      "id": "kndo-5a6ea414ac55",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/test/com/google/common/collect/AbstractTableTest.java",
+        "selector": {
+          "owner": "AbstractTableTest",
+          "name": "cellValue",
+          "signature": "(Character)"
+        },
+        "span": {
+          "start": 5686,
+          "end": 5852
+        }
+      },
+      "lines": {
+        "start": 159,
+        "end": 162
+      },
+      "message": "declared `protected`, but every use is within `AbstractTableTest` — `private` would suffice for this method"
+    },
+    {
       "id": "kndo-20febc3e0fa3",
       "category": "internal-only",
       "severity": "info",
@@ -146369,6 +146445,30 @@
         "end": 105
       },
       "message": "declared `package-private`, but every use is within `AbstractClosingFutureTest` — `private` would suffice for this declaration"
+    },
+    {
+      "id": "kndo-99ecc021af06",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava-tests/test/com/google/common/util/concurrent/AbstractClosingFutureTest.java",
+        "selector": {
+          "owner": "AbstractClosingFutureTest",
+          "name": "assertFinalStepThrowsIllegalStateException",
+          "signature": "(ClosingFuture<?>)"
+        },
+        "span": {
+          "start": 54012,
+          "end": 54407
+        }
+      },
+      "lines": {
+        "start": 1276,
+        "end": 1283
+      },
+      "message": "declared `protected`, but every use is within `AbstractClosingFutureTest` — `private` would suffice for this method"
     },
     {
       "id": "kndo-a0a16ce2468f",
@@ -154197,6 +154297,30 @@
       "message": "declared `package-private`, but every use is within `ArrayBasedEscaperMap` — `private` would suffice for this method"
     },
     {
+      "id": "kndo-084b762a975b",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava/src/com/google/common/graph/AbstractBaseGraph.java",
+        "selector": {
+          "owner": "AbstractBaseGraph",
+          "name": "nodePairInvalidatableSet",
+          "signature": "(Set<T>, N, N)"
+        },
+        "span": {
+          "start": 11716,
+          "end": 12038
+        }
+      },
+      "lines": {
+        "start": 335,
+        "end": 342
+      },
+      "message": "declared `protected`, but every use is within `AbstractBaseGraph` — `private` would suffice for this method"
+    },
+    {
       "id": "kndo-1103a6866020",
       "category": "internal-only",
       "severity": "info",
@@ -154971,6 +155095,30 @@
         "end": 89
       },
       "message": "declared `package-private`, but every use is within `Closer` — `private` would suffice for this declaration"
+    },
+    {
+      "id": "kndo-07a25871518d",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "android/guava/src/com/google/common/io/LineBuffer.java",
+        "selector": {
+          "owner": "LineBuffer",
+          "name": "handleLine",
+          "signature": "(String, String)"
+        },
+        "span": {
+          "start": 3884,
+          "end": 3963
+        }
+      },
+      "lines": {
+        "start": 117,
+        "end": 117
+      },
+      "message": "declared `protected`, but every use is within `LineBuffer` — `private` would suffice for this method"
     },
     {
       "id": "kndo-6568d07fa5b6",
@@ -157614,6 +157762,29 @@
         "end": 148
       },
       "message": "declared `package-private`, but every use is within `AbstractIteratorTester` — `private` would suffice for this declaration"
+    },
+    {
+      "id": "kndo-e90f64987fba",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-testlib/src/com/google/common/collect/testing/AbstractIteratorTester.java",
+        "selector": {
+          "owner": "AbstractIteratorTester",
+          "name": "MultiExceptionListIterator"
+        },
+        "span": {
+          "start": 5642,
+          "end": 10030
+        }
+      },
+      "lines": {
+        "start": 139,
+        "end": 274
+      },
+      "message": "declared `protected`, but every use is within `AbstractIteratorTester` — `private` would suffice for this type"
     },
     {
       "id": "kndo-f3813c35502b",
@@ -165284,6 +165455,54 @@
       "message": "declared `package-private`, but every use is within `AbstractImmutableSetTest` — `private` would suffice for this type"
     },
     {
+      "id": "kndo-d7d81d37a625",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/test/com/google/common/collect/AbstractTableTest.java",
+        "selector": {
+          "owner": "AbstractTableTest",
+          "name": "nullableCellValue",
+          "signature": "(Character)"
+        },
+        "span": {
+          "start": 5952,
+          "end": 6077
+        }
+      },
+      "lines": {
+        "start": 165,
+        "end": 168
+      },
+      "message": "declared `protected`, but every use is within `AbstractTableTest` — `private` would suffice for this method"
+    },
+    {
+      "id": "kndo-f9ed8b839231",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/test/com/google/common/collect/AbstractTableTest.java",
+        "selector": {
+          "owner": "AbstractTableTest",
+          "name": "cellValue",
+          "signature": "(Character)"
+        },
+        "span": {
+          "start": 5686,
+          "end": 5852
+        }
+      },
+      "lines": {
+        "start": 159,
+        "end": 162
+      },
+      "message": "declared `protected`, but every use is within `AbstractTableTest` — `private` would suffice for this method"
+    },
+    {
       "id": "kndo-607f58a48205",
       "category": "internal-only",
       "severity": "info",
@@ -169507,6 +169726,30 @@
         "end": 94
       },
       "message": "declared `package-private`, but every use is within `AbstractClosingFutureTest` — `private` would suffice for this declaration"
+    },
+    {
+      "id": "kndo-ea1c73d84c61",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-tests/test/com/google/common/util/concurrent/AbstractClosingFutureTest.java",
+        "selector": {
+          "owner": "AbstractClosingFutureTest",
+          "name": "assertFinalStepThrowsIllegalStateException",
+          "signature": "(ClosingFuture<?>)"
+        },
+        "span": {
+          "start": 54012,
+          "end": 54407
+        }
+      },
+      "lines": {
+        "start": 1276,
+        "end": 1283
+      },
+      "message": "declared `protected`, but every use is within `AbstractClosingFutureTest` — `private` would suffice for this method"
     },
     {
       "id": "kndo-ea5584ce4095",
@@ -176934,6 +177177,30 @@
       "message": "declared `package-private`, but every use is within `ArrayBasedEscaperMap` — `private` would suffice for this method"
     },
     {
+      "id": "kndo-836958b7a8b4",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava/src/com/google/common/graph/AbstractBaseGraph.java",
+        "selector": {
+          "owner": "AbstractBaseGraph",
+          "name": "nodePairInvalidatableSet",
+          "signature": "(Set<T>, N, N)"
+        },
+        "span": {
+          "start": 11716,
+          "end": 12038
+        }
+      },
+      "lines": {
+        "start": 335,
+        "end": 342
+      },
+      "message": "declared `protected`, but every use is within `AbstractBaseGraph` — `private` would suffice for this method"
+    },
+    {
       "id": "kndo-279e4d18f64a",
       "category": "internal-only",
       "severity": "info",
@@ -177638,6 +177905,30 @@
         "end": 89
       },
       "message": "declared `package-private`, but every use is within `Closer` — `private` would suffice for this declaration"
+    },
+    {
+      "id": "kndo-16fa35792f91",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava/src/com/google/common/io/LineBuffer.java",
+        "selector": {
+          "owner": "LineBuffer",
+          "name": "handleLine",
+          "signature": "(String, String)"
+        },
+        "span": {
+          "start": 3884,
+          "end": 3963
+        }
+      },
+      "lines": {
+        "start": 117,
+        "end": 117
+      },
+      "message": "declared `protected`, but every use is within `LineBuffer` — `private` would suffice for this method"
     },
     {
       "id": "kndo-1eeea6788ced",

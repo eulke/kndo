@@ -59,6 +59,11 @@
             "bearer": "free"
           },
           {
+            "rung": "heirs",
+            "word": "protected",
+            "bearer": "member"
+          },
+          {
             "rung": "unit",
             "word": "internal"
           },

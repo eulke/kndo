@@ -30,7 +30,10 @@ fn no_modifier_means_public_the_opposite_of_java() {
     );
     assert_eq!(
         declaration_named(&ev, "forSubclasses").reach,
-        Reach::Exported
+        Reach::Heirs {
+            and_namespace: false
+        },
+        "protected grants the subtypes and nothing of the package"
     );
     // One keyword, two rungs: a member's `private` is its owner's, a
     // top-level declaration's is its file's.

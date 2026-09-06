@@ -48,7 +48,7 @@ impl JavaAdapter {
         JavaAdapter {
             // 6: the package clause IS the namespace — a file declares it, so
             // two files share one however far apart they sit.
-            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:java", 10, &["java"])
+            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:java", 11, &["java"])
                 .ladder(&[
                     // `private` is class-private and exists for members alone
                     // (a top-level class cannot take it), `public` is
@@ -57,6 +57,7 @@ impl JavaAdapter {
                     // the word its developers use.
                     Step::for_members(Rung::Owner, "private"),
                     Step::new(Rung::Namespace, "package-private"),
+                    Step::for_members(Rung::Heirs, "protected"),
                     Step::new(Rung::Exported, "public"),
                 ])
                 // A package is a NAME, not a place: two artifacts on one

@@ -101,18 +101,20 @@ fn is_generated(source: &[u8]) -> bool {
 
 /// No modifier means public. `internal` is the compiler's module boundary —
 /// the unit's reach, bounded by the resolver from the source-set layout until
-/// the manifest names the unit; `protected` folds to Exported (subclasses are
-/// unboundable); `private` is the file's on a top-level declaration and the
-/// owner's on a member — one keyword, two rungs, as the ladder says.
+/// the manifest names the unit; `protected` is the owner's heirs, and
+/// nothing of the package; `private` is the file's on a top-level declaration
+/// and the owner's on a member — one keyword, two rungs, as the ladder says.
 fn reach_of(item: Node<'_>) -> Reach {
     let Some(modifiers) = tk::child_of_kind(item, "modifiers") else {
         return Reach::Exported;
     };
     let mut private = false;
     let mut internal = false;
+    let mut protected = false;
     tk::walk(modifiers, &mut |n| match n.kind() {
         "private" => private = true,
         "internal" => internal = true,
+        "protected" => protected = true,
         _ => {}
     });
     if private {
@@ -120,6 +122,10 @@ fn reach_of(item: Node<'_>) -> Reach {
             Reach::File
         } else {
             Reach::Owner
+        }
+    } else if protected {
+        Reach::Heirs {
+            and_namespace: false,
         }
     } else if internal {
         Reach::Unit { up: 0 }

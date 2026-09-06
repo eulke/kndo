@@ -455,6 +455,12 @@ fn a_reach_stands_on_a_rung_and_never_reaches_wider_than_its_owner() {
         (Reach::Namespace { up: 2 }, Some(Rung::Namespace)),
         (named.clone(), Some(Rung::Namespace)),
         (Reach::Directory { up: 1 }, Some(Rung::Directory)),
+        (
+            Reach::Heirs {
+                and_namespace: true,
+            },
+            Some(Rung::Heirs),
+        ),
         (Reach::Unit { up: 0 }, Some(Rung::Unit)),
         (Reach::Unit { up: 1 }, Some(Rung::Group)),
         (Reach::Exported, Some(Rung::Exported)),
@@ -479,6 +485,15 @@ fn a_reach_stands_on_a_rung_and_never_reaches_wider_than_its_owner() {
         "a token compares as a namespace, the widest thing a token has named"
     );
     assert_eq!(Reach::Owner.capped_by(&token), Reach::Owner);
+    let heirs = Reach::Heirs {
+        and_namespace: false,
+    };
+    assert_eq!(
+        heirs.capped_by(&Reach::Namespace { up: 0 }),
+        Reach::Namespace { up: 0 },
+        "a protected member of a package-private type reaches the package"
+    );
+    assert_eq!(heirs.capped_by(&Reach::Exported), heirs);
 
     // A chain: a file-private type owning an exported type owning a member
     // that inherits — the member reaches the file, and so does the inner
@@ -505,4 +520,32 @@ fn a_reach_stands_on_a_rung_and_never_reaches_wider_than_its_owner() {
     assert_eq!(ev.effective_reach(inner), Reach::File);
     assert_eq!(ev.effective_reach(m), Reach::File);
     assert_eq!(ev.effective_reach(stray), Reach::Exported);
+}
+
+#[test]
+fn the_heirs_step_is_another_axis_of_the_ladder() {
+    use kndo_contract::extension::{Ladder, Rung, Step};
+    let ladder = Ladder::new(vec![
+        Step::for_members(Rung::Owner, "private"),
+        Step::for_members(Rung::Heirs, "protected"),
+        Step::new(Rung::Unit, "internal"),
+        Step::new(Rung::Exported, "public"),
+    ]);
+    // A member used in its file alone cannot fall to `protected`: nothing on
+    // this ladder spells a file, so there is no advice.
+    assert!(ladder.step_down(Rung::Unit, Rung::File, true).is_none());
+    // Used in its owner alone, `private`; used from its subtypes alone,
+    // `protected`.
+    assert_eq!(
+        ladder
+            .step_down(Rung::Unit, Rung::Owner, true)
+            .map(|s| s.word.as_str()),
+        Some("private")
+    );
+    assert_eq!(
+        ladder
+            .step_down(Rung::Exported, Rung::Heirs, true)
+            .map(|s| s.word.as_str()),
+        Some("protected")
+    );
 }

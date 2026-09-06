@@ -755,6 +755,11 @@
           "const": "directory"
         },
         {
+          "description": "Nameable inside its owner and every subtype of it (`protected`). Sits\nabove the namespace for the ladder's order, but is another axis: no\nuse pattern short of \"its subtypes alone\" fills it.",
+          "type": "string",
+          "const": "heirs"
+        },
+        {
           "description": "Nameable inside its build unit (Kotlin's `internal`, Rust's\n`pub(crate)`).",
           "type": "string",
           "const": "unit"

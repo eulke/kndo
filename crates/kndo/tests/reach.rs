@@ -41,9 +41,11 @@ fn publishing() -> MockExtension {
 /// step per rung, under the word these tests read back.
 fn laddered() -> MockExtension {
     let words = [
+        (Rung::Owner, "own"),
         (Rung::File, "local"),
         (Rung::Namespace, "ns"),
         (Rung::Directory, "tree"),
+        (Rung::Heirs, "heirs"),
         (Rung::Unit, "unit"),
         (Rung::Group, "package"),
         (Rung::Exported, "pub"),
@@ -51,6 +53,7 @@ fn laddered() -> MockExtension {
     let steps: Vec<Step> = words
         .into_iter()
         .map(|(rung, word)| match rung {
+            Rung::Owner | Rung::Heirs => Step::for_members(rung, word),
             Rung::File => Step::for_free(rung, word),
             _ => Step::new(rung, word),
         })
@@ -211,6 +214,83 @@ fn a_named_reach_pools_the_namespace_it_spells() {
     let unused = reported(&snap, &Category::UNUSED);
     assert!(
         unused.contains(&"src/x.kmock — g".to_string()),
+        "{unused:?}"
+    );
+}
+
+#[test]
+fn a_heirs_reach_pools_the_owner_its_subtypes_and_at_most_its_package() {
+    let p = TempProject::new();
+    p.file(
+        "kmock.pkg",
+        "unit core library roots=src entries=src/base.kmock,src/sub.kmock,src/other.kmock,src/far.kmock\n",
+    )
+    .file(
+        "src/base.kmock",
+        "package a\npub type Base\nheirs member Base.hook\nheirs member Base.lonely\nheirs+ns member Base.local\nheirs member Base.fenced\ncall lonely\n",
+    )
+    // A subtype, in another file: in the pool of every heirs member.
+    .file(
+        "src/sub.kmock",
+        "package a\nimport ./base { Base }\npub type Sub\nextends Sub Base\ncall s.hook\n",
+    )
+    // The same package, no subtype: in the pool of `local` alone.
+    .file(
+        "src/other.kmock",
+        "package a\nimport ./base { Base }\ncall Base.local\ncall Base.fenced\n",
+    )
+    // Another package, no subtype: in nobody's pool.
+    .file("src/far.kmock", "package z\nimport ./base { Base }\ncall f.fenced\n");
+    let snap = common::analyze(&p, vec![Box::new(laddered())]);
+
+    assert_eq!(
+        reaches(&snap, "src/base.kmock#Base.hook"),
+        pair("subtypes", "subtypes")
+    );
+    assert_eq!(
+        reaches(&snap, "src/base.kmock#Base.local"),
+        pair("subtypes+namespace", "subtypes+namespace")
+    );
+    // `hook` is used from its subtype: its reach is what it needs. `lonely`
+    // is used in its own file alone, `local` from its package and no subtype
+    // (the package's rung). `fenced` is used from a package it does not
+    // reach: not a use this pool counts, so no advice is drawn from it — and
+    // a member dispatches through values, so that use still keeps it alive.
+    assert_eq!(
+        reported(&snap, &Category::INTERNAL_ONLY),
+        [
+            "src/base.kmock — Base.local",
+            "src/base.kmock — Base.lonely"
+        ]
+    );
+    let unused = reported(&snap, &Category::UNUSED);
+    assert!(!unused.iter().any(|s| s.contains("Base.")), "{unused:?}");
+}
+
+#[test]
+fn a_heirs_member_of_a_published_type_is_published_surface() {
+    let p = TempProject::new();
+    p.file("kmock.pkg", "unit core library roots=src\n").file(
+        "src/api.kmock",
+        "pub type Base\nheirs member Base.hook\nfile type Local\nheirs member Local.hook\n",
+    );
+    let snap = common::analyze(&p, vec![Box::new(publishing())]);
+
+    // A subtype outside the tree may name it: kept, and never advised.
+    assert_eq!(
+        keeper_kinds(&snap, "src/api.kmock#Base.hook"),
+        ["published"]
+    );
+    assert!(reported(&snap, &Category::INTERNAL_ONLY).is_empty());
+    // Its owner's fence caps it to the file: nobody outside can, and nobody
+    // inside does.
+    assert_eq!(
+        reaches(&snap, "src/api.kmock#Local.hook"),
+        pair("subtypes", "file")
+    );
+    let unused = reported(&snap, &Category::UNUSED);
+    assert!(
+        unused.contains(&"src/api.kmock — Local.hook".to_string()),
         "{unused:?}"
     );
 }

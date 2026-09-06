@@ -163,6 +163,7 @@ pub(crate) fn reach_to_wire(reach: &ev::Reach) -> awire::Reach {
         ev::Reach::Namespace { up } => awire::Reach::Namespace(*up),
         ev::Reach::Unit { up } => awire::Reach::Unit(*up),
         ev::Reach::Directory { up } => awire::Reach::Directory(*up),
+        ev::Reach::Heirs { and_namespace } => awire::Reach::Heirs(*and_namespace),
         ev::Reach::Named { namespace } => {
             awire::Reach::Named(namespace.iter().map(|s| s.to_string()).collect())
         }
@@ -179,6 +180,9 @@ pub(crate) fn reach_from_wire(reach: &awire::Reach) -> ev::Reach {
         awire::Reach::Namespace(up) => ev::Reach::Namespace { up: *up },
         awire::Reach::Unit(up) => ev::Reach::Unit { up: *up },
         awire::Reach::Directory(up) => ev::Reach::Directory { up: *up },
+        awire::Reach::Heirs(and_namespace) => ev::Reach::Heirs {
+            and_namespace: *and_namespace,
+        },
         awire::Reach::Named(namespace) => ev::Reach::Named {
             namespace: namespace.iter().map(SmolStr::new).collect(),
         },

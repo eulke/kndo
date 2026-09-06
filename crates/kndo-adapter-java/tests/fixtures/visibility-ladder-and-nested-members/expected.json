@@ -2,12 +2,12 @@
   "run": {
     "schema": "kndo-v2/m6",
     "mode": "full",
-    "files_discovered": 3,
-    "files_claimed": 2,
+    "files_discovered": 6,
+    "files_claimed": 5,
     "extensions": [
       {
         "id": "kndo:java",
-        "files": 2,
+        "files": 5,
         "published_surface": "exports",
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
@@ -23,6 +23,11 @@
             "word": "package-private"
           },
           {
+            "rung": "heirs",
+            "word": "protected",
+            "bearer": "member"
+          },
+          {
             "rung": "exported",
             "word": "public"
           }
@@ -31,19 +36,48 @@
     ]
   },
   "health": {
-    "implicated": 0,
-    "subjects": 13,
-    "by_category": [],
+    "implicated": 1,
+    "subjects": 26,
+    "by_category": [
+      {
+        "category": "unused",
+        "findings": 1
+      }
+    ],
     "by_package": [
       {
         "name": "visibility-ladder-and-nested-members",
         "manifest": "pom.xml",
-        "implicated": 0,
-        "subjects": 13
+        "implicated": 1,
+        "subjects": 26
       }
     ]
   },
   "findings": [
+    {
+      "id": "kndo-cff1689415af",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "src/test/java/com/foo/Fixture.java",
+        "selector": {
+          "owner": "Fixture",
+          "name": "nobody",
+          "signature": "()"
+        },
+        "span": {
+          "start": 188,
+          "end": 230
+        }
+      },
+      "lines": {
+        "start": 16,
+        "end": 18
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
     {
       "id": "kndo-2d7192464f26",
       "category": "internal-only",
@@ -114,6 +148,54 @@
         "end": 33
       },
       "message": "declared `package-private`, but every use is within `Widget` — `private` would suffice for this type"
+    },
+    {
+      "id": "kndo-02a0ff9b1553",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "src/test/java/com/foo/Fixture.java",
+        "selector": {
+          "owner": "Fixture",
+          "name": "packaged",
+          "signature": "()"
+        },
+        "span": {
+          "start": 133,
+          "end": 184
+        }
+      },
+      "lines": {
+        "start": 12,
+        "end": 14
+      },
+      "message": "declared `protected`, but every use is within its own package — `package-private` would suffice for this method"
+    },
+    {
+      "id": "kndo-8564a51203d6",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "src/test/java/com/foo/Fixture.java",
+        "selector": {
+          "owner": "Fixture",
+          "name": "seed",
+          "signature": "()"
+        },
+        "span": {
+          "start": 43,
+          "end": 83
+        }
+      },
+      "lines": {
+        "start": 4,
+        "end": 6
+      },
+      "message": "declared `protected`, but every use is within `Fixture` — `private` would suffice for this method"
     }
   ],
   "fixed": [],
@@ -130,13 +212,12 @@
     },
     {
       "category": "test-only",
-      "reason": "no-test-roots-anywhere",
-      "scope": "whole-run"
-    },
-    {
-      "category": "untested",
-      "reason": "no-test-roots-anywhere",
-      "scope": "whole-run"
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 1
+        }
+      }
     },
     {
       "category": "undeclared",

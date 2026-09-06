@@ -76,6 +76,10 @@ impl Analysis for InternalOnly {
         // none, and `qualifies` below is what keeps that absence from reading
         // as "this file accesses no members".
         let mut per_file_accesses: Vec<BTreeSet<&str>> = Vec::with_capacity(g.files.len());
+        // The same accesses with what they were read from — `(receiver, name)`
+        // — which is what tells `Owner.create()` from another class's.
+        let mut per_file_accesses_on: Vec<BTreeSet<(&str, &str)>> =
+            Vec::with_capacity(g.files.len());
         let mut per_file_types: Vec<BTreeSet<&str>> = Vec::with_capacity(g.files.len());
         let mut qualifies: Vec<bool> = Vec::with_capacity(g.files.len());
         for f in &g.files {
@@ -92,6 +96,13 @@ impl Analysis for InternalOnly {
                     .iter()
                     .filter(|r| r.on.is_some())
                     .map(|r| r.name.as_str())
+                    .collect(),
+            );
+            per_file_accesses_on.push(
+                f.evidence
+                    .references
+                    .iter()
+                    .filter_map(|r| r.on.as_ref().map(|on| (on.as_str(), r.name.as_str())))
                     .collect(),
             );
             per_file_types.push(
@@ -186,16 +197,27 @@ impl Analysis for InternalOnly {
                     Reach::Namespace { .. }
                     | Reach::Unit { .. }
                     | Reach::Directory { .. }
-                    | Reach::Named { .. } => {
+                    | Reach::Named { .. }
+                    | Reach::Heirs { .. } => {
                         if !bounded_open {
+                            continue;
+                        }
+                        // A heirs member of an exported owner, in a unit that
+                        // publishes its exports, is published surface: a
+                        // subtype outside the tree may name it, as with
+                        // `public`.
+                        if matches!(d.reach, Reach::Heirs { .. })
+                            && !export_is_internal
+                            && d.owner
+                                .is_some_and(|o| f.evidence.effective_reach(o) == Reach::Exported)
+                        {
                             continue;
                         }
                         // The pool is the effective reach's — a bounded member
                         // of a file-private owner pools its file — and the
                         // rung the declared one's, since the word is the
                         // declaration's own.
-                        let effective = f.evidence.effective_reach_at(d_ix);
-                        let Pool::Files(files) = cx.run.index.pool_of(g, i, &effective) else {
+                        let Pool::Files(files) = cx.run.index.pool_for(g, i, d_ix) else {
                             continue;
                         };
                         let Some(rung) = d.reach.rung() else {
@@ -241,11 +263,16 @@ impl Analysis for InternalOnly {
                         continue;
                     }
                 }
-                // Used INSIDE its own file at all? If not, `unused` owns it.
+                // Used INSIDE its own file at all? If not, `unused` owns it —
+                // unless the pool holds a use, which the package extent below
+                // reads.
                 let own_use = per_file_refs[i].contains(d.name.as_str());
-                if !own_use {
-                    continue;
-                }
+                // A heirs member granted its package too, used from the
+                // package and from no subtype: the package's rung. Any member
+                // used from its subtypes alone: the heirs' rung — what
+                // `protected` is for, whatever package the subtype sits in.
+                let mut within_package = false;
+                let mut within_heirs = false;
                 let used_beyond = match pool {
                     // Any use beyond the file disqualifies: a binding importer,
                     // or a reference in another file of the POOL — the only
@@ -284,18 +311,66 @@ impl Analysis for InternalOnly {
                                 || per_file_accesses[j].contains(d.name.as_str())
                                 || heirs.iter().any(|t| per_file_types[j].contains(t.as_str()))
                         };
-                        bound_names.contains(&(i as u32, d.name.as_str()))
+                        let bound = bound_names.contains(&(i as u32, d.name.as_str()))
                             || d.exported_as
                                 .as_ref()
-                                .is_some_and(|a| bound_names.contains(&(i as u32, a.as_str())))
-                            || region.iter().any(|&j| {
+                                .is_some_and(|a| bound_names.contains(&(i as u32, a.as_str())));
+                        let users: Vec<u32> = region
+                            .iter()
+                            .copied()
+                            .filter(|&j| {
                                 j as usize != i && reachable(j as usize) && names_it(j as usize)
                             })
+                            .collect();
+                        if !own_use && users.is_empty() {
+                            continue;
+                        }
+                        let is_heir = |j: &u32| -> bool {
+                            heirs.as_ref().is_some_and(|heirs| {
+                                heirs
+                                    .iter()
+                                    .any(|t| per_file_types[*j as usize].contains(t.as_str()))
+                            })
+                        };
+                        // Positive advice rests on uses this declaration's for
+                        // sure: an access read from the owner or one of its
+                        // heirs by name. A receiver that is anything else — a
+                        // local, another class with a same-named member —
+                        // keeps the member alive and says nothing about where
+                        // it is used.
+                        let names_owner = |j: &u32| -> bool {
+                            let Some(owner) = owner else { return false };
+                            per_file_accesses_on[*j as usize].iter().any(|(on, n)| {
+                                *n == d.name.as_str()
+                                    && (*on == owner
+                                        || heirs
+                                            .as_ref()
+                                            .is_some_and(|h| h.iter().any(|t| t == on)))
+                            })
+                        };
+                        within_heirs = !bound && !users.is_empty() && users.iter().all(is_heir);
+                        within_package = !bound
+                            && !users.is_empty()
+                            && !users.iter().any(is_heir)
+                            && users.iter().all(names_owner)
+                            && matches!(
+                                d.reach,
+                                Reach::Heirs {
+                                    and_namespace: true
+                                }
+                            )
+                            && cx.run.index.namespace_pool(i, 0).is_some_and(|ns| {
+                                users.iter().all(|u| ns.binary_search(u).is_ok())
+                            });
+                        bound || (!users.is_empty() && !within_package && !within_heirs)
                     }
                     // Total absence for the Exported rung: any binding importer
                     // (reachable or not), or the name spelled in ANY other
                     // claimed file.
                     None => {
+                        if !own_use {
+                            continue;
+                        }
                         bound_all.contains(&(i as u32, d.name.as_str()))
                             || d.exported_as
                                 .as_ref()
@@ -311,9 +386,21 @@ impl Analysis for InternalOnly {
                 // a keyword this declaration cannot take.
                 let enclosing = enclosing_owner(&f.evidence, d_ix);
                 let extent = match enclosing {
+                    _ if within_heirs => Rung::Heirs,
+                    _ if within_package => Rung::Namespace,
                     Some(_) => Rung::Owner,
                     None => Rung::File,
                 };
+                // The owner's cap already holds the uses: the word between the
+                // cap and the declaration changes nothing anyone can name, so
+                // only an extent below the cap is advice.
+                if f.evidence
+                    .effective_reach_at(d_ix)
+                    .rung()
+                    .is_some_and(|cap| extent >= cap)
+                {
+                    continue;
+                }
                 let Some(step) = ladder.step_down(declared, extent, d.owner.is_some()) else {
                     continue;
                 };
@@ -325,6 +412,14 @@ impl Analysis for InternalOnly {
                     _ => "declaration",
                 };
                 let within = match enclosing {
+                    _ if within_heirs => match &d.owner {
+                        Some(o) => format!(
+                            "`{}` and its subtypes",
+                            f.evidence.declarations[o.index()].name
+                        ),
+                        None => "its subtypes".to_string(),
+                    },
+                    _ if within_package => "its own package".to_string(),
                     Some(owner) => format!("`{}`", owner.name),
                     None if declared == Rung::Exported => {
                         "its own file and nothing else in the tree imports or names it".to_string()

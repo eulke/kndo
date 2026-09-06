@@ -23,7 +23,13 @@ fn visibility_folds_to_binary_reach() {
     );
     assert_eq!(declaration_named(&ev, "Widget").reach, Reach::Exported);
     assert_eq!(declaration_named(&ev, "a").reach, Reach::Exported);
-    assert_eq!(declaration_named(&ev, "b").reach, Reach::Exported);
+    assert_eq!(
+        declaration_named(&ev, "b").reach,
+        Reach::Heirs {
+            and_namespace: true
+        },
+        "protected grants the subtypes and the package"
+    );
     assert_eq!(
         declaration_named(&ev, "c").reach,
         Reach::Namespace { up: 0 }

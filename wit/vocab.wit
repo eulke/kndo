@@ -59,6 +59,7 @@ interface types {
         namespace(u32),
         unit(u32),
         directory(u32),
+        heirs(bool),
         named(list<string>),
         inherited,
         scoped(string),
