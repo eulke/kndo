@@ -6,9 +6,28 @@
     <link rel="stylesheet" href="./style.css">
     <link rel="modulepreload" href="/src/util.ts">
     <!-- <script src="./retired.js"></script> -->
+    <style>
+      @import "./inline.css";
+      body { margin: 0; }
+    </style>
   </head>
   <body>
     <div id="app"></div>
     <script type="module" src="/src/main.ts?v=2"></script>
+    <script type="module">
+      import { greet } from "./src/util";
+      import "./src/inline-only";
+      const banner = greet("inline");
+      function unusedInline() {
+        return banner.toUpperCase();
+      }
+      document.title = banner;
+    </script>
+    <script>
+      function onBannerClick() {
+        return "a classic script's function is the page's global";
+      }
+    </script>
+    <script type="importmap">{ "imports": { "vue": "/vendor/vue.js" } }</script>
   </body>
 </html>

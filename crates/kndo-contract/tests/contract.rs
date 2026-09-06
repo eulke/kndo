@@ -379,3 +379,65 @@ fn a_ladder_names_the_narrowest_step_a_declaration_can_take() {
     assert!(Ladder::default().is_empty());
     assert_eq!(PublishedSurface::default(), PublishedSurface::Exports);
 }
+
+#[test]
+fn a_regions_writes_land_in_the_files_coordinates_and_never_nest() {
+    use kndo_contract::evidence::{
+        EvidenceSink, EvidenceStream, EvidenceStreams, ImportShape, ImportTarget, Reach,
+        RegionMode, SymbolKind,
+    };
+    use kndo_contract::vocab::{Confidence, Span};
+    // A 100-byte host declaring no optional stream, with a region at 40..60.
+    let mut sink = EvidenceSink::new(100, EvidenceStreams::none());
+    let id = sink
+        .region(Span::new(40, 60), "kmock", RegionMode::Script)
+        .expect("a region of the file");
+    sink.within(id, |sink| {
+        // Region-relative spans shift by the region's start …
+        sink.declaration("f", SymbolKind::Function, Span::new(2, 8), Reach::Private);
+        sink.import(
+            ImportTarget::Relative("./x".into()),
+            ImportShape::SideEffect,
+            Span::new(0, 3),
+            Confidence::Certain,
+        );
+        // … and clamp to the region, not the file.
+        sink.reference(
+            "g",
+            kndo_contract::evidence::RefKind::Call,
+            Span::new(10, 30),
+        );
+        // What the host never declared is dropped, silently.
+        sink.comment(Span::new(0, 1), Span::new(0, 1));
+        // A region inside a region is refused.
+        assert!(
+            sink.region(Span::new(0, 1), "kmock", RegionMode::Module)
+                .is_none()
+        );
+    });
+    // Back at the file's level, a write is the file's own again.
+    sink.import(
+        ImportTarget::Relative("./y".into()),
+        ImportShape::SideEffect,
+        Span::new(90, 93),
+        Confidence::Certain,
+    );
+    let evidence = sink.finish();
+    assert_eq!(evidence.declarations[0].span, Span::new(42, 48));
+    assert_eq!(evidence.imports[0].span, Span::new(40, 43));
+    assert_eq!(evidence.imports[0].embedded_in, Some(id));
+    assert_eq!(evidence.references[0].span, Span::new(50, 60));
+    assert!(evidence.comments.is_empty());
+    assert_eq!(evidence.imports[1].span, Span::new(90, 93));
+    assert_eq!(evidence.imports[1].embedded_in, None);
+    assert_eq!(evidence.embedded.len(), 1);
+    let messages: Vec<&str> = evidence
+        .diagnostics
+        .iter()
+        .map(|d| d.message.as_str())
+        .collect();
+    assert_eq!(messages.len(), 2, "{messages:?}");
+    assert!(messages[0].contains("exceeds region length 20"));
+    assert!(messages[1].contains("never nests"));
+    assert!(!evidence.declared.contains(EvidenceStream::Comments));
+}

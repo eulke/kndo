@@ -3,15 +3,22 @@
 //! [`crate::extension::Extension`] is the one trait that consumes them; this module
 //! holds the data shapes it shares with the engine.
 
-use crate::evidence::RootKind;
+use crate::evidence::{EmbeddedRegion, RootKind};
 use crate::vocab::{Confidence, ProjectPath};
 use smol_str::SmolStr;
 use std::collections::BTreeSet;
 
-/// One file handed to extraction. Adapters never touch the filesystem.
+/// One file handed to extraction, or one embedded region of it. Adapters
+/// never touch the filesystem.
 pub struct SourceFile<'a> {
     pub path: &'a ProjectPath,
     pub content: &'a [u8],
+    /// `Some` when `content` is one embedded region of the file at `path`: its
+    /// language named this extension, and its mode says how the region runs.
+    /// `None` for the whole file. Spans an adapter reports are relative to
+    /// `content` either way — the sink puts a region's into the file's
+    /// coordinates.
+    pub region: Option<&'a EmbeddedRegion>,
 }
 
 /// A package one manifest declares: the name the ecosystem imports it by, the file

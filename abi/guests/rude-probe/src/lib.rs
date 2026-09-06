@@ -40,7 +40,11 @@ impl bindings::Guest for RudeProbe {
         }
     }
 
-    fn extract(_path: String, content: Vec<u8>) -> wire::FileEvidence {
+    fn extract(
+        _path: String,
+        content: Vec<u8>,
+        _region: Option<wire::EmbeddedRegion>,
+    ) -> wire::FileEvidence {
         // The misbehavior under test, chosen by the claimed file's content: a
         // conduct import during extraction, or a PROJECT enumeration during
         // extraction (evidence caches by content alone, so the file set is
@@ -60,6 +64,7 @@ impl bindings::Guest for RudeProbe {
             relations: Vec::new(),
             comments: Vec::new(),
             metrics: Vec::new(),
+            embedded: Vec::new(),
             diagnostics: Vec::new(),
         }
     }

@@ -2,12 +2,12 @@
   "run": {
     "schema": "kndo-v2/m6",
     "mode": "full",
-    "files_discovered": 14,
-    "files_claimed": 12,
+    "files_discovered": 16,
+    "files_claimed": 14,
     "extensions": [
       {
         "id": "kndo:css",
-        "files": 3,
+        "files": 4,
         "published_surface": "exports",
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
@@ -23,7 +23,7 @@
       },
       {
         "id": "kndo:js-ts",
-        "files": 6,
+        "files": 7,
         "published_surface": "entries",
         "import_cycles": "hazard",
         "dependency_scoping": "scoped",
@@ -43,20 +43,20 @@
     ]
   },
   "health": {
-    "implicated": 2,
-    "subjects": 14,
+    "implicated": 3,
+    "subjects": 19,
     "by_category": [
       {
         "category": "unused",
-        "findings": 2
+        "findings": 3
       }
     ],
     "by_package": [
       {
         "name": "",
         "manifest": "",
-        "implicated": 2,
-        "subjects": 14
+        "implicated": 3,
+        "subjects": 19
       }
     ]
   },
@@ -80,6 +80,28 @@
         "end": 5
       },
       "message": "import of './gone.js' resolves to no file — a broken path or a rename that missed this call site"
+    },
+    {
+      "id": "kndo-3800df13471c",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "index.html",
+        "selector": {
+          "name": "unusedInline"
+        },
+        "span": {
+          "start": 590,
+          "end": 660
+        }
+      },
+      "lines": {
+        "start": 21,
+        "end": 23
+      },
+      "message": "nothing references, roots, or imports this declaration"
     },
     {
       "id": "kndo-c6f77b4eb1d2",
@@ -115,6 +137,17 @@
       "message": "only tests reach this file — no production or tooling root does"
     },
     {
+      "id": "kndo-a4794e201151",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "index.html"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
       "id": "kndo-21fc1433cc85",
       "category": "untested",
       "severity": "info",
@@ -140,7 +173,7 @@
       },
       "scope": {
         "files": {
-          "unmeasured": 6
+          "unmeasured": 7
         }
       }
     },

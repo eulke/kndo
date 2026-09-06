@@ -482,6 +482,7 @@ fn the_manifest_hook_gets_bytes_and_no_project_surface() {
         &kndo_contract::adapter::SourceFile {
             path: &kndo_contract::vocab::ProjectPath::new("manifest.rude"),
             content: b"files\n",
+            region: None,
         },
     )
     .into_iter()

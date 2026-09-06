@@ -23,6 +23,7 @@ fn manifest_roots(manifest_path: &str, json: &str, files: &[&str]) -> Vec<(Strin
             &SourceFile {
                 path: &path,
                 content: json.as_bytes(),
+                region: None,
             },
             &cx,
         )
@@ -111,6 +112,7 @@ fn manifest_declares_its_package() {
         &SourceFile {
             path: &path,
             content: br#"{ "name": "@demo/core", "main": "src/index.ts" }"#,
+            region: None,
         },
         &cx,
     );
@@ -145,6 +147,7 @@ fn extracted_roots(path: &str, source: &str) -> Vec<(RootKind, bool)> {
         &SourceFile {
             path: &p,
             content: source.as_bytes(),
+            region: None,
         },
         &mut sink,
     );
@@ -225,6 +228,7 @@ fn manifest_dependencies_report_every_section() {
     let mut deps = TypeScriptAdapter::new().manifest_dependencies(&SourceFile {
         path: &path,
         content: json.as_bytes(),
+        region: None,
     });
     deps.sort_by(|a, b| a.name.cmp(&b.name));
     let brief: Vec<(&str, Option<DependencyScope>, Option<&str>)> = deps
@@ -247,6 +251,7 @@ fn manifest_dependencies_report_every_section() {
             .manifest_dependencies(&SourceFile {
                 path: &path,
                 content: b"not json",
+                region: None,
             })
             .is_empty()
     );
@@ -275,6 +280,7 @@ fn manifest_mentions_are_what_it_spells_outside_declarations_and_prose() {
     let mentions = TypeScriptAdapter::new().manifest_mentions(&SourceFile {
         path: &path,
         content: json.as_bytes(),
+        region: None,
     });
     let has = |name: &str| mentions.iter().any(|m| m == name);
     // A scoped name is one word, its own slash included; a `browser` alias names

@@ -46,6 +46,45 @@ impl DeclarationId {
     }
 }
 
+/// The address of one embedded region within its file's evidence — issued by
+/// the sink when the host adapter reports the region, read back by the engine
+/// to extract it. No public constructor: a region id names a region this
+/// file's sink saw.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ContractFingerprint)]
+#[serde(transparent)]
+pub struct RegionId(u32);
+
+impl RegionId {
+    pub fn index(self) -> usize {
+        self.0 as usize
+    }
+}
+
+/// How an embedded region runs. A module has its own scope, its imports and
+/// its exports; a classic script has no imports, and its top-level
+/// declarations are the host page's globals — reachable from every other
+/// script and handler attribute on the page. A language without the
+/// distinction (a stylesheet) is a module: a self-contained unit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ContractFingerprint)]
+#[serde(rename_all = "lowercase")]
+pub enum RegionMode {
+    Module,
+    Script,
+}
+
+/// A span of the file written in another language — a page's `<script>` or
+/// `<style>`. The host adapter reports it; the engine extracts it with the
+/// extension claiming a file of `language`'s suffix, into this same evidence
+/// at the host's offsets, so what the region declares and imports is judged,
+/// resolved and addressed as the host file's own.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ContractFingerprint)]
+pub struct EmbeddedRegion {
+    pub span: Span,
+    /// The language, as the file suffix its extension claims (`js`, `css`).
+    pub language: SmolStr,
+    pub mode: RegionMode,
+}
+
 /// An optional evidence stream — one whose absence would be ambiguous without a
 /// declaration. Grows a variant whenever a language teaches us a new stream
 /// (test spans, units, …); the default for every adapter is not-declared.
@@ -373,6 +412,10 @@ pub struct Import {
     /// never set by an adapter: a file that imports `./x` twice states two
     /// imports, and a finding on each must be two findings.
     pub nth: u32,
+    /// The embedded region this import was read from, when it was read from
+    /// one — set by the sink, never by an adapter. What resolves it is that
+    /// region's language's extension, not the host file's.
+    pub embedded_in: Option<RegionId>,
 }
 
 /// Closed by design: the role taxonomy (production/test/tooling) is a reporting
@@ -531,6 +574,10 @@ pub struct FileEvidence {
     pub relations: Vec<Relation>,
     pub comments: Vec<CommentSpan>,
     pub metrics: Vec<(DeclarationId, FunctionMetrics)>,
+    /// The spans of this file written in another language, in the order the
+    /// host adapter reported them — see [`EmbeddedRegion`]. Their evidence
+    /// sits in the fields above, in this file's coordinates.
+    pub embedded: Vec<EmbeddedRegion>,
     pub diagnostics: Vec<AdapterDiagnostic>,
 }
 
@@ -591,7 +638,20 @@ impl FileEvidence {
 /// and hands back the ids that make attachment misuse unrepresentable.
 pub struct EvidenceSink {
     file_len: u32,
+    /// The embedded region being extracted, while one is: every incoming span
+    /// is relative to the region's content and lands shifted into the file's
+    /// coordinates, every import is marked as the region's, and the host's
+    /// declared streams bound what the region's adapter may write.
+    within: Option<Within>,
     out: FileEvidence,
+}
+
+struct Within {
+    region: RegionId,
+    /// The region's start in the file — what a region-relative span shifts by.
+    base: u32,
+    /// The region's length — what a region-relative span is clamped against.
+    len: u32,
 }
 
 impl EvidenceSink {
@@ -602,6 +662,7 @@ impl EvidenceSink {
     pub fn new(file_len: u32, declares: EvidenceStreams) -> Self {
         EvidenceSink {
             file_len,
+            within: None,
             out: FileEvidence {
                 declared: declares,
                 len: file_len,
@@ -614,25 +675,94 @@ impl EvidenceSink {
                 relations: Vec::new(),
                 comments: Vec::new(),
                 metrics: Vec::new(),
+                embedded: Vec::new(),
                 diagnostics: Vec::new(),
             },
         }
     }
 
+    /// A span as the file sees it: clamped to what is being extracted — the
+    /// file, or the region within it — and, inside a region, shifted to the
+    /// file's coordinates.
     fn clamp(&mut self, mut span: Span, what: &str) -> Span {
-        if span.end > self.file_len {
+        let (base, len, of) = match &self.within {
+            Some(w) => (w.base, w.len, "region"),
+            None => (0, self.file_len, "file"),
+        };
+        if span.end > len {
             self.out.diagnostics.push(AdapterDiagnostic {
                 level: DiagnosticLevel::Warn,
                 message: format!(
-                    "{what} span {}..{} exceeds file length {} — clamped (adapter defect)",
-                    span.start, span.end, self.file_len
+                    "{what} span {}..{} exceeds {of} length {len} — clamped (adapter defect)",
+                    span.start, span.end
                 ),
                 span: None,
             });
-            span.end = self.file_len;
+            span.end = len;
             span.start = span.start.min(span.end);
         }
-        span
+        Span::new(span.start + base, span.end + base)
+    }
+
+    /// A span of this file written in another language — see
+    /// [`EmbeddedRegion`]. Reported by the host adapter; the engine extracts it
+    /// with that language's extension through this same sink. One level of
+    /// embedding: a region reported from inside a region is dropped with a
+    /// diagnostic, so a region never nests.
+    pub fn region(
+        &mut self,
+        span: Span,
+        language: impl Into<SmolStr>,
+        mode: RegionMode,
+    ) -> Option<RegionId> {
+        if self.within.is_some() {
+            self.out.diagnostics.push(AdapterDiagnostic {
+                level: DiagnosticLevel::Warn,
+                message: "embedded region reported inside an embedded region dropped — a \
+                          region never nests (adapter defect)"
+                    .to_string(),
+                span: None,
+            });
+            return None;
+        }
+        let span = self.clamp(span, "embedded region");
+        let id = RegionId(self.out.embedded.len() as u32);
+        self.out.embedded.push(EmbeddedRegion {
+            span,
+            language: language.into(),
+            mode,
+        });
+        Some(id)
+    }
+
+    /// Every region reported so far, with its id — what the engine extracts
+    /// after the host adapter is done.
+    pub fn regions(&self) -> Vec<(RegionId, EmbeddedRegion)> {
+        self.out
+            .embedded
+            .iter()
+            .enumerate()
+            .map(|(i, r)| (RegionId(i as u32), r.clone()))
+            .collect()
+    }
+
+    /// Runs `extract` with every write landing inside region `id`: spans
+    /// relative to the region's content, shifted into the file's coordinates;
+    /// imports marked as the region's; writes to streams the host never
+    /// declared dropped without a word, since the host's declaration bounds
+    /// its file's evidence; a namespace clause ignored, since a region
+    /// declares none for its host. An id this sink never issued runs nothing.
+    pub fn within(&mut self, id: RegionId, extract: impl FnOnce(&mut EvidenceSink)) {
+        let Some(region) = self.out.embedded.get(id.index()) else {
+            return;
+        };
+        self.within = Some(Within {
+            region: id,
+            base: region.span.start,
+            len: region.span.end - region.span.start,
+        });
+        extract(self);
+        self.within = None;
     }
 
     pub fn declaration(
@@ -732,9 +862,15 @@ impl EvidenceSink {
 
     /// True when the write may proceed; otherwise drops it with a diagnostic so the
     /// declaration stays truthful and the adapter author sees the defect at once.
+    /// Inside an embedded region the drop is silent: the region's adapter may
+    /// declare more than the host, and what the host never declared has no
+    /// place in the host's evidence — the host's declaration, not a defect.
     fn declared(&mut self, stream: EvidenceStream) -> bool {
         if self.out.declared.contains(stream) {
             return true;
+        }
+        if self.within.is_some() {
+            return false;
         }
         self.out.diagnostics.push(AdapterDiagnostic {
             level: DiagnosticLevel::Warn,
@@ -759,8 +895,12 @@ impl EvidenceSink {
     }
 
     /// The namespace this file declares itself into — see
-    /// [`FileEvidence::namespace`]. Last write wins: a file declares one.
+    /// [`FileEvidence::namespace`]. Last write wins: a file declares one — and
+    /// an embedded region declares none for its host, so its write is ignored.
     pub fn namespace(&mut self, segments: impl IntoIterator<Item = SmolStr>) {
+        if self.within.is_some() {
+            return;
+        }
         self.out.namespace = segments.into_iter().collect();
     }
 
@@ -823,6 +963,7 @@ impl EvidenceSink {
             confidence,
             timing,
             nth: 0,
+            embedded_in: self.within.as_ref().map(|w| w.region),
         });
     }
 

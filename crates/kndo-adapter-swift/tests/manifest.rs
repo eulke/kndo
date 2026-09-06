@@ -22,6 +22,7 @@ let package = Package(
         .manifest_dependencies(&SourceFile {
             path: &ProjectPath::new("Package.swift"),
             content: manifest,
+            region: None,
         })
         .into_iter()
         .map(|d| d.name)

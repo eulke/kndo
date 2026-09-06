@@ -30,6 +30,7 @@ fn read_among(
         &SourceFile {
             path: &path,
             content: content.as_bytes(),
+            region: None,
         },
         &cx,
         &mut sink,

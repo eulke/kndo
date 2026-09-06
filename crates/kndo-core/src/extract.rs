@@ -10,9 +10,10 @@
 use crate::cache::EvidenceCache;
 use crate::discover::DiscoveredFile;
 use kndo_contract::adapter::SourceFile;
-use kndo_contract::evidence::{EvidenceSink, FileEvidence};
+use kndo_contract::evidence::{DiagnosticLevel, EvidenceSink, FileEvidence};
 use kndo_contract::extension::Extension;
 use rayon::prelude::*;
+use smol_str::SmolStr;
 
 pub struct ClaimedFile {
     pub file_index: usize,
@@ -91,19 +92,25 @@ pub fn extract(
             extract_one(
                 &files[c.file_index],
                 adapters[c.adapter_index].as_ref(),
+                adapters,
                 cache,
             )
         })
         .collect()
 }
 
+/// One file's evidence: the claiming adapter reads the file, then every
+/// embedded region it reported is read by the extension claiming that
+/// language's suffix, into the same evidence at the file's offsets. A region
+/// of a language nothing claims is left unread, with a diagnostic on the file.
 pub fn extract_one(
     file: &DiscoveredFile,
     adapter: &dyn Extension,
+    adapters: &[Box<dyn Extension>],
     cache: &EvidenceCache,
 ) -> FileEvidence {
     let spec = adapter.spec();
-    if let Some(hit) = cache.get(spec, &file.path, &file.hash) {
+    if let Some(hit) = cache.get(spec, &file.path, &file.hash, adapters) {
         return hit;
     }
     let mut sink = EvidenceSink::new(file.content.len() as u32, spec.emits().clone());
@@ -111,10 +118,52 @@ pub fn extract_one(
         &SourceFile {
             path: &file.path,
             content: &file.content,
+            region: None,
         },
         &mut sink,
     );
+    let mut extractors: Vec<(SmolStr, u32)> = Vec::new();
+    for (id, region) in sink.regions() {
+        let Some(ix) = claimant_of_suffix(adapters, &region.language) else {
+            sink.diagnostic(
+                DiagnosticLevel::Warn,
+                format!(
+                    "no extension claims `{}` files — the embedded region at {}..{} is left unread",
+                    region.language, region.span.start, region.span.end
+                ),
+                Some(region.span),
+            );
+            continue;
+        };
+        let extractor = adapters[ix].as_ref();
+        let content = &file.content[region.span.start as usize..region.span.end as usize];
+        sink.within(id, |sink| {
+            extractor.extract(
+                &SourceFile {
+                    path: &file.path,
+                    content,
+                    region: Some(&region),
+                },
+                sink,
+            )
+        });
+        extractors.push((
+            SmolStr::new(extractor.spec().coordinate()),
+            extractor.spec().version(),
+        ));
+    }
+    extractors.sort_unstable();
+    extractors.dedup();
     let evidence = sink.finish();
-    cache.put(spec, &file.path, &file.hash, &evidence);
+    cache.put(spec, &file.path, &file.hash, &evidence, &extractors);
     evidence
+}
+
+/// The extension that claims a file of `suffix` — the one an embedded region
+/// of that language is handed to, and the one that resolves what the region
+/// imports. The first registered wins, as it does for a file's claim.
+pub(crate) fn claimant_of_suffix(adapters: &[Box<dyn Extension>], suffix: &str) -> Option<usize> {
+    adapters
+        .iter()
+        .position(|a| a.spec().suffixes().iter().any(|s| s == suffix))
 }

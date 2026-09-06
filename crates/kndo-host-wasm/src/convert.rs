@@ -10,7 +10,8 @@
 use crate::bindings::kndo::vocab::types as awire;
 use kndo_contract::adapter::{PackageEntry, ProjectRoot, Resolution};
 use kndo_contract::evidence::{
-    self as ev, DiagnosticLevel, EvidenceSink, EvidenceStream, EvidenceStreams, RootKind,
+    self as ev, DiagnosticLevel, EmbeddedRegion, EvidenceSink, EvidenceStream, EvidenceStreams,
+    RegionMode, RootKind,
 };
 use kndo_contract::extension::{
     Activation, ActivationRule, Bearer, ConductSeverity, ConductTarget, CycleTolerance,
@@ -19,6 +20,20 @@ use kndo_contract::extension::{
 };
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use smol_str::SmolStr;
+
+pub(crate) fn region_to_wire(region: &EmbeddedRegion) -> awire::EmbeddedRegion {
+    awire::EmbeddedRegion {
+        span: awire::Span {
+            start: region.span.start,
+            end: region.span.end,
+        },
+        language: region.language.to_string(),
+        mode: match region.mode {
+            RegionMode::Module => awire::RegionMode::Module,
+            RegionMode::Script => awire::RegionMode::Script,
+        },
+    }
+}
 
 pub(crate) fn span(s: awire::Span) -> Span {
     // A hostile start > end normalizes to the empty span at the lower offset; the
@@ -432,6 +447,16 @@ pub(crate) fn replay_evidence(evidence: awire::FileEvidence, sink: &mut Evidence
                 None,
             ),
         }
+    }
+    for r in evidence.embedded {
+        sink.region(
+            span(r.span),
+            SmolStr::new(r.language),
+            match r.mode {
+                awire::RegionMode::Module => RegionMode::Module,
+                awire::RegionMode::Script => RegionMode::Script,
+            },
+        );
     }
     for d in evidence.diagnostics {
         sink.diagnostic(

@@ -16,6 +16,7 @@ fn packages_of(manifest_path: &str, content: &str) -> Vec<(String, Option<String
             &SourceFile {
                 path: &path,
                 content: content.as_bytes(),
+                region: None,
             },
             &cx,
         )
@@ -74,6 +75,7 @@ fn require_lines_report_dependency_names_both_forms() {
         .manifest_dependencies(&SourceFile {
             path: &path,
             content: content.as_bytes(),
+            region: None,
         })
         .into_iter()
         .map(|d| d.name.to_string())
@@ -95,6 +97,7 @@ fn indirect_requirements_declare_transitive_and_direct_ones_no_scope() {
     let deps = GoAdapter::new().manifest_dependencies(&SourceFile {
         path: &path,
         content: b"module example.com/m\n\nrequire github.com/x/single v1.0.0 // indirect\n\nrequire (\n\tgithub.com/a/b v1.2.3\n\tgithub.com/c/d v0.1.0 // indirect\n)\n",
+        region: None,
     });
     let scope = |name: &str| deps.iter().find(|d| d.name == name).map(|d| d.scope);
     assert_eq!(

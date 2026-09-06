@@ -29,6 +29,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::OnceLock;
 
 #[doc(hidden)]
+// The generated export lowers a record's fields to scalar arguments: the
+// region an `extract` call carries makes its lowering wider than the lint
+// allows, and the shape is the canonical ABI's, not ours.
+#[allow(clippy::too_many_arguments)]
 pub mod bindings {
     wit_bindgen::generate!({
         path: "../../wit",
@@ -186,6 +190,32 @@ fn span_to_wire(span: Span) -> wire::Span {
     wire::Span {
         start: span.start,
         end: span.end,
+    }
+}
+
+fn region_mode_to_wire(mode: ev::RegionMode) -> wire::RegionMode {
+    match mode {
+        ev::RegionMode::Module => wire::RegionMode::Module,
+        ev::RegionMode::Script => wire::RegionMode::Script,
+    }
+}
+
+fn region_to_wire(region: &ev::EmbeddedRegion) -> wire::EmbeddedRegion {
+    wire::EmbeddedRegion {
+        span: span_to_wire(region.span),
+        language: region.language.to_string(),
+        mode: region_mode_to_wire(region.mode),
+    }
+}
+
+fn region_from_wire(region: wire::EmbeddedRegion) -> ev::EmbeddedRegion {
+    ev::EmbeddedRegion {
+        span: Span::new(region.span.start, region.span.end),
+        language: SmolStr::new(region.language),
+        mode: match region.mode {
+            wire::RegionMode::Module => ev::RegionMode::Module,
+            wire::RegionMode::Script => ev::RegionMode::Script,
+        },
     }
 }
 
@@ -355,6 +385,7 @@ pub fn evidence_to_wire(evidence: &FileEvidence) -> wire::FileEvidence {
                 },
             })
             .collect(),
+        embedded: evidence.embedded.iter().map(region_to_wire).collect(),
         diagnostics: evidence
             .diagnostics
             .iter()
@@ -589,9 +620,14 @@ impl<E: Extension + Default> bindings::Guest for ExportedExtension<E> {
         spec_to_wire(E::default().spec())
     }
 
-    fn extract(path: String, content: Vec<u8>) -> wire::FileEvidence {
+    fn extract(
+        path: String,
+        content: Vec<u8>,
+        region: Option<wire::EmbeddedRegion>,
+    ) -> wire::FileEvidence {
         let extension = E::default();
         let path = ProjectPath::new(path);
+        let region = region.map(region_from_wire);
         let mut sink = EvidenceSink::new(
             content.len() as u32,
             // The same pairing rule as the engine's own claim wiring: the sink is
@@ -602,6 +638,7 @@ impl<E: Extension + Default> bindings::Guest for ExportedExtension<E> {
             &SourceFile {
                 path: &path,
                 content: &content,
+                region: region.as_ref(),
             },
             &mut sink,
         );
@@ -618,6 +655,7 @@ impl<E: Extension + Default> bindings::Guest for ExportedExtension<E> {
         let manifest = SourceFile {
             path: &path,
             content: &content,
+            region: None,
         };
         E::default()
             .roots(&manifest, &resolve_context())
@@ -631,6 +669,7 @@ impl<E: Extension + Default> bindings::Guest for ExportedExtension<E> {
         let manifest = SourceFile {
             path: &path,
             content: &content,
+            region: None,
         };
         E::default()
             .packages(&manifest, &resolve_context())
@@ -644,6 +683,7 @@ impl<E: Extension + Default> bindings::Guest for ExportedExtension<E> {
         let manifest = SourceFile {
             path: &path,
             content: &content,
+            region: None,
         };
         // The ABI speaks names only; a guest's scope/requirement stay guest-side
         // until a versioned world carries them.

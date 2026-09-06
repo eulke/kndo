@@ -1,11 +1,15 @@
-//! The tag scan. Three things reach code: a script's `src`, a `link` whose
-//! `rel` loads a stylesheet or preloads a module or a script, and the import
-//! statements of an inline `<script type="module">`. Everything else a page
-//! names — images, icons, manifests, other pages — is a resource or a
-//! document, and reachability cannot enter either.
+//! The tag scan. Two things a page NAMES reach code: a script's `src`, and a
+//! `link` whose `rel` loads a stylesheet or preloads a module or a script.
+//! Two things a page HOLDS are code: an inline `<script>` and an inline
+//! `<style>`, reported as embedded regions of JavaScript and CSS for those
+//! extensions to read. Everything else a page names — images, icons,
+//! manifests, other pages — is a resource or a document, and reachability
+//! cannot enter either.
 
 use kndo_contract::adapter::SourceFile;
-use kndo_contract::evidence::{EvidenceSink, ImportShape, ImportTarget, RootKind, RootTarget};
+use kndo_contract::evidence::{
+    EvidenceSink, ImportShape, ImportTarget, RegionMode, RootKind, RootTarget,
+};
 use kndo_contract::vocab::{Confidence, Span};
 use smol_str::SmolStr;
 
@@ -29,72 +33,54 @@ pub(crate) fn extract(file: &SourceFile<'_>, out: &mut EvidenceSink) {
     }
     // A commented-out tag references nothing; blanking keeps every offset.
     let blanked = blank_comments(text);
-    for reference in references(&blanked) {
-        let span = Span::new(
-            reference.start as u32,
-            (reference.start + reference.value.len()) as u32,
+    let scan = scan(&blanked);
+    for reference in scan.references {
+        // A page binds no names from what an attribute loads: naming the
+        // file IS the use. An attribute URL is document-relative by
+        // definition, so a bare `main.js` is spelled `./main.js` — the
+        // one spelling that says so to every resolver and judgment.
+        let Some(specifier) = local_reference(reference.value) else {
+            continue;
+        };
+        let specifier = if specifier.starts_with('.') || specifier.starts_with('/') {
+            SmolStr::new(specifier)
+        } else {
+            SmolStr::from(format!("./{specifier}"))
+        };
+        out.import(
+            ImportTarget::Relative(specifier),
+            ImportShape::SideEffect,
+            Span::new(
+                reference.start as u32,
+                (reference.start + reference.value.len()) as u32,
+            ),
+            Confidence::Certain,
         );
-        match reference.kind {
-            // A page binds no names from what an attribute loads: naming the
-            // file IS the use. An attribute URL is document-relative by
-            // definition, so a bare `main.js` is spelled `./main.js` — the
-            // one spelling that says so to every resolver and judgment.
-            ReferenceKind::Attribute => {
-                let Some(specifier) = local_reference(reference.value) else {
-                    continue;
-                };
-                let specifier = if specifier.starts_with('.') || specifier.starts_with('/') {
-                    SmolStr::new(specifier)
-                } else {
-                    SmolStr::from(format!("./{specifier}"))
-                };
-                out.import(
-                    ImportTarget::Relative(specifier),
-                    ImportShape::SideEffect,
-                    span,
-                    Confidence::Certain,
-                );
-            }
-            // An inline module's import is JavaScript's: a path or a package
-            // by its spelling. Nothing in the document names what it took, so
-            // the whole imported surface stays alive; a dynamic `import()` is
-            // the module's own claim about the future, one tier down.
-            ReferenceKind::Import { dynamic } => {
-                let value = reference.value.trim();
-                if value.is_empty() {
-                    continue;
-                }
-                let target = if value.starts_with('.') || value.starts_with('/') {
-                    ImportTarget::Relative(SmolStr::new(value))
-                } else {
-                    ImportTarget::Package(SmolStr::new(value))
-                };
-                out.import(
-                    target,
-                    ImportShape::Glob,
-                    span,
-                    if dynamic {
-                        Confidence::Probable
-                    } else {
-                        Confidence::Certain
-                    },
-                );
-            }
-        }
+    }
+    // The body of an inline script or style is the other language's, read by
+    // its extension in the page's coordinates: what it declares and imports
+    // is the page's evidence.
+    for region in scan.regions {
+        out.region(region.span, region.language, region.mode);
     }
 }
 
-/// One value that names a file — an attribute's, or an inline import's
-/// specifier — with the byte offset it starts at.
+/// One attribute value that names a file, with the byte offset it starts at.
 struct Reference<'a> {
     value: &'a str,
     start: usize,
-    kind: ReferenceKind,
 }
 
-enum ReferenceKind {
-    Attribute,
-    Import { dynamic: bool },
+/// One inline body of another language, and how it runs.
+struct Region {
+    span: Span,
+    language: &'static str,
+    mode: RegionMode,
+}
+
+struct Scan<'a> {
+    references: Vec<Reference<'a>>,
+    regions: Vec<Region>,
 }
 
 /// One parsed attribute: its name lowercased, its value as written, and the
@@ -105,11 +91,12 @@ struct Attribute<'a> {
     value_at: usize,
 }
 
-/// Every `<script src>`, every `<link href>` that loads code or style, and
-/// every import statement of an inline `<script type="module">`, in document
-/// order.
-fn references(text: &str) -> Vec<Reference<'_>> {
-    let mut out = Vec::new();
+/// Every `<script src>` and every `<link href>` that loads code or style, in
+/// document order — and every inline `<script>` or `<style>` body, as a
+/// region of its language.
+fn scan(text: &str) -> Scan<'_> {
+    let mut references = Vec::new();
+    let mut regions = Vec::new();
     let bytes = text.as_bytes();
     let mut at = 0;
     while let Some(found) = text[at..].find('<') {
@@ -140,17 +127,17 @@ fn references(text: &str) -> Vec<Reference<'_>> {
             _ => None,
         };
         if let Some(a) = attribute {
-            out.push(Reference {
+            references.push(Reference {
                 value: a.value,
                 start: a.value_at,
-                kind: ReferenceKind::Attribute,
             });
         }
         at = end.max(start);
         // A script's or style's body is raw text up to its closing tag, never
         // markup: a `<script src>` spelled inside a `document.write` string is
-        // text. An inline MODULE script's body is JavaScript, and its import
-        // statements are references like any attribute's.
+        // text. An inline body is the other language's code — unless the
+        // script has a `src`, when a browser ignores its body, or its type
+        // says data rather than JavaScript (an import map, JSON, a template).
         if matches!(tag.as_str(), "script" | "style") && end < text.len() {
             let body_start = end + 1;
             let closing = format!("</{tag}");
@@ -158,179 +145,53 @@ fn references(text: &str) -> Vec<Reference<'_>> {
                 .to_ascii_lowercase()
                 .find(&closing)
                 .map_or(text.len(), |e| body_start + e);
-            let module = attribute.is_none()
-                && attributes
-                    .iter()
-                    .any(|a| a.name == "type" && a.value.eq_ignore_ascii_case("module"));
-            if tag == "script" && module {
-                for import in inline_imports(&text[body_start..body_end]) {
-                    out.push(Reference {
-                        value: import.specifier,
-                        start: body_start + import.at,
-                        kind: ReferenceKind::Import {
-                            dynamic: import.dynamic,
-                        },
-                    });
-                }
+            let language = if attribute.is_some() || text[body_start..body_end].trim().is_empty() {
+                None
+            } else if tag == "script" {
+                script_mode(&attributes).map(|mode| ("js", mode))
+            } else {
+                Some(("css", RegionMode::Module))
+            };
+            if let Some((language, mode)) = language {
+                regions.push(Region {
+                    span: Span::new(body_start as u32, body_end as u32),
+                    language,
+                    mode,
+                });
             }
             at = body_end;
         }
     }
-    out
+    Scan {
+        references,
+        regions,
+    }
 }
 
-/// One import statement's specifier inside an inline module, at its byte
-/// offset within the body.
-struct InlineImport<'a> {
-    specifier: &'a str,
-    at: usize,
-    dynamic: bool,
-}
-
-/// The import statements of one module body, by their forms alone: `import
-/// "x"`, `import … from "x"`, `export … from "x"`, `import("x")`. Comments are
-/// blanked first so a commented-out import references nothing; the offsets of
-/// the blanked copy are the body's own.
-fn inline_imports(body: &str) -> Vec<InlineImport<'_>> {
-    let text = blank_js_comments(body);
-    let bytes = text.as_bytes();
-    let is_ident = |b: u8| b.is_ascii_alphanumeric() || b == b'_' || b == b'$';
-    let skip_ws = |mut j: usize| {
-        while j < bytes.len() && bytes[j].is_ascii_whitespace() {
-            j += 1;
-        }
-        j
+/// How an inline script runs, by its `type`: a module, a classic script (no
+/// type, or a JavaScript MIME type), or not JavaScript at all — an import
+/// map, JSON data, a template — which is `None`.
+fn script_mode(attributes: &[Attribute<'_>]) -> Option<RegionMode> {
+    let Some(attribute) = attributes.iter().find(|a| a.name == "type") else {
+        return Some(RegionMode::Script);
     };
-    let mut out = Vec::new();
-    let mut i = 0;
-    while i < bytes.len() {
-        // A string or template literal is skipped whole: the keyword inside
-        // one is text, not a statement. A specifier is consumed right after
-        // its keyword below, so this never skips one.
-        if matches!(bytes[i], b'"' | b'\'' | b'`') {
-            let quote = bytes[i];
-            i += 1;
-            while i < bytes.len() && bytes[i] != quote {
-                i += if bytes[i] == b'\\' { 2 } else { 1 };
-            }
-            i += 1;
-            continue;
-        }
-        // Byte-wise: `i` walks bytes and may sit inside a multi-byte
-        // character, where a `str` slice would panic.
-        let keyword = if bytes[i..].starts_with(b"import") {
-            "import"
-        } else if bytes[i..].starts_with(b"export") {
-            "export"
-        } else {
-            i += 1;
-            continue;
-        };
-        let bounded = (i == 0 || !is_ident(bytes[i - 1]))
-            && bytes.get(i + keyword.len()).is_none_or(|b| !is_ident(*b));
-        if !bounded {
-            i += keyword.len();
-            continue;
-        }
-        let j = skip_ws(i + keyword.len());
-        let found = if keyword == "import" && bytes.get(j) == Some(&b'(') {
-            string_at(&text, skip_ws(j + 1)).map(|(at, end)| (at, end, true))
-        } else if keyword == "import" && matches!(bytes.get(j), Some(b'"' | b'\'')) {
-            string_at(&text, j).map(|(at, end)| (at, end, false))
-        } else {
-            // `… from "x"` before the statement ends. `from` is contextual: a
-            // bare `import.meta` or an `export const` never reaches a string.
-            let statement_end = text[j..].find(';').map_or(text.len(), |e| j + e);
-            keyword_at(&text[j..statement_end], "from")
-                .and_then(|f| string_at(&text, skip_ws(j + f + 4)))
-                .map(|(at, end)| (at, end, false))
-        };
-        match found {
-            Some((at, end, dynamic)) => {
-                out.push(InlineImport {
-                    specifier: &body[at..end],
-                    at,
-                    dynamic,
-                });
-                i = end + 1;
-            }
-            None => i += keyword.len(),
-        }
+    let essence = attribute
+        .value
+        .split(';')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase();
+    match essence.as_str() {
+        "module" => Some(RegionMode::Module),
+        ""
+        | "text/javascript"
+        | "application/javascript"
+        | "text/ecmascript"
+        | "application/ecmascript"
+        | "text/jscript" => Some(RegionMode::Script),
+        _ => None,
     }
-    out
-}
-
-/// A quoted string starting at `j`: the byte range of its contents.
-fn string_at(text: &str, j: usize) -> Option<(usize, usize)> {
-    let quote = match text.as_bytes().get(j) {
-        Some(q @ (b'"' | b'\'')) => *q as char,
-        _ => return None,
-    };
-    let end = text[j + 1..].find(quote).map(|e| j + 1 + e)?;
-    Some((j + 1, end))
-}
-
-/// A word at a token boundary — `from` inside `fromage` is not the keyword.
-fn keyword_at(hay: &str, word: &str) -> Option<usize> {
-    let bytes = hay.as_bytes();
-    let is_ident = |b: u8| b.is_ascii_alphanumeric() || b == b'_' || b == b'$';
-    let mut at = 0;
-    while let Some(found) = hay[at..].find(word) {
-        let start = at + found;
-        let end = start + word.len();
-        if (start == 0 || !is_ident(bytes[start - 1]))
-            && bytes.get(end).is_none_or(|b| !is_ident(*b))
-        {
-            return Some(start);
-        }
-        at = end;
-    }
-    None
-}
-
-/// `//` and `/* … */` comments replaced by spaces, string and template
-/// literals left intact, offsets preserved.
-fn blank_js_comments(body: &str) -> String {
-    let bytes = body.as_bytes();
-    let mut out = body.as_bytes().to_vec();
-    let mut i = 0;
-    let mut quote: Option<u8> = None;
-    while i < bytes.len() {
-        let b = bytes[i];
-        match quote {
-            Some(q) => {
-                if b == b'\\' {
-                    i += 2;
-                    continue;
-                }
-                if b == q {
-                    quote = None;
-                }
-                i += 1;
-            }
-            None => {
-                if matches!(b, b'"' | b'\'' | b'`') {
-                    quote = Some(b);
-                    i += 1;
-                } else if bytes[i..].starts_with(b"//") {
-                    let end = body[i..].find('\n').map_or(bytes.len(), |e| i + e);
-                    out[i..end].iter_mut().for_each(|c| *c = b' ');
-                    i = end;
-                } else if bytes[i..].starts_with(b"/*") {
-                    let end = body[i + 2..]
-                        .find("*/")
-                        .map_or(bytes.len(), |e| i + 2 + e + 2);
-                    out[i..end].iter_mut().for_each(|c| *c = b' ');
-                    i = end;
-                } else {
-                    i += 1;
-                }
-            }
-        }
-    }
-    // Blanking writes ASCII spaces over whole bytes of ASCII delimiters and
-    // comment text, so the copy stays valid UTF-8 at the same offsets.
-    String::from_utf8(out).unwrap_or_else(|_| body.to_string())
 }
 
 /// A `<link>` reaches code or style through `rel="stylesheet"`,

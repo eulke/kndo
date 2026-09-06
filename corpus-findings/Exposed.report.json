@@ -72,7 +72,7 @@
   },
   "health": {
     "implicated": 30,
-    "subjects": 16823,
+    "subjects": 25399,
     "by_category": [
       {
         "category": "unused",
@@ -84,7 +84,7 @@
         "name": "",
         "manifest": "",
         "implicated": 20,
-        "subjects": 4815
+        "subjects": 13391
       },
       {
         "name": "com.example:exposed-modules-maven",

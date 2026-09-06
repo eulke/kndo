@@ -242,8 +242,9 @@ impl Extension for WasmExtension {
     }
 
     fn extract(&self, file: &SourceFile<'_>, out: &mut EvidenceSink) {
+        let region = file.region.map(convert::region_to_wire);
         let result = self.call(StoreData::bare(Phase::Extract), |guest, store| {
-            guest.call_extract(store, file.path.as_str(), file.content)
+            guest.call_extract(store, file.path.as_str(), file.content, region.as_ref())
         });
         match result {
             // Replayed into the engine's own sink, primed with this spec's

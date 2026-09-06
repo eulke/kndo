@@ -163,7 +163,13 @@ impl Default for TypeScriptAdapter {
 /// `.tsx`, `.jsx`, and plain JS in all its extensions — gets TSX, whose JSX support
 /// is a superset of what those files can contain.
 fn language_for(path: &ProjectPath) -> Language {
-    if path.as_str().ends_with(".ts") {
+    grammar(path.as_str().rsplit('.').next().unwrap_or(""))
+}
+
+/// TypeScript's own grammar for a `ts` suffix; the TSX grammar for every
+/// other, which reads JavaScript, JSX and TSX alike.
+fn grammar(suffix: &str) -> Language {
+    if suffix == "ts" {
         tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into()
     } else {
         tree_sitter_typescript::LANGUAGE_TSX.into()
@@ -178,11 +184,17 @@ impl Extension for TypeScriptAdapter {
     fn extract(&self, file: &SourceFile<'_>, out: &mut EvidenceSink) {
         // Convention roots come from the path and the first bytes, before any parse:
         // a test file that fails to parse must still be rooted, or the parse failure
-        // would turn into an unreachable-file accusation.
-        convention_roots(file, out);
-        let language = language_for(file.path);
+        // would turn into an unreachable-file accusation. An embedded region has
+        // none of its own: its host rooted the page, and the path is the host's.
+        if file.region.is_none() {
+            convention_roots(file, out);
+        }
+        let language = match file.region {
+            Some(region) => grammar(region.language.as_str()),
+            None => language_for(file.path),
+        };
         if let Some(tree) = kndo_toolkit::parse_reporting(&language, file.content, out) {
-            extract::extract(file.content, &tree, out);
+            extract::extract(file.content, &tree, file.region.map(|r| r.mode), out);
         }
     }
 

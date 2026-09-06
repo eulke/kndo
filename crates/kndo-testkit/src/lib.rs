@@ -47,14 +47,25 @@
 //! published and nothing else is. The kmock ecosystem publishes through its
 //! entries, like npm; [`MockExtension::with`] speaks the variant that
 //! publishes every export, like a jar.
+//!
+//! A `.kdoc` document ([`MockExtension::hosting`]) is a page holding kmock in
+//! fences — what a test of embedded regions speaks:
+//!
+//! ```text
+//! prose the document keeps to itself
+//! <<kmock module          a region of kmock, run as a module (or `script`)
+//! import ./lib { f }
+//! call f
+//! >>
+//! ```
 
 pub mod expectations;
 
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{
     CoverageRecords, DeclarationId, DiagnosticLevel, EvidenceSink, EvidenceStream, EvidenceStreams,
-    ImportBinding, ImportShape, ImportTarget, MarkerTarget, Reach, RefKind, RelationKind, RootKind,
-    RootTarget, SymbolKind, Timing,
+    ImportBinding, ImportShape, ImportTarget, MarkerTarget, Reach, RefKind, RegionMode,
+    RelationKind, RootKind, RootTarget, SymbolKind, Timing,
 };
 use kndo_contract::extension::{
     ConductSink, ContentAccess, DispatchRule, Extension, ExtensionSpec, ExtensionSpecBuilder,
@@ -75,7 +86,7 @@ type IngestHook = dyn Fn(&str, &[u8]) -> Option<CoverageRecords> + Send + Sync;
 /// are exactly what containment tests script.
 pub struct MockExtension {
     spec: ExtensionSpec,
-    speaks_kmock: bool,
+    speaks: Speaks,
     on_contribute: Option<Box<ConductHook>>,
     on_report: Option<Box<ConductHook>>,
     on_ingest: Option<Box<IngestHook>>,
@@ -83,6 +94,48 @@ pub struct MockExtension {
 
 /// The kmock-speaking mock under its historical name.
 pub type MockAdapter = MockExtension;
+
+/// What a mock speaks: kmock (extraction, resolution, manifests), kdoc (a
+/// document embedding kmock regions), or nothing (a conduct or ingestion
+/// mock, whose spec and hooks are all it has).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Speaks {
+    Kmock,
+    Kdoc,
+    Nothing,
+}
+
+/// A kdoc document: a whole-file production root, and one embedded region
+/// per fence, spanning the lines between `<<LANG mode` and `>>`.
+fn host_extract(file: &SourceFile<'_>, out: &mut EvidenceSink) {
+    out.root(
+        RootTarget::WholeFile,
+        RootKind::Production,
+        Confidence::Certain,
+    );
+    let text = String::from_utf8_lossy(file.content);
+    let mut open: Option<(String, RegionMode, u32)> = None;
+    let mut offset = 0u32;
+    for raw in text.split_inclusive('\n') {
+        let line = raw.trim_end_matches(['\n', '\r']);
+        let next = offset + raw.len() as u32;
+        if let Some(rest) = line.strip_prefix("<<") {
+            let mut words = rest.split_whitespace();
+            let language = words.next().unwrap_or("kmock").to_string();
+            let mode = if words.next() == Some("script") {
+                RegionMode::Script
+            } else {
+                RegionMode::Module
+            };
+            open = Some((language, mode, next));
+        } else if line == ">>"
+            && let Some((language, mode, start)) = open.take()
+        {
+            out.region(Span::new(start, offset), language, mode);
+        }
+        offset = next;
+    }
+}
 
 /// The kmock language's spec, before the capability a test adds to it.
 fn kmock_spec() -> ExtensionSpecBuilder {
@@ -132,6 +185,22 @@ impl MockExtension {
         MockExtension::speaking(kmock_spec().dispatch(rules).build())
     }
 
+    /// The kdoc language: a document holding kmock in fenced regions — what a
+    /// test of embedded regions speaks. A `.kdoc` file roots itself like a
+    /// page, and each `<<LANG module` (or `script`) … `>>` fence is a region
+    /// of language `LANG`, read by the extension claiming that suffix.
+    pub fn hosting() -> Self {
+        MockExtension {
+            spec: ExtensionSpec::builder("kdoc", 1)
+                .suffixes(&["kdoc"])
+                .build(),
+            speaks: Speaks::Kdoc,
+            on_contribute: None,
+            on_report: None,
+            on_ingest: None,
+        }
+    }
+
     /// The kmock language with a ladder — what a test of `internal-only`
     /// speaks, since the plain mock states none and gets no advice. Its unit
     /// is the whole project: every kmock file is one compilation.
@@ -149,7 +218,7 @@ impl MockExtension {
     fn speaking(spec: ExtensionSpec) -> Self {
         MockExtension {
             spec,
-            speaks_kmock: true,
+            speaks: Speaks::Kmock,
             on_contribute: None,
             on_report: None,
             on_ingest: None,
@@ -161,7 +230,7 @@ impl MockExtension {
     pub fn scripted(spec: ExtensionSpec) -> Self {
         MockExtension {
             spec,
-            speaks_kmock: false,
+            speaks: Speaks::Nothing,
             on_contribute: None,
             on_report: None,
             on_ingest: None,
@@ -231,8 +300,10 @@ impl Extension for MockExtension {
     }
 
     fn extract(&self, file: &SourceFile<'_>, out: &mut EvidenceSink) {
-        if !self.speaks_kmock {
-            return;
+        match self.speaks {
+            Speaks::Nothing => return,
+            Speaks::Kdoc => return host_extract(file, out),
+            Speaks::Kmock => {}
         }
         let text = String::from_utf8_lossy(file.content);
 
@@ -397,7 +468,7 @@ impl Extension for MockExtension {
         _cx: &ResolveContext<'_>,
         out: &mut ManifestSink,
     ) {
-        if !self.speaks_kmock {
+        if self.speaks != Speaks::Kmock {
             return;
         }
         let text = String::from_utf8_lossy(manifest.content);
@@ -474,7 +545,7 @@ impl Extension for MockExtension {
     }
 
     fn resolve(&self, from: &ProjectPath, specifier: &str, cx: &ResolveContext<'_>) -> Resolution {
-        if !self.speaks_kmock {
+        if self.speaks != Speaks::Kmock {
             return Resolution::Unresolved;
         }
         let Some(name) = specifier.strip_prefix("./") else {
@@ -666,6 +737,7 @@ pub fn extract_evidence(
         &SourceFile {
             path: &path,
             content: source.as_bytes(),
+            region: None,
         },
         &mut sink,
     );

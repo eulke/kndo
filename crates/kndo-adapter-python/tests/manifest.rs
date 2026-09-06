@@ -22,6 +22,7 @@ dev = [
         .manifest_dependencies(&SourceFile {
             path: &ProjectPath::new("pyproject.toml"),
             content: pyproject,
+            region: None,
         })
         .into_iter()
         .map(|d| d.name)
@@ -33,6 +34,7 @@ dev = [
         .manifest_dependencies(&SourceFile {
             path: &ProjectPath::new("requirements.txt"),
             content: reqs,
+            region: None,
         })
         .into_iter()
         .map(|d| d.name)

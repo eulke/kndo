@@ -6,7 +6,7 @@
 
 use kndo_contract::evidence::{
     DeclarationId, EvidenceSink, ImportBinding, ImportShape, ImportTarget, Reach, RefKind,
-    SymbolKind, Timing,
+    RegionMode, SymbolKind, Timing,
 };
 use kndo_contract::vocab::{Confidence, Span};
 use kndo_toolkit as tk;
@@ -14,8 +14,18 @@ use smol_str::SmolStr;
 use std::collections::BTreeMap;
 use tree_sitter::Node;
 
-pub fn extract(source: &[u8], tree: &tree_sitter::Tree, out: &mut EvidenceSink) {
+/// `mode` is the embedded region's, when the source is one: a classic
+/// script's top-level declarations are the page's globals — reachable from
+/// every other script and handler attribute on it — so they are exported
+/// rather than private to the region.
+pub fn extract(
+    source: &[u8],
+    tree: &tree_sitter::Tree,
+    mode: Option<RegionMode>,
+    out: &mut EvidenceSink,
+) {
     let root = tree.root_node();
+    let globals = mode == Some(RegionMode::Script);
     // The `@generated`/`DO NOT EDIT` convention (graphql-codegen, protobuf):
     // generated code is the generator's business — it declares nothing
     // accusable and the FILE is the generator's output, rooted Tooling so it is
@@ -30,7 +40,7 @@ pub fn extract(source: &[u8], tree: &tree_sitter::Tree, out: &mut EvidenceSink) 
         );
     } else {
         let aliases = export_aliases(root, source);
-        declarations(root, source, &aliases, out);
+        declarations(root, source, &aliases, globals, out);
     }
     imports(root, source, out);
     literal_specifiers(root, source, out);
@@ -159,6 +169,7 @@ fn declarations(
     root: Node<'_>,
     source: &[u8],
     aliases: &BTreeMap<String, String>,
+    globals: bool,
     out: &mut EvidenceSink,
 ) {
     let mut cursor = root.walk();
@@ -166,27 +177,29 @@ fn declarations(
         if stmt.kind() == "export_statement" {
             if let Some(decl) = stmt.child_by_field_name("declaration") {
                 let is_default = has_token(stmt, "default");
-                declare(decl, source, Some(is_default), aliases, out);
+                declare(decl, source, Some(is_default), aliases, globals, out);
             }
         } else {
-            declare(stmt, source, None, aliases, out);
+            declare(stmt, source, None, aliases, globals, out);
         }
     }
 }
 
 /// `export_default` is `None` for a plain top-level statement, `Some(is_default)` for
-/// a declaration inside an `export_statement`.
+/// a declaration inside an `export_statement`; `globals` says every top-level
+/// declaration is reachable beyond the source (a classic script's).
 fn declare(
     node: Node<'_>,
     source: &[u8],
     export_default: Option<bool>,
     aliases: &BTreeMap<String, String>,
+    globals: bool,
     out: &mut EvidenceSink,
 ) {
     let emit = |name: &str, kind: SymbolKind, span: Span, out: &mut EvidenceSink| {
         let in_export = export_default.is_some();
         let clause_alias = aliases.get(name);
-        let reach = if in_export || clause_alias.is_some() {
+        let reach = if globals || in_export || clause_alias.is_some() {
             Reach::Exported
         } else {
             Reach::Private

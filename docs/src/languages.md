@@ -16,7 +16,7 @@ consumer in the engine.
 | `kndo:kotlin` | `kt` | the same JVM manifests | `main` functions, test sources; `internal` reaches the unit and its friends |
 | `kndo:python` | `py` | `pyproject.toml`, `requirements.txt`, `requirements-*.txt` | scripts, `__main__`, test files, entry points |
 | `kndo:swift` | `swift` | `Package.swift` | executable targets, `@main`, test targets |
-| `kndo:html` | `html` `htm` | — | a document is its own root; `<script src>`, `<link href>` and inline module imports are its references |
+| `kndo:html` | `html` `htm` | — | a document is its own root; `<script src>` and `<link href>` are its references; an inline `<script>` or `<style>` is a region of JavaScript or CSS, read by that adapter |
 | `kndo:css` | `css` `scss` | — | `@import`, `@use`, `@forward`, resolved with Sass partial and index conventions |
 
 Two more extensions ship for Apple projects: `kndo:interface-builder` roots
@@ -65,6 +65,17 @@ adapter says nothing:
   three test files); an output directory a JVM or Cargo build writes is not
   one, since a package may be named `target` or `build`; and what a manifest
   excludes is that unit's membership, not the tree's.
+- **Embedded regions**: the spans of a file written in another language.
+  HTML reports each inline `<script>` — a module, or a classic script — and
+  each inline `<style>` as a region of JavaScript or CSS, and the engine hands
+  it to that adapter, which reads it as it reads a file, in the page's
+  coordinates: a function the inline module never calls is the page's
+  `unused` finding, its imports resolve as JavaScript's (an extensionless
+  `./src/util` finds `util.ts`, a bare name is a package), and an `@import`
+  in the inline style is the stylesheet's edge. A classic script's top-level
+  declarations are the page's globals — reachable from every other script and
+  handler attribute on it — and stay alive; a script whose type is data (an
+  import map, JSON, a template) is no region at all.
 - **Cycle tolerance** for `cyclic`: a hazard in JavaScript, TypeScript and
   Python (initialization order bites at run time), tolerated in Rust, Go, Java,
   Kotlin and Swift (the compiler or the package model makes cycles benign).

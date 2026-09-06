@@ -77,15 +77,14 @@ fn the_project_is_never_left() {
 }
 
 #[test]
-fn javascript_resolves_what_the_page_imports() {
+fn an_attribute_names_a_file_exactly_never_a_guessed_one() {
     assert_eq!(
         resolve(&["src/main.ts"], "index.html", "./src/main"),
-        file("src/main.ts"),
-        "an inline import is a bundler's to resolve: the js-ts spellings apply"
+        Resolution::Unresolved,
+        "a browser requests what the attribute says: no extension is guessed"
     );
     assert_eq!(
-        resolve(&["src/main.ts"], "index.html", "vue"),
-        Resolution::Unresolved,
-        "a bare name with no workspace package behind it is external"
+        resolve(&["src/main.ts"], "index.html", "./src/main.ts"),
+        file("src/main.ts")
     );
 }

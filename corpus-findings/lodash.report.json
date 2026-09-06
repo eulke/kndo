@@ -43,20 +43,20 @@
     ]
   },
   "health": {
-    "implicated": 14,
-    "subjects": 198,
+    "implicated": 13,
+    "subjects": 208,
     "by_category": [
       {
         "category": "unused",
-        "findings": 14
+        "findings": 13
       }
     ],
     "by_package": [
       {
         "name": "lodash",
         "manifest": "package.json",
-        "implicated": 14,
-        "subjects": 198
+        "implicated": 13,
+        "subjects": 208
       }
     ]
   },
@@ -180,17 +180,6 @@
       "subject": {
         "kind": "file",
         "path": "vendor/firebug-lite/skin/xp/firebug.IE6.css"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-5ad65d51273e",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "vendor/firebug-lite/skin/xp/firebug.css"
       },
       "message": "no root anchors this file and no reachable file imports it"
     },

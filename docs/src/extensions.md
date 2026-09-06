@@ -133,6 +133,21 @@ A plugin's findings are advisory: `info` at most, never counted in health. Its
 roots are not — they change what is reachable, which is why `mutates_graph`
 has no default.
 
+A file is not always one language. An adapter that finds a span of another
+language in its file — a page's inline `<script>`, its `<style>` — reports it
+as an embedded region (`sink.region(span, "js", RegionMode::Module)`): the
+language as the file suffix its extension claims, and how the span runs (a
+module, or a classic script whose top-level declarations are the page's
+globals). The engine hands each region to the extension claiming that
+suffix, which reads it exactly as it reads a file — `SourceFile::region`
+says it is one, and which — with spans relative to the region's bytes; the
+sink puts them in the host file's coordinates, marks the region's imports so
+that extension resolves them, and drops what the host never declared, since
+the host's streams bound its file's evidence. What a region declares and
+imports is then judged, resolved and addressed as the host file's own, and
+the host's cache entry remembers which extensions read its regions, so a
+change in one of them re-extracts the file.
+
 ## Proving one
 
 A plugin that removes findings must be shown to remove exactly those. The

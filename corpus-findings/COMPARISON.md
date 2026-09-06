@@ -1310,3 +1310,17 @@ byte-identical. Two vite `test-only` dependency findings that the first run
 retired came back once an unclaimed file under an ignore stopped casting
 `unclaimed-importers` doubt on its manifest: they were an artifact of the
 mechanism, not a judgment.
+
+### Embedded regions: inline scripts and styles read by their language (2026-09-06)
+
+| repo | before | after | what moved |
+|---|---|---|---|
+| vite | 687 | 711 | −2 `unused` files reached through an inline style's `@import url()` and an inline module's dynamic `import()`; +20 `untested` playground pages whose inline modules declare functions; +6 `unused` — three constants inline modules declare and never read, two named exports of `transform-visibility.js` the page never imports (the old whole-surface `Glob` kept them by not looking), and `wasm/imports.js#imported_func`, consumed by a wasm import section no adapter reads |
+| flask | 26 | 29 | +3 `untested` example templates with inline functions |
+| lodash | 19 | 18 | −1: `firebug.css` reached by an inline `<style>@import` |
+| Exposed | 971 | 971 | byte-identical findings; 12,891 inline classic scripts of the generated docs now read (declarations 11,673 → 20,249), their `var`s the pages' globals |
+
+vite's unresolved edges fall 165 → 155 (inline imports resolve under
+JavaScript's spellings) and its diagnostics rise 19 → 20 (an inline
+`@import url(./imported.scss)` parses partially). Every other repository is
+byte-identical.

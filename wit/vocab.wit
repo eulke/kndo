@@ -215,6 +215,22 @@ interface types {
         span: option<span>,
     }
 
+    /// Mirrors `RegionMode` — how an embedded region runs: as a module, or as
+    /// a classic script whose top-level declarations are the page's globals.
+    enum region-mode {
+        module,
+        script,
+    }
+
+    /// Mirrors `EmbeddedRegion` — a span of the file written in another
+    /// language, named by the file suffix its extension claims. A host
+    /// adapter reports it; the engine extracts it with that extension.
+    record embedded-region {
+        span: span,
+        language: string,
+        mode: region-mode,
+    }
+
     /// Mirrors `FileEvidence`, minus `declared` — the declared streams come from the
     /// spec, and the host replays every wire write through a real `EvidenceSink`, so
     /// the pairing rule and every clamp apply to a WASM adapter identically.
@@ -227,6 +243,7 @@ interface types {
         relations: list<relation>,
         comments: list<comment-span>,
         metrics: list<metric-entry>,
+        embedded: list<embedded-region>,
         diagnostics: list<diagnostic>,
     }
 

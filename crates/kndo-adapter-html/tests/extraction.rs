@@ -2,7 +2,9 @@
 //! and attributes are references, which values leave the project.
 
 use kndo_adapter_html::HtmlAdapter;
-use kndo_contract::evidence::{FileEvidence, ImportShape, ImportTarget, RootKind, RootTarget};
+use kndo_contract::evidence::{
+    FileEvidence, ImportShape, ImportTarget, RegionMode, RootKind, RootTarget,
+};
 use kndo_contract::vocab::Confidence;
 
 fn extract(path: &str, source: &str) -> FileEvidence {
@@ -114,6 +116,7 @@ fn a_binary_file_yields_nothing_and_says_nothing() {
         &kndo_contract::adapter::SourceFile {
             path: &kndo_contract::vocab::ProjectPath::new("x.html"),
             content: &[0xff, 0xfe, 0x00],
+            region: None,
         },
         &mut sink,
     );
@@ -122,75 +125,65 @@ fn a_binary_file_yields_nothing_and_says_nothing() {
 }
 
 #[test]
-fn an_inline_module_scripts_imports_are_references() {
-    let ev = extract(
-        "index.html",
-        r##"<script type="module">
-  import "./side-effect.css";
+fn an_inline_script_or_style_is_a_region_of_its_language() {
+    let source = r##"<script type="module">
   import def from './default.js'
-  import { a, b as c } from "/src/named.ts";
-  import * as ns from "vue";
-  export { x } from './reexport.js';
-  export const local = import.meta.url;
-  // import "./commented-out.js";
-  /* import "./also-commented.js"; */
-  const s = "import './inside-a-string.js'";
-  const lazy = () => import("./lazy.js");
-  fromage("./not-an-import.js");
 </script>
 <script>
-  import "./classic-scripts-cannot-import.js";
+  function classic() {}
 </script>
 <script type="module" src="./with-src.js">
   import "./body-of-a-src-script-is-ignored.js";
-</script>"##,
+</script>
+<script type="importmap">{ "imports": {} }</script>
+<script type="text/javascript; charset=utf-8">var legacy = 1;</script>
+<style>
+  @import "./inline.css";
+</style>
+<style>   </style>
+<!-- <script>function commentedOut() {}</script> -->"##;
+    let ev = extract("index.html", source);
+    assert_eq!(
+        specifiers(&ev),
+        ["./with-src.js"],
+        "a page's own imports are its attributes'"
     );
-    let imports: Vec<(String, String, Confidence)> = ev
-        .imports
+    let regions: Vec<(&str, RegionMode, &str)> = ev
+        .embedded
         .iter()
-        .map(|i| {
-            let (kind, spec) = match &i.target {
-                ImportTarget::Relative(s) => ("rel", s.to_string()),
-                ImportTarget::Package(s) => ("pkg", s.to_string()),
-                _ => ("?", String::new()),
-            };
-            (kind.to_string(), spec, i.confidence)
+        .map(|r| {
+            (
+                r.language.as_str(),
+                r.mode,
+                &source[r.span.start as usize..r.span.end as usize],
+            )
         })
         .collect();
-    let expected = [
-        ("rel", "./side-effect.css", Confidence::Certain),
-        ("rel", "./default.js", Confidence::Certain),
-        ("rel", "/src/named.ts", Confidence::Certain),
-        ("pkg", "vue", Confidence::Certain),
-        ("rel", "./reexport.js", Confidence::Certain),
-        ("rel", "./lazy.js", Confidence::Probable),
-        ("rel", "./with-src.js", Confidence::Certain),
-    ];
     assert_eq!(
-        imports,
-        expected
-            .iter()
-            .map(|(k, s, c)| (k.to_string(), s.to_string(), *c))
-            .collect::<Vec<_>>()
+        regions,
+        [
+            (
+                "js",
+                RegionMode::Module,
+                "\n  import def from './default.js'\n"
+            ),
+            ("js", RegionMode::Script, "\n  function classic() {}\n"),
+            ("js", RegionMode::Script, "var legacy = 1;"),
+            ("css", RegionMode::Module, "\n  @import \"./inline.css\";\n"),
+        ],
+        "a src script's body, a data script, an empty style and a commented-out \
+         script are no region"
     );
     assert!(
-        ev.imports[..6]
-            .iter()
-            .all(|i| matches!(i.shape, ImportShape::Glob)),
-        "nothing in the document names what an inline import took"
+        ev.declarations.is_empty(),
+        "a region's code is its language's to read, never this adapter's"
     );
-    let source = "<script type=\"module\">import x from './a.js'</script>";
-    let ev = extract("i.html", source);
-    let span = ev.imports[0].span;
-    assert_eq!(&source[span.start as usize..span.end as usize], "./a.js");
 }
 
 #[test]
 fn a_scripts_body_is_text_and_a_page_may_not_be_ascii() {
     // lodash's test pages write their script tags from JavaScript strings.
-    let ev = extract(
-        "test/index.html",
-        r##"<title>Ünïcödé — tests</title>
+    let source = r##"<title>Ünïcödé — tests</title>
 <script>
   document.write('<script src="./' + ui.buildPath + '"><\/script>');
   var s = '<link rel="stylesheet" href="./' + theme + '.css">';
@@ -201,7 +194,22 @@ fn a_scripts_body_is_text_and_a_page_may_not_be_ascii() {
 <script type="module">
   import "./réel.js"; // après un caractère non ASCII
 </script>
-<script src="./real.js"></script>"##,
+<script src="./real.js"></script>"##;
+    let ev = extract("test/index.html", source);
+    assert_eq!(specifiers(&ev), ["./real.js"]);
+    let regions: Vec<&str> = ev
+        .embedded
+        .iter()
+        .map(|r| &source[r.span.start as usize..r.span.end as usize])
+        .collect();
+    assert_eq!(
+        regions.len(),
+        3,
+        "the classic script, the style, the module"
     );
-    assert_eq!(specifiers(&ev), ["./réel.js", "./real.js"]);
+    assert!(
+        regions[2].contains("import \"./réel.js\""),
+        "a region's span is the body's bytes, after non-ASCII text: {:?}",
+        regions[2]
+    );
 }

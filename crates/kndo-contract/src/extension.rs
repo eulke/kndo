@@ -1360,8 +1360,11 @@ pub trait Extension: Send + Sync {
 
     // ---- extraction: per file, pure in (bytes, spec version); gated by claims ----
 
-    /// Extract one claimed file's evidence. Never fails: extraction degrades
-    /// through the sink's diagnostics.
+    /// Extract one claimed file's evidence — or one embedded region of a file
+    /// another extension claimed, when `file.region` says so: the engine hands
+    /// a reported region to the extension claiming its language's suffix, and
+    /// what it reads lands in the host's evidence at the host's offsets. Never
+    /// fails: extraction degrades through the sink's diagnostics.
     fn extract(&self, file: &SourceFile<'_>, out: &mut EvidenceSink) {
         let _ = (file, out);
     }
@@ -1628,6 +1631,7 @@ mod tests {
             &SourceFile {
                 path: &from,
                 content: b"{}",
+                region: None,
             },
             &cx,
             &mut manifest,

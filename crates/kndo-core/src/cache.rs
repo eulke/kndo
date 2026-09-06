@@ -2,15 +2,18 @@
 //! fingerprint — a shape change in any evidence type invalidates every entry with no
 //! constant to remember. The evidence cache's key also folds the adapter's id,
 //! `version` and declared streams, so a behavior or declaration change
-//! invalidates exactly that adapter's entries; the graph cache's key folds the whole
+//! invalidates exactly that adapter's entries — and an entry remembers which
+//! extensions its embedded regions were handed to, by coordinate and version,
+//! so a change in one of those misses too; the graph cache's key folds the whole
 //! adapter set and `GRAPH_SEMANTICS_VERSION`. Every failure path degrades to a miss
 //! or a skipped write; a cache can slow a run down, never change it.
 
 use crate::graph::Graph;
 use kndo_contract::evidence::FileEvidence;
-use kndo_contract::extension::ExtensionSpec;
+use kndo_contract::extension::{Extension, ExtensionSpec};
 use kndo_contract::vocab::ProjectPath;
 use serde::{Deserialize, Serialize};
+use smol_str::SmolStr;
 use std::path::PathBuf;
 
 const MAGIC: &[u8; 4] = b"KNE1";
@@ -56,11 +59,16 @@ impl EvidenceCache {
         Some(dir.join(format!("{hex}.bin")))
     }
 
+    /// The cached evidence for `path` under `spec`, if the entry exists and the
+    /// extensions its embedded regions were handed to are still loaded at the
+    /// versions that produced it — the one part of the key extraction alone
+    /// could learn, so it is checked here instead of hashed.
     pub fn get(
         &self,
         spec: &ExtensionSpec,
         path: &ProjectPath,
         content_hash: &[u8; 32],
+        extensions: &[Box<dyn Extension>],
     ) -> Option<FileEvidence> {
         let path = self.entry_path(spec, path, content_hash)?;
         let bytes = std::fs::read(path).ok()?;
@@ -72,20 +80,34 @@ impl EvidenceCache {
         if fp != self.fingerprint {
             return None;
         }
-        bincode::deserialize(payload).ok()
+        let cached: CachedEvidence = bincode::deserialize(payload).ok()?;
+        let current = cached.extractors.iter().all(|(coordinate, version)| {
+            extensions
+                .iter()
+                .any(|e| e.spec().coordinate() == coordinate && e.spec().version() == *version)
+        });
+        current.then_some(cached.evidence)
     }
 
+    /// Writes `evidence` for `path` under `spec`, remembering `extractors` —
+    /// the (coordinate, version) of every extension an embedded region was
+    /// handed to — for [`EvidenceCache::get`] to check.
     pub fn put(
         &self,
         spec: &ExtensionSpec,
         path: &ProjectPath,
         content_hash: &[u8; 32],
         evidence: &FileEvidence,
+        extractors: &[(SmolStr, u32)],
     ) {
         let Some(path) = self.entry_path(spec, path, content_hash) else {
             return;
         };
-        let Ok(payload) = bincode::serialize(evidence) else {
+        let entry = CachedEvidenceRef {
+            extractors,
+            evidence,
+        };
+        let Ok(payload) = bincode::serialize(&entry) else {
             return;
         };
         let mut bytes = Vec::with_capacity(4 + 32 + payload.len());
@@ -94,6 +116,23 @@ impl EvidenceCache {
         bytes.extend_from_slice(&payload);
         write_atomically(&path, &bytes);
     }
+}
+
+/// One evidence entry as stored: the evidence and the extensions its embedded
+/// regions were handed to, which the key could not fold since only
+/// extraction learns them.
+#[derive(Deserialize)]
+struct CachedEvidence {
+    extractors: Vec<(SmolStr, u32)>,
+    evidence: FileEvidence,
+}
+
+/// [`CachedEvidence`] by reference, for writing without a clone; the two
+/// serialize identically.
+#[derive(Serialize)]
+struct CachedEvidenceRef<'a> {
+    extractors: &'a [(SmolStr, u32)],
+    evidence: &'a FileEvidence,
 }
 
 /// A graph plus what its manifest-derived parts were computed from, so a later run

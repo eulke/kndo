@@ -3846,3 +3846,96 @@ template's `Info.plist` under `node_modules` could activate `kndo:info-plist`
 alone would read `test-only` today; whether it is test material by the
 tool's layout is a file-role question, and gin's only `testdata` package is
 generated, so nothing measures it yet.
+
+## 2026-09-06 — M8.b.13: an embedded region is its language's to read — html's second `TypeScriptAdapter` and hand-written scanner retire
+
+**The capability.** A host adapter reports a span of its file written in
+another language as an embedded region: the span, the language as the file
+suffix its extension claims (`js`, `css`), and how the span runs — a module,
+or a classic script whose top-level declarations are the page's globals.
+The engine, after the host's own extraction, hands each region to the
+extension claiming that suffix through the same sink: spans arrive relative
+to the region's bytes and land in the host's coordinates, the region's
+imports are marked as the region's so that extension resolves them, a write
+to a stream the host never declared is dropped without a word (the host's
+declaration bounds its file's evidence), a region reported inside a region
+is refused, and a region of a language nothing claims is left unread with a
+diagnostic on the file. `SourceFile::region` tells the reading extension it
+is one, and which. What a region declares and imports is then judged,
+resolved and addressed as the host file's own — `index.html#unusedInline` is
+a finding like any. The evidence cache remembers which extensions read a
+file's regions, by coordinate and version, and misses when one changed: the
+part of the key only extraction could learn is checked on read instead of
+hashed.
+
+**What retired.** The html adapter carried a private `TypeScriptAdapter` to
+resolve what inline scripts import and a hand-written scan of import
+statements — a second JavaScript reader beside the grammar, string- and
+comment-skipping by hand, every import a whole-surface `Glob`. Both are
+gone: the adapter reports each inline `<script>` (module, or classic by its
+`type`; an import map, JSON or a template is data, not a region) and each
+inline `<style>` as a region, and resolves its own attribute URLs exactly as
+a browser requests them — the path as written, or root-relative at the
+nearest ancestor that holds it — with no guessed extension. The JavaScript
+adapter reads a region with the grammar its language names, leaves a
+region's roots to its host, and marks a classic script's top-level
+declarations exported, since every other script and handler attribute on the
+page can reach them.
+
+**Measurement, decomposed.** vite 687 → 711 (+26, −2). Retired: two `unused`
+files the old scanner never reached — `playground/assets/css/import.css`,
+imported by an inline style's `@import url(...)`, and
+`playground/assets/static/import-expression.js`, imported by an inline
+module's dynamic `import()`. Added, twenty `untested` on playground pages
+whose inline modules declare functions: a page with code is production code
+no test file reaches, the verdict its sibling modules already carried, and
+the page carried none only because it declared nothing. Added, six `unused`:
+three constants an inline module declares and never reads
+(`define/index.html#__VAR_NAME__`, `glob-import/root/index.html#notInvocation`,
+`optimize-deps/index.html#globbed` — each a fixture of vite's own behavior,
+each unread by the language); two named exports of
+`glob-import/root/transform-visibility.js` (`globResult`, `dynamicResult`)
+that the page never imports — it takes the default — and that the old
+whole-surface `Glob` kept alive by not looking; and one that is a gap:
+`wasm/imports.js#imported_func`, consumed by `light-with-imports.wasm`'s
+import section, which vite's wasm plugin resolves from the binary and no
+adapter reads. Ten fewer unresolved edges (165 → 155): inline imports now
+resolve under JavaScript's spellings. One more diagnostic: the css
+playground's inline `@import url(./imported.scss)` parses partially, as the
+same text in a `.css` file would. flask 26 → 29: the three example templates
+with inline functions (`fetch.html`, `jquery.html`, `xhr.html`) are
+`untested` for the reason above. lodash 19 → 18:
+`vendor/firebug-lite/skin/xp/firebug.css` is reached by `firebug.html`'s
+inline `<style>@import "firebug.css"</style>`. Exposed's findings are
+byte-identical at 971 while its declarations move 11,673 → 20,249 and its
+references 238,593 → 345,849: 4,315 generated documentation pages hold
+12,891 inline classic scripts (2.7 MB of `var pathToRoot = …`), now read —
+their declarations are the pages' globals, the pages root themselves, and
+none declares a function, so nothing fires. gin, guava, ripgrep, vapor and
+Alamofire are byte-identical.
+
+**Fixtures and knobs.** `document-entries` in the kndo-adapter-html fixtures
+grows an inline module (a named extensionless import resolved as
+JavaScript's, a side-effect import only the region makes, a dead function),
+a classic script (its function alive as the page's global), an inline style
+(`@import` reaching a sheet) and an import map (no region); the engine test
+speaks kdoc, a document language embedding kmock, and pins the offsets, the
+routing, the judgment, the unknown-language diagnostic and the host's stream
+bound; the contract test pins the sink's shifting, clamping, marking,
+dropping and refusal. The contract fingerprint moves (`FileEvidence`,
+`Import`, `SourceFile`); `kndo:html` moves 1 → 2 (different evidence from
+the same page); the JavaScript and CSS adapters keep their versions, since
+no file they saw before yields different evidence; the graph semantics do
+not move, since the assembly of the same evidence is unchanged; the WIT
+`extract` takes the region and `file-evidence` carries the list, and the
+compat guests are re-pinned.
+
+**Open, with what would decide each.** A `.wasm` module's import section is
+evidence (the `imported_func` gap above); an adapter for the binary format
+would close it, measured on vite's wasm playground. Handler attributes
+(`onclick="f()"`) are JavaScript expressions in classic mode and are not
+regions yet — the corpus reaches every such function through its script's
+globals rule, so nothing measures the need. Suppression pragmas inside a
+region are dropped with the host's undeclared comments stream; a page that
+wants `kndo:allow` in its inline script is the day to decide whether a host
+declares its regions' streams.

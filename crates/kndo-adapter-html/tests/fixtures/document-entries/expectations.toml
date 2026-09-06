@@ -1,4 +1,4 @@
-# document-entries: HTML pages are roots — script src and link href (stylesheet, modulepreload) with query suffixes stripped and commented-out tags ignored; a test page is a test root; a script src that resolves to no file is unresolved.
+# document-entries: HTML pages are roots — script src and link href (stylesheet, modulepreload) with query suffixes stripped and commented-out tags ignored; a test page is a test root; a script src that resolves to no file is unresolved. An inline `<script>` or `<style>` is a region of its language: the JavaScript and CSS adapters read it in the page's coordinates, its imports resolve as JavaScript's (an extensionless `./src/util` finds `util.ts`), a module's dead function is the page's finding, a classic script's function is the page's global, and an import map is data, not code.
 
 [[dead]]
 subject = "orphan.css"
@@ -49,6 +49,31 @@ why = "loaded by pages/about.html's `<script src=about.js>`"
 subject = "test/cases.js"
 category = "unused"
 why = "loaded by the test page test/index.html"
+
+[[dead]]
+subject = "index.html#unusedInline"
+category = "unused"
+why = "declared in index.html's inline module script and called by nothing — the region's code is judged as the page's own"
+
+[[alive]]
+subject = "index.html#onBannerClick"
+category = "unused"
+why = "a classic script's top-level function is the page's global, reachable from every other script and handler attribute"
+
+[[alive]]
+subject = "index.html#banner"
+category = "unused"
+why = "read by the inline module's own statements"
+
+[[alive]]
+subject = "src/inline-only.ts"
+category = "unused"
+why = "imported by index.html's inline module alone — the region's import, resolved by JavaScript's rules"
+
+[[alive]]
+subject = "inline.css"
+category = "unused"
+why = "imported by the `@import` of index.html's inline style — the region's import, resolved by CSS's rules"
 
 [[dead]]
 subject = "import:pages/about.html:./gone.js"

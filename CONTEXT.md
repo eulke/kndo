@@ -79,8 +79,10 @@ builds (test-only, as a `_test.go` file does).
 
 **Embedded region**:
 A span of a file written in another language (`<script>`, `<style>`), with the
-language and its mode (module or classic script). The engine extracts it with that
-language's extension.
+language — named by the file suffix its extension claims — and its mode (module or
+classic script). The host reports it; the engine extracts it with that language's
+extension into the host's evidence, at the host's offsets, and that extension
+resolves what it imports.
 
 ### Structure
 

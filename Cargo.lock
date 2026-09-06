@@ -997,7 +997,6 @@ dependencies = [
 name = "kndo-adapter-html"
 version = "0.0.0"
 dependencies = [
- "kndo-adapter-ts",
  "kndo-contract",
  "kndo-testkit",
  "kndo-toolkit",

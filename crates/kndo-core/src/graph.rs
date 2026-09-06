@@ -484,7 +484,14 @@ pub fn assemble(
     let mut resolved: Vec<ResolvedEdges> = Vec::with_capacity(graph_files.len());
     for (ix, gf) in graph_files.iter().enumerate() {
         let adapter = adapter_by_id(adapters, &gf.adapter);
-        let mut edges = resolve_file(&gf.path, &gf.evidence, adapter, &cx, &sorted_paths);
+        let mut edges = resolve_file(
+            &gf.path,
+            &gf.evidence,
+            adapter,
+            adapters,
+            &cx,
+            &sorted_paths,
+        );
         edges.sees = sees_of(ix, &gf.path, adapter, &cx, &sorted_paths);
         edges.regions = regions_of(&gf.path, &gf.evidence, adapter, &cx, &sorted_paths);
         resolved.push(edges);
@@ -722,10 +729,15 @@ struct ResolvedEdges {
     regions: Vec<(Reach, Vec<u32>)>,
 }
 
+/// The file's imports resolved by the extension that read each: the claiming
+/// adapter's for the file's own, and for an import read from an embedded
+/// region, the extension claiming that region's language — the resolver the
+/// specifier was written for.
 fn resolve_file(
     from: &ProjectPath,
     evidence: &FileEvidence,
     adapter: &dyn Extension,
+    adapters: &[Box<dyn Extension>],
     cx: &ResolveContext<'_>,
     sorted_paths: &[ProjectPath],
 ) -> ResolvedEdges {
@@ -750,7 +762,12 @@ fn resolve_file(
             per_import.push(Vec::new());
             continue;
         }
-        let resolved: Vec<u32> = match adapter.resolve(from, specifier, cx) {
+        let resolver: &dyn Extension = import
+            .embedded_in
+            .and_then(|r| evidence.embedded.get(r.index()))
+            .and_then(|region| crate::extract::claimant_of_suffix(adapters, &region.language))
+            .map_or(adapter, |ix| adapters[ix].as_ref());
+        let resolved: Vec<u32> = match resolver.resolve(from, specifier, cx) {
             Resolution::File(p) => index_of(&p).into_iter().collect(),
             Resolution::Files(paths) => {
                 let mut ixs: Vec<u32> = paths.iter().filter_map(&index_of).collect();
@@ -842,8 +859,8 @@ pub fn patch(
     for (ix, file_index) in changed {
         let file = &files[file_index];
         let adapter = adapter_by_id(adapters, &prev.files[ix].adapter);
-        let evidence = crate::extract::extract_one(file, adapter, cache);
-        let edges = resolve_file(&file.path, &evidence, adapter, &cx, &sorted_paths);
+        let evidence = crate::extract::extract_one(file, adapter, adapters, cache);
+        let edges = resolve_file(&file.path, &evidence, adapter, adapters, &cx, &sorted_paths);
         let dispatched = crate::dispatch::apply(&evidence, adapter.spec().dispatch_rules());
         let published = publishes(
             adapter.spec().published_surface(),
@@ -924,6 +941,7 @@ pub(crate) fn for_each_matching(
                 SourceFile {
                     path: &file.path,
                     content: &file.content,
+                    region: None,
                 },
             );
         }

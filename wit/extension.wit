@@ -3,8 +3,9 @@
 // host invokes only what the spec declares, so a stub is dead bytes, never dead
 // design. Phase discipline is host-enforced: the imports below belong to phases,
 // and calling one outside its phase traps with a named contract violation —
-// `extract` imports NOTHING (evidence is cached by file content alone, so the
-// file SET may not influence it); `resolve`, `roots`, `packages` and
+// `extract` imports NOTHING (evidence is cached by file content and the
+// extensions its embedded regions were handed to, so the file SET may not
+// influence it); `resolve`, `roots`, `packages` and
 // `sees` may use only the project enumerations; `manifest-dependencies`
 // gets bytes and imports nothing; conduct-phase exports (contribute-roots,
 // report-findings) only the graph and content imports; ingest imports nothing.
@@ -17,6 +18,7 @@ world extension {
     use types.{
         extension-spec, file-evidence, resolution, project-root, package-entry,
         contributed-root, contributed-finding, coverage-records, declared-symbol, reach,
+        embedded-region,
     };
 
     // ---- extraction-phase imports: the project as ResolveContext sees it ----
@@ -54,10 +56,13 @@ world extension {
     /// folded into evidence cache keys, so it must be stable for the process).
     export spec: func() -> extension-spec;
 
-    /// Extract one claimed file's evidence. The host replays the result through a
-    /// real `EvidenceSink` under the spec's declared streams — clamps, drops and
+    /// Extract one claimed file's evidence — or, when `region` is given, one
+    /// embedded region of the file at `path` whose language named this
+    /// extension: `content` is then the region's bytes and every span is
+    /// relative to it. The host replays the result through a real
+    /// `EvidenceSink` under the spec's declared streams — clamps, drops and
     /// the pairing rule apply identically to native and WASM extensions.
-    export extract: func(path: string, content: list<u8>) -> file-evidence;
+    export extract: func(path: string, content: list<u8>, region: option<embedded-region>) -> file-evidence;
 
     /// Resolve one import specifier written in `from`.
     export resolve: func(%from: string, specifier: string) -> resolution;

@@ -144,6 +144,7 @@ fn manifest_dependencies_carry_both_spellings() {
     let deps = a.manifest_dependencies(&SourceFile {
         path: &pom,
         content: b"<project><dependencies>\n  <dependency>\n    <groupId>com.squareup.okhttp3</groupId>\n    <artifactId>okhttp</artifactId>\n  </dependency>\n</dependencies></project>",
+        region: None,
     });
     assert!(deps.iter().any(|d| d.name == "com.squareup.okhttp3:okhttp"));
     assert!(deps.iter().any(|d| d.name == "okhttp"));
@@ -152,6 +153,7 @@ fn manifest_dependencies_carry_both_spellings() {
     let deps = a.manifest_dependencies(&SourceFile {
         path: &gradle,
         content: b"dependencies {\n  implementation 'io.vertx:vertx-core:4.5.0'\n}\n",
+        region: None,
     });
     assert!(deps.iter().any(|d| d.name == "io.vertx:vertx-core"));
     assert!(deps.iter().any(|d| d.name == "vertx-core"));

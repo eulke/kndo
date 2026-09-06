@@ -22,6 +22,7 @@ fn roots_of(manifest_path: &str, manifest: &str, files: &[&str]) -> Vec<(String,
             &SourceFile {
                 path: &path,
                 content: manifest.as_bytes(),
+                region: None,
             },
             &cx,
         )
@@ -121,6 +122,7 @@ fn packages_are_entry_optional_and_underscored() {
         &SourceFile {
             path: &lib_path,
             content: b"[package]\nname = \"demo-core\"\n",
+            region: None,
         },
         &cx,
     );
@@ -142,6 +144,7 @@ fn packages_are_entry_optional_and_underscored() {
         &SourceFile {
             path: &bin_path,
             content: b"[package]\nname = \"tool\"\n",
+            region: None,
         },
         &cx,
     );
@@ -159,6 +162,7 @@ fn lib_name_overrides_the_import_name() {
         &SourceFile {
             path: &path,
             content: b"[package]\nname = \"demo-cli\"\n\n[lib]\nname = \"demo\"\n",
+            region: None,
         },
         &cx,
     );
@@ -191,6 +195,7 @@ winapi = "0.3"
     let mut deps = RustAdapter::new().manifest_dependencies(&SourceFile {
         path: &path,
         content: manifest.as_bytes(),
+        region: None,
     });
     deps.sort_by(|a, b| a.name.cmp(&b.name));
     use kndo_contract::adapter::DependencyScope as S;
@@ -220,6 +225,7 @@ fn optional_dependencies_declare_optional_whatever_their_table() {
     let deps = RustAdapter::new().manifest_dependencies(&SourceFile {
         path: &path,
         content: b"[package]\nname = \"x\"\n\n[dependencies]\nplain = \"1\"\narbitrary = { version = \"1.3\", optional = true }\n",
+        region: None,
     });
     let scope = |name: &str| deps.iter().find(|d| d.name == name).and_then(|d| d.scope);
     assert_eq!(scope("plain"), Some(S::Prod));
