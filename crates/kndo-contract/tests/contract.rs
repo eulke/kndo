@@ -14,12 +14,7 @@ fn sink_attaches_metrics_and_membership_by_id() {
         Span::new(0, 40),
         Reach::Exported,
     );
-    let method = sink.declaration(
-        "draw",
-        SymbolKind::Method,
-        Span::new(10, 30),
-        Reach::Private,
-    );
+    let method = sink.declaration("draw", SymbolKind::Method, Span::new(10, 30), Reach::File);
     sink.member_of(method, owner);
     sink.metrics(
         method,
@@ -47,7 +42,7 @@ fn sink_attaches_metrics_and_membership_by_id() {
 #[test]
 fn sink_degrades_on_a_bad_span_instead_of_failing() {
     let mut sink = EvidenceSink::new(10, EvidenceStreams::none());
-    let d = sink.declaration("x", SymbolKind::Function, Span::new(4, 99), Reach::Private);
+    let d = sink.declaration("x", SymbolKind::Function, Span::new(4, 99), Reach::File);
     sink.diagnostic(DiagnosticLevel::Info, "note", None);
     let ev = sink.finish();
     assert_eq!(
@@ -166,7 +161,7 @@ fn as_str_spellings_are_the_serde_spellings() {
 fn markers_ride_their_declared_stream() {
     // Declared: a marker on a declaration or the file lands as written.
     let mut sink = EvidenceSink::new(80, EvidenceStreams::of(&[EvidenceStream::Markers]));
-    let f = sink.declaration("f", SymbolKind::Function, Span::new(10, 30), Reach::Private);
+    let f = sink.declaration("f", SymbolKind::Function, Span::new(10, 30), Reach::File);
     sink.marker(
         MarkerTarget::Declaration(f),
         "tokio::test",
@@ -232,19 +227,19 @@ fn a_selector_is_unique_within_its_file_by_construction() {
         "size",
         SymbolKind::Variable,
         Span::new(100, 110),
-        Reach::Private,
+        Reach::File,
     );
     let first = sink.declaration(
         "helper",
         SymbolKind::Function,
         Span::new(200, 250),
-        Reach::Private,
+        Reach::File,
     );
     let again = sink.declaration(
         "helper",
         SymbolKind::Function,
         Span::new(300, 350),
-        Reach::Private,
+        Reach::File,
     );
     for id in [by_int, by_str, field] {
         sink.member_of(id, widget);
@@ -394,7 +389,7 @@ fn a_regions_writes_land_in_the_files_coordinates_and_never_nest() {
         .expect("a region of the file");
     sink.within(id, |sink| {
         // Region-relative spans shift by the region's start …
-        sink.declaration("f", SymbolKind::Function, Span::new(2, 8), Reach::Private);
+        sink.declaration("f", SymbolKind::Function, Span::new(2, 8), Reach::File);
         sink.import(
             ImportTarget::Relative("./x".into()),
             ImportShape::SideEffect,
@@ -440,4 +435,74 @@ fn a_regions_writes_land_in_the_files_coordinates_and_never_nest() {
     assert!(messages[0].contains("exceeds region length 20"));
     assert!(messages[1].contains("never nests"));
     assert!(!evidence.declared.contains(EvidenceStream::Comments));
+}
+
+#[test]
+fn a_reach_stands_on_a_rung_and_never_reaches_wider_than_its_owner() {
+    use kndo_contract::evidence::{EvidenceSink, EvidenceStreams, Reach, SymbolKind};
+    use kndo_contract::extension::Rung;
+    use kndo_contract::vocab::Span;
+    let named = Reach::Named {
+        namespace: vec!["crate".into(), "a".into()],
+    };
+    let token = Reach::Scoped {
+        scope: "package".into(),
+    };
+    for (reach, rung) in [
+        (Reach::Owner, Some(Rung::Owner)),
+        (Reach::File, Some(Rung::File)),
+        (Reach::Namespace { up: 0 }, Some(Rung::Namespace)),
+        (Reach::Namespace { up: 2 }, Some(Rung::Namespace)),
+        (named.clone(), Some(Rung::Namespace)),
+        (Reach::Directory { up: 1 }, Some(Rung::Directory)),
+        (Reach::Unit { up: 0 }, Some(Rung::Unit)),
+        (Reach::Unit { up: 1 }, Some(Rung::Group)),
+        (Reach::Exported, Some(Rung::Exported)),
+        (Reach::Inherited, None),
+        (token.clone(), None),
+    ] {
+        assert_eq!(reach.rung(), rung, "{reach:?}");
+    }
+    assert_eq!(Reach::Exported.capped_by(&Reach::File), Reach::File);
+    assert_eq!(Reach::Owner.capped_by(&Reach::Exported), Reach::Owner);
+    assert_eq!(
+        Reach::Inherited.capped_by(&Reach::Unit { up: 0 }),
+        Reach::Unit { up: 0 }
+    );
+    assert_eq!(
+        Reach::Unit { up: 1 }.capped_by(&Reach::Unit { up: 0 }),
+        Reach::Unit { up: 0 }
+    );
+    assert_eq!(
+        Reach::Exported.capped_by(&token),
+        token,
+        "a token compares as a namespace, the widest thing a token has named"
+    );
+    assert_eq!(Reach::Owner.capped_by(&token), Reach::Owner);
+
+    // A chain: a file-private type owning an exported type owning a member
+    // that inherits — the member reaches the file, and so does the inner
+    // type; a top-level `Inherited` has nothing to inherit and reads exported.
+    let mut sink = EvidenceSink::new(100, EvidenceStreams::none());
+    let outer = sink.declaration("Outer", SymbolKind::Type, Span::new(0, 90), Reach::File);
+    let inner = sink.declaration(
+        "Inner",
+        SymbolKind::Type,
+        Span::new(10, 80),
+        Reach::Exported,
+    );
+    sink.member_of(inner, outer);
+    let m = sink.declaration("m", SymbolKind::Method, Span::new(20, 30), Reach::Inherited);
+    sink.member_of(m, inner);
+    let stray = sink.declaration(
+        "stray",
+        SymbolKind::Function,
+        Span::new(91, 99),
+        Reach::Inherited,
+    );
+    let ev = sink.finish();
+    assert_eq!(ev.effective_reach(outer), Reach::File);
+    assert_eq!(ev.effective_reach(inner), Reach::File);
+    assert_eq!(ev.effective_reach(m), Reach::File);
+    assert_eq!(ev.effective_reach(stray), Reach::Exported);
 }

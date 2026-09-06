@@ -92,25 +92,28 @@ impl Analysis for PrivateTypeLeak {
     }
 }
 
-/// Every link of the owner chain, self included, is `Exported`.
+/// Every link of the owner chain, self included, is `Exported` — which is
+/// what an `Exported` effective reach says: an owner narrower than exported
+/// would have capped it.
 fn chain_is_exported(
     decls: &[kndo_contract::evidence::Declaration],
     d: &kndo_contract::evidence::Declaration,
 ) -> bool {
     let mut cursor = d;
     loop {
-        if !matches!(cursor.reach, Reach::Exported) {
+        if !matches!(cursor.reach, Reach::Exported | Reach::Inherited) {
             return false;
         }
         match cursor.owner {
             Some(owner) => cursor = &decls[owner.index()],
-            None => return true,
+            None => return matches!(cursor.reach, Reach::Exported),
         }
     }
 }
 
-/// The declaration's own reach — or any link of its chain — is `Private`, and
-/// no link is `Scoped` (scoped regions are not this analysis's judgment).
+/// The declaration's own reach — or any link of its chain — stops at its
+/// owner or its file, and no link is bounded any other way (a namespace, a
+/// unit, a token: not this analysis's judgment).
 fn chain_is_private(
     decls: &[kndo_contract::evidence::Declaration],
     d: &kndo_contract::evidence::Declaration,
@@ -119,9 +122,9 @@ fn chain_is_private(
     let mut any_private = false;
     loop {
         match cursor.reach {
-            Reach::Private => any_private = true,
-            Reach::Exported => {}
-            _ => return false, // Scoped or future variants: silence
+            Reach::Owner | Reach::File => any_private = true,
+            Reach::Exported | Reach::Inherited => {}
+            _ => return false, // bounded otherwise, or a future variant: silence
         }
         match cursor.owner {
             Some(owner) => cursor = &decls[owner.index()],

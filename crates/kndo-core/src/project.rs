@@ -59,6 +59,11 @@ pub struct ProjectUnit {
     /// friendship is the build system's statement about one pair of units and
     /// never carries over a third.
     pub friend_of: Vec<u32>,
+    /// The manifest that aggregates this unit's — Maven's `<modules>`,
+    /// Cargo's `workspace.members`, a SwiftPM package's targets — which is
+    /// the group a `Reach::Unit { up: 1 }` declaration pools over; `None`
+    /// where no manifest lists this one.
+    pub group: Option<ProjectPath>,
     /// Whether the outside world consumes this unit's exported API —
     /// [`kndo_contract::manifest::Unit::is_published`], read once.
     pub published: bool,
@@ -240,6 +245,7 @@ pub fn assemble(reads: &[ManifestRead]) -> Project {
                 compiles_against: Vec::new(),
                 friend_of: Vec::new(),
                 published: unit.is_published(),
+                group: None,
             });
             named.push((unit.depends_on.clone(), unit.friend_of.clone()));
         }
@@ -286,9 +292,11 @@ pub fn assemble(reads: &[ManifestRead]) -> Project {
     };
     let mut sorted: Vec<ProjectUnit> = order.iter().map(|&i| units[i].clone()).collect();
     let by_rank: Vec<Vec<u32>> = order.iter().map(|&i| direct[i].clone()).collect();
+    let aggregators = Aggregators::of(reads);
     for (i, unit) in sorted.iter_mut().enumerate() {
         unit.compiles_against = closure(i as u32, &by_rank);
         unit.friend_of = friends[order[i]].clone();
+        unit.group = aggregators.parent.get(&unit.manifest).cloned();
     }
     Project { units: sorted }
 }

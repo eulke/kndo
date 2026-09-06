@@ -134,10 +134,10 @@ fn is_generated(source: &[u8]) -> bool {
 }
 
 /// `public` → Exported; `protected` folds to Exported (subclasses are
-/// unboundable statically); `private` → Private; NO modifier is the compiler's
-/// own package boundary — `Scoped("package")`, whose region equals the sight
-/// set (dir + standard-layout mirrors), which made this migration a measured
-/// no-op on findings. `implicit_public` (interface bodies) overrides absence.
+/// unboundable statically); `private` → the owner's, since Java spells it on
+/// members and nested types alone; NO modifier is the compiler's own package
+/// boundary, nameable inside the package this file declares.
+/// `implicit_public` (interface bodies) overrides absence.
 fn reach_of(item: Node<'_>, ctx: &Ctx) -> Reach {
     // No modifier is package-private: nameable inside the package this file
     // declares, and the engine pools it from that declaration.
@@ -156,7 +156,7 @@ fn reach_of(item: Node<'_>, ctx: &Ctx) -> Reach {
     for child in modifiers.children(&mut c) {
         match child.kind() {
             "public" | "protected" => explicit = Some(Reach::Exported),
-            "private" => explicit = Some(Reach::Private),
+            "private" => explicit = Some(Reach::Owner),
             _ => {}
         }
     }

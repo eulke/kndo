@@ -32,7 +32,8 @@ owner (the declaration it is a member of).
 How far a declaration's name may legally be used, as an address in the scope forest:
 its owner, its file, its namespace or an ancestor of it, its unit or the unit's group,
 a directory, a named namespace, the owner's reach (inherited), or exported.
-_Avoid_: visibility rung, region, scope token
+_Avoid_: visibility rung, region, scope token, private (a keyword; the reach it
+spells is the owner's or the file's)
 
 **Effective reach**:
 A member's reach after the engine caps it by its owner's: never wider than the owner.

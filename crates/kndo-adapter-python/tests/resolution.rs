@@ -80,7 +80,7 @@ fn a_python_file_sees_nothing_without_an_import() {
     let a = PythonAdapter::new();
     assert!(a.sees(&path("src/pkg/a.py"), &cx).is_empty());
     assert!(
-        a.seen_from(&path("src/pkg/a.py"), &Reach::Unit, &cx)
+        a.seen_from(&path("src/pkg/a.py"), &Reach::Unit { up: 0 }, &cx)
             .is_none()
     );
 }

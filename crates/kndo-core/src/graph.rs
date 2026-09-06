@@ -680,7 +680,7 @@ fn regions_of(
         .declarations
         .iter()
         .map(|d| &d.reach)
-        .filter(|r| matches!(r, Reach::Scoped { .. } | Reach::Unit))
+        .filter(|r| matches!(r, Reach::Scoped { .. } | Reach::Unit { up: 0 }))
         .collect();
     reaches.sort();
     reaches.dedup();

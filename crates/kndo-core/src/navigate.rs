@@ -305,13 +305,19 @@ impl Index {
         };
         let f = &graph.files[file];
         match reach {
-            Reach::Private => Pool::Own,
+            Reach::Owner | Reach::File => Pool::Own,
             Reach::Namespace { up } => bounded(self.scopes.namespace_pool(file, *up)),
-            Reach::Unit => match f.unit {
+            Reach::Unit { up: 0 } => match f.unit {
                 Some(u) => Pool::Files(self.scopes.unit_pool(u)),
                 None => bounded(region_of(f, reach)),
             },
+            Reach::Unit { up: 1 } => bounded(f.unit.and_then(|u| self.scopes.group_pool(u))),
+            Reach::Directory { up } => bounded(self.scopes.directory_pool(file, *up)),
+            Reach::Named { namespace } => bounded(self.scopes.named_pool(file, namespace)),
             Reach::Scoped { .. } => bounded(region_of(f, reach)),
+            // A unit's group beyond its aggregator, a reach that is its
+            // owner's (resolved by the caller through the effective reach),
+            // and any reach this build does not know: published surface.
             _ => Pool::Published,
         }
     }
@@ -390,9 +396,12 @@ pub fn keepers(
         out: Vec::new(),
         limit: limit.max(1),
     };
+    // The reach the engine pools by: the declared one after every owner above
+    // caps it — a public member of a file-private class reaches the file.
+    let effective = f.evidence.effective_reach_at(decl);
 
     // The pool a bounded reach names, or `None` for published surface.
-    let (exported, region) = match index.pool_of(graph, file, &d.reach) {
+    let (exported, region) = match index.pool_of(graph, file, &effective) {
         Pool::Published => (true, None),
         Pool::Files(r) => (false, Some(r)),
         Pool::Own => (false, None),
@@ -440,12 +449,12 @@ pub fn keepers(
             }
         }
         // A surface hands out what the language exports and nothing else, so a
-        // member whose OWN reach is Private rides none of the three surface
-        // keepers below — not a namespace importer, not an entry, not its
-        // owner's binding. Its name cannot be spelled outside this file; the
-        // dispatch pool above, which is every reachable file, is the whole of
-        // its keep-alive.
-        let handed_out = !matches!(d.reach, Reach::Private);
+        // member whose effective reach stops at its owner or its file rides
+        // none of the three surface keepers below — not a namespace importer,
+        // not an entry, not its owner's binding. Its name cannot be spelled
+        // outside this file; the dispatch pool above, which is every reachable
+        // file, is the whole of its keep-alive.
+        let handed_out = !matches!(effective, Reach::Owner | Reach::File);
         // Any whole-surface importer keeps every member it could name (the
         // engine cannot see through a namespace import, so it degrades toward
         // keep-alive for everything the import can reach).
@@ -457,11 +466,11 @@ pub fn keepers(
             }
         }
         let surface_reach = match d.owner {
-            Some(owner) => &f.evidence.declarations[owner.index()].reach,
-            None => &d.reach,
+            Some(owner) => f.evidence.effective_reach(owner),
+            None => effective.clone(),
         };
         let owner_surface_exported =
-            matches!(index.pool_of(graph, file, surface_reach), Pool::Published);
+            matches!(index.pool_of(graph, file, &surface_reach), Pool::Published);
         if handed_out
             && owner_surface_exported
             && region.is_none()
@@ -482,7 +491,7 @@ pub fn keepers(
         // the member's region when it has one.
         if handed_out && let Some(o) = d.owner {
             let od = &f.evidence.declarations[o.index()];
-            if !matches!(od.reach, Reach::Private) {
+            if !matches!(surface_reach, Reach::Owner | Reach::File) {
                 let mut owner_names: Vec<&str> = vec![od.name.as_str()];
                 if let Some(alias) = &od.exported_as {
                     owner_names.push(alias.as_str());

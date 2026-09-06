@@ -133,6 +133,14 @@ A plugin's findings are advisory: `info` at most, never counted in health. Its
 roots are not — they change what is reachable, which is why `mutates_graph`
 has no default.
 
+What a declaration reaches is the adapter's statement in the contract's
+vocabulary: its owner, its file, its namespace (or an ancestor, by `up`),
+its unit (or its unit's group, `up: 1`), a directory (`up` levels above the
+file), a namespace by name, its owner's exactly (`Inherited`), or exported.
+The engine resolves each to a pool of files from the scope forest and caps a
+member's reach by its owner's; an adapter states the declared reach and
+never computes the effective one.
+
 A file is not always one language. An adapter that finds a span of another
 language in its file — a page's inline `<script>`, its `<style>` — reports it
 as an embedded region (`sink.region(span, "js", RegionMode::Module)`): the

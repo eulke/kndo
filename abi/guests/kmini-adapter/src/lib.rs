@@ -128,7 +128,7 @@ impl Extension for KminiAdapter {
             let declared = if let Some(name) = trimmed.strip_prefix("pub fn ") {
                 Some(out.declaration(name.trim(), SymbolKind::Function, span, Reach::Exported))
             } else if let Some(name) = trimmed.strip_prefix("fn ") {
-                Some(out.declaration(name.trim(), SymbolKind::Function, span, Reach::Private))
+                Some(out.declaration(name.trim(), SymbolKind::Function, span, Reach::File))
             } else {
                 None
             };

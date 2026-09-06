@@ -30,7 +30,7 @@ impl GoAdapter {
             // 4: go.mod `// indirect` requirements declare `Transitive`.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:go",
-                4,
+                5,
                 &["go"],
                 &["**/go.mod"],
                 // The compiler forbids import cycles: one could only be a
@@ -48,6 +48,11 @@ impl GoAdapter {
             // nowhere narrower to go and `internal-only` stays silent for it.
             .ladder(&[
                 Step::new(Rung::Namespace, "unexported"),
+                // An exported name in an `internal` package is spelled the
+                // same way and reaches the fence's subtree: the word is
+                // `exported` on both rungs, and the advice below either is
+                // `unexported`.
+                Step::new(Rung::Directory, "exported"),
                 Step::new(Rung::Exported, "exported"),
             ])
             // go.mod has no sections: every direct requirement is a build

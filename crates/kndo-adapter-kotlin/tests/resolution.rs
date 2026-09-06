@@ -126,7 +126,11 @@ fn the_module_region_is_the_source_set_tree() {
     let a = KotlinAdapter::new();
 
     let region = a
-        .seen_from(&path("core/src/main/kotlin/com/a/A.kt"), &Reach::Unit, &cx)
+        .seen_from(
+            &path("core/src/main/kotlin/com/a/A.kt"),
+            &Reach::Unit { up: 0 },
+            &cx,
+        )
         .expect("the unit is bounded from the source-set layout");
     assert_eq!(
         region,

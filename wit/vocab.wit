@@ -51,9 +51,16 @@ interface types {
     /// Rust's `pub(crate)`); `scoped` carries the adapter's own token for a
     /// bounded region. For both, the host asks `seen-from` for the files and
     /// judges by the set.
+    /// Mirrors `Reach`: `namespace`, `unit` and `directory` carry their
+    /// `up`, `named` the segments of the namespace it spells.
     variant reach {
-        private,
-        unit,
+        owner,
+        file,
+        namespace(u32),
+        unit(u32),
+        directory(u32),
+        named(list<string>),
+        inherited,
         scoped(string),
         exported,
     }

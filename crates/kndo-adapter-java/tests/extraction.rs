@@ -28,7 +28,7 @@ fn visibility_folds_to_binary_reach() {
         declaration_named(&ev, "c").reach,
         Reach::Namespace { up: 0 }
     );
-    assert_eq!(declaration_named(&ev, "d").reach, Reach::Private);
+    assert_eq!(declaration_named(&ev, "d").reach, Reach::Owner);
 }
 
 #[test]

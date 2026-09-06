@@ -18,6 +18,10 @@
             "word": "unexported"
           },
           {
+            "rung": "directory",
+            "word": "exported"
+          },
+          {
             "rung": "exported",
             "word": "exported"
           }
@@ -2414,6 +2418,28 @@
         "end": 1113
       },
       "message": "structural clone of tree_test.go:TestTreeFindCaseInsensitivePathWithMultipleChildrenAndWildcard"
+    },
+    {
+      "id": "kndo-38128bd9d2ed",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "internal/bytesconv/bytesconv_test.go",
+        "selector": {
+          "name": "RandStringBytesMaskImprSrcSB"
+        },
+        "span": {
+          "start": 1430,
+          "end": 1904
+        }
+      },
+      "lines": {
+        "start": 62,
+        "end": 79
+      },
+      "message": "declared `exported`, but every use is within its own file — `unexported` would suffice for this function"
     }
   ],
   "fixed": [],

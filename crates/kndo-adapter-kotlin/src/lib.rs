@@ -35,7 +35,7 @@ impl KotlinAdapter {
     pub fn new() -> Self {
         KotlinAdapter {
             // 4: `internal` is the unit's reach, not a token.
-            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:kotlin", 4, &["kt"])
+            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:kotlin", 5, &["kt"])
                 .ladder(&[
                     Step::for_members(Rung::Owner, "private"),
                     Step::for_free(Rung::File, "private"),
@@ -94,6 +94,6 @@ impl Extension for KotlinAdapter {
         reach: &Reach,
         cx: &ResolveContext<'_>,
     ) -> Option<Vec<ProjectPath>> {
-        matches!(reach, Reach::Unit).then(|| resolve::module_region(path, cx))
+        matches!(reach, Reach::Unit { up: 0 }).then(|| resolve::module_region(path, cx))
     }
 }

@@ -1324,3 +1324,18 @@ vite's unresolved edges fall 165 → 155 (inline imports resolve under
 JavaScript's spellings) and its diagnostics rise 19 → 20 (an inline
 `@import url(./imported.scss)` parses partially). Every other repository is
 byte-identical.
+
+### Structured reach and the owner's cap (2026-09-06)
+
+| repo | before | after | what moved |
+|---|---|---|---|
+| guava | 9,555 | 8,242 | −1,315 `internal-only` on members whose owner already fences them (1,295 inside private nested classes); +2 `unused` on `BenchmarkHelpers.chooseSize`, a public method of a nested enum of a package-private test class that nothing references |
+| Alamofire | 591 | 538 | −53 `internal-only` on `internal` members of `private` and `fileprivate` types |
+| vapor | 218 | 199 | −19 of the same shape, all in tests |
+| gin | 108 | 109 | +1 `internal-only`: an exported helper of an `internal` package's test file used in that file alone — `unexported` would suffice |
+
+A member reaches no farther than its owner: advising a narrower word on a
+member of a private type changes nothing anyone outside the owner can
+name, so v2 does not. Exposed, flask, lodash, ripgrep and vite are
+byte-identical; ripgrep's trait items and `pub(super)` items change reach
+without changing judgment.

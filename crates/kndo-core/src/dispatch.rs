@@ -140,17 +140,12 @@ mod tests {
     #[test]
     fn markers_derive_roots_by_rule_order_and_deduplicate() {
         let mut s = sink();
-        let unit = s.declaration(
-            "unit",
-            SymbolKind::Function,
-            Span::new(0, 10),
-            Reach::Private,
-        );
+        let unit = s.declaration("unit", SymbolKind::Function, Span::new(0, 10), Reach::File);
         let plain = s.declaration(
             "plain",
             SymbolKind::Function,
             Span::new(20, 30),
-            Reach::Private,
+            Reach::File,
         );
         s.marker(
             MarkerTarget::Declaration(unit),
@@ -192,23 +187,18 @@ mod tests {
     #[test]
     fn exemptions_are_lexically_scoped_and_a_blanket_is_said_aloud() {
         let mut s = sink();
-        let outer = s.declaration(
-            "outer",
-            SymbolKind::Module,
-            Span::new(0, 100),
-            Reach::Private,
-        );
+        let outer = s.declaration("outer", SymbolKind::Module, Span::new(0, 100), Reach::File);
         let inner = s.declaration(
             "inner",
             SymbolKind::Function,
             Span::new(10, 40),
-            Reach::Private,
+            Reach::File,
         );
         let beside = s.declaration(
             "beside",
             SymbolKind::Function,
             Span::new(120, 140),
-            Reach::Private,
+            Reach::File,
         );
         s.marker(
             MarkerTarget::Declaration(outer),
@@ -223,8 +213,8 @@ mod tests {
         assert!(d.notes.is_empty());
 
         let mut s = sink();
-        s.declaration("a", SymbolKind::Function, Span::new(0, 10), Reach::Private);
-        s.declaration("b", SymbolKind::Function, Span::new(20, 30), Reach::Private);
+        s.declaration("a", SymbolKind::Function, Span::new(0, 10), Reach::File);
+        s.declaration("b", SymbolKind::Function, Span::new(20, 30), Reach::File);
         s.marker(
             MarkerTarget::File,
             "allow",
@@ -244,7 +234,7 @@ mod tests {
     #[test]
     fn no_rules_or_no_markers_derive_nothing() {
         let mut s = sink();
-        let f = s.declaration("f", SymbolKind::Function, Span::new(0, 10), Reach::Private);
+        let f = s.declaration("f", SymbolKind::Function, Span::new(0, 10), Reach::File);
         s.marker(
             MarkerTarget::Declaration(f),
             "test",

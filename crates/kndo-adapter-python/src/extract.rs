@@ -337,12 +337,13 @@ fn all_strings_as_refs(list: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
 
 // ---------------------------------------------------------------- visibility
 
-/// Convention is the whole ladder: a leading underscore is module-private,
-/// everything else is importable surface. Dunder names are protocol surface —
-/// Exported (their leading underscores are spelling, not hiding).
+/// Convention is the whole ladder: a leading underscore is module-private —
+/// the file's — everything else is importable surface. Dunder names are
+/// protocol surface — Exported (their leading underscores are spelling, not
+/// hiding).
 fn reach_of(name: &str) -> Reach {
     if name.starts_with('_') && !is_dunder(name) {
-        Reach::Private
+        Reach::File
     } else {
         Reach::Exported
     }

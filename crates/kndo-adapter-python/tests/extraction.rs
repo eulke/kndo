@@ -30,13 +30,10 @@ def _module_helper():
     );
     assert_eq!(declaration_named(&e, "MAX").kind, SymbolKind::Constant);
     assert_eq!(declaration_named(&e, "MAX").reach, Reach::Exported);
-    assert_eq!(declaration_named(&e, "_cache").reach, Reach::Private);
+    assert_eq!(declaration_named(&e, "_cache").reach, Reach::File);
     assert_eq!(declaration_named(&e, "Widget").reach, Reach::Exported);
-    assert_eq!(declaration_named(&e, "_hidden").reach, Reach::Private);
-    assert_eq!(
-        declaration_named(&e, "_module_helper").reach,
-        Reach::Private
-    );
+    assert_eq!(declaration_named(&e, "_hidden").reach, Reach::File);
+    assert_eq!(declaration_named(&e, "_module_helper").reach, Reach::File);
     let widget = e
         .declarations_with_ids()
         .find(|(_, d)| d.name == "Widget")

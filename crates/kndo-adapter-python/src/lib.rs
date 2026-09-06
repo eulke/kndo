@@ -47,7 +47,7 @@ impl PythonAdapter {
         PythonAdapter {
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:python",
-                1,
+                2,
                 &["py"],
                 &[
                     "**/pyproject.toml",

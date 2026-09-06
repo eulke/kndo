@@ -310,9 +310,14 @@ pub enum Rung {
     File,
     /// Nameable inside its namespace (a Java package, a Go package).
     Namespace,
+    /// Nameable inside a directory subtree (Go's `internal` fence).
+    Directory,
     /// Nameable inside its build unit (Kotlin's `internal`, Rust's
     /// `pub(crate)`).
     Unit,
+    /// Nameable inside the group of units one manifest aggregates (Swift's
+    /// `package`).
+    Group,
     Exported,
 }
 
@@ -423,7 +428,9 @@ impl From<Rung> for Step {
             Rung::Owner => "owner",
             Rung::File => "file",
             Rung::Namespace => "namespace",
+            Rung::Directory => "directory",
             Rung::Unit => "unit",
+            Rung::Group => "group",
             Rung::Exported => "exported",
         };
         Step::new(rung, word)

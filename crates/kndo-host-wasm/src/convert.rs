@@ -158,10 +158,35 @@ fn step(s: awire::Step) -> Step {
 /// the host judges the declaration as exported, keep-alive.
 pub(crate) fn reach_to_wire(reach: &ev::Reach) -> awire::Reach {
     match reach {
-        ev::Reach::Private => awire::Reach::Private,
-        ev::Reach::Unit => awire::Reach::Unit,
+        ev::Reach::Owner => awire::Reach::Owner,
+        ev::Reach::File => awire::Reach::File,
+        ev::Reach::Namespace { up } => awire::Reach::Namespace(*up),
+        ev::Reach::Unit { up } => awire::Reach::Unit(*up),
+        ev::Reach::Directory { up } => awire::Reach::Directory(*up),
+        ev::Reach::Named { namespace } => {
+            awire::Reach::Named(namespace.iter().map(|s| s.to_string()).collect())
+        }
+        ev::Reach::Inherited => awire::Reach::Inherited,
         ev::Reach::Scoped { scope } => awire::Reach::Scoped(scope.to_string()),
         _ => awire::Reach::Exported,
+    }
+}
+
+pub(crate) fn reach_from_wire(reach: &awire::Reach) -> ev::Reach {
+    match reach {
+        awire::Reach::Owner => ev::Reach::Owner,
+        awire::Reach::File => ev::Reach::File,
+        awire::Reach::Namespace(up) => ev::Reach::Namespace { up: *up },
+        awire::Reach::Unit(up) => ev::Reach::Unit { up: *up },
+        awire::Reach::Directory(up) => ev::Reach::Directory { up: *up },
+        awire::Reach::Named(namespace) => ev::Reach::Named {
+            namespace: namespace.iter().map(SmolStr::new).collect(),
+        },
+        awire::Reach::Inherited => ev::Reach::Inherited,
+        awire::Reach::Scoped(scope) => ev::Reach::Scoped {
+            scope: SmolStr::new(scope),
+        },
+        awire::Reach::Exported => ev::Reach::Exported,
     }
 }
 
@@ -299,14 +324,7 @@ pub(crate) fn replay_evidence(evidence: awire::FileEvidence, sink: &mut Evidence
                 SmolStr::new(&d.name),
                 symbol_kind_from_wire(d.kind.clone()),
                 span(d.span),
-                match &d.reach {
-                    awire::Reach::Private => ev::Reach::Private,
-                    awire::Reach::Unit => ev::Reach::Unit,
-                    awire::Reach::Scoped(scope) => ev::Reach::Scoped {
-                        scope: SmolStr::new(scope),
-                    },
-                    awire::Reach::Exported => ev::Reach::Exported,
-                },
+                reach_from_wire(&d.reach),
             )
         })
         .collect();

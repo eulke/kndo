@@ -18,6 +18,10 @@
             "word": "unexported"
           },
           {
+            "rung": "directory",
+            "word": "exported"
+          },
+          {
             "rung": "exported",
             "word": "exported"
           }

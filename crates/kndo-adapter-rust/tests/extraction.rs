@@ -36,11 +36,12 @@ pub mod outer { pub fn inner() {} }
 "#,
     );
     assert_eq!(decl(&ev, "visible").reach, Reach::Exported);
-    assert_eq!(decl(&ev, "hidden").reach, Reach::Private);
-    // `pub(crate)` is the compiler's crate boundary — the unit's reach;
-    // `pub(super)` keeps Exported until module-tree regions are enumerable.
-    assert_eq!(decl(&ev, "crate_wide").reach, Reach::Unit);
-    assert_eq!(decl(&ev, "super_wide").reach, Reach::Exported);
+    // No modifier is the module's, which is the file until the module tree is
+    // declared; `pub(crate)` is the compiler's crate boundary — the unit's
+    // reach; `pub(super)` names the ancestor by distance.
+    assert_eq!(decl(&ev, "hidden").reach, Reach::File);
+    assert_eq!(decl(&ev, "crate_wide").reach, Reach::Unit { up: 0 });
+    assert_eq!(decl(&ev, "super_wide").reach, Reach::Namespace { up: 1 });
     assert_eq!(decl(&ev, "Config").kind, SymbolKind::Type);
     assert_eq!(decl(&ev, "Runner").kind, SymbolKind::Type);
     let run = decl(&ev, "run");
@@ -366,7 +367,7 @@ impl Elsewhere {
     assert_eq!(start.kind, SymbolKind::Method);
     assert_eq!(start.owner.map(|o| o.index()), Some(server_ix));
     assert_eq!(start.reach, Reach::Exported);
-    assert_eq!(decl(&ev, "tick").reach, Reach::Private);
+    assert_eq!(decl(&ev, "tick").reach, Reach::File);
     assert_eq!(
         decl(&ev, "RETRIES").owner.map(|o| o.index()),
         Some(server_ix)

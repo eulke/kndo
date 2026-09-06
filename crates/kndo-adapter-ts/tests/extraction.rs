@@ -34,12 +34,12 @@ enum Color { Red, Green }
 "#,
     );
     assert_eq!(decl(&ev, "visible").reach, Reach::Exported);
-    assert_eq!(decl(&ev, "hidden").reach, Reach::Private);
+    assert_eq!(decl(&ev, "hidden").reach, Reach::File);
     let entry = decl(&ev, "entry");
     assert_eq!(entry.reach, Reach::Exported);
     assert_eq!(entry.exported_as.as_deref(), Some("default"));
     assert_eq!(decl(&ev, "secret").kind, SymbolKind::Constant);
-    assert_eq!(decl(&ev, "secret").reach, Reach::Private);
+    assert_eq!(decl(&ev, "secret").reach, Reach::File);
     assert_eq!(decl(&ev, "setting").reach, Reach::Exported);
     assert_eq!(decl(&ev, "counter").kind, SymbolKind::Variable);
     let renamed = decl(&ev, "renamed");

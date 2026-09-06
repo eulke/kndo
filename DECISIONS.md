@@ -3939,3 +3939,97 @@ globals rule, so nothing measures the need. Suppression pragmas inside a
 region are dropped with the host's undeclared comments stream; a page that
 wants `kndo:allow` in its inline script is the day to decide whether a host
 declares its regions' streams.
+
+## 2026-09-06 — M8.b.14: reach is structured, and a member reaches no farther than its owner — `Private` retires
+
+**The vocabulary.** `Reach` now spells every address the scope forest has:
+`Owner` (a private member), `File` (a top-level `private`, an ES
+declaration without `export`, a Rust item without `pub` until its module
+tree is declared), `Namespace { up }` (Java's package-private, Rust's
+`pub(super)`), `Unit { up }` (`internal` and `pub(crate)` at `up: 0`;
+Swift's `package`, the group of units one manifest aggregates, at `up: 1`),
+`Directory { up }` (an exported Go name under `internal/`, fenced at that
+directory's parent), `Named { namespace }` (Rust's `pub(in crate::a)`,
+resolved by the engine against the forest inside the file's own
+compilation), `Inherited` (a Rust trait item: exactly as reachable as its
+owner), `Scoped` (the go adapter's `package` token, until its namespace
+clause lands) and `Exported`. `Private` retires: it named two rungs under
+one word, and the adapter always knew which — Kotlin, Swift, Java, the
+TypeScript members and Python's underscore now say `Owner` or `File`. Each
+reach stands on a rung (`Reach::rung`), and `Rung` grows `Directory` and
+`Group` so a ladder can name them: Go spells `exported` on both the
+directory rung and the exported one, so the advice below either is
+`unexported`.
+
+**Effective reach.** A member's reach is capped by its owner's,
+transitively (`Reach::capped_by`, `FileEvidence::effective_reach`): never
+wider by rung, `Inherited` the owner's exactly, a token compared as a
+namespace. The engine pools and judges by the effective reach — the
+navigator's keepers, `internal-only`'s pool, `private-type-leak`'s chain —
+and the ladder's word by the declared one; `describe` reports both. A
+public member of a file-private class is never handed out by a published
+surface or an entry's; a package-private field of a private nested class has
+no pool beyond its owner.
+
+**Pools.** The forest gains three layers with their consumers: a directory
+layer (every directory of the tree with the files under it, the root
+included, read by `Directory { up }`), a group layer (each unit beside every
+unit its aggregator lists, read by `Unit { up: 1 }`; `ProjectUnit::group`
+names the aggregator) and a lookup by name inside a compilation (read by
+`Named`). A climb that leaves the tree, a unit no manifest aggregates and a
+name no file of the compilation declares are unbounded — keep-alive, as
+every unbounded pool is.
+
+**Measured.** Nine repositories: guava 9,555 → 8,242 (1,315 `internal-only`
+retired, 2 `unused` added), Alamofire 591 → 538 (53 retired), vapor 218 → 199
+(19 retired), gin 108 → 109 (1 added); Exposed, flask, lodash, ripgrep and
+vite byte-identical. Every retirement is one shape: a member whose declared
+word is wider than its owner's fence — 1,295 of guava's are members of
+private nested classes (`AbstractIteratorTester.PermittedMetaException.UOE`,
+package-private inside a private class), 16 of local or package-private
+nested classes and 4 of private top-level nested classes;
+Alamofire's and vapor's are `internal` members of `private struct`s and
+`fileprivate` classes (`AuthenticationInterceptor.AdaptOperation`,
+`URLEncodedFormTests.User`). v1 advised `private` on each; v2 does not: a
+narrower word there changes nothing anyone outside the owner can name, and
+the advisory is about surface, not spelling. The two additions are the same
+rule from the other side — `BenchmarkHelpers.chooseSize`, a public method of
+a nested enum of a package-private test class, referenced by nothing, which
+the whole-file test root's entry surface kept while its owner's fence was
+not read. gin's addition is `RandStringBytesMaskImprSrcSB`, an exported
+helper of an `internal` package's test file used in that file alone —
+`unexported` would suffice, and now Go's ladder can say so. ripgrep's trait
+items read `Inherited` and judge as before, since the old code copied the
+trait's reach onto them; ripgrep's 14 `pub(super)` items are `Namespace
+{ up: 1 }`, unbounded until Rust declares its nesting, and its 0 `pub(in
+…)` leave `Named` to the fixture and the engine test. vapor's 27 `package`
+declarations are `Unit { up: 1 }`, unbounded until SwiftPM's targets are
+units; no finding depended on them before.
+
+**A regression the measurement caught.** The first run added ten `unused`
+on gin's `TestXxx` and `BenchmarkXxx` functions in `internal` packages: an
+exported name there is directory-reaching, and the whole-file test root's
+entry surface keeps exported names alone. The runner's rule is the go
+adapter's to state: a top-level `Test`, `Benchmark`, `Example` or `Fuzz`
+function of a `_test.go` file is now a root on the function itself,
+whatever its reach — which is what `go test` does.
+
+**Fixtures and knobs.** No judgment moves in any fixture; every one of the
+kndo-adapter-go fixtures re-pins because its run header lists Go's ladder,
+which grew the directory step. The contract fingerprint moves (`Reach`, `Rung`); the report
+and query schemas move (`Rung`'s two values, `describe`'s
+`effective_reach`); the WIT `reach` variant carries every address and the
+compat guests are re-pinned; every adapter that emits a changed value bumps
+(`kndo:rust` 9, `kndo:kotlin` 5, `kndo:swift` 3, `kndo:java` 10,
+`kndo:js-ts` 9, `kndo:python` 2, `kndo:go` 5); the graph semantics do not
+move. The engine test speaks every rung through kmock (`owner`, `file`,
+`ns`, `unit`, `group`, `dir(N)`, `named(a.b)`, `inherited`), and the contract
+test pins the rungs, the cap and the chain.
+
+**Cut, and named as such.** The design listed `Named` and `Unit { up }`
+beside the others; both land, with a real emitter each (Rust's
+`pub(in path)`, Swift's `package`). `Reach::Inherited` is the owner's reach,
+not a subclass's: Java's and Kotlin's `protected` still fold to Exported,
+since subclasses are a relation the forest does not walk yet. TypeScript
+members read `Owner` whatever their modifier, as they read `Private` before
+— the modifier is the js-ts migration's to spell.

@@ -85,7 +85,7 @@ impl RustAdapter {
             // 8: `pub(crate)` is the unit's reach, not a token.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:rust",
-                8,
+                9,
                 &["rs"],
                 &["**/Cargo.toml"],
                 // Modules within a crate reference each other freely — legal,
@@ -149,7 +149,7 @@ impl Extension for RustAdapter {
         reach: &Reach,
         cx: &ResolveContext<'_>,
     ) -> Option<Vec<ProjectPath>> {
-        if !matches!(reach, Reach::Unit) {
+        if !matches!(reach, Reach::Unit { up: 0 }) {
             return None;
         }
         resolve::crate_region(path, cx)

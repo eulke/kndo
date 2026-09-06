@@ -183,16 +183,23 @@ impl Analysis for InternalOnly {
                 // own token), an unbounded pool, and an exported name in an
                 // ecosystem that publishes every export.
                 let (declared, pool): (Rung, Option<&[u32]>) = match &d.reach {
-                    Reach::Namespace { .. } | Reach::Unit => {
+                    Reach::Namespace { .. }
+                    | Reach::Unit { .. }
+                    | Reach::Directory { .. }
+                    | Reach::Named { .. } => {
                         if !bounded_open {
                             continue;
                         }
-                        let Pool::Files(files) = cx.run.index.pool_of(g, i, &d.reach) else {
+                        // The pool is the effective reach's — a bounded member
+                        // of a file-private owner pools its file — and the
+                        // rung the declared one's, since the word is the
+                        // declaration's own.
+                        let effective = f.evidence.effective_reach_at(d_ix);
+                        let Pool::Files(files) = cx.run.index.pool_of(g, i, &effective) else {
                             continue;
                         };
-                        let rung = match d.reach {
-                            Reach::Unit => Rung::Unit,
-                            _ => Rung::Namespace,
+                        let Some(rung) = d.reach.rung() else {
+                            continue;
                         };
                         (rung, Some(files))
                     }
@@ -208,8 +215,9 @@ impl Analysis for InternalOnly {
                         }
                         (Rung::Exported, None)
                     }
-                    // Private is the floor, a token names no rung, and a reach
-                    // this build does not know is the widest one.
+                    // Owner and File are the floor, a token names no rung, a
+                    // reach that is its owner's has no word of its own, and a
+                    // reach this build does not know is the widest one.
                     _ => continue,
                 };
                 // A rooted declaration is used from outside the graph's sight.
@@ -377,7 +385,7 @@ mod tests {
             Span::new(0, 100),
             Reach::Exported,
         );
-        let inner = sink.declaration("Inner", SymbolKind::Type, Span::new(10, 60), Reach::Private);
+        let inner = sink.declaration("Inner", SymbolKind::Type, Span::new(10, 60), Reach::Owner);
         sink.member_of(inner, outer);
         let m = sink.declaration(
             "m",
@@ -419,7 +427,12 @@ mod tests {
         );
 
         let mut sink = EvidenceSink::new(1_000, EvidenceStreams::none());
-        let f = sink.declaration("f", SymbolKind::Function, Span::new(0, 10), Reach::Unit);
+        let f = sink.declaration(
+            "f",
+            SymbolKind::Function,
+            Span::new(0, 10),
+            Reach::Unit { up: 0 },
+        );
         sink.reference("f", RefKind::Call, Span::new(5, 6));
         let ev = sink.finish();
         assert!(

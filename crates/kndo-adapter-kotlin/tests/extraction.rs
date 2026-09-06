@@ -24,13 +24,18 @@ fn no_modifier_means_public_the_opposite_of_java() {
     );
     assert_eq!(declaration_named(&ev, "Widget").reach, Reach::Exported);
     assert_eq!(declaration_named(&ev, "visible").reach, Reach::Exported);
-    assert_eq!(declaration_named(&ev, "moduleWide").reach, Reach::Unit);
+    assert_eq!(
+        declaration_named(&ev, "moduleWide").reach,
+        Reach::Unit { up: 0 }
+    );
     assert_eq!(
         declaration_named(&ev, "forSubclasses").reach,
         Reach::Exported
     );
-    assert_eq!(declaration_named(&ev, "hidden").reach, Reach::Private);
-    assert_eq!(declaration_named(&ev, "FileLocal").reach, Reach::Private);
+    // One keyword, two rungs: a member's `private` is its owner's, a
+    // top-level declaration's is its file's.
+    assert_eq!(declaration_named(&ev, "hidden").reach, Reach::Owner);
+    assert_eq!(declaration_named(&ev, "FileLocal").reach, Reach::File);
 }
 
 #[test]
@@ -233,7 +238,7 @@ fn top_level_functions_and_properties_are_declared_free() {
          fun String.slugify(): String = lowercase()\n",
     );
     assert_eq!(declaration_named(&ev, "MAX").reach, Reach::Exported);
-    assert_eq!(declaration_named(&ev, "counter").reach, Reach::Private);
+    assert_eq!(declaration_named(&ev, "counter").reach, Reach::File);
     assert!(declaration_named(&ev, "helper").owner.is_none());
     assert!(
         ev.declarations.iter().any(|d| d.name == "slugify"),

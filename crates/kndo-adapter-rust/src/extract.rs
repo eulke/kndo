@@ -263,7 +263,7 @@ impl<'a> ItemPass<'a, '_> {
                     self.free_declarations.entry(name.to_string()).or_insert(id);
                     self.markers(&attrs, id);
                     if item.kind() == "trait_item" {
-                        self.trait_members(item, id, reach);
+                        self.trait_members(item, id);
                     }
                 }
             }
@@ -361,7 +361,7 @@ impl<'a> ItemPass<'a, '_> {
     /// Trait definition methods: members of the trait, reached through it — their
     /// personal reach is the trait's, since trait items have no modifiers of their
     /// own.
-    fn trait_members(&mut self, trait_item: Node<'a>, owner: DeclarationId, reach: Reach) {
+    fn trait_members(&mut self, trait_item: Node<'a>, owner: DeclarationId) {
         let Some(body) = trait_item.child_by_field_name("body") else {
             return;
         };
@@ -374,11 +374,13 @@ impl<'a> ItemPass<'a, '_> {
             let Some(n) = m.child_by_field_name("name") else {
                 continue;
             };
+            // A trait item has no visibility of its own: it reaches as far as
+            // its trait does, which the engine resolves through the owner.
             let id = self.out.declaration(
                 tk::text(n, self.source),
                 SymbolKind::Method,
                 tk::span(m),
-                reach.clone(),
+                Reach::Inherited,
             );
             self.out.member_of(id, owner);
             if m.child_by_field_name("body").is_some() {
@@ -757,20 +759,39 @@ fn visibility_node(item: Node<'_>) -> Option<Node<'_>> {
         .find(|ch| ch.kind() == "visibility_modifier")
 }
 
-/// `pub` → Exported; `pub(crate)` is the compiler's crate boundary — the
-/// unit's reach, which [`crate::resolve`] bounds from the package map until
-/// the manifest names the crate. `pub(super)`/`pub(in …)` keep Exported for
-/// now: their regions are module-tree shapes the resolver cannot yet enumerate
-/// from paths alone, and an unanswerable bound must stay keep-alive (recorded
-/// in EXPERIMENTS).
+/// No modifier is module-private, and a file is its module until the module
+/// tree is declared — File. `pub(crate)` is the compiler's crate boundary,
+/// the unit's reach, which [`crate::resolve`] bounds from the package map
+/// until the manifest names the crate. `pub(super)` and `pub(in super…)` name
+/// an ancestor by distance; `pub(in crate::a)` names one by path, which the
+/// engine resolves against the forest; `pub(self)` is the module's own.
+/// `pub` → Exported.
 fn reach_of(item: Node<'_>, source: &[u8]) -> Reach {
-    match visibility_node(item) {
-        None => Reach::Private,
-        Some(v) => {
-            if tk::text(v, source).trim() == "pub(crate)" {
-                Reach::Unit
+    let Some(v) = visibility_node(item) else {
+        return Reach::File;
+    };
+    let text = tk::text(v, source).trim();
+    let Some(scope) = text
+        .strip_prefix("pub(")
+        .and_then(|rest| rest.strip_suffix(')'))
+    else {
+        return Reach::Exported;
+    };
+    let scope = scope.trim();
+    let path = scope.strip_prefix("in ").map_or(scope, str::trim);
+    match path {
+        "crate" => Reach::Unit { up: 0 },
+        "self" => Reach::File,
+        _ => {
+            let segments: Vec<&str> = path.split("::").map(str::trim).collect();
+            if segments.iter().all(|s| *s == "super") {
+                Reach::Namespace {
+                    up: segments.len() as u32,
+                }
             } else {
-                Reach::Exported
+                Reach::Named {
+                    namespace: segments.into_iter().map(SmolStr::new).collect(),
+                }
             }
         }
     }

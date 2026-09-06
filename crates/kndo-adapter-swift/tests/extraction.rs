@@ -10,7 +10,7 @@ fn ev(path: &str, src: &str) -> FileEvidence {
 }
 
 fn unit_wide() -> Reach {
-    Reach::Unit
+    Reach::Unit { up: 0 }
 }
 
 #[test]
@@ -28,10 +28,10 @@ fn the_default_rung_is_the_module() {
          struct Bare {}\n",
     );
     assert_eq!(declaration_named(&e, "Widget").reach, Reach::Exported);
-    assert_eq!(declaration_named(&e, "a").reach, Reach::Private);
+    assert_eq!(declaration_named(&e, "a").reach, Reach::Owner);
     assert_eq!(
         declaration_named(&e, "b").reach,
-        Reach::Private,
+        Reach::File,
         "fileprivate is a file fact"
     );
     assert_eq!(declaration_named(&e, "c").reach, unit_wide());

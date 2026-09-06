@@ -1,0 +1,216 @@
+//! A declaration reaches as far as its language says, and no farther than its
+//! owner lets it: the engine pools by the effective reach — the declared one
+//! after every owner above caps it — and judges by the pool.
+
+mod common;
+
+use common::{keeper_kinds, reported};
+use kndo::Category;
+use kndo::query::{Answer, Outcome, Request, Verb};
+use kndo_contract::extension::{PublishedSurface, Rung, Step};
+use kndo_testkit::{MockExtension, TempProject};
+
+/// What `describe` says a declaration reaches: as declared, and effectively.
+fn reaches(snap: &kndo::Snapshot, selector: &str) -> (String, String) {
+    let response = snap.query(&Request {
+        verb: Verb::Describe,
+        inputs: vec![selector.to_string()],
+        options: Default::default(),
+    });
+    match &response.results[0] {
+        Outcome::Ok {
+            answer: Answer::Describe(d),
+        } => {
+            let facts = d.declaration.as_ref().expect("a declaration");
+            (facts.reach.clone(), facts.effective_reach.clone())
+        }
+        _ => panic!("describe {selector}: not an answer"),
+    }
+}
+
+fn pair(declared: &str, effective: &str) -> (String, String) {
+    (declared.to_string(), effective.to_string())
+}
+
+/// The kmock language whose units publish every export, like a jar.
+fn publishing() -> MockExtension {
+    MockExtension::with(|spec| spec.published_surface(PublishedSurface::Exports))
+}
+
+/// The kmock language with every rung the engine pools on its ladder — one
+/// step per rung, under the word these tests read back.
+fn laddered() -> MockExtension {
+    let words = [
+        (Rung::File, "local"),
+        (Rung::Namespace, "ns"),
+        (Rung::Directory, "tree"),
+        (Rung::Unit, "unit"),
+        (Rung::Group, "package"),
+        (Rung::Exported, "pub"),
+    ];
+    let steps: Vec<Step> = words
+        .into_iter()
+        .map(|(rung, word)| match rung {
+            Rung::File => Step::for_free(rung, word),
+            _ => Step::new(rung, word),
+        })
+        .collect();
+    MockExtension::laddered(&steps)
+}
+
+#[test]
+fn a_members_reach_is_capped_by_its_owners() {
+    let p = TempProject::new();
+    p.file("kmock.pkg", "unit core library roots=src\n").file(
+        "src/api.kmock",
+        "pub type Shown\npub member Shown.show\nfile type Hidden\npub member Hidden.show\n",
+    );
+    let snap = common::analyze(&p, vec![Box::new(publishing())]);
+
+    assert_eq!(
+        reaches(&snap, "src/api.kmock#Shown.show"),
+        pair("exported", "exported")
+    );
+    assert_eq!(
+        reaches(&snap, "src/api.kmock#Hidden.show"),
+        pair("exported", "file"),
+        "a public member of a file-private type reaches the file"
+    );
+    // The published surface hands out the first and never the second.
+    assert_eq!(
+        keeper_kinds(&snap, "src/api.kmock#Shown.show"),
+        ["published"]
+    );
+    assert!(keeper_kinds(&snap, "src/api.kmock#Hidden.show").is_empty());
+    let unused = reported(&snap, &Category::UNUSED);
+    assert!(
+        unused.contains(&"src/api.kmock — Hidden.show".to_string()),
+        "{unused:?}"
+    );
+    assert!(!unused.iter().any(|s| s.contains("Shown")), "{unused:?}");
+}
+
+#[test]
+fn an_inherited_member_reaches_as_its_owner_does() {
+    let p = TempProject::new();
+    p.file("kmock.pkg", "unit core library roots=src\n").file(
+        "src/api.kmock",
+        "pub type Contract\ninherited member Contract.run\nfile type Local\ninherited member Local.run\n",
+    );
+    let snap = common::analyze(&p, vec![Box::new(publishing())]);
+
+    assert_eq!(
+        reaches(&snap, "src/api.kmock#Contract.run"),
+        pair("inherited", "exported")
+    );
+    assert_eq!(
+        reaches(&snap, "src/api.kmock#Local.run"),
+        pair("inherited", "file")
+    );
+    assert_eq!(
+        keeper_kinds(&snap, "src/api.kmock#Contract.run"),
+        ["published"]
+    );
+    let unused = reported(&snap, &Category::UNUSED);
+    assert!(
+        unused.contains(&"src/api.kmock — Local.run".to_string()),
+        "{unused:?}"
+    );
+    assert!(!unused.iter().any(|s| s.contains("Contract")), "{unused:?}");
+}
+
+#[test]
+fn a_directory_reach_pools_the_subtree_above_the_file() {
+    let p = TempProject::new();
+    p.file(
+        "kmock.pkg",
+        "unit core library roots= entries=src/app.kmock,elsewhere/far.kmock\n",
+    )
+    // Inside the fence (src/), binding one name: no whole-surface import,
+    // which would keep everything the file hands out.
+    .file(
+        "src/app.kmock",
+        "import ./internal/util { helper }\ncall helper\n",
+    )
+    .file(
+        "src/internal/util.kmock",
+        "dir(1) fn helper\ndir(1) fn lonely\ndir(1) fn fenced\ncall lonely\ncall fenced\n",
+    )
+    // Outside the fence: a bare use the pool does not hold.
+    .file("elsewhere/far.kmock", "call fenced\n");
+    let snap = common::analyze(&p, vec![Box::new(laddered())]);
+
+    assert_eq!(
+        reaches(&snap, "src/internal/util.kmock#helper"),
+        pair("directory+1", "directory+1")
+    );
+    let keepers = keeper_kinds(&snap, "src/internal/util.kmock#helper");
+    assert!(keepers.contains(&"binding".to_string()), "{keepers:?}");
+    // `fenced` is used from outside the fence, which is not a use of this
+    // declaration: like `lonely`, it reads as used in its own file alone, and
+    // the ladder's step below the directory rung is the advice for both.
+    assert_eq!(
+        reported(&snap, &Category::INTERNAL_ONLY),
+        [
+            "src/internal/util.kmock — fenced",
+            "src/internal/util.kmock — lonely"
+        ]
+    );
+}
+
+#[test]
+fn a_group_reach_pools_the_units_one_manifest_aggregates() {
+    let p = TempProject::new();
+    p.file("kmock.pkg", "member a/kmock.pkg\nmember b/kmock.pkg\n")
+        .file("a/kmock.pkg", "unit a library entries=a/lib.kmock\n")
+        .file("b/kmock.pkg", "unit b library entries=b/main.kmock\n")
+        .file("d/kmock.pkg", "unit d library entries=d/other.kmock\n")
+        .file(
+            "a/lib.kmock",
+            "group fn shared\ngroup fn alone\ngroup fn afar\ncall alone\ncall afar\n",
+        )
+        // `b` is aggregated beside `a`: its use is `shared`'s.
+        .file(
+            "b/main.kmock",
+            "import ./../a/lib { shared }\ncall shared\n",
+        )
+        // `d` is aggregated by nobody: its bare use is not `afar`'s.
+        .file("d/other.kmock", "call afar\n");
+    let snap = common::analyze(&p, vec![Box::new(laddered())]);
+
+    assert_eq!(reaches(&snap, "a/lib.kmock#shared"), pair("group", "group"));
+    let keepers = keeper_kinds(&snap, "a/lib.kmock#shared");
+    assert!(keepers.contains(&"binding".to_string()), "{keepers:?}");
+    assert_eq!(
+        reported(&snap, &Category::INTERNAL_ONLY),
+        ["a/lib.kmock — afar", "a/lib.kmock — alone"]
+    );
+}
+
+#[test]
+fn a_named_reach_pools_the_namespace_it_spells() {
+    let p = TempProject::new();
+    p.file(
+        "kmock.pkg",
+        "unit core library roots=src entries=src/x.kmock\n",
+    )
+    .file(
+        "src/x.kmock",
+        "package a.b\nnamed(a.b) fn f\nnamed(a.b) fn g\nimport ./y\nimport ./z\n",
+    )
+    .file("src/y.kmock", "package a.b\ncall f\n")
+    .file("src/z.kmock", "package other\ncall g\n");
+    let snap = common::analyze(&p, vec![Box::new(laddered())]);
+
+    assert_eq!(
+        reaches(&snap, "src/x.kmock#f"),
+        pair("named:a.b", "named:a.b")
+    );
+    assert_eq!(keeper_kinds(&snap, "src/x.kmock#f"), ["reference"]);
+    assert!(keeper_kinds(&snap, "src/x.kmock#g").is_empty());
+    let unused = reported(&snap, &Category::UNUSED);
+    assert!(
+        unused.contains(&"src/x.kmock — g".to_string()),
+        "{unused:?}"
+    );
+}

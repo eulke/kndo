@@ -31,6 +31,18 @@ Beyond suffixes and manifests, an adapter declares the facts the engine's
 judgments depend on — with a default that keeps the judgment silent where the
 adapter says nothing:
 
+- **Reach**: how far each declaration's name legally reaches, as the
+  language spells it — its owner (a `private` member), its file (a top-level
+  `private`, an ES declaration without `export`, a Rust item without `pub`
+  until its module tree is declared), its namespace or an ancestor of it
+  (Java's package-private, Rust's `pub(super)`), its unit (`internal`,
+  `pub(crate)`) or the group of units one manifest aggregates (Swift's
+  `package`), a directory (an exported Go name under `internal/`, fenced at
+  that directory's parent), a namespace by name (Rust's `pub(in crate::a)`),
+  its owner's exactly (a Rust trait item), or exported. The engine pools by
+  the *effective* reach — the declared one after every owner above caps it,
+  so a public member of a file-private class reaches the file and is never
+  handed out by a published surface — and `describe` shows both.
 - **The visibility ladder** for `internal-only`: the reaches a language can
   spell, narrowest first, each under that language's own word for it and,
   where a keyword exists for members or for top-level declarations alone,

@@ -750,9 +750,19 @@
           "const": "namespace"
         },
         {
+          "description": "Nameable inside a directory subtree (Go's `internal` fence).",
+          "type": "string",
+          "const": "directory"
+        },
+        {
           "description": "Nameable inside its build unit (Kotlin's `internal`, Rust's\n`pub(crate)`).",
           "type": "string",
           "const": "unit"
+        },
+        {
+          "description": "Nameable inside the group of units one manifest aggregates (Swift's\n`package`).",
+          "type": "string",
+          "const": "group"
         }
       ]
     },

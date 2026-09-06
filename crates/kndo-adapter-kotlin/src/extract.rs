@@ -102,7 +102,8 @@ fn is_generated(source: &[u8]) -> bool {
 /// No modifier means public. `internal` is the compiler's module boundary —
 /// the unit's reach, bounded by the resolver from the source-set layout until
 /// the manifest names the unit; `protected` folds to Exported (subclasses are
-/// unboundable); `private` alone is Private.
+/// unboundable); `private` is the file's on a top-level declaration and the
+/// owner's on a member — one keyword, two rungs, as the ladder says.
 fn reach_of(item: Node<'_>) -> Reach {
     let Some(modifiers) = tk::child_of_kind(item, "modifiers") else {
         return Reach::Exported;
@@ -115,12 +116,21 @@ fn reach_of(item: Node<'_>) -> Reach {
         _ => {}
     });
     if private {
-        Reach::Private
+        if top_level(item) {
+            Reach::File
+        } else {
+            Reach::Owner
+        }
     } else if internal {
-        Reach::Unit
+        Reach::Unit { up: 0 }
     } else {
         Reach::Exported
     }
+}
+
+/// Declared directly in the file, not inside a body.
+fn top_level(item: Node<'_>) -> bool {
+    item.parent().is_none_or(|p| p.kind() == "source_file")
 }
 
 fn has_modifier(item: Node<'_>, keyword: &str) -> bool {

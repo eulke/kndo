@@ -50,7 +50,7 @@ impl SwiftAdapter {
             // 2: `internal` is the unit's reach, not a token.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:swift",
-                2,
+                3,
                 &["swift"],
                 &["**/Package.swift"],
                 // Files in a module compile as one unit; cross-references are
@@ -100,7 +100,7 @@ impl Extension for SwiftAdapter {
         reach: &Reach,
         cx: &ResolveContext<'_>,
     ) -> Option<Vec<ProjectPath>> {
-        matches!(reach, Reach::Unit).then(|| resolve::module_region(path, cx))
+        matches!(reach, Reach::Unit { up: 0 }).then(|| resolve::module_region(path, cx))
     }
 
     fn manifest_dependencies(

@@ -69,7 +69,7 @@ fn the_module_region_adds_every_test_tree() {
     let cx = ResolveContext::new(&files);
     let a = SwiftAdapter::new();
     let region = a
-        .seen_from(&path("Sources/App/A.swift"), &Reach::Unit, &cx)
+        .seen_from(&path("Sources/App/A.swift"), &Reach::Unit { up: 0 }, &cx)
         .expect("the unit is bounded from the target layout");
     assert_eq!(
         region,

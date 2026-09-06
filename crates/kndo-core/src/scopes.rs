@@ -41,6 +41,23 @@ pub struct Scopes {
     /// forest, read where a manifest named the unit; until one does, the
     /// adapter's own enumeration stands in.
     unit_pool: Vec<Vec<u32>>,
+    /// unit → the files of every unit its aggregator lists beside it, its own
+    /// included, ascending; empty for a unit no manifest aggregates. What a
+    /// group-reaching declaration (Swift's `package`) pools over.
+    group_pool: Vec<Vec<u32>>,
+    /// directory → the files under it, ascending, for every directory of the
+    /// tree, the root as the empty path. What a directory-reaching
+    /// declaration (Go's `internal`) pools over.
+    directories: BTreeMap<SmolStr, Vec<u32>>,
+    /// (compilation, namespace segments) → node, so a namespace spelled by
+    /// name (`pub(in crate::a)`) is found inside the speller's own
+    /// compilation.
+    nodes: BTreeMap<(Compilation, Vec<SmolStr>), u32>,
+    /// file → its compilation, the key a named namespace is looked up under.
+    compilation_of: Vec<Compilation>,
+    /// file → its directory, the empty path at the root — where a directory
+    /// climb starts.
+    dirs: Vec<SmolStr>,
 }
 
 impl Scopes {
@@ -50,6 +67,7 @@ impl Scopes {
         // source root its own declaration implies.
         let mut nodes: BTreeMap<(Compilation, Vec<SmolStr>), u32> = BTreeMap::new();
         let mut of_file: Vec<u32> = Vec::with_capacity(graph.files.len());
+        let mut compilation_of: Vec<Compilation> = Vec::with_capacity(graph.files.len());
         let mut files: Vec<Vec<u32>> = Vec::new();
         let mut unit_of_node: Vec<Option<u32>> = Vec::new();
         let mut segments_of_node: Vec<Vec<SmolStr>> = Vec::new();
@@ -67,7 +85,7 @@ impl Scopes {
                 };
                 (compilation, f.evidence.namespace.clone())
             };
-            let node = *nodes.entry(key).or_insert_with(|| {
+            let node = *nodes.entry(key.clone()).or_insert_with(|| {
                 files.push(Vec::new());
                 unit_of_node.push(f.unit);
                 segments_of_node.push(f.evidence.namespace.clone());
@@ -75,6 +93,7 @@ impl Scopes {
             });
             files[node as usize].push(i as u32);
             of_file.push(node);
+            compilation_of.push(key.0);
         }
         let spanned = span_nodes(graph, &files, &unit_of_node, &segments_of_node);
         let spans = graph
@@ -93,10 +112,59 @@ impl Scopes {
             spanned,
             spans,
             unit_pool: unit_pools(graph),
+            group_pool: group_pools(graph),
+            directories: directories(graph),
+            nodes,
+            compilation_of,
+            dirs: graph
+                .files
+                .iter()
+                .map(|f| SmolStr::new(f.path.as_str().rsplit_once('/').map_or("", |(d, _)| d)))
+                .collect(),
         }
     }
 
-    /// The files a `Reach::Unit` declaration in `unit` pools over: the unit's
+    /// The files a `Reach::Unit { up: 1 }` declaration in `unit` pools over:
+    /// every unit the same manifest aggregates. `None` where no manifest
+    /// aggregates the unit — unbounded, keep-alive.
+    pub fn group_pool(&self, unit: u32) -> Option<&[u32]> {
+        let pool = &self.group_pool[unit as usize];
+        (!pool.is_empty()).then_some(pool.as_slice())
+    }
+
+    /// The files a `Reach::Directory { up }` declaration in `file` pools over:
+    /// everything under the directory `up` levels above the file's own, the
+    /// root included when the climb reaches it. `None` when the climb would
+    /// leave the tree — unbounded, keep-alive.
+    pub fn directory_pool(&self, file: usize, up: u32) -> Option<&[u32]> {
+        let mut dir = self.file_dir(file);
+        for _ in 0..up {
+            if dir.is_empty() {
+                return None;
+            }
+            dir = dir.rsplit_once('/').map_or("", |(parent, _)| parent);
+        }
+        self.directories.get(dir).map(Vec::as_slice)
+    }
+
+    /// The files a `Reach::Named { namespace }` declaration in `file` pools
+    /// over: the node of that name inside the file's own compilation. `None`
+    /// when no file of that compilation declares the name — unbounded.
+    pub fn named_pool(&self, file: usize, namespace: &[SmolStr]) -> Option<&[u32]> {
+        let key = (self.compilation_of[file].clone(), namespace.to_vec());
+        let node = *self.nodes.get(&key)? as usize;
+        Some(if self.spans[file] {
+            &self.spanned[node]
+        } else {
+            &self.files[node]
+        })
+    }
+
+    fn file_dir(&self, file: usize) -> &str {
+        &self.dirs[file]
+    }
+
+    /// The files a `Reach::Unit { up: 0 }` declaration in `unit` pools over: the unit's
     /// own and its friends'. Never empty for a unit some file belongs to.
     pub fn unit_pool(&self, unit: u32) -> &[u32] {
         &self.unit_pool[unit as usize]
@@ -145,11 +213,58 @@ fn unit_pools(graph: &Graph) -> Vec<Vec<u32>> {
     pools
 }
 
+/// Each unit's files together with those of every unit its aggregator lists
+/// — the group a `package`-reaching name may be used from. Empty where no
+/// manifest aggregates the unit.
+fn group_pools(graph: &Graph) -> Vec<Vec<u32>> {
+    let units = &graph.project.units;
+    let mut own: Vec<Vec<u32>> = vec![Vec::new(); units.len()];
+    for (i, f) in graph.files.iter().enumerate() {
+        if let Some(u) = f.unit {
+            own[u as usize].push(i as u32);
+        }
+    }
+    units
+        .iter()
+        .map(|unit| {
+            let Some(group) = &unit.group else {
+                return Vec::new();
+            };
+            let mut pool: Vec<u32> = units
+                .iter()
+                .enumerate()
+                .filter(|(_, other)| other.group.as_ref() == Some(group))
+                .flat_map(|(i, _)| own[i].iter().copied())
+                .collect();
+            pool.sort_unstable();
+            pool.dedup();
+            pool
+        })
+        .collect()
+}
+
+/// Every directory of the tree — the root as the empty path — with the files
+/// under it, ascending: each file is listed under each of its ancestors.
+fn directories(graph: &Graph) -> BTreeMap<SmolStr, Vec<u32>> {
+    let mut out: BTreeMap<SmolStr, Vec<u32>> = BTreeMap::new();
+    for (i, f) in graph.files.iter().enumerate() {
+        let mut dir = f.path.as_str().rsplit_once('/').map_or("", |(d, _)| d);
+        loop {
+            out.entry(SmolStr::new(dir)).or_default().push(i as u32);
+            if dir.is_empty() {
+                break;
+            }
+            dir = dir.rsplit_once('/').map_or("", |(parent, _)| parent);
+        }
+    }
+    out
+}
+
 /// Which compilation a namespace node belongs to. Three cases and no fallback
 /// chain: a unit when a manifest declared one, the source root the file's own
 /// declaration implies when none did, and the file itself when it declares no
 /// namespace at all.
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum Compilation {
     Unit(u32),
     Root(SmolStr),

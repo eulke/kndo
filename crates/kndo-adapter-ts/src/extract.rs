@@ -202,7 +202,7 @@ fn declare(
         let reach = if globals || in_export || clause_alias.is_some() {
             Reach::Exported
         } else {
-            Reach::Private
+            Reach::File
         };
         let id = out.declaration(name, kind, span, reach);
         if export_default == Some(true) {
@@ -327,7 +327,9 @@ fn class_members(class: Node<'_>, source: &[u8], class_id: DeclarationId, out: &
         if name == "constructor" {
             continue;
         }
-        let id = out.declaration(name, SymbolKind::Method, tk::span(m), Reach::Private);
+        // Every member reads as its owner's alone: the modifier (`private`,
+        // `#name`, `protected`, none) is the migration's to spell.
+        let id = out.declaration(name, SymbolKind::Method, tk::span(m), Reach::Owner);
         out.member_of(id, class_id);
         out.metrics(id, function_metrics(m, source));
     }

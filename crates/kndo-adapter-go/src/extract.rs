@@ -58,9 +58,23 @@ pub fn extract(
             "function_declaration" => {
                 if let Some(n) = item.child_by_field_name("name") {
                     let name = tk::text(n, source);
-                    let id =
-                        out.declaration(name, SymbolKind::Function, tk::span(item), reach_of(name));
+                    let id = out.declaration(
+                        name,
+                        SymbolKind::Function,
+                        tk::span(item),
+                        reach_of(name, path.as_str()),
+                    );
                     out.metrics(id, function_metrics(item, source));
+                    // The runner's own rule: in a `_test.go` file it runs every
+                    // `TestXxx`, `BenchmarkXxx`, `ExampleXxx` and `FuzzXxx` by
+                    // name — a root on the function, whatever its reach.
+                    if is_test_file && runner_entry(name) {
+                        out.root(
+                            RootTarget::Declaration(id),
+                            RootKind::Test,
+                            Confidence::Certain,
+                        );
+                    }
                     if package_main && name == "main" {
                         out.root(
                             RootTarget::Declaration(id),
@@ -90,7 +104,12 @@ pub fn extract(
                     }
                     if let Some(n) = spec.child_by_field_name("name") {
                         let name = tk::text(n, source);
-                        out.declaration(name, SymbolKind::Type, tk::span(spec), reach_of(name));
+                        out.declaration(
+                            name,
+                            SymbolKind::Type,
+                            tk::span(spec),
+                            reach_of(name, path.as_str()),
+                        );
                     }
                 }
             }
@@ -112,7 +131,12 @@ pub fn extract(
                         if name == "_" {
                             continue;
                         }
-                        out.declaration(name, kind.clone(), tk::span(spec), reach_of(name));
+                        out.declaration(
+                            name,
+                            kind.clone(),
+                            tk::span(spec),
+                            reach_of(name, path.as_str()),
+                        );
                     }
                 }
             }
@@ -128,6 +152,18 @@ fn package_name(root: Node<'_>, source: &[u8]) -> Option<String> {
     let clause = tk::child_of_kind(root, "package_clause")?;
     let ident = tk::child_of_kind(clause, "package_identifier")?;
     Some(tk::text(ident, source).to_string())
+}
+
+/// `go test` runs a top-level function named `Test`, `Benchmark`, `Example`
+/// or `Fuzz` followed by nothing or by a character that is not a lowercase
+/// letter — `TestFoo` and `Test_foo` are entries, `Testing` is a function.
+fn runner_entry(name: &str) -> bool {
+    ["Test", "Benchmark", "Example", "Fuzz"]
+        .iter()
+        .any(|prefix| {
+            name.strip_prefix(prefix)
+                .is_some_and(|rest| !rest.chars().next().is_some_and(|c| c.is_lowercase()))
+        })
 }
 
 fn is_internal(path: &str) -> bool {
@@ -146,18 +182,31 @@ fn is_generated(source: &[u8]) -> bool {
     })
 }
 
-/// Capitalization IS Go's whole visibility story: uppercase exports, lowercase
+/// Capitalization IS Go's visibility story: uppercase exports, lowercase
 /// reaches exactly the package — a bounded region, not a private name. The
-/// region equals the sight set here, which is what made this migration a
-/// measured no-op on findings.
-fn reach_of(name: &str) -> Reach {
-    if name.chars().next().is_some_and(|c| c.is_uppercase()) {
-        Reach::Exported
-    } else {
-        Reach::Scoped {
+/// one fence beyond it is the path's: an exported name in a package under an
+/// `internal` directory is importable only from the tree rooted at that
+/// directory's parent, which is the directory `up` levels above the file's.
+fn reach_of(name: &str, path: &str) -> Reach {
+    if !name.chars().next().is_some_and(|c| c.is_uppercase()) {
+        return Reach::Scoped {
             scope: smol_str::SmolStr::new_static("package"),
-        }
+        };
     }
+    match internal_fence(path) {
+        Some(up) => Reach::Directory { up },
+        None => Reach::Exported,
+    }
+}
+
+/// How many directories above the file's own the `internal` fence sits: the
+/// parent of the innermost `internal` element, the most restrictive one. A
+/// file at `a/b/internal/c/x.go` is fenced at `a/b`, two above `a/b/internal/c`.
+fn internal_fence(path: &str) -> Option<u32> {
+    let dir = path.rsplit_once('/').map_or("", |(d, _)| d);
+    let components: Vec<&str> = dir.split('/').filter(|c| !c.is_empty()).collect();
+    let innermost = components.iter().rposition(|c| *c == "internal")?;
+    Some((components.len() - innermost) as u32)
 }
 
 /// One record per import spec: plain → the package's whole surface under its local

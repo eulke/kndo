@@ -246,9 +246,13 @@ pub struct DescribeAnswer {
 #[derive(Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct DeclarationFacts {
-    /// The reach as the contract spells it: `private`, `scoped:<token>`, or
-    /// `exported`.
+    /// The reach as declared: `owner`, `file`, `namespace` (`+N` for an
+    /// ancestor), `directory+N`, `unit`, `group`, `named:<a.b>`,
+    /// `inherited`, `scoped:<token>`, or `exported`.
     pub reach: String,
+    /// The reach after every owner above caps it — what the engine pools and
+    /// judges by; equal to `reach` for a declaration nobody owns.
+    pub effective_reach: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub exported_as: Option<SmolStr>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -813,24 +817,10 @@ fn describe(cx: &QueryContext<'_>, selector: Selector) -> Answer {
             Answer::Describe(Box::new(DescribeAnswer {
                 node: node_ref(cx, file, Some(decl)),
                 declaration: Some(DeclarationFacts {
-                    reach: match &d.reach {
-                        kndo_contract::evidence::Reach::Private => "private".to_string(),
-                        kndo_contract::evidence::Reach::Namespace { up: 0 } => {
-                            "namespace".to_string()
-                        }
-                        kndo_contract::evidence::Reach::Namespace { up } => {
-                            format!("namespace+{up}")
-                        }
-                        kndo_contract::evidence::Reach::Unit => "unit".to_string(),
-                        kndo_contract::evidence::Reach::Scoped { scope } => {
-                            format!("scoped:{scope}")
-                        }
-                        kndo_contract::evidence::Reach::Exported => "exported".to_string(),
-                        // A rung this build does not know reads as the widest
-                        // one: `describe` never claims a narrowness it cannot
-                        // name.
-                        _ => "exported".to_string(),
-                    },
+                    reach: render_reach(&d.reach),
+                    effective_reach: render_reach(
+                        &cx.graph.files[file].evidence.effective_reach_at(decl),
+                    ),
                     exported_as: d.exported_as.clone(),
                     owner: d.owner.map(|o| {
                         cx.graph.files[file].evidence.declarations[o.index()]
@@ -1521,4 +1511,25 @@ pub fn response_schema() -> String {
 #[cfg(feature = "schema")]
 pub fn options_schema() -> serde_json::Value {
     serde_json::to_value(schemars::schema_for!(Options)).expect("schema serializes")
+}
+
+/// A reach as `describe` spells it. A reach this build does not know reads as
+/// the widest one: `describe` never claims a narrowness it cannot name.
+fn render_reach(reach: &kndo_contract::evidence::Reach) -> String {
+    use kndo_contract::evidence::Reach;
+    match reach {
+        Reach::Owner => "owner".to_string(),
+        Reach::File => "file".to_string(),
+        Reach::Namespace { up: 0 } => "namespace".to_string(),
+        Reach::Namespace { up } => format!("namespace+{up}"),
+        Reach::Unit { up: 0 } => "unit".to_string(),
+        Reach::Unit { up: 1 } => "group".to_string(),
+        Reach::Unit { up } => format!("unit+{up}"),
+        Reach::Directory { up } => format!("directory+{up}"),
+        Reach::Named { namespace } => format!("named:{}", namespace.join(".")),
+        Reach::Inherited => "inherited".to_string(),
+        Reach::Scoped { scope } => format!("scoped:{scope}"),
+        Reach::Exported => "exported".to_string(),
+        _ => "exported".to_string(),
+    }
 }

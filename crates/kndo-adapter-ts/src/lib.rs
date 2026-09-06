@@ -94,7 +94,7 @@ impl TypeScriptAdapter {
         let spec = kndo_toolkit::source_adapter_builder(
             "kndo:js-ts",
             // 8: a workflow or action step's launched file is a root, like a script's.
-            8,
+            9,
             &["ts", "tsx", "js", "jsx", "mjs", "cjs", "mts", "cts"],
             &["**/package.json"],
             // ESM/CJS initialization order makes cycles bite: TDZ errors and

@@ -223,17 +223,23 @@ impl SymbolKind {
 
 /// How far a declaration's name legally reaches, as an address in the scope
 /// forest: the engine names the pool each variant stands for and judges by the
-/// SET of files in it, never by comparing words. Every variant is a rung a
-/// language's [`crate::extension::Ladder`] can name, which is what lets
-/// `internal-only` say which keyword would do; a pool the engine cannot bound
-/// degrades to Exported treatment (keep-alive).
+/// SET of files in it, never by comparing words. A variant on a rung
+/// ([`Reach::rung`]) is one a language's [`crate::extension::Ladder`] can
+/// name, which is what lets `internal-only` say which keyword would do; a pool
+/// the engine cannot bound degrades to Exported treatment (keep-alive). The
+/// derived order is for sorting alone — narrowness is the rung's.
 #[derive(
     Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, ContractFingerprint,
 )]
 #[serde(rename_all = "lowercase")]
 #[non_exhaustive]
 pub enum Reach {
-    Private,
+    /// Nameable only inside the declaration that owns it — a private member.
+    Owner,
+    /// Nameable only inside its own file — a top-level `private`, an ES
+    /// declaration without `export`, a Rust item without `pub` until its
+    /// module tree is declared.
+    File,
     /// Nameable within the file's own namespace — the node it declares itself
     /// into ([`FileEvidence::namespace`]) — or an ancestor `up` levels above
     /// it. Java's package-private is `Namespace { up: 0 }`; Rust's
@@ -242,11 +248,33 @@ pub enum Reach {
     Namespace {
         up: u32,
     },
-    /// Nameable within the unit that compiles the file — Kotlin's and Swift's
-    /// `internal`, Rust's `pub(crate)` — and from a unit that is its friend.
-    /// The pool is the unit's files; until the claiming adapter reports its
-    /// units, [`crate::extension::Extension::seen_from`] bounds it from paths.
-    Unit,
+    /// Nameable within the unit that compiles the file (`up: 0` — Kotlin's
+    /// and Swift's `internal`, Rust's `pub(crate)`) and from a unit that is
+    /// its friend; or within the group of units one manifest aggregates
+    /// (`up: 1` — Swift's `package`). The pool is the unit's files, or the
+    /// group's; until the claiming adapter reports its units,
+    /// [`crate::extension::Extension::seen_from`] bounds the unit from paths
+    /// and the group stays unbounded.
+    Unit {
+        up: u32,
+    },
+    /// Nameable within the directory `up` levels above the file's own — Go's
+    /// `internal`, whose fence is the parent of the `internal` directory. The
+    /// pool is every file under it.
+    Directory {
+        up: u32,
+    },
+    /// Nameable within the namespace spelled — Rust's `pub(in crate::a)` — as
+    /// the segments of its path, which the engine resolves against the forest
+    /// inside the file's own compilation.
+    Named {
+        namespace: Vec<SmolStr>,
+    },
+    /// As reachable as its owner, exactly: a trait item, an enum variant, a
+    /// member the language gives no reach of its own. Resolved by the engine
+    /// ([`FileEvidence::effective_reach`]); with no owner to inherit from it
+    /// reads as Exported, the keep-alive reading of an adapter's slip.
+    Inherited,
     /// Nameable beyond its file, only within a region the declaring adapter can
     /// enumerate from paths and manifests — never from contents, and under the
     /// adapter's own word, which no ladder can place. The path-derived
@@ -256,6 +284,44 @@ pub enum Reach {
         scope: SmolStr,
     },
     Exported,
+}
+
+impl Reach {
+    /// The rung this reach stands on — what a ladder step can name. `None`
+    /// for an adapter's own token and for a reach that is its owner's: neither
+    /// is a word a declaration could take.
+    pub fn rung(&self) -> Option<crate::extension::Rung> {
+        use crate::extension::Rung;
+        Some(match self {
+            Reach::Owner => Rung::Owner,
+            Reach::File => Rung::File,
+            Reach::Namespace { .. } | Reach::Named { .. } => Rung::Namespace,
+            Reach::Directory { .. } => Rung::Directory,
+            Reach::Unit { up: 0 } => Rung::Unit,
+            Reach::Unit { .. } => Rung::Group,
+            Reach::Exported => Rung::Exported,
+            Reach::Inherited | Reach::Scoped { .. } => return None,
+        })
+    }
+
+    /// This reach after its owner's caps it: never wider than the owner's.
+    /// `Inherited` is the owner's exactly; a reach keeps itself where its rung
+    /// is no wider than the owner's and takes the owner's otherwise. A token
+    /// (an adapter's own region) is compared as a namespace, the widest thing
+    /// a token has named.
+    pub fn capped_by(&self, owner: &Reach) -> Reach {
+        use crate::extension::Rung;
+        if matches!(self, Reach::Inherited) {
+            return owner.clone();
+        }
+        let mine = self.rung().unwrap_or(Rung::Namespace);
+        let theirs = owner.rung().unwrap_or(Rung::Namespace);
+        if mine <= theirs {
+            self.clone()
+        } else {
+            owner.clone()
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ContractFingerprint)]
@@ -608,6 +674,43 @@ impl FileEvidence {
         }
     }
 
+    /// The declaration's reach after every owner above it caps it — see
+    /// [`Reach::capped_by`]: a public member of a file-private class reaches
+    /// the file, a trait item reaches as its trait does. The one reach the
+    /// engine pools and judges by; the declared one is what a ladder's word
+    /// names.
+    pub fn effective_reach(&self, id: DeclarationId) -> Reach {
+        self.effective_reach_at(id.index())
+    }
+
+    /// [`FileEvidence::effective_reach`] by position in `declarations` — for
+    /// the engine's walks, which address declarations by index.
+    pub fn effective_reach_at(&self, index: usize) -> Reach {
+        // The owner chain, top first; a chain that revisits a declaration
+        // (a defective pair of `member_of` writes) stops where it repeats.
+        let mut chain: Vec<usize> = vec![index];
+        let mut cursor = index;
+        while let Some(owner) = self.declarations[cursor].owner {
+            if chain.contains(&owner.index()) || chain.len() > self.declarations.len() {
+                break;
+            }
+            chain.push(owner.index());
+            cursor = owner.index();
+        }
+        let mut effective: Option<Reach> = None;
+        for index in chain.into_iter().rev() {
+            let declared = &self.declarations[index].reach;
+            effective = Some(match &effective {
+                None => match declared {
+                    Reach::Inherited => Reach::Exported,
+                    r => r.clone(),
+                },
+                Some(owner) => declared.capped_by(owner),
+            });
+        }
+        effective.expect("a chain holds at least the declaration itself")
+    }
+
     /// The finding subject for one declaration: the file, its address, its
     /// span (carried for lines, never for identity).
     pub fn subject_of(&self, path: &ProjectPath, id: DeclarationId) -> Subject {
@@ -845,11 +948,14 @@ impl EvidenceSink {
         // `internal` + `@JvmName` coexist) — except on Private, where nothing can
         // bind it: that write is a defect, dropped here at the ONE constructor so
         // the inert combination cannot exist in finished evidence.
-        if matches!(self.out.declarations[of.index()].reach, Reach::Private) {
+        if matches!(
+            self.out.declarations[of.index()].reach,
+            Reach::Owner | Reach::File
+        ) {
             self.out.diagnostics.push(AdapterDiagnostic {
                 level: DiagnosticLevel::Warn,
                 message: format!(
-                    "exported_as on a Private declaration (index {}) dropped — nothing \
+                    "exported_as on an owner- or file-reaching declaration (index {}) dropped — nothing \
                      can bind a private name (adapter defect)",
                     of.index()
                 ),

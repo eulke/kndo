@@ -5,14 +5,19 @@
 //! The kmock DSL, one construct per line:
 //!
 //! ```text
-//! fn name              private function declaration
+//! fn name              file-reaching function declaration
 //! fn name(int, T)      the same, with the signature that tells two `name`s apart
 //! pub fn name          exported function declaration
-//! type Name            private type declaration
+//! type Name            file-reaching type declaration
 //! pub type Name        exported type declaration
-//! member Owner.name    private member of `Owner` (`Owner.name(int)` with a signature;
-//!                      a later line naming a bare `name` means the last one declared)
+//! member Owner.name    owner-reaching member of `Owner` (`Owner.name(int)` with a
+//!                      signature; a later line naming a bare `name` means the last
+//!                      one declared)
 //! pub member Owner.name   exported member of `Owner`
+//! REACH fn name        any declaration under a reach word: `owner`, `file`, `ns`
+//!                      (its namespace), `unit`, `group` (the unit's aggregate),
+//!                      `dir(N)` (N directories up), `named(a.b)` (a namespace by
+//!                      name), `inherited` (its owner's), `pub`
 //! package a.b          the namespace this file declares itself into
 //! extends Sub Base     `Sub` extends the type named `Base`
 //! implements Impl Face `Impl` implements the type named `Face`
@@ -533,7 +538,7 @@ impl Extension for MockExtension {
     ) -> Option<Vec<ProjectPath>> {
         // The mock language is one unit: a unit-reaching name is nameable
         // from every kmock file.
-        matches!(reach, Reach::Unit).then(|| {
+        matches!(reach, Reach::Unit { up: 0 }).then(|| {
             let mut files: Vec<ProjectPath> = cx
                 .known_files()
                 .filter(|p| p.as_str().ends_with(".kmock"))
@@ -593,22 +598,7 @@ fn split_signature(rest: &str) -> (&str, Option<&str>) {
 /// `pub fn f`, `type T`, `pub member T.m` — a declaration line's reach, kind
 /// and the rest of it.
 fn declaration_line(line: &str) -> Option<(Reach, SymbolKind, &str)> {
-    let (reach, rest) = match line.strip_prefix("pub ") {
-        Some(rest) => (Reach::Exported, rest),
-        None => (Reach::Private, line),
-    };
-    let (reach, rest) = match rest.strip_prefix("ns ") {
-        // `ns` is the namespace rung: nameable inside the namespace the file
-        // declares, and nowhere else.
-        Some(rest) => (Reach::Namespace { up: 0 }, rest),
-        None => (reach, rest),
-    };
-    let (reach, rest) = match rest.strip_prefix("unit ") {
-        // `unit` is the unit's rung: nameable from every kmock file, which
-        // is the one unit the mock language compiles.
-        Some(rest) => (Reach::Unit, rest),
-        None => (reach, rest),
-    };
+    let (reach, rest) = reach_prefix(line);
     let (kind, rest) = [
         ("fn ", SymbolKind::Function),
         ("type ", SymbolKind::Type),
@@ -616,7 +606,47 @@ fn declaration_line(line: &str) -> Option<(Reach, SymbolKind, &str)> {
     ]
     .into_iter()
     .find_map(|(word, kind)| rest.strip_prefix(word).map(|rest| (kind, rest)))?;
+    // Unstated, a free declaration reaches its file and a member its owner —
+    // Kotlin's `private` on either.
+    let reach = reach.unwrap_or(if kind == SymbolKind::Method {
+        Reach::Owner
+    } else {
+        Reach::File
+    });
     Some((reach, kind, rest))
+}
+
+/// The reach word a declaration line opens with, if any, and the rest of the
+/// line. `unit` is nameable from every kmock file, the one unit the mock
+/// language compiles; `ns` from the namespace the file declares.
+fn reach_prefix(line: &str) -> (Option<Reach>, &str) {
+    let words: [(&str, Reach); 7] = [
+        ("pub ", Reach::Exported),
+        ("owner ", Reach::Owner),
+        ("file ", Reach::File),
+        ("ns ", Reach::Namespace { up: 0 }),
+        ("unit ", Reach::Unit { up: 0 }),
+        ("group ", Reach::Unit { up: 1 }),
+        ("inherited ", Reach::Inherited),
+    ];
+    for (word, reach) in words {
+        if let Some(rest) = line.strip_prefix(word) {
+            return (Some(reach), rest);
+        }
+    }
+    if let Some(rest) = line.strip_prefix("dir(")
+        && let Some((up, rest)) = rest.split_once(") ")
+        && let Ok(up) = up.parse()
+    {
+        return (Some(Reach::Directory { up }), rest);
+    }
+    if let Some(rest) = line.strip_prefix("named(")
+        && let Some((path, rest)) = rest.split_once(") ")
+    {
+        let namespace = path.split('.').map(smol_str::SmolStr::new).collect();
+        return (Some(Reach::Named { namespace }), rest);
+    }
+    (None, line)
 }
 
 fn unit_kind(word: &str) -> Option<UnitKind> {

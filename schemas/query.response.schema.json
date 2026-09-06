@@ -53,6 +53,10 @@
     "DeclarationFacts": {
       "type": "object",
       "properties": {
+        "effective_reach": {
+          "description": "The reach after every owner above caps it — what the engine pools and\njudges by; equal to `reach` for a declaration nobody owns.",
+          "type": "string"
+        },
         "exported_as": {
           "type": [
             "string",
@@ -66,12 +70,13 @@
           ]
         },
         "reach": {
-          "description": "The reach as the contract spells it: `private`, `scoped:<token>`, or\n`exported`.",
+          "description": "The reach as declared: `owner`, `file`, `namespace` (`+N` for an\nancestor), `directory+N`, `unit`, `group`, `named:<a.b>`,\n`inherited`, `scoped:<token>`, or `exported`.",
           "type": "string"
         }
       },
       "required": [
-        "reach"
+        "reach",
+        "effective_reach"
       ]
     },
     "DescribeAnswer": {

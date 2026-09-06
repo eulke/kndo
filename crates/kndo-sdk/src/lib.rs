@@ -120,8 +120,15 @@ fn step_to_wire(step: &Step) -> wire::Step {
 /// never accuse through a narrowness the host would have to guess at.
 fn reach_to_wire(reach: &ev::Reach) -> wire::Reach {
     match reach {
-        ev::Reach::Private => wire::Reach::Private,
-        ev::Reach::Unit => wire::Reach::Unit,
+        ev::Reach::Owner => wire::Reach::Owner,
+        ev::Reach::File => wire::Reach::File,
+        ev::Reach::Namespace { up } => wire::Reach::Namespace(*up),
+        ev::Reach::Unit { up } => wire::Reach::Unit(*up),
+        ev::Reach::Directory { up } => wire::Reach::Directory(*up),
+        ev::Reach::Named { namespace } => {
+            wire::Reach::Named(namespace.iter().map(|s| s.to_string()).collect())
+        }
+        ev::Reach::Inherited => wire::Reach::Inherited,
         ev::Reach::Scoped { scope } => wire::Reach::Scoped(scope.to_string()),
         _ => wire::Reach::Exported,
     }
@@ -129,8 +136,15 @@ fn reach_to_wire(reach: &ev::Reach) -> wire::Reach {
 
 fn reach_from_wire(reach: wire::Reach) -> ev::Reach {
     match reach {
-        wire::Reach::Private => ev::Reach::Private,
-        wire::Reach::Unit => ev::Reach::Unit,
+        wire::Reach::Owner => ev::Reach::Owner,
+        wire::Reach::File => ev::Reach::File,
+        wire::Reach::Namespace(up) => ev::Reach::Namespace { up },
+        wire::Reach::Unit(up) => ev::Reach::Unit { up },
+        wire::Reach::Directory(up) => ev::Reach::Directory { up },
+        wire::Reach::Named(namespace) => ev::Reach::Named {
+            namespace: namespace.into_iter().map(SmolStr::new).collect(),
+        },
+        wire::Reach::Inherited => ev::Reach::Inherited,
         wire::Reach::Scoped(scope) => ev::Reach::Scoped {
             scope: SmolStr::new(scope),
         },

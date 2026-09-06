@@ -382,7 +382,7 @@ fn function(
     } else {
         SymbolKind::Function
     };
-    let scoped_or_wider = !matches!(reach, Reach::Private);
+    let scoped_or_wider = !matches!(reach, Reach::Owner | Reach::File);
     let id = out.declaration(fn_name, kind, tk::span(item), reach);
 
     // The toolchain's own test runners dispatch on declarations no source line
@@ -477,13 +477,15 @@ fn property(
 
 // ---------------------------------------------------------------- visibility
 
-/// Swift's access levels as reaches: `private` and `fileprivate` are both
-/// file-bounded facts → Private; NO modifier and `internal` are the module
-/// boundary → the unit's reach (the default rung); `public`/`open` →
-/// Exported.
+/// Swift's access levels as reaches: `fileprivate` is the file's; `private`
+/// is the file's on a top-level declaration and the owner's on a member
+/// (extensions in the same file included, which the file pool holds); NO
+/// modifier and `internal` are the module boundary → the unit's reach (the
+/// default rung); `package` is the group of targets one package aggregates;
+/// `public`/`open` → Exported.
 fn reach_of(item: Node<'_>, source: &[u8]) -> Reach {
     let Some(modifiers) = tk::child_of_kind(item, "modifiers") else {
-        return Reach::Unit;
+        return Reach::Unit { up: 0 };
     };
     let mut c = modifiers.walk();
     for m in modifiers.named_children(&mut c) {
@@ -494,14 +496,22 @@ fn reach_of(item: Node<'_>, source: &[u8]) -> Reach {
                 .unwrap_or_default()
                 .trim()
             {
-                "private" | "fileprivate" => Reach::Private,
+                "fileprivate" => Reach::File,
+                "private" => {
+                    if item.parent().is_none_or(|p| p.kind() == "source_file") {
+                        Reach::File
+                    } else {
+                        Reach::Owner
+                    }
+                }
+                "package" => Reach::Unit { up: 1 },
                 "public" | "open" => Reach::Exported,
                 // `internal`, or a form we do not know — the default rung.
-                _ => Reach::Unit,
+                _ => Reach::Unit { up: 0 },
             };
         }
     }
-    Reach::Unit
+    Reach::Unit { up: 0 }
 }
 
 fn has_modifier(item: Node<'_>, source: &[u8], word: &str) -> bool {
