@@ -10,7 +10,7 @@ consumer in the engine.
 | Adapter | Suffixes | Manifests and launchers | Roots |
 |---|---|---|---|
 | `kndo:js-ts` | `ts` `tsx` `js` `jsx` `mjs` `cjs` `mts` `cts` | `package.json`; `.github/workflows/*.yml`, `action.yml` | manifest entries (`main`, `module`, `browser`, `bin`, `exports`, `imports`), files handed to a runtime by npm scripts and by workflow or action steps (`node`, `tsx`, `ts-node`, `bun`, `deno`), test files, config files, shebangs |
-| `kndo:rust` | `rs` | `Cargo.toml` | crate roots (`main.rs`, `lib.rs`, bins, examples, tests, benches); by dispatch rule: `#[test]`, `#[bench]`, `#[cfg(test)]`, `#[no_mangle]` and the other linkage attributes, `#[tokio::main]`-style entries; `#[allow(dead_code)]` and kin exempt |
+| `kndo:rust` | `rs` | `Cargo.toml` | every cargo target as a unit entered through its own file (lib, bins, tests, benches, examples, build script), with `publish = false` read as "no consumer outside"; by dispatch rule: `#[test]`, `#[bench]`, `#[cfg(test)]`, `#[no_mangle]` and the other linkage attributes, `#[tokio::main]`-style entries; `#[allow(dead_code)]` and kin exempt |
 | `kndo:go` | `go` | `go.mod` | `package main`, `_test.go`; a package is one unit |
 | `kndo:java` | `java` | `pom.xml`, `build.gradle`, `build.gradle.kts`, `settings.gradle`, `settings.gradle.kts` | `main` methods, test sources, framework annotations through extensions; a `pom.xml` module is two units, its main set and its test set, the test set compiling against main and a friend of it; the test set is what the pom states (its own `<testSourceDirectory>`, else the nearest parent's along `<parent>`, plus the build helper's added test sources), and every file in it is a test root by the unit's kind |
 | `kndo:kotlin` | `kt` | the same JVM manifests | `main` functions, test sources; `internal` reaches the unit and its friends |
@@ -33,10 +33,9 @@ adapter says nothing:
 
 - **Reach**: how far each declaration's name legally reaches, as the
   language spells it — its owner (a `private` member), its file (a top-level
-  `private`, an ES declaration without `export`, a Rust item without `pub`
-  until its module tree is declared), its namespace or an ancestor of it
-  (Java's package-private, Rust's `pub(super)`), its unit (`internal`,
-  `pub(crate)`) or the group of units one manifest aggregates (Swift's
+  `private`, an ES declaration without `export`), its namespace or an ancestor
+  of it (Java's package-private, a Rust item without `pub`, `pub(super)`), its
+  unit (`internal`, `pub(crate)`) or the group of units one manifest aggregates (Swift's
   `package`), a directory (an exported Go name under `internal/`, fenced at
   that directory's parent), a namespace by name (Rust's `pub(in crate::a)`),
   its owner and the owner's subtypes (`protected`; Java's adds the package),

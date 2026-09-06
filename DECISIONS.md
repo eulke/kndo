@@ -4266,3 +4266,65 @@ new assembled fields); the WIT gains `mount-point` and the compat guests are
 re-pinned; the report and query schemas do not move, since a shape is not in
 them. No adapter version moves and no fixture changes: nothing emits a mount
 until the next slice.
+
+## 2026-09-06 — M8.c.2: a Rust module is its mount chain, and a crate is what Cargo compiles — four convention hooks retire
+
+**What lands.** `kndo:rust` speaks the vocabulary the engine grew: `mod x;`
+is a mount carrying the `mod`'s own visibility; an item with no `pub` reaches
+its module's namespace rather than its file; an inline `mod x { }` OWNS what
+it declares, so the module caps its items the way a private type caps its
+methods; and one `extract_manifest` states what four convention hooks used to
+guess. Every cargo target is a unit entered through its own file — the lib,
+each bin (declared or discovered under `src/bin`), each test, bench and
+example, and the build script — with `publish = false` read as cargo's own
+word for "no consumer outside this project". `roots`, `packages`,
+`manifest_dependencies` and `seen_from` are gone from this adapter, and with
+them the hand-enumerated crate region and the path table that decided which
+files were "unimportable" targets.
+
+**What the engine had to learn with it.** A file a tree holds is compiled by
+the target the tree is rooted at: Cargo's lib and its bins share `src/` and
+differ only in which module tree reaches them, so the directory cannot say who
+compiles what and the entry does. And `internal-only` had to be told what the
+navigator already knew — a mount hands out no surface, so it never marks its
+target as namespace-imported. Without that one arm the whole analysis went
+silent for every mounted file, which the `macro-template-names` fixture caught
+before the corpus did.
+
+**Measured on ripgrep** (the only corpus repository rust claims): 154 → 151.
+Sixty-four `duplicate` findings are the same findings under a more precise
+name — a test fn inside `mod tests { }` is now `tests.only_matching`, not
+`only_matching`, because the module owns it. Three `test-only` findings retire
+as false positives: `tests/index/basic.rs`, `disallowed.rs` and `mod.rs` are
+modules of an integration-test crate, so "only tests reach this file" was
+never a defect — the unit's kind says they are tests by role, which is the
+same rule that retired this repository's own `kndo:allow-file test-only` in
+`crates/kndo/tests/common/mod.rs` the day it landed. One `internal-only`
+survives with a wider pool. No `unused` moves on ripgrep, and every other
+corpus repository is byte-identical.
+
+**The rule that could have gone wrong, and did not.** With `pub mod` no longer
+a re-export, a crate's exported surface is kept by its unit's publication
+alone — and this repository's own crates all declare `publish = false`. The
+dogfood gate is the measurement: kndo on kndo reports nothing new. Every `pub`
+item in this workspace is named by something in it, which is what an internal
+library should be able to say about itself.
+
+**Fixtures.** `module-tree-visibility` pins the mount rules end to end: a
+`pub` fn under a private `mod` is accusable and IS accused; a private name is
+read by a module mounted under it (legal Rust the old file-scoped reach called
+dead); `pub(super)` names the parent; and the published crate's `pub mod`
+surface stays kept. `bin-crate-surface` pins the other side — an executable
+hands nothing to anyone, so its unreferenced `pub fn` is dead.
+`test-only-and-cycle` moves one verdict and says why in its own file: its
+crate declares `publish = false`, so `pong::rally`, which nothing names, is
+dead where `pub mod pong;` used to keep it. `attribute-dispatch` and
+`inline-mod-qualified` re-spell two subjects with the module that owns them.
+Only the kndo-adapter-rust fixtures move, and only test-only-and-cycle changes
+a judgment.
+
+**Knobs.** `kndo:rust` bumps to 10 (a mount is different evidence from a
+re-export, and a bare item now names its namespace). The graph semantics go
+19 → 20: the same evidence assembles differently now that a unit walks down
+its module tree. The contract fingerprint and the schemas do not move — the
+shapes landed with the engine slice before this one.

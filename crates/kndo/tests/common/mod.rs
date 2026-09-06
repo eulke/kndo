@@ -1,10 +1,6 @@
 //! The two lines every engine test writes: analyze a throwaway project under
 //! the extensions it names, and read one category's subjects back.
 
-// kndo:allow-file test-only -- a module of a test target is a test by role, not
-// production code only tests reach; M8.b's file roles retire this allow, and the
-// flicker rule turns it stale the day they land.
-
 use kndo::query::{Answer, Outcome, Request, Verb};
 use kndo::{CacheLocation, Category, Config, Extension, RunMode, Session, Threads};
 use kndo_testkit::TempProject;

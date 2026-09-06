@@ -1,8 +1,8 @@
 # inline-mod-qualified: a call qualified by an inline module (`convert::usize("x")`) reaches the fn inside `mod convert { }`.
 
 [[alive]]
-subject = "src/defs.rs#usize"
-why = "run calls it as convert::usize through the inline module"
+subject = "src/defs.rs#convert.usize"
+why = "run calls it as convert::usize through the inline module that holds it"
 
 [[alive]]
 subject = "src/defs.rs#convert"

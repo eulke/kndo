@@ -1,4 +1,4 @@
-# test-only-and-cycle: a ping/pong module cycle is tolerated in Rust (never a finding); the lib's published fixture_helper is not test-only; ping and pong are untested.
+# test-only-and-cycle: a ping/pong module cycle is tolerated in Rust (never a finding); fixture_helper is production-reachable through the lib's mount, so it is not test-only; ping and pong are untested; and an exported fn of a `publish = false` crate that nothing names is dead, since a mount hands out no surface.
 
 [[dead]]
 subject = "src/ping.rs"
@@ -25,6 +25,7 @@ subject = "src/fixture_helper.rs"
 category = "test-only"
 why = "only tests/smoke.rs calls build_fixture, but `pub mod fixture_helper;` publishes it as lib surface"
 
-[[alive]]
+[[dead]]
 subject = "src/pong.rs#rally"
-why = "published through `pub mod pong;`; it exists to close the ping/pong cycle"
+category = "unused"
+why = "the crate says `publish = false`, so no consumer outside the project exists, and nothing inside names `rally` — `pub mod pong;` mounts the module, it never hands out its surface"

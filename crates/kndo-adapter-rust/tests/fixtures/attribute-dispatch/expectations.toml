@@ -18,8 +18,8 @@ subject = "src/ffi.rs#expected_unused"
 why = "#[expect(unused)] exempts it: the author asked the compiler for exactly this lint"
 
 [[alive]]
-subject = "src/ffi.rs#touches"
-why = "#[test] roots it Test — a dispatched root, inside the cfg(test)-rooted inline module"
+subject = "src/ffi.rs#tests.touches"
+why = "#[test] roots it Test — a dispatched root, and a member of the cfg(test)-rooted inline module that holds it"
 
 [[alive]]
 subject = "src/scratch.rs#draft_one"

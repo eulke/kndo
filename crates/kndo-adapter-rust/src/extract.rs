@@ -40,7 +40,6 @@ pub fn extract(
         source,
         generated,
         main_root_kind: main_root_kind(path),
-        unimportable_root: unimportable_crate_root(path),
         types: BTreeMap::new(),
         free_declarations: BTreeMap::new(),
         impls: Vec::new(),
@@ -48,6 +47,7 @@ pub fn extract(
         uses: Vec::new(),
         use_locals: BTreeSet::new(),
         stack: Vec::new(),
+        owner: None,
         out,
     };
     cx.items(root, MarkerTarget::File);
@@ -136,26 +136,10 @@ fn main_root_kind(path: &kndo_contract::vocab::ProjectPath) -> RootKind {
     }
 }
 
-/// Whether this file roots a target nothing can import — a binary, build script,
-/// test, bench, or example crate. `pub mod` in such a file publishes to no one, so
-/// its edge stays mute instead of re-exporting the child's surface.
-fn unimportable_crate_root(path: &kndo_contract::vocab::ProjectPath) -> bool {
-    let p = path.as_str();
-    let name = p.rsplit('/').next().unwrap_or(p);
-    let in_dir = |d: &str| p.starts_with(&format!("{d}/")) || p.contains(&format!("/{d}/"));
-    name == "main.rs"
-        || name == "build.rs"
-        || in_dir("bin")
-        || in_dir("examples")
-        || in_dir("tests")
-        || in_dir("benches")
-}
-
 struct ItemPass<'a, 'o> {
     source: &'a [u8],
     generated: bool,
     main_root_kind: RootKind,
-    unimportable_root: bool,
     /// Type name → its declaration, for wiring `impl` members to their owner.
     types: BTreeMap<String, DeclarationId>,
     /// Every free declaration by name, for the macro-template pass: names a
@@ -177,6 +161,10 @@ struct ItemPass<'a, 'o> {
     /// the top of the file; rebasing against this stack keeps the emitted specifier
     /// file-relative.
     stack: Vec<String>,
+    /// The inline module the current item is declared in, when one holds it: its
+    /// items are ITS members, so a private inline module caps everything it
+    /// declares the way a private type caps its methods.
+    owner: Option<DeclarationId>,
     out: &'o mut EvidenceSink,
 }
 
@@ -211,6 +199,13 @@ impl<'a> ItemPass<'a, '_> {
         );
     }
 
+    /// Wire a declaration to the inline module it stands in, if any.
+    fn own(&mut self, id: DeclarationId) {
+        if let Some(owner) = self.owner {
+            self.out.member_of(id, owner);
+        }
+    }
+
     fn markers(&mut self, attrs: &[Node<'a>], id: DeclarationId) {
         for attr in attrs {
             self.marker(*attr, MarkerTarget::Declaration(id));
@@ -235,6 +230,7 @@ impl<'a> ItemPass<'a, '_> {
                     let id =
                         self.out
                             .declaration(name, SymbolKind::Function, tk::span(item), reach);
+                    self.own(id);
                     self.free_declarations.entry(name.to_string()).or_insert(id);
                     self.out.metrics(id, function_metrics(item, self.source));
                     self.markers(&attrs, id);
@@ -259,6 +255,7 @@ impl<'a> ItemPass<'a, '_> {
                     let id =
                         self.out
                             .declaration(name, SymbolKind::Type, tk::span(item), reach.clone());
+                    self.own(id);
                     self.types.entry(name.to_string()).or_insert(id);
                     self.free_declarations.entry(name.to_string()).or_insert(id);
                     self.markers(&attrs, id);
@@ -276,6 +273,7 @@ impl<'a> ItemPass<'a, '_> {
                     };
                     let name = tk::text(n, self.source);
                     let id = self.out.declaration(name, kind, tk::span(item), reach);
+                    self.own(id);
                     self.free_declarations.entry(name.to_string()).or_insert(id);
                     self.markers(&attrs, id);
                 }
@@ -291,22 +289,23 @@ impl<'a> ItemPass<'a, '_> {
                                 tk::span(item),
                                 reach,
                             );
+                            self.own(id);
                             self.free_declarations.entry(name.to_string()).or_insert(id);
                             self.markers(&attrs, id);
                             self.stack.push(name.to_string());
+                            let held = self.owner.replace(id);
                             self.items(body, MarkerTarget::Declaration(id));
+                            self.owner = held;
                             self.stack.pop();
                         }
                         // `mod foo;` is module-system plumbing, not an accusable
-                        // declaration — the same posture as an import statement. A
-                        // private mod emits the bare edge: the module lives in its
-                        // own file, and binding nothing keeps that file reachable
-                        // without handing over its whole surface. `pub mod foo;`
-                        // RE-PUBLISHES the child's exported surface through this
-                        // crate's own — a lib's pub-mod tree is its published API —
-                        // so the edge is a reexport-all. `#[path = "other.rs"]`
-                        // redirects where the file lives, relative to this module's
-                        // own directory.
+                        // declaration — the same posture as an import statement.
+                        // It MOUNTS: the file it names becomes this module's
+                        // child namespace `foo`, fenced by the `mod`'s own
+                        // visibility, so a `pub` item of a private module is
+                        // nameable here and nowhere else. `#[path = "other.rs"]`
+                        // redirects where the file lives, relative to this
+                        // module's own directory.
                         None => {
                             let mut segments = vec!["self".to_string()];
                             segments.extend(self.stack.iter().cloned());
@@ -320,14 +319,12 @@ impl<'a> ItemPass<'a, '_> {
                                 }
                                 None => segments.push(name.to_string()),
                             }
-                            let shape = if reach == Reach::Exported && !self.unimportable_root {
-                                ImportShape::ReexportAll
-                            } else {
-                                ImportShape::Bindings(Vec::new())
-                            };
                             self.out.import(
                                 ImportTarget::Relative(SmolStr::new(segments.join("::"))),
-                                shape,
+                                ImportShape::Mount {
+                                    namespace: SmolStr::new(name),
+                                    reach,
+                                },
                                 tk::span(item),
                                 Confidence::Certain,
                             );
@@ -768,7 +765,10 @@ fn visibility_node(item: Node<'_>) -> Option<Node<'_>> {
 /// `pub` → Exported.
 fn reach_of(item: Node<'_>, source: &[u8]) -> Reach {
     let Some(v) = visibility_node(item) else {
-        return Reach::File;
+        // No `pub` at all is private to the module — the file, and everything
+        // the file mounts under it, which is what Rust means and what the
+        // engine's namespace pool holds.
+        return Reach::Namespace { up: 0 };
     };
     let text = tk::text(v, source).trim();
     let Some(scope) = text
@@ -781,7 +781,7 @@ fn reach_of(item: Node<'_>, source: &[u8]) -> Reach {
     let path = scope.strip_prefix("in ").map_or(scope, str::trim);
     match path {
         "crate" => Reach::Unit { up: 0 },
-        "self" => Reach::File,
+        "self" => Reach::Namespace { up: 0 },
         _ => {
             let segments: Vec<&str> = path.split("::").map(str::trim).collect();
             if segments.iter().all(|s| *s == "super") {

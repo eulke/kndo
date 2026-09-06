@@ -1359,3 +1359,20 @@ caliper `@BeforeExperiment` entry, and its 2 `unused` on
 `SomeClassThatDoesNotUseNullable.protectedButDoesNotCheckNull` ride the
 owner's import binding in the test that subclasses it and exercises it by
 reflection.
+
+### Rust on mounts and units: a module is its mount chain (2026-09-06)
+
+| repo | before | after | what moved |
+|---|---|---|---|
+| ripgrep | 154 | 151 | 64 `duplicate` re-identified under the module that owns them (`tests.only_matching`, not `only_matching`); −3 `test-only` false positives on `tests/index/*.rs`, modules of an integration-test crate the unit's kind now colors as tests; one `internal-only` re-pooled over the mount tree |
+
+`mod x;` mounts, `pub mod` no longer re-exports, an item with no `pub` reaches
+its module's namespace, an inline `mod` owns what it declares, and every cargo
+target is a unit entered through its own file. No `unused` moves on ripgrep:
+its crates' exported surfaces are kept by publication or by real uses, and the
+one crate that declares `publish = false` (`crates/index`) has no unreferenced
+export. Alamofire, Exposed, flask, gin, guava, lodash, vapor and vite are
+byte-identical — rust claims none of them. v1's oracle is no comparison here:
+it read `pub` as exported everywhere, kept every `pub mod` surface alive, and
+named a test fn inside `mod tests` without its module, so its ripgrep numbers
+answer a different question in all three respects.

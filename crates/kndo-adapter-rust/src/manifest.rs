@@ -1,56 +1,126 @@
-//! What one `Cargo.toml` teaches the engine: the targets cargo builds become roots
-//! (declared `[[bin]]`/`[lib]` paths and the auto-discovered conventions alike —
-//! both are real cargo semantics, so both are `Certain`), and the `[package]` name
-//! becomes a workspace package other crates can import by path dependency.
-//! Unparseable or dangling entries degrade to absence: a root that anchors nothing
-//! accuses nothing.
+//! What one `Cargo.toml` teaches the engine: every target cargo builds is a UNIT
+//! — the lib, each bin, each test, bench and example, and the build script —
+//! with the file cargo enters it through, the directory that file lives in, and
+//! whether the registry ever sees it (`publish = false`). Declared paths and the
+//! auto-discovered conventions alike are real cargo semantics, so both are
+//! stated the same way. The `[package]` name becomes a workspace package other
+//! crates import by path dependency, and the dependency tables become the
+//! declarations the hygiene analyses read. Unparseable or dangling entries
+//! degrade to absence: a unit whose entry does not exist anchors nothing.
+//!
+//! Cargo's targets share directories — `src/lib.rs` and `src/main.rs` are two
+//! crates in one folder — so a directory cannot say which target compiles a
+//! file. The entry can: the engine walks each module tree down from the file
+//! its unit names, and every file the tree holds belongs to that unit.
 
 use kndo_contract::adapter::{
-    DependencyDeclaration, DependencyScope, PackageEntry, ProjectRoot, ResolveContext, SourceFile,
+    DependencyDeclaration, DependencyScope, PackageEntry, ResolveContext, SourceFile,
 };
-use kndo_contract::evidence::RootKind;
-use kndo_contract::vocab::{Confidence, ProjectPath};
+use kndo_contract::manifest::{ManifestSink, Publication, Unit, UnitKind};
+use kndo_contract::vocab::ProjectPath;
 use smol_str::SmolStr;
 
-pub fn roots(manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<ProjectRoot> {
+/// Everything one `Cargo.toml` states, in one read.
+pub fn structure(manifest: &SourceFile<'_>, cx: &ResolveContext<'_>, out: &mut ManifestSink) {
     let Some(toml) = parse(manifest.content) else {
-        return Vec::new();
+        return;
     };
-    if toml.get("package").is_none() {
-        // A virtual workspace manifest: its members carry their own.
-        return Vec::new();
+    // A virtual workspace manifest declares no target and no package, and its
+    // `[workspace.dependencies]` pool is still a declaration its members
+    // inherit from.
+    for declaration in dependencies(manifest) {
+        out.dependency(declaration);
+    }
+    let Some(package_name) = toml
+        .get("package")
+        .and_then(|p| p.get("name"))
+        .and_then(|n| n.as_str())
+    else {
+        return;
+    };
+    for package in packages(manifest, cx) {
+        out.package(package);
     }
     let dir = parent_dir(manifest.path);
-    let mut out = Vec::new();
-    let mut push = |file: ProjectPath, kind: RootKind| {
-        if cx.contains(&file) && !out.iter().any(|r: &ProjectRoot| r.file == file) {
-            out.push(ProjectRoot {
-                file,
-                kind,
-                confidence: Confidence::Certain,
-            });
+    // `publish = false` (or an empty allow-list) is cargo's own word for "no
+    // registry sees this": the lib's exports are the project's business alone.
+    let publication = match toml.get("package").and_then(|p| p.get("publish")) {
+        Some(toml::Value::Boolean(false)) => Publication::Unpublished,
+        Some(toml::Value::Array(a)) if a.is_empty() => Publication::Unpublished,
+        _ => Publication::Unstated,
+    };
+    let mut declared: Vec<SmolStr> = dependencies(manifest).into_iter().map(|d| d.name).collect();
+    declared.sort();
+    declared.dedup();
+    for (name, kind, entry) in targets(&toml, &dir, package_name, cx) {
+        let mut depends_on = declared.clone();
+        if kind != UnitKind::Library {
+            // Every other target compiles against the crate's own library.
+            depends_on.push(SmolStr::new(package_name));
+        }
+        out.unit(Unit {
+            name,
+            kind,
+            roots: vec![SmolStr::new(parent_dir(&entry))],
+            excludes: Vec::new(),
+            entries: vec![entry],
+            depends_on,
+            // Cargo says nothing of the sort: an integration test is a
+            // separate crate that sees only what the library exports.
+            friend_of: Vec::new(),
+            publication: if kind == UnitKind::Library {
+                publication
+            } else {
+                Publication::Unstated
+            },
+        });
+    }
+}
+
+/// Every target cargo builds from this manifest, as (unit name, kind, entry):
+/// the declared ones and the ones cargo discovers by convention, each named
+/// the way cargo names it and prefixed by its kind, so a bin and a test that
+/// share a file stem stay two units.
+fn targets(
+    toml: &toml::Value,
+    dir: &str,
+    package_name: &str,
+    cx: &ResolveContext<'_>,
+) -> Vec<(SmolStr, UnitKind, ProjectPath)> {
+    let mut out: Vec<(SmolStr, UnitKind, ProjectPath)> = Vec::new();
+    let mut push = |name: String, kind: UnitKind, file: ProjectPath| {
+        if cx.contains(&file) && !out.iter().any(|(_, _, e)| *e == file) {
+            out.push((SmolStr::new(name), kind, file));
         }
     };
 
-    if let Some(entry) = lib_entry(&toml, &dir) {
-        push(entry, RootKind::Production);
+    if let Some(entry) = lib_entry(toml, dir) {
+        push(package_name.to_string(), UnitKind::Library, entry);
     }
-    push(join(&dir, "src/main.rs"), RootKind::Production);
-    push(join(&dir, "build.rs"), RootKind::Tooling);
+    push(
+        format!("bin:{package_name}"),
+        UnitKind::Executable,
+        join(dir, "src/main.rs"),
+    );
+    push(
+        "build".to_string(),
+        UnitKind::Tooling,
+        join(dir, "build.rs"),
+    );
     if let Some(build) = toml
         .get("package")
         .and_then(|p| p.get("build"))
         .and_then(|b| b.as_str())
     {
-        push(join(&dir, build), RootKind::Tooling);
+        push("build".to_string(), UnitKind::Tooling, join(dir, build));
     }
 
     // Declared targets with explicit paths.
     for (section, kind) in [
-        ("bin", RootKind::Production),
-        ("test", RootKind::Test),
-        ("bench", RootKind::Test),
-        ("example", RootKind::Tooling),
+        ("bin", UnitKind::Executable),
+        ("test", UnitKind::Test),
+        ("bench", UnitKind::Bench),
+        ("example", UnitKind::Example),
     ] {
         for target in toml
             .get(section)
@@ -59,19 +129,25 @@ pub fn roots(manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<ProjectR
             .flatten()
         {
             if let Some(path) = target.get("path").and_then(|p| p.as_str()) {
-                push(join(&dir, path), kind);
+                let file = join(dir, path);
+                let name = target
+                    .get("name")
+                    .and_then(|n| n.as_str())
+                    .map(str::to_string)
+                    .unwrap_or_else(|| stem(&file));
+                push(format!("{section}:{name}"), kind, file);
             }
         }
     }
 
-    // Auto-discovered target conventions: every single-file crate cargo would build.
-    for (subdir, kind) in [
-        ("src/bin", RootKind::Production),
-        ("tests", RootKind::Test),
-        ("benches", RootKind::Test),
-        ("examples", RootKind::Tooling),
+    // Auto-discovered target conventions: every single-file crate cargo builds.
+    for (subdir, section, kind) in [
+        ("src/bin", "bin", UnitKind::Executable),
+        ("tests", "test", UnitKind::Test),
+        ("benches", "bench", UnitKind::Bench),
+        ("examples", "example", UnitKind::Example),
     ] {
-        let prefix = format!("{}/", join(&dir, subdir).as_str());
+        let prefix = format!("{}/", join(dir, subdir).as_str());
         let discovered: Vec<ProjectPath> = cx
             .files_with_prefix(&prefix)
             .filter(|p| {
@@ -83,17 +159,31 @@ pub fn roots(manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<ProjectR
             .cloned()
             .collect();
         for file in discovered {
-            push(file, kind);
+            let name = match file.as_str().strip_suffix("/main.rs") {
+                Some(rest) => stem_of(rest),
+                None => stem(&file),
+            };
+            push(format!("{section}:{name}"), kind, file);
         }
     }
 
     out
 }
 
+/// A file's name without its extension (`tests/it.rs` → `it`).
+fn stem(file: &ProjectPath) -> String {
+    stem_of(file.as_str().strip_suffix(".rs").unwrap_or(file.as_str()))
+}
+
+/// The last segment of a `/`-separated path.
+fn stem_of(path: &str) -> String {
+    path.rsplit('/').next().unwrap_or(path).to_string()
+}
+
 /// The package this manifest declares, entry-optional: a bin-only crate has no lib
 /// to import, but its directory still tells `package_of` which crate a file belongs
 /// to — `crate::` resolution needs that even where nothing imports the package.
-pub fn packages(manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<PackageEntry> {
+fn packages(manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<PackageEntry> {
     let Some(toml) = parse(manifest.content) else {
         return Vec::new();
     };
@@ -125,7 +215,7 @@ pub fn packages(manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<Packa
 /// reads: the three top-level sections, `[workspace.dependencies]`, and the same
 /// sections under each `[target.…]`. Names are the table keys (what the project's
 /// code refers to). Activation evidence for plugin `ManifestDependency` rules.
-pub fn dependencies(manifest: &SourceFile<'_>) -> Vec<DependencyDeclaration> {
+fn dependencies(manifest: &SourceFile<'_>) -> Vec<DependencyDeclaration> {
     const SECTIONS: [(&str, DependencyScope); 3] = [
         ("dependencies", DependencyScope::Prod),
         ("dev-dependencies", DependencyScope::Dev),

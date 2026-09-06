@@ -36,10 +36,10 @@ pub mod outer { pub fn inner() {} }
 "#,
     );
     assert_eq!(decl(&ev, "visible").reach, Reach::Exported);
-    // No modifier is the module's, which is the file until the module tree is
-    // declared; `pub(crate)` is the compiler's crate boundary — the unit's
-    // reach; `pub(super)` names the ancestor by distance.
-    assert_eq!(decl(&ev, "hidden").reach, Reach::File);
+    // No modifier is the module's own namespace — the file, and everything the
+    // file mounts under it; `pub(crate)` is the compiler's crate boundary — the
+    // unit's reach; `pub(super)` names the ancestor by distance.
+    assert_eq!(decl(&ev, "hidden").reach, Reach::Namespace { up: 0 });
     assert_eq!(decl(&ev, "crate_wide").reach, Reach::Unit { up: 0 });
     assert_eq!(decl(&ev, "super_wide").reach, Reach::Namespace { up: 1 });
     assert_eq!(decl(&ev, "Config").kind, SymbolKind::Type);
@@ -62,31 +62,48 @@ pub mod outer { pub fn inner() {} }
 }
 
 #[test]
-fn mod_without_body_is_an_edge_not_a_declaration() {
+fn mod_without_body_mounts_the_file_it_names() {
     // `mod foo;` is module-system plumbing, the same posture as an import
-    // statement: it draws the edge and declares nothing accusable. In a lib tree,
-    // `pub mod` re-publishes the child's surface; a private mod binds nothing.
+    // statement: it declares nothing accusable and MOUNTS — the file becomes
+    // this module's child namespace, fenced by the `mod`'s own visibility.
     let ev = extract("src/lib.rs", "pub mod net;\nmod util;\n");
     assert!(!ev.declarations.iter().any(|d| d.name == "net"));
     let edge = import(&ev, "self::net");
-    assert!(matches!(&edge.shape, ImportShape::ReexportAll));
+    assert!(
+        matches!(&edge.shape, ImportShape::Mount { namespace, reach }
+            if namespace == "net" && *reach == Reach::Exported),
+        "{:?}",
+        edge.shape
+    );
     assert!(matches!(&edge.target, ImportTarget::Relative(_)));
-    assert!(matches!(
-        &import(&ev, "self::util").shape,
-        ImportShape::Bindings(b) if b.is_empty()
-    ));
-    // In a bin-style file nothing can import, `pub mod` publishes to no one.
+    assert!(
+        matches!(&import(&ev, "self::util").shape, ImportShape::Mount { namespace, reach }
+            if namespace == "util" && *reach == Reach::Namespace { up: 0 })
+    );
+    // What a bin's `pub mod` publishes is its unit's business, not the path's:
+    // the shape is the same mount either way.
     let bin = extract("src/main.rs", "pub mod net;\n");
-    assert!(matches!(
-        &import(&bin, "self::net").shape,
-        ImportShape::Bindings(b) if b.is_empty()
-    ));
-    // A `#[path]` attribute redirects where the module file lives.
+    assert!(
+        matches!(&import(&bin, "self::net").shape, ImportShape::Mount { reach, .. }
+            if *reach == Reach::Exported)
+    );
+    // A `#[path]` attribute redirects where the module file lives; the segment
+    // it is mounted as stays the module's own name.
     let redirected = extract("src/lib.rs", "#[path = \"imp/unix.rs\"]\nmod imp;\n");
-    import(&redirected, "self::imp::unix");
-    // An inline mod is a container of code and stays declared.
+    assert!(
+        matches!(&import(&redirected, "self::imp::unix").shape, ImportShape::Mount { namespace, .. }
+            if namespace == "imp")
+    );
+    // An inline mod is a container of code: it stays declared, and what it
+    // holds is its own.
     let inline = extract("src/lib.rs", "mod inline_here { pub fn f() {} }\n");
     assert_eq!(decl(&inline, "inline_here").kind, SymbolKind::Module);
+    let module_ix = inline
+        .declarations
+        .iter()
+        .position(|d| d.name == "inline_here")
+        .unwrap();
+    assert_eq!(decl(&inline, "f").owner.map(|o| o.index()), Some(module_ix));
 }
 
 #[test]
@@ -367,7 +384,7 @@ impl Elsewhere {
     assert_eq!(start.kind, SymbolKind::Method);
     assert_eq!(start.owner.map(|o| o.index()), Some(server_ix));
     assert_eq!(start.reach, Reach::Exported);
-    assert_eq!(decl(&ev, "tick").reach, Reach::File);
+    assert_eq!(decl(&ev, "tick").reach, Reach::Namespace { up: 0 });
     assert_eq!(
         decl(&ev, "RETRIES").owner.map(|o| o.index()),
         Some(server_ix)

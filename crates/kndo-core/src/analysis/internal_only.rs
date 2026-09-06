@@ -137,6 +137,11 @@ impl Analysis for InternalOnly {
                                 }
                             }
                         }
+                        // A mount says where the target sits in the forest and
+                        // hands out nothing: what the mounting module may name
+                        // is the target's own reach, capped by the mount, which
+                        // the pool below already reads.
+                        ImportShape::Mount { .. } => {}
                         // A namespace/glob importer may use anything: treat the
                         // whole target as used from outside.
                         _ => {

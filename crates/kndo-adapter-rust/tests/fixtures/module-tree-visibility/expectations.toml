@@ -1,0 +1,22 @@
+# module-tree-visibility: a mount nests a namespace. `pub` under a private `mod` reaches the mounting module and nothing else — off the crate's published surface and accusable; a private name is readable in every module mounted under it; and the published crate's own `pub mod` surface is kept whatever this project does with it.
+
+[[alive]]
+subject = "src/api.rs#published"
+why = "the crate publishes (no `publish = false`), and `pub mod api;` leaves it on the surface a consumer imports"
+
+[[dead]]
+subject = "src/hidden.rs#never_used"
+category = "unused"
+why = "`mod hidden;` is private, so its exports reach the crate root's namespace and no farther — and nothing there names this one"
+
+[[alive]]
+subject = "src/hidden.rs#used_inside"
+why = "lib.rs calls it through the module it mounts"
+
+[[alive]]
+subject = "src/hidden.rs#shared_with_children"
+why = "private to `hidden`, and a module mounted under it reads it — legal Rust, and the pool the namespace names"
+
+[[alive]]
+subject = "src/hidden/deep.rs#down"
+why = "`pub(super)` names the parent module, and the parent calls it"

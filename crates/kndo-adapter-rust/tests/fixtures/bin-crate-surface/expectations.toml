@@ -1,0 +1,10 @@
+# bin-crate-surface: an executable hands nothing to anyone. `pub` in a binary's module tree is not a published surface, so a `pub fn` nothing calls is dead.
+
+[[alive]]
+subject = "src/cli.rs#run"
+why = "main calls it"
+
+[[dead]]
+subject = "src/cli.rs#never_called"
+category = "unused"
+why = "the unit is a binary: its exports have no consumer outside the project, and nothing inside names this one"

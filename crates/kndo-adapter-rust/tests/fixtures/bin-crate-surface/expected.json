@@ -2,12 +2,12 @@
   "run": {
     "schema": "kndo-v2/m6",
     "mode": "full",
-    "files_discovered": 7,
-    "files_claimed": 6,
+    "files_discovered": 3,
+    "files_claimed": 2,
     "extensions": [
       {
         "id": "kndo:rust",
-        "files": 6,
+        "files": 2,
         "published_surface": "exports",
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
@@ -31,7 +31,7 @@
   },
   "health": {
     "implicated": 1,
-    "subjects": 12,
+    "subjects": 5,
     "by_category": [
       {
         "category": "unused",
@@ -40,62 +40,50 @@
     ],
     "by_package": [
       {
-        "name": "cycles",
+        "name": "tool",
         "manifest": "Cargo.toml",
         "implicated": 1,
-        "subjects": 12
+        "subjects": 5
       }
     ]
   },
   "findings": [
     {
-      "id": "kndo-0ff326d57529",
+      "id": "kndo-cfc765c0f581",
       "category": "unused",
       "severity": "warning",
       "confidence": "certain",
       "subject": {
         "kind": "symbol",
-        "path": "src/pong.rs",
+        "path": "src/cli.rs",
         "selector": {
-          "name": "rally"
+          "name": "never_called"
         },
         "span": {
-          "start": 19,
-          "end": 63
+          "start": 17,
+          "end": 41
         }
       },
       "lines": {
         "start": 3,
-        "end": 5
+        "end": 3
       },
       "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-1cc5901f1df0",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "src/ping.rs"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-a86464a07631",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "src/pong.rs"
-      },
-      "message": "production-reachable, but no test reaches this file"
     }
   ],
   "fixed": [],
   "baselined": 0,
   "abstained": [
+    {
+      "category": "test-only",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    },
+    {
+      "category": "untested",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    },
     {
       "category": "crap",
       "reason": "no-coverage-ingested",

@@ -224,23 +224,3 @@ fn join(dir: &str, rest: &str) -> String {
         format!("{dir}/{rest}")
     }
 }
-
-/// The crate region behind `pub(crate)`: every `.rs` file of the declaring
-/// package (its manifest's directory subtree). Without a package map the bound
-/// is unanswerable — None, and the declaration judges as Exported.
-pub fn crate_region(path: &ProjectPath, cx: &ResolveContext<'_>) -> Option<Vec<ProjectPath>> {
-    let pkg = cx.package_of(path)?;
-    let prefix = if pkg.dir.is_empty() {
-        String::new()
-    } else {
-        format!("{}/", pkg.dir)
-    };
-    let mut out: Vec<ProjectPath> = cx
-        .files_with_prefix(&prefix)
-        .filter(|p| p.as_str().ends_with(".rs"))
-        .cloned()
-        .collect();
-    out.sort();
-    out.dedup();
-    Some(out)
-}

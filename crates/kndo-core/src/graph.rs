@@ -21,7 +21,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Bump when the SAME evidence assembles into a DIFFERENT graph — resolution
 /// candidate changes, reachability semantics, new assembled fields. Folded into the
 /// graph cache key beside the contract fingerprint and the adapter set.
-pub const GRAPH_SEMANTICS_VERSION: u32 = 19;
+pub const GRAPH_SEMANTICS_VERSION: u32 = 20;
 
 #[derive(Serialize, Deserialize)]
 pub struct GraphFile {
@@ -768,12 +768,46 @@ fn mount_and_publish(
     for (f, cap) in files.iter_mut().zip(caps) {
         f.mount_cap = cap;
     }
+    // A file a tree holds is compiled by the target that tree is rooted at.
+    // Cargo's lib and its bins share a directory and differ only in which
+    // module tree reaches them, so a directory cannot say who compiles what —
+    // the entry the tree stands on can, and does.
+    let mut unit_of_entry: BTreeMap<&ProjectPath, u32> = BTreeMap::new();
+    for (u, unit) in project.units.iter().enumerate() {
+        for entry in &unit.entries {
+            unit_of_entry.entry(entry).or_insert(u as u32);
+        }
+    }
+    if !unit_of_entry.is_empty() {
+        let units: Vec<Option<u32>> = (0..files.len())
+            .map(|i| unit_of_entry.get(&files[tree_root(files, i)].path).copied())
+            .collect();
+        for (f, unit) in files.iter_mut().zip(units) {
+            if let Some(u) = unit {
+                f.unit = Some(u);
+            }
+        }
+    }
     for f in files.iter_mut() {
         let surface = adapter_by_id(adapters, &f.adapter)
             .spec()
             .published_surface();
         f.published = publishes(surface, project, f.unit, &f.evidence, f.mount_cap.as_ref());
     }
+}
+
+/// The file this one's mount chain is rooted at — itself where nothing mounts
+/// it. A chain that closes on itself stops where it repeats.
+fn tree_root(files: &[GraphFile], file: usize) -> usize {
+    let mut cursor = file;
+    let mut seen: BTreeSet<usize> = BTreeSet::new();
+    while let Some(edge) = &files[cursor].mounted_by {
+        if !seen.insert(cursor) {
+            break;
+        }
+        cursor = edge.parent as usize;
+    }
+    cursor
 }
 
 /// The fence this file inherits from the mounts above it: each mount's reach
