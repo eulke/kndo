@@ -523,6 +523,42 @@ fn a_reach_stands_on_a_rung_and_never_reaches_wider_than_its_owner() {
 }
 
 #[test]
+fn a_mount_reach_reads_from_where_it_stands_and_the_fewer_levels_cap() {
+    use kndo_contract::evidence::Reach;
+
+    // A mount's reach is written in the mounting file; read one namespace
+    // deeper it addresses the same node one level further up.
+    assert_eq!(
+        Reach::Namespace { up: 0 }.shifted(2),
+        Reach::Namespace { up: 2 }
+    );
+    // A unit, a name and an export are the same node wherever they are read.
+    assert_eq!(Reach::Unit { up: 0 }.shifted(3), Reach::Unit { up: 0 });
+    assert_eq!(Reach::Exported.shifted(1), Reach::Exported);
+
+    // On one rung the address that climbs fewer levels is the narrower, in
+    // either position.
+    assert_eq!(
+        Reach::Namespace { up: 5 }.capped_by(&Reach::Namespace { up: 2 }),
+        Reach::Namespace { up: 2 }
+    );
+    assert_eq!(
+        Reach::Namespace { up: 0 }.capped_by(&Reach::Namespace { up: 2 }),
+        Reach::Namespace { up: 0 }
+    );
+    assert_eq!(
+        Reach::Directory { up: 3 }.capped_by(&Reach::Directory { up: 1 }),
+        Reach::Directory { up: 1 }
+    );
+    // Across rungs the narrower rung wins, which is how a fence takes an
+    // export off a surface.
+    assert_eq!(
+        Reach::Exported.capped_by(&Reach::Namespace { up: 1 }),
+        Reach::Namespace { up: 1 }
+    );
+}
+
+#[test]
 fn the_heirs_step_is_another_axis_of_the_ladder() {
     use kndo_contract::extension::{Ladder, Rung, Step};
     let ladder = Ladder::new(vec![

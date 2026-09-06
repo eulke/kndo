@@ -818,9 +818,7 @@ fn describe(cx: &QueryContext<'_>, selector: Selector) -> Answer {
                 node: node_ref(cx, file, Some(decl)),
                 declaration: Some(DeclarationFacts {
                     reach: render_reach(&d.reach),
-                    effective_reach: render_reach(
-                        &cx.graph.files[file].evidence.effective_reach_at(decl),
-                    ),
+                    effective_reach: render_reach(&cx.index.effective(cx.graph, file, decl)),
                     exported_as: d.exported_as.clone(),
                     owner: d.owner.map(|o| {
                         cx.graph.files[file].evidence.declarations[o.index()]

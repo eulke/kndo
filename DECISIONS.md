@@ -4202,3 +4202,67 @@ tree); the adapter emitting mounts and its Cargo targets as units; paths inside
 macro token trees, the audit's largest Certain false-positive class; and
 `#[path]` in non-mod-rs files with `include!`. Each with its corpus number
 against ripgrep and this repository's own dogfood.
+
+## 2026-09-06 — M8.c.1: a mount nests a namespace — the engine reads a module tree, and a private mount fences everything under it
+
+**The gap.** Half the vocabulary M8.b built had no way to be answered. A
+namespace pool climbed nowhere (`Reach::Namespace { up }` returned `None` for
+any `up > 0`, keep-alive), a namespace by name resolved only where a file
+wrote a clause, and `Reach::Unit { up: 0 }` fell back to the adapter's own
+`seen_from` region. The reason is that a Rust module has no clause to read:
+its name is written by the file that MOUNTS it (`mod x;`), and its address is
+the chain of mounts above it. Until the engine reads that chain, ripgrep's 14
+`pub(super)` items are unbounded, `pub(in crate::a)` names nothing, a `pub`
+item of a private module is published surface forever, and a descendant
+reading its parent's private name — legal Rust, and the audit's measured
+false-positive class — has no pool to be read from.
+
+**The shape.** `ImportShape::Mount { namespace, reach }`: the target becomes a
+child namespace of the importing file's, named by the segment and attached
+with the reach the mount carries. Two facts no other shape holds — the address
+and the fence — and one it deliberately drops: a mount hands out no surface.
+The parent reaches its child's items by qualifying them, which is a reference
+of its own, so `pub mod` stops keeping a whole surface alive the way a
+re-export does.
+
+**The forest, and the pools that read it.** The engine builds one mount edge
+per file (the first mount in file order, so two `#[cfg]` twins mounting one
+file still give it one address), then each file's chain: the tree it is rooted
+at, and the segments down to it. A namespace node is now either a clause
+inside a compilation, as before, or a chain inside a TREE. A namespace pool is
+that node's SUBTREE — its files plus every file mounted under it — which is
+exactly what "private to this module" means in a language whose modules nest;
+a climbing address (`up`) walks the chain and pools the node it reaches; a
+named namespace resolves inside the file's own tree; and a unit reach with no
+manifest unit pools the tree, which is the crate region the adapter used to
+enumerate by hand.
+
+**The fence.** A mount's reach is written in the mounting file, so the engine
+reads it from where the mounted file stands: `Reach::shifted` moves a
+namespace-relative address out by the hops between them, and the narrowest
+mount on the chain becomes the file's cap. `Reach::capped_by` grows a level
+compare to make that work — on one rung the address that climbs fewer levels
+is the narrower, which was already true of an owner above a member and is now
+asked twice. `Index::effective` is the one seam every judgment reads: the
+declared reach, capped by every owner above it and by the mounts above its
+file. The keepers, `internal-only`, the pools and `describe` all read that
+one function, and publication reads it too — a fenced file's exports are on no
+unit's surface.
+
+**Measured: nothing moves, by construction.** No adapter emits a mount yet, so
+every corpus repository is byte-identical and every conformance fixture
+re-pins unchanged. That is the point of landing the engine first: the numbers
+belong to the adapter slice, where rust's `mod` lines become mounts and the
+audit's classes are answered. The kmock language grows a `mount` line and an
+`ns(N)` reach so the four engine tests state the rules on evidence rather than
+on Rust: a private mount fences an export off the published surface and leaves
+it accusable, a namespace reaches down every mount it holds, a climbing reach
+pools the node it climbs to, and a unit reach pools the tree where no manifest
+named a unit.
+
+**Knobs.** The contract fingerprint moves (`ImportShape` grows a variant); the
+graph semantics go 18 → 19 (each file carries its mount edge and its cap, two
+new assembled fields); the WIT gains `mount-point` and the compat guests are
+re-pinned; the report and query schemas do not move, since a shape is not in
+them. No adapter version moves and no fixture changes: nothing emits a mount
+until the next slice.

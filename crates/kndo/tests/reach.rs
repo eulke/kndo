@@ -4,29 +4,10 @@
 
 mod common;
 
-use common::{keeper_kinds, reported};
+use common::{keeper_kinds, reaches, reported};
 use kndo::Category;
-use kndo::query::{Answer, Outcome, Request, Verb};
 use kndo_contract::extension::{PublishedSurface, Rung, Step};
 use kndo_testkit::{MockExtension, TempProject};
-
-/// What `describe` says a declaration reaches: as declared, and effectively.
-fn reaches(snap: &kndo::Snapshot, selector: &str) -> (String, String) {
-    let response = snap.query(&Request {
-        verb: Verb::Describe,
-        inputs: vec![selector.to_string()],
-        options: Default::default(),
-    });
-    match &response.results[0] {
-        Outcome::Ok {
-            answer: Answer::Describe(d),
-        } => {
-            let facts = d.declaration.as_ref().expect("a declaration");
-            (facts.reach.clone(), facts.effective_reach.clone())
-        }
-        _ => panic!("describe {selector}: not an answer"),
-    }
-}
 
 fn pair(declared: &str, effective: &str) -> (String, String) {
     (declared.to_string(), effective.to_string())

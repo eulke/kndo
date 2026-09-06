@@ -208,8 +208,9 @@ impl Analysis for InternalOnly {
                         // `public`.
                         if matches!(d.reach, Reach::Heirs { .. })
                             && !export_is_internal
-                            && d.owner
-                                .is_some_and(|o| f.evidence.effective_reach(o) == Reach::Exported)
+                            && d.owner.is_some_and(|o| {
+                                cx.run.index.effective(g, i, o.index()) == Reach::Exported
+                            })
                         {
                             continue;
                         }
@@ -394,8 +395,10 @@ impl Analysis for InternalOnly {
                 // The owner's cap already holds the uses: the word between the
                 // cap and the declaration changes nothing anyone can name, so
                 // only an extent below the cap is advice.
-                if f.evidence
-                    .effective_reach_at(d_ix)
+                if cx
+                    .run
+                    .index
+                    .effective(g, i, d_ix)
                     .rung()
                     .is_some_and(|cap| extent >= cap)
                 {

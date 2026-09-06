@@ -110,6 +110,13 @@ interface types {
         local: string,
     }
 
+    /// The target of a `mount` shape: the segment it is mounted as, and the
+    /// reach the mount carries, read from the mounting file.
+    record mount-point {
+        namespace: string,
+        reach: reach,
+    }
+
     /// Mirrors `ImportShape`. A type-only import is its bindings at the
     /// `erased` timing — the shape says what is bound, the timing when.
     variant import-shape {
@@ -119,6 +126,7 @@ interface types {
         reexport(list<import-binding>),
         reexport-all,
         glob,
+        mount(mount-point),
     }
 
     /// Mirrors `Timing` — when an import runs: at module load, when the code

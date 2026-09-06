@@ -183,6 +183,10 @@ impl Index {
                                 bound.entry((t, b.imported.clone())).or_default().push(site);
                             }
                         }
+                        // A mount hands out nothing: it says where the target
+                        // sits in the forest, and the parent names what it
+                        // holds by qualifying it — a reference of its own.
+                        ImportShape::Mount { .. } => {}
                         _ => surface_importers[t as usize].push(site),
                     }
                 }
@@ -269,13 +273,27 @@ impl Index {
         out
     }
 
+    /// The reach a declaration really has: its own after every owner above it
+    /// caps it, and after the fence any mount above its FILE imposes. The one
+    /// seam every judgment reads — a `pub` item of a privately mounted module
+    /// is nameable where that mount says and nowhere else, which no reading of
+    /// the file alone can tell.
+    pub fn effective(&self, graph: &Graph, file: usize, decl: usize) -> Reach {
+        let f = &graph.files[file];
+        let own = f.evidence.effective_reach_at(decl);
+        match &f.mount_cap {
+            Some(cap) => own.capped_by(cap),
+            None => own,
+        }
+    }
+
     /// The pool a declaration is nameable from, by its effective reach — see
     /// [`Index::pool_of`] — with a heirs reach resolved against the owner
     /// that fences it: the declaration carrying the reach, self first up the
     /// owner chain, names the fence, whichever member inherits it.
     pub fn pool_for<'a>(&'a self, graph: &'a Graph, file: usize, decl: usize) -> Pool<'a> {
         let f = &graph.files[file];
-        let effective = f.evidence.effective_reach_at(decl);
+        let effective = self.effective(graph, file, decl);
         let Reach::Heirs { and_namespace } = effective else {
             return self.pool_of(graph, file, &effective);
         };
@@ -391,7 +409,10 @@ impl Index {
             Reach::Namespace { up } => bounded(self.scopes.namespace_pool(file, *up)),
             Reach::Unit { up: 0 } => match f.unit {
                 Some(u) => Pool::Files(self.scopes.unit_pool(u)),
-                None => bounded(region_of(f, reach)),
+                // No manifest named the unit: the tree the mounts spell is
+                // the compilation, and the adapter's own region answers only
+                // where the language mounts nothing.
+                None => bounded(self.scopes.tree_pool(file).or_else(|| region_of(f, reach))),
             },
             Reach::Unit { up: 1 } => bounded(f.unit.and_then(|u| self.scopes.group_pool(u))),
             Reach::Directory { up } => bounded(self.scopes.directory_pool(file, *up)),
@@ -480,7 +501,7 @@ pub fn keepers(
     };
     // The reach the engine pools by: the declared one after every owner above
     // caps it — a public member of a file-private class reaches the file.
-    let effective = f.evidence.effective_reach_at(decl);
+    let effective = index.effective(graph, file, decl);
 
     // The pool a bounded reach names, or `None` for published surface.
     let (exported, region) = match index.pool_for(graph, file, decl) {
@@ -548,7 +569,7 @@ pub fn keepers(
             }
         }
         let surface_reach = match d.owner {
-            Some(owner) => f.evidence.effective_reach(owner),
+            Some(owner) => index.effective(graph, file, owner.index()),
             None => effective.clone(),
         };
         let owner_surface_exported = matches!(

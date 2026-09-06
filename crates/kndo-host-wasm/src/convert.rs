@@ -381,6 +381,10 @@ pub(crate) fn replay_evidence(evidence: awire::FileEvidence, sink: &mut Evidence
                 awire::ImportShape::Reexport(b) => ev::ImportShape::Reexport(bindings(b)),
                 awire::ImportShape::ReexportAll => ev::ImportShape::ReexportAll,
                 awire::ImportShape::Glob => ev::ImportShape::Glob,
+                awire::ImportShape::Mount(m) => ev::ImportShape::Mount {
+                    namespace: SmolStr::new(m.namespace),
+                    reach: reach_from_wire(&m.reach),
+                },
             },
             span(i.span),
             confidence(i.confidence),

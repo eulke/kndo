@@ -315,11 +315,13 @@ impl Reach {
         })
     }
 
-    /// This reach after its owner's caps it: never wider than the owner's.
-    /// `Inherited` is the owner's exactly; a reach keeps itself where its rung
-    /// is no wider than the owner's and takes the owner's otherwise. A token
-    /// (an adapter's own region) is compared as a namespace, the widest thing
-    /// a token has named.
+    /// This reach after another caps it: never wider than the cap. Used for
+    /// the owner above a member and for the mount above a file, which are the
+    /// same question asked twice. `Inherited` is the cap exactly; a reach
+    /// keeps itself where its rung is no wider and takes the cap's otherwise;
+    /// on one rung the address that climbs fewer levels wins. A token (an
+    /// adapter's own region) is compared as a namespace, the widest thing a
+    /// token has named.
     pub fn capped_by(&self, owner: &Reach) -> Reach {
         use crate::extension::Rung;
         if matches!(self, Reach::Inherited) {
@@ -327,10 +329,36 @@ impl Reach {
         }
         let mine = self.rung().unwrap_or(Rung::Namespace);
         let theirs = owner.rung().unwrap_or(Rung::Namespace);
-        if mine <= theirs {
-            self.clone()
-        } else {
-            owner.clone()
+        if mine != theirs {
+            return if mine < theirs {
+                self.clone()
+            } else {
+                owner.clone()
+            };
+        }
+        // One rung, two addresses: the one that climbs FEWER levels is the
+        // narrower, since a name that stops one namespace up cannot be read
+        // from two.
+        match (self, owner) {
+            (Reach::Namespace { up: mine }, Reach::Namespace { up: theirs })
+            | (Reach::Directory { up: mine }, Reach::Directory { up: theirs })
+                if theirs < mine =>
+            {
+                owner.clone()
+            }
+            _ => self.clone(),
+        }
+    }
+
+    /// This reach as it reads from `hops` namespaces deeper — how a mount's
+    /// reach, written in the mounting file, addresses the same place from
+    /// inside the mounted one. Only a namespace-relative address moves: a
+    /// unit, a directory, a named namespace and the owner's own name the same
+    /// node wherever they are read.
+    pub fn shifted(&self, hops: u32) -> Reach {
+        match self {
+            Reach::Namespace { up } => Reach::Namespace { up: up + hops },
+            other => other.clone(),
         }
     }
 }
@@ -452,6 +480,18 @@ pub enum ImportShape {
     /// runtime may resolve — never imported by the language: enough for a
     /// declared dependency to count as used, never a reachability edge.
     Mention,
+    /// The target becomes a CHILD NAMESPACE of this file's, named `namespace`
+    /// and attached with `reach` (`mod x;`, `pub mod x;`). Two facts no other
+    /// shape carries: the mounted file's address in the forest is this file's
+    /// plus one segment, and everything under the mount is capped by its
+    /// reach, read from the mounting file — a `pub` item of a privately
+    /// mounted module is nameable in the mounting file's namespace and
+    /// nowhere else. It binds no name: the parent reaches the child's items
+    /// by qualifying them, which is a reference of its own.
+    Mount {
+        namespace: SmolStr,
+        reach: Reach,
+    },
 }
 
 /// WHEN an import runs — a fact the adapter reads off the syntax, never a

@@ -48,6 +48,28 @@ pub fn reported(snap: &kndo::Snapshot, category: &Category) -> Vec<String> {
 // binary uses reads as dead here — the harness's wart, per item rather than a
 // file-level blanket, which kndo would (rightly) report as one.
 #[allow(dead_code)]
+/// What `describe` says a declaration reaches: as declared, and effectively.
+pub fn reaches(snap: &kndo::Snapshot, selector: &str) -> (String, String) {
+    let response = snap.query(&Request {
+        verb: Verb::Describe,
+        inputs: vec![selector.to_string()],
+        options: Default::default(),
+    });
+    match &response.results[0] {
+        Outcome::Ok {
+            answer: Answer::Describe(d),
+        } => {
+            let facts = d.declaration.as_ref().expect("a declaration");
+            (facts.reach.clone(), facts.effective_reach.clone())
+        }
+        _ => panic!("describe {selector}: not an answer"),
+    }
+}
+
+// Rust compiles a shared test module once per test BINARY, so a helper another
+// binary uses reads as dead here — the harness's wart, per item rather than a
+// file-level blanket, which kndo would (rightly) report as one.
+#[allow(dead_code)]
 /// What `used-by` says keeps a node alive, by kind — the evidence a judgment
 /// counted, read back through the query contract every frontend uses.
 pub fn keeper_kinds(snap: &kndo::Snapshot, selector: &str) -> Vec<String> {

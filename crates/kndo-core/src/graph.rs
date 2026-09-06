@@ -21,7 +21,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Bump when the SAME evidence assembles into a DIFFERENT graph — resolution
 /// candidate changes, reachability semantics, new assembled fields. Folded into the
 /// graph cache key beside the contract fingerprint and the adapter set.
-pub const GRAPH_SEMANTICS_VERSION: u32 = 18;
+pub const GRAPH_SEMANTICS_VERSION: u32 = 19;
 
 #[derive(Serialize, Deserialize)]
 pub struct GraphFile {
@@ -51,6 +51,17 @@ pub struct GraphFile {
     /// declaration ([`crate::navigate::Keeper::Published`]). A function of the
     /// manifest AND the content, so it is recomputed with the evidence.
     pub published: bool,
+    /// The file that mounts this one, when one does: its index, the segment
+    /// this file is mounted as, and the reach the mount carries — the edge a
+    /// [`kndo_contract::evidence::ImportShape::Mount`] draws. The first mount
+    /// in file order wins, so two `#[cfg]` twins mounting one file still give
+    /// it one address.
+    pub mounted_by: Option<MountEdge>,
+    /// The narrowest reach any mount on this file's chain imposes, read from
+    /// HERE — the fence a privately mounted module puts around everything
+    /// under it. `None` where every mount up to the tree's root is exported,
+    /// which is also every file of a language without mounts.
+    pub mount_cap: Option<Reach>,
     /// Roots anchored from OUTSIDE this file's content — a manifest naming it as an
     /// entry point (whole-file), a plugin naming it or one of its declarations. Kept
     /// apart from `evidence.roots` because evidence is cached by this file's content
@@ -81,6 +92,14 @@ pub struct GraphFile {
     /// or an unresolvable specifier, never an accusation.
     pub import_targets: Vec<Vec<u32>>,
     pub unresolved_imports: u32,
+}
+
+/// One mount, from the mounted file's side — see [`GraphFile::mounted_by`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MountEdge {
+    pub parent: u32,
+    pub segment: SmolStr,
+    pub reach: Reach,
 }
 
 impl GraphFile {
@@ -456,7 +475,6 @@ pub fn assemble(
             let spec = adapters[c.adapter_index].spec();
             let dispatched = crate::dispatch::apply(&ev, spec.dispatch_rules());
             let unit = project.unit_of(&f.path);
-            let published = publishes(spec.published_surface(), &project, unit, &ev);
             GraphFile {
                 path: f.path.clone(),
                 adapter: SmolStr::new(spec.coordinate()),
@@ -464,7 +482,11 @@ pub fn assemble(
                 evidence: ev,
                 sees: Vec::new(),
                 regions: Vec::new(),
-                published,
+                // Both wait for the mount pass below: a fence is a fact about
+                // the whole file set, and publication reads it.
+                published: false,
+                mounted_by: None,
+                mount_cap: None,
                 anchored: Vec::new(),
                 dispatched: dispatched.roots,
                 exempt: dispatched.exempt,
@@ -508,6 +530,7 @@ pub fn assemble(
             "import_targets is index-parallel to evidence.imports"
         );
     }
+    mount_and_publish(&mut graph_files, adapters, &project);
 
     anchor_manifest_roots(files, adapters, &cx, &project, &reads, &mut graph_files);
 
@@ -700,6 +723,84 @@ fn regions_of(
     out
 }
 
+/// The mount forest over the whole file set, and the publication that reads it.
+/// Both are functions of every file's imports together, so both run once the
+/// edges are resolved — and both run again on the surgical patch path, where
+/// one file's `mod` line can move another file's fence.
+fn mount_and_publish(
+    files: &mut [GraphFile],
+    adapters: &[Box<dyn Extension>],
+    project: &crate::project::Project,
+) {
+    let mut edges: Vec<(u32, MountEdge)> = Vec::new();
+    for (i, f) in files.iter().enumerate() {
+        for (import, targets) in f.evidence.imports.iter().zip(&f.import_targets) {
+            let kndo_contract::evidence::ImportShape::Mount { namespace, reach } = &import.shape
+            else {
+                continue;
+            };
+            for &t in targets {
+                if t as usize != i {
+                    edges.push((
+                        t,
+                        MountEdge {
+                            parent: i as u32,
+                            segment: namespace.clone(),
+                            reach: reach.clone(),
+                        },
+                    ));
+                }
+            }
+        }
+    }
+    for f in files.iter_mut() {
+        f.mounted_by = None;
+    }
+    // File order, first mount wins: two `#[cfg]` twins mounting one file give
+    // it one address, and which one is a function of the sorted file list.
+    for (target, edge) in edges {
+        let slot = &mut files[target as usize].mounted_by;
+        if slot.is_none() {
+            *slot = Some(edge);
+        }
+    }
+    let caps: Vec<Option<Reach>> = (0..files.len()).map(|i| mount_cap(files, i)).collect();
+    for (f, cap) in files.iter_mut().zip(caps) {
+        f.mount_cap = cap;
+    }
+    for f in files.iter_mut() {
+        let surface = adapter_by_id(adapters, &f.adapter)
+            .spec()
+            .published_surface();
+        f.published = publishes(surface, project, f.unit, &f.evidence, f.mount_cap.as_ref());
+    }
+}
+
+/// The fence this file inherits from the mounts above it: each mount's reach
+/// read from HERE rather than from the file that wrote it, and the narrowest
+/// of them. An exported chain fences nothing. A chain that closes on itself —
+/// which no language can mean and only defective evidence can spell — stops
+/// where it repeats.
+fn mount_cap(files: &[GraphFile], file: usize) -> Option<Reach> {
+    let mut cap: Option<Reach> = None;
+    let mut cursor = file;
+    let mut hops = 0u32;
+    let mut seen: BTreeSet<usize> = BTreeSet::new();
+    while let Some(edge) = &files[cursor].mounted_by {
+        if !seen.insert(cursor) {
+            break;
+        }
+        hops += 1;
+        let reach = edge.reach.shifted(hops);
+        cap = Some(match cap {
+            None => reach,
+            Some(held) => held.capped_by(&reach),
+        });
+        cursor = edge.parent as usize;
+    }
+    cap.filter(|r| !matches!(r, Reach::Exported))
+}
+
 /// Is this file on its unit's published surface? Only where the language's
 /// units publish every export ([`PublishedSurface::Exports`] — under
 /// `Entries` the entries already anchor the surface), the unit is a
@@ -711,13 +812,22 @@ fn publishes(
     project: &crate::project::Project,
     unit: Option<u32>,
     evidence: &FileEvidence,
+    mount_cap: Option<&Reach>,
 ) -> bool {
     surface == PublishedSurface::Exports
         && unit.is_some_and(|u| project.units[u as usize].published)
-        && evidence
-            .declarations
-            .iter()
-            .any(|d| d.owner.is_none() && matches!(d.reach, Reach::Exported))
+        && evidence.declarations.iter().any(|d| {
+            d.owner.is_none()
+                && matches!(
+                    match mount_cap {
+                        // A fence above this file takes its exports off the
+                        // unit's surface: nothing outside can name them.
+                        Some(cap) => d.reach.capped_by(cap),
+                        None => d.reach.clone(),
+                    },
+                    Reach::Exported
+                )
+        })
 }
 
 /// One file's assembled edges, mirroring the `GraphFile` fields they land in.
@@ -862,15 +972,8 @@ pub fn patch(
         let evidence = crate::extract::extract_one(file, adapter, adapters, cache);
         let edges = resolve_file(&file.path, &evidence, adapter, adapters, &cx, &sorted_paths);
         let dispatched = crate::dispatch::apply(&evidence, adapter.spec().dispatch_rules());
-        let published = publishes(
-            adapter.spec().published_surface(),
-            &prev.project,
-            prev.files[ix].unit,
-            &evidence,
-        );
         let gf = &mut prev.files[ix];
         gf.regions = regions_of(&file.path, &evidence, adapter, &cx, &sorted_paths);
-        gf.published = published;
         gf.evidence = evidence;
         gf.dispatched = dispatched.roots;
         gf.exempt = dispatched.exempt;
@@ -881,12 +984,18 @@ pub fn patch(
         // `sees` and `unit` are untouched on purpose, and so is the graph's
         // `project`: each is a pure function of path and (file set,
         // manifests), and this path only runs when all of those are unchanged.
+        // The mounts and the publication that reads them are NOT: a changed
+        // `mod` line moves another file's fence, so they are recomputed over
+        // the whole set below.
         debug_assert_eq!(
             gf.import_targets.len(),
             gf.evidence.imports.len(),
             "import_targets is index-parallel to evidence.imports"
         );
     }
+    let project = std::mem::take(&mut prev.project);
+    mount_and_publish(&mut prev.files, adapters, &project);
+    prev.project = project;
     Some(prev)
 }
 

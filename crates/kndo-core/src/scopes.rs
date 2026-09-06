@@ -18,7 +18,7 @@ use crate::analysis::DeclaredCapabilities;
 use crate::graph::Graph;
 use kndo_contract::extension::NamespaceSpan;
 use smol_str::SmolStr;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub struct Scopes {
     /// file → the namespace node it declares itself into. Every file has one:
@@ -58,13 +58,31 @@ pub struct Scopes {
     /// file → its directory, the empty path at the root — where a directory
     /// climb starts.
     dirs: Vec<SmolStr>,
+    /// node → the node it hangs under in a mount forest, `None` at a tree's
+    /// root and for every node of a language that mounts nothing.
+    parent_node: Vec<Option<u32>>,
+    /// node → its own files plus every descendant node's, ascending. What a
+    /// namespace reaches where namespaces NEST: a private name is readable in
+    /// its module and everything mounted under it.
+    subtree: Vec<Vec<u32>>,
+    /// node → whether it stands in a mount forest, so a pool reads the
+    /// subtree instead of the node's own files.
+    node_in_forest: Vec<bool>,
+    /// file → whether it stands in a mount forest.
+    forest: Vec<bool>,
+    /// file → the node its tree is rooted at; its own node where it is not
+    /// mounted.
+    root_node: Vec<u32>,
 }
 
 impl Scopes {
     pub fn build(graph: &Graph, capabilities: &[(SmolStr, DeclaredCapabilities)]) -> Scopes {
         // A node is one namespace inside one COMPILATION: the unit that
         // compiles the file when a manifest named one, and otherwise the
-        // source root its own declaration implies.
+        // source root its own declaration implies — or, where the language
+        // MOUNTS its namespaces, the chain of segments the mounts spell,
+        // inside the tree they are rooted at.
+        let chains = mount_chains(graph);
         let mut nodes: BTreeMap<(Compilation, Vec<SmolStr>), u32> = BTreeMap::new();
         let mut of_file: Vec<u32> = Vec::with_capacity(graph.files.len());
         let mut compilation_of: Vec<Compilation> = Vec::with_capacity(graph.files.len());
@@ -72,7 +90,12 @@ impl Scopes {
         let mut unit_of_node: Vec<Option<u32>> = Vec::new();
         let mut segments_of_node: Vec<Vec<SmolStr>> = Vec::new();
         for (i, f) in graph.files.iter().enumerate() {
-            let key = if f.evidence.namespace.is_empty() {
+            let key = if let Some((root, segments)) = &chains[i] {
+                (
+                    Compilation::Tree(SmolStr::new(graph.files[*root].path.as_str())),
+                    segments.clone(),
+                )
+            } else if f.evidence.namespace.is_empty() {
                 // Its own node, named by nothing another file can spell.
                 (
                     Compilation::Alone(SmolStr::new(f.path.as_str())),
@@ -88,13 +111,39 @@ impl Scopes {
             let node = *nodes.entry(key.clone()).or_insert_with(|| {
                 files.push(Vec::new());
                 unit_of_node.push(f.unit);
-                segments_of_node.push(f.evidence.namespace.clone());
+                segments_of_node.push(key.1.clone());
                 (files.len() - 1) as u32
             });
             files[node as usize].push(i as u32);
             of_file.push(node);
             compilation_of.push(key.0);
         }
+        // The forest, in node terms: who hangs under whom, and every node's
+        // subtree. A node nobody mounts and that mounts nobody has neither.
+        let node_in_forest: Vec<bool> = {
+            let mut out = vec![false; files.len()];
+            for (i, chain) in chains.iter().enumerate() {
+                if chain.is_some() {
+                    out[of_file[i] as usize] = true;
+                }
+            }
+            out
+        };
+        let mut parent_node: Vec<Option<u32>> = vec![None; files.len()];
+        for (i, f) in graph.files.iter().enumerate() {
+            if let Some(edge) = &f.mounted_by {
+                let node = of_file[i] as usize;
+                parent_node[node].get_or_insert(of_file[edge.parent as usize]);
+            }
+        }
+        let subtree = subtrees(&files, &parent_node);
+        let root_node: Vec<u32> = (0..graph.files.len())
+            .map(|i| match &chains[i] {
+                Some((root, _)) => of_file[*root],
+                None => of_file[i],
+            })
+            .collect();
+        let forest: Vec<bool> = chains.iter().map(Option::is_some).collect();
         let spanned = span_nodes(graph, &files, &unit_of_node, &segments_of_node);
         let spans = graph
             .files
@@ -121,6 +170,11 @@ impl Scopes {
                 .iter()
                 .map(|f| SmolStr::new(f.path.as_str().rsplit_once('/').map_or("", |(d, _)| d)))
                 .collect(),
+            parent_node,
+            subtree,
+            node_in_forest,
+            forest,
+            root_node,
         }
     }
 
@@ -153,11 +207,30 @@ impl Scopes {
     pub fn named_pool(&self, file: usize, namespace: &[SmolStr]) -> Option<&[u32]> {
         let key = (self.compilation_of[file].clone(), namespace.to_vec());
         let node = *self.nodes.get(&key)? as usize;
-        Some(if self.spans[file] {
+        Some(self.pool_at(file, node))
+    }
+
+    /// The files a `Reach::Unit { up: 0 }` declaration pools over where no
+    /// manifest named the unit but the language mounts its namespaces: the
+    /// whole tree this file hangs in — a Rust crate, reached from any module
+    /// of it. `None` outside a forest, where the adapter's own region still
+    /// answers.
+    pub fn tree_pool(&self, file: usize) -> Option<&[u32]> {
+        self.forest[file].then(|| self.subtree[self.root_node[file] as usize].as_slice())
+    }
+
+    /// One node's pool as `file` reads it: the subtree where namespaces nest,
+    /// the node's own files where they are flat, and every file of a
+    /// same-named node in a unit this one compiles against where the language
+    /// says a namespace spans the compilation.
+    fn pool_at(&self, file: usize, node: usize) -> &[u32] {
+        if self.node_in_forest[node] {
+            &self.subtree[node]
+        } else if self.spans[file] {
             &self.spanned[node]
         } else {
             &self.files[node]
-        })
+        }
     }
 
     fn file_dir(&self, file: usize) -> &str {
@@ -178,16 +251,85 @@ impl Scopes {
     /// ancestor of `com.foo.bar` is `com.foo` in Rust's module tree and
     /// nothing at all in Java's flat packages, and core does not guess.
     pub fn namespace_pool(&self, file: usize, up: u32) -> Option<&[u32]> {
+        let mut node = self.of_file[file] as usize;
+        if self.forest[file] {
+            // Nested namespaces: climb the mounts, and a climb that leaves
+            // the tree names nothing this project can enumerate.
+            for _ in 0..up {
+                node = self.parent_node[node]? as usize;
+            }
+            return Some(&self.subtree[node]);
+        }
         if up > 0 {
             return None;
         }
-        let node = self.of_file[file] as usize;
-        Some(if self.spans[file] {
-            &self.spanned[node]
-        } else {
-            &self.files[node]
-        })
+        Some(self.pool_at(file, node))
     }
+}
+
+/// Every file's address in the mount forest: the file its tree is rooted at
+/// and the segments the mounts spell down to it. `None` for a file no mount
+/// touches — which is every file of a language that mounts nothing, and a
+/// standalone file of one that does.
+///
+/// A chain that closes on itself cannot be a module tree; it stops where it
+/// repeats and the file reads as its own root, which keeps a pool bounded by
+/// what the evidence actually spelled.
+fn mount_chains(graph: &Graph) -> Vec<Option<(usize, Vec<SmolStr>)>> {
+    let mut mounts_something = vec![false; graph.files.len()];
+    for f in &graph.files {
+        if let Some(edge) = &f.mounted_by {
+            mounts_something[edge.parent as usize] = true;
+        }
+    }
+    (0..graph.files.len())
+        .map(|i| {
+            if graph.files[i].mounted_by.is_none() && !mounts_something[i] {
+                return None;
+            }
+            let mut segments: Vec<SmolStr> = Vec::new();
+            let mut cursor = i;
+            let mut seen: BTreeSet<usize> = BTreeSet::new();
+            while let Some(edge) = &graph.files[cursor].mounted_by {
+                if !seen.insert(cursor) {
+                    break;
+                }
+                segments.push(edge.segment.clone());
+                cursor = edge.parent as usize;
+            }
+            segments.reverse();
+            Some((cursor, segments))
+        })
+        .collect()
+}
+
+/// Each node's files plus every descendant's, ascending. Nodes outside a
+/// forest have no descendants, so their subtree is their own files — which
+/// nothing reads, and which keeps the vector index-parallel to the nodes.
+fn subtrees(files: &[Vec<u32>], parent_node: &[Option<u32>]) -> Vec<Vec<u32>> {
+    let mut children: Vec<Vec<u32>> = vec![Vec::new(); files.len()];
+    for (node, parent) in parent_node.iter().enumerate() {
+        if let Some(p) = parent {
+            children[*p as usize].push(node as u32);
+        }
+    }
+    (0..files.len())
+        .map(|root| {
+            let mut out: Vec<u32> = Vec::new();
+            let mut pending = vec![root as u32];
+            let mut seen: BTreeSet<u32> = BTreeSet::new();
+            while let Some(node) = pending.pop() {
+                if !seen.insert(node) {
+                    continue;
+                }
+                out.extend_from_slice(&files[node as usize]);
+                pending.extend_from_slice(&children[node as usize]);
+            }
+            out.sort_unstable();
+            out.dedup();
+            out
+        })
+        .collect()
 }
 
 /// Each unit's files plus the files of every unit that is its friend — what
@@ -269,6 +411,9 @@ enum Compilation {
     Unit(u32),
     Root(SmolStr),
     Alone(SmolStr),
+    /// One mount forest, named by the file its tree is rooted at — a Rust
+    /// crate, whose namespaces are its `mod` chain and nothing a path spells.
+    Tree(SmolStr),
 }
 
 /// Each node's files, plus the files of every same-named node whose unit
@@ -405,6 +550,8 @@ mod tests {
                 sees: Vec::new(),
                 regions: Vec::new(),
                 published: false,
+                mounted_by: None,
+                mount_cap: None,
                 anchored: Vec::new(),
                 dispatched: Vec::new(),
                 exempt: Vec::new(),

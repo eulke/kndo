@@ -16,11 +16,15 @@
 //! pub member Owner.name   exported member of `Owner`
 //! REACH fn name        any declaration under a reach word: `owner`, `file`, `ns`
 //!                      (its namespace), `unit`, `group` (the unit's aggregate),
-//!                      `dir(N)` (N directories up), `named(a.b)` (a namespace by
+//!                      `ns(N)` (N namespaces up), `dir(N)` (N directories up),
+//!                      `named(a.b)` (a namespace by
 //!                      name), `heirs` (its owner and the owner's subtypes),
 //!                      `heirs+ns` (those and its namespace), `inherited` (its
 //!                      owner's), `pub`
 //! package a.b          the namespace this file declares itself into
+//! mount a ./a          `./a` becomes the child namespace `a` of this file's,
+//!                      fenced by the mount's own reach (`pub mount a ./a`,
+//!                      `unit mount a ./a`; unstated, this file's namespace)
 //! extends Sub Base     `Sub` extends the type named `Base`
 //! implements Impl Face `Impl` implements the type named `Face`
 //! call name            a Call reference to a bare `name`
@@ -424,6 +428,16 @@ impl Extension for MockExtension {
                         Some(span),
                     ),
                 }
+            } else if let Some((reach, segment, specifier)) = mount_line(line) {
+                out.import(
+                    ImportTarget::Relative(specifier.into()),
+                    ImportShape::Mount {
+                        namespace: segment,
+                        reach,
+                    },
+                    span,
+                    Confidence::Certain,
+                );
             } else if let Some(rest) = line.strip_prefix("mark-file ") {
                 let (path, args) = marker_parts(rest);
                 out.marker(MarkerTarget::File, path, args, span);
@@ -648,6 +662,12 @@ fn reach_prefix(line: &str) -> (Option<Reach>, &str) {
             return (Some(reach), rest);
         }
     }
+    if let Some(rest) = line.strip_prefix("ns(")
+        && let Some((up, rest)) = rest.split_once(") ")
+        && let Ok(up) = up.parse()
+    {
+        return (Some(Reach::Namespace { up }), rest);
+    }
     if let Some(rest) = line.strip_prefix("dir(")
         && let Some((up, rest)) = rest.split_once(") ")
         && let Ok(up) = up.parse()
@@ -686,6 +706,21 @@ fn marker_parts(rest: &str) -> (&str, Vec<smol_str::SmolStr>) {
         .map(smol_str::SmolStr::new)
         .collect();
     (path, args)
+}
+
+/// `mount a ./a`, `pub mount a ./a`, `unit mount a ./a` — the segment the
+/// target is mounted as, the reach the mount carries, and the file it names.
+/// Unstated, a mount is private to the mounting file's own namespace, which
+/// is what `mod x;` means where the word is optional.
+fn mount_line(line: &str) -> Option<(Reach, smol_str::SmolStr, &str)> {
+    let (reach, rest) = reach_prefix(line);
+    let rest = rest.strip_prefix("mount ")?;
+    let (segment, specifier) = rest.trim().split_once(' ')?;
+    Some((
+        reach.unwrap_or(Reach::Namespace { up: 0 }),
+        smol_str::SmolStr::new(segment),
+        specifier.trim(),
+    ))
 }
 
 /// `import ./x`, `lazy-import ./x`, `erased-import ./x` — the three moments an

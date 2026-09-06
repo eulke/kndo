@@ -37,7 +37,8 @@ _Avoid_: visibility rung, region, scope token, private (a keyword; the reach it
 spells is the owner's or the file's)
 
 **Effective reach**:
-A member's reach after the engine caps it by its owner's: never wider than the owner.
+A declaration's reach after the engine caps it: by every owner above it, and by the
+mounts above its file. Never wider than either.
 
 **Reference**:
 A use of a name in a file, with a kind (call, read, write, extend, implement, type
@@ -55,7 +56,13 @@ When an import runs: at load, lazily (inside a function or a condition), or eras
 
 **Mount**:
 An import that makes its target a child namespace of the importing file's namespace
-(`mod x;`). An **include** makes the target's content part of the importing file.
+(`mod x;`), carrying the reach it is attached with. An **include** makes the target's
+content part of the importing file.
+
+**Mount cap**:
+The narrowest reach the mounts above a file impose on it, read from that file: what a
+privately mounted module puts around everything under it. Folded into the effective
+reach, so nothing under it is published surface.
 
 **Marker**:
 An attribute, annotation, decorator, modifier or directive on a declaration or a

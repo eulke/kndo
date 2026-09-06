@@ -79,6 +79,15 @@ adapter says nothing:
   three test files); an output directory a JVM or Cargo build writes is not
   one, since a package may be named `target` or `build`; and what a manifest
   excludes is that unit's membership, not the tree's.
+- **Mounts**: where a language names its namespaces by ATTACHING files to
+  each other rather than by a clause each file writes, the import that does it
+  says so — Rust's `mod x;` makes `x.rs` the child namespace `x` of the
+  mounting module's. The engine reads the tree that results: a name private to
+  a module is readable in every file mounted under it, an address that climbs
+  (`pub(super)`, `pub(in crate::a)`) names the node it climbs to, and the
+  mount's own reach fences everything below it, so a `pub` item of a privately
+  mounted module is nameable in the mounting namespace and nowhere else — off
+  the unit's published surface, and judged like any other bounded name.
 - **Embedded regions**: the spans of a file written in another language.
   HTML reports each inline `<script>` — a module, or a classic script — and
   each inline `<style>` as a region of JavaScript or CSS, and the engine hands
