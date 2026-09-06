@@ -21,7 +21,8 @@ impl bindings::Guest for RudeProbe {
             coordinate: "demo:rude".to_string(),
             version: 1,
             suffixes: vec!["rude".to_string()],
-            narrowable_scopes: Vec::new(),
+            ladder: Vec::new(),
+            published_surface: wire::PublishedSurface::Exports,
             import_cycles: wire::CycleTolerance::Tolerated,
             dispatch: Vec::new(),
             claims: vec!["**/*.rude".to_string()],
@@ -88,7 +89,7 @@ impl bindings::Guest for RudeProbe {
         Vec::new()
     }
 
-    fn seen_from(_path: String, _scope: String) -> Option<Vec<String>> {
+    fn seen_from(_path: String, _reach: wire::Reach) -> Option<Vec<String>> {
         None
     }
 

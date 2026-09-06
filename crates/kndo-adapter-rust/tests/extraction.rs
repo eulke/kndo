@@ -37,14 +37,9 @@ pub mod outer { pub fn inner() {} }
     );
     assert_eq!(decl(&ev, "visible").reach, Reach::Exported);
     assert_eq!(decl(&ev, "hidden").reach, Reach::Private);
-    // `pub(crate)` is the compiler's crate boundary — a bounded region;
+    // `pub(crate)` is the compiler's crate boundary — the unit's reach;
     // `pub(super)` keeps Exported until module-tree regions are enumerable.
-    assert_eq!(
-        decl(&ev, "crate_wide").reach,
-        Reach::Scoped {
-            scope: "crate".into()
-        }
-    );
+    assert_eq!(decl(&ev, "crate_wide").reach, Reach::Unit);
     assert_eq!(decl(&ev, "super_wide").reach, Reach::Exported);
     assert_eq!(decl(&ev, "Config").kind, SymbolKind::Type);
     assert_eq!(decl(&ev, "Runner").kind, SymbolKind::Type);

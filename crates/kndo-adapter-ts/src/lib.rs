@@ -15,7 +15,7 @@ use kndo_contract::adapter::{
     DependencyDeclaration, PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile,
 };
 use kndo_contract::evidence::{EvidenceSink, RootKind, RootTarget};
-use kndo_contract::extension::{Extension, ExtensionSpec};
+use kndo_contract::extension::{Extension, ExtensionSpec, PublishedSurface, Rung, Step};
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use tree_sitter::Language;
 
@@ -97,7 +97,6 @@ impl TypeScriptAdapter {
             8,
             &["ts", "tsx", "js", "jsx", "mjs", "cjs", "mts", "cts"],
             &["**/package.json"],
-            &[],
             // ESM/CJS initialization order makes cycles bite: TDZ errors and
             // partially-initialized modules at run time.
             kndo_contract::extension::CycleTolerance::Hazard,
@@ -109,9 +108,18 @@ impl TypeScriptAdapter {
             "**/action.yml",
             "**/action.yaml",
         ])
-        // Dropping `export` is the language-checked narrowing: tsc turns any
-        // missed external use into a compile error.
-        .export_narrowing(kndo_contract::extension::ExportNarrowing::Expressible)
+        // Two rungs: a top-level declaration is either exported or its
+        // module's own — dropping `export` is the narrowing tsc then checks,
+        // turning any missed external use into a compile error. Members have
+        // no step here: `unexported` is a keyword only a top-level takes.
+        .ladder(&[
+            Step::for_free(Rung::File, "unexported"),
+            Step::new(Rung::Exported, "export"),
+        ])
+        // An npm package resolves through `main`/`exports`: what an entry
+        // exports is published, and an export no entry reaches is internal
+        // however it is spelled.
+        .published_surface(PublishedSurface::Entries)
         // `lodash/fp` names `lodash`; a scoped name carries its own slash.
         .dependency_identity(kndo_contract::extension::DependencyIdentity::PackageName)
         .dependency_builtins(kndo_contract::extension::DependencyBuiltins::Named(

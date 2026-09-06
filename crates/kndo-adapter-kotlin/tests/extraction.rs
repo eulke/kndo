@@ -24,12 +24,7 @@ fn no_modifier_means_public_the_opposite_of_java() {
     );
     assert_eq!(declaration_named(&ev, "Widget").reach, Reach::Exported);
     assert_eq!(declaration_named(&ev, "visible").reach, Reach::Exported);
-    assert_eq!(
-        declaration_named(&ev, "moduleWide").reach,
-        Reach::Scoped {
-            scope: "module".into()
-        }
-    );
+    assert_eq!(declaration_named(&ev, "moduleWide").reach, Reach::Unit);
     assert_eq!(
         declaration_named(&ev, "forSubclasses").reach,
         Reach::Exported

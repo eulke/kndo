@@ -238,9 +238,8 @@ pub mod jvm_manifest {
         coordinate: &'static str,
         version: u32,
         suffixes: &[&'static str],
-        narrowable: &'static [&'static str],
     ) -> kndo_contract::extension::ExtensionSpec {
-        jvm_builder(coordinate, version, suffixes, narrowable).build()
+        jvm_builder(coordinate, version, suffixes).build()
     }
 
     /// The same shared spelling, still open: a JVM adapter that declares a
@@ -249,14 +248,12 @@ pub mod jvm_manifest {
         coordinate: &'static str,
         version: u32,
         suffixes: &[&'static str],
-        narrowable: &'static [&'static str],
     ) -> kndo_contract::extension::ExtensionSpecBuilder {
         crate::source_adapter_builder(
             coordinate,
             version,
             suffixes,
             MANIFEST_GLOBS,
-            narrowable,
             // JVM compilers resolve reference cycles in multiple passes —
             // routine structure, never an initialization hazard worth a finding.
             kndo_contract::extension::CycleTolerance::Tolerated,
@@ -823,18 +820,9 @@ pub fn source_adapter_spec(
     version: u32,
     suffixes: &[&'static str],
     manifests: &[&'static str],
-    narrowable: &'static [&'static str],
     import_cycles: kndo_contract::extension::CycleTolerance,
 ) -> kndo_contract::extension::ExtensionSpec {
-    source_adapter_builder(
-        coordinate,
-        version,
-        suffixes,
-        manifests,
-        narrowable,
-        import_cycles,
-    )
-    .build()
+    source_adapter_builder(coordinate, version, suffixes, manifests, import_cycles).build()
 }
 
 /// The same shared spelling, still open: an adapter that declares a capability
@@ -845,7 +833,6 @@ pub fn source_adapter_builder(
     version: u32,
     suffixes: &[&'static str],
     manifests: &[&'static str],
-    narrowable: &'static [&'static str],
     import_cycles: kndo_contract::extension::CycleTolerance,
 ) -> kndo_contract::extension::ExtensionSpecBuilder {
     use kndo_contract::evidence::{EvidenceStream, EvidenceStreams};
@@ -856,7 +843,6 @@ pub fn source_adapter_builder(
             EvidenceStream::Metrics,
         ]))
         .manifests(manifests)
-        .narrowable(narrowable)
         .import_cycles(import_cycles)
 }
 

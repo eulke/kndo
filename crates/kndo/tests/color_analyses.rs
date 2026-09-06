@@ -90,7 +90,7 @@ fn test_color_separates_test_only_from_unused_and_untested() {
 }
 
 #[test]
-fn export_narrowing_fires_only_where_nothing_else_spells_the_name() {
+fn an_export_is_advised_unexported_only_where_nothing_else_spells_the_name() {
     let p = TempProject::new();
     p.file("package.json", r#"{ "name": "demo", "main": "main.js" }"#);
     // The entry: whole-file-rooted, so its own exports are outside surface.
@@ -134,9 +134,10 @@ fn export_narrowing_fires_only_where_nothing_else_spells_the_name() {
         .iter()
         .find(|f| f.category == Category::INTERNAL_ONLY)
         .unwrap();
-    assert!(
-        finding.message.contains("declared exported"),
-        "the Exported rung speaks its own message: {}",
-        finding.message
+    assert_eq!(
+        finding.message,
+        "declared `export`, but every use is within its own file and nothing else in the \
+         tree imports or names it — `unexported` would suffice for this function",
+        "the Exported rung names the language's words for both rungs"
     );
 }

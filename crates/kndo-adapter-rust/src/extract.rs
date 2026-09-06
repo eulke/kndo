@@ -757,19 +757,18 @@ fn visibility_node(item: Node<'_>) -> Option<Node<'_>> {
         .find(|ch| ch.kind() == "visibility_modifier")
 }
 
-/// `pub` → Exported; `pub(crate)` is the compiler's crate boundary —
-/// `Scoped("crate")`, the region [`crate::resolve`] bounds from the package
-/// map. `pub(super)`/`pub(in …)` keep Exported for now: their regions are
-/// module-tree shapes the resolver cannot yet enumerate from paths alone, and
-/// an unanswerable bound must stay keep-alive (recorded in EXPERIMENTS).
+/// `pub` → Exported; `pub(crate)` is the compiler's crate boundary — the
+/// unit's reach, which [`crate::resolve`] bounds from the package map until
+/// the manifest names the crate. `pub(super)`/`pub(in …)` keep Exported for
+/// now: their regions are module-tree shapes the resolver cannot yet enumerate
+/// from paths alone, and an unanswerable bound must stay keep-alive (recorded
+/// in EXPERIMENTS).
 fn reach_of(item: Node<'_>, source: &[u8]) -> Reach {
     match visibility_node(item) {
         None => Reach::Private,
         Some(v) => {
             if tk::text(v, source).trim() == "pub(crate)" {
-                Reach::Scoped {
-                    scope: smol_str::SmolStr::new_static("crate"),
-                }
+                Reach::Unit
             } else {
                 Reach::Exported
             }

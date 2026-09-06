@@ -477,14 +477,13 @@ fn property(
 
 // ---------------------------------------------------------------- visibility
 
-/// Swift's ladder, folded onto the contract's three shapes: `private` and
-/// `fileprivate` are both file-bounded facts → Private; NO modifier and
-/// `internal` are the module boundary → `Scoped("module")` (the default rung —
-/// the reason this adapter wanted the region mechanism); `public`/`open` →
+/// Swift's access levels as reaches: `private` and `fileprivate` are both
+/// file-bounded facts → Private; NO modifier and `internal` are the module
+/// boundary → the unit's reach (the default rung); `public`/`open` →
 /// Exported.
 fn reach_of(item: Node<'_>, source: &[u8]) -> Reach {
     let Some(modifiers) = tk::child_of_kind(item, "modifiers") else {
-        return module_scoped();
+        return Reach::Unit;
     };
     let mut c = modifiers.walk();
     for m in modifiers.named_children(&mut c) {
@@ -498,17 +497,11 @@ fn reach_of(item: Node<'_>, source: &[u8]) -> Reach {
                 "private" | "fileprivate" => Reach::Private,
                 "public" | "open" => Reach::Exported,
                 // `internal`, or a form we do not know — the default rung.
-                _ => module_scoped(),
+                _ => Reach::Unit,
             };
         }
     }
-    module_scoped()
-}
-
-fn module_scoped() -> Reach {
-    Reach::Scoped {
-        scope: SmolStr::new_static("module"),
-    }
+    Reach::Unit
 }
 
 fn has_modifier(item: Node<'_>, source: &[u8], word: &str) -> bool {

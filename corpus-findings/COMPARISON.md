@@ -1230,3 +1230,22 @@ overloads do; a gate over every pinned report refuses two findings with one
 identity. Corpus: zero identities moved, zero duplicated, every row unchanged.
 This slice changed no verdict; it made the class of defect impossible to
 reintroduce without a red gate.
+
+### `internal-only` on the ladder (2026-09-06)
+
+The analysis now reads one fact about a language — its ladder — and names the
+keyword to type. Nine repositories, before → after:
+
+| repo | before | after | retired | what the ladder says |
+|---|---|---|---|---|
+| guava | 3,204 | 3,184 | 20 | top-level package-private classes: Java spells nothing between the file and the package for a free declaration |
+| Exposed | 31 | 23 | 8 | `internal` members used from elsewhere in their file: `private` would break them, and Kotlin has no file-wide keyword for a member |
+| Alamofire | 264 | 264 | 0 | 24 now read `private`, 240 `fileprivate` |
+| vapor | 85 | 85 | 0 | 16 `private`, 69 `fileprivate` |
+| ripgrep | 1 | 1 | 0 | `pub(crate)` → `private` |
+| vite | 51 | 51 | 0 | `export` → `unexported` |
+| flask, gin, lodash | 0 | 0 | 0 | no ladder (Python), nothing below the package (Go), nothing exported and unnamed (lodash) |
+
+Zero findings added anywhere; every finding of every other category is
+byte-identical. Both retired classes were advice naming a keyword that does not
+exist — the defect a step's bearer and the owner extent make unrepresentable.

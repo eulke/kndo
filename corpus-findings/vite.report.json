@@ -8,7 +8,7 @@
       {
         "id": "kndo:css",
         "files": 233,
-        "export_narrowing": "none",
+        "published_surface": "exports",
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
         "dependency_identity": "underivable"
@@ -16,7 +16,7 @@
       {
         "id": "kndo:html",
         "files": 155,
-        "export_narrowing": "none",
+        "published_surface": "exports",
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
         "dependency_identity": "underivable"
@@ -24,10 +24,21 @@
       {
         "id": "kndo:js-ts",
         "files": 1558,
-        "export_narrowing": "expressible",
+        "published_surface": "entries",
         "import_cycles": "hazard",
         "dependency_scoping": "scoped",
-        "dependency_identity": "package-name"
+        "dependency_identity": "package-name",
+        "ladder": [
+          {
+            "rung": "file",
+            "word": "unexported",
+            "bearer": "free"
+          },
+          {
+            "rung": "exported",
+            "word": "export"
+          }
+        ]
       }
     ]
   },
@@ -9612,7 +9623,7 @@
         "start": 3,
         "end": 3
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this type"
     },
     {
       "id": "kndo-71724797f4e4",
@@ -9634,7 +9645,7 @@
         "start": 946,
         "end": 973
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this function"
     },
     {
       "id": "kndo-9d8ffe13d9da",
@@ -9656,7 +9667,7 @@
         "start": 1113,
         "end": 1119
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this function"
     },
     {
       "id": "kndo-de06ba830ee0",
@@ -9678,7 +9689,7 @@
         "start": 1703,
         "end": 1738
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this function"
     },
     {
       "id": "kndo-078982fbe99b",
@@ -9700,7 +9711,7 @@
         "start": 97,
         "end": 155
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this function"
     },
     {
       "id": "kndo-366bfb4080c7",
@@ -9722,7 +9733,7 @@
         "start": 29,
         "end": 34
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this type"
     },
     {
       "id": "kndo-da06035fb2f1",
@@ -9744,7 +9755,7 @@
         "start": 9,
         "end": 15
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this type"
     },
     {
       "id": "kndo-ea82dd23cfc3",
@@ -9766,7 +9777,7 @@
         "start": 164,
         "end": 176
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this function"
     },
     {
       "id": "kndo-f41e111a446a",
@@ -9788,7 +9799,7 @@
         "start": 50,
         "end": 80
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this function"
     },
     {
       "id": "kndo-b9532ebd21e9",
@@ -9810,7 +9821,7 @@
         "start": 6,
         "end": 9
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this type"
     },
     {
       "id": "kndo-bc13f4d598c5",
@@ -9832,7 +9843,7 @@
         "start": 69,
         "end": 71
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this type"
     },
     {
       "id": "kndo-510d1bdf45c7",
@@ -9854,7 +9865,7 @@
         "start": 99,
         "end": 110
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this function"
     },
     {
       "id": "kndo-7f34c3fbb906",
@@ -9876,7 +9887,7 @@
         "start": 59,
         "end": 59
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this declaration"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this declaration"
     },
     {
       "id": "kndo-94c99355ea87",
@@ -9898,7 +9909,7 @@
         "start": 445,
         "end": 489
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this function"
     },
     {
       "id": "kndo-10fa0cb85d45",
@@ -9920,7 +9931,7 @@
         "start": 2090,
         "end": 2091
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this declaration"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this declaration"
     },
     {
       "id": "kndo-13f0982d24be",
@@ -9942,7 +9953,7 @@
         "start": 2088,
         "end": 2089
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this declaration"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this declaration"
     },
     {
       "id": "kndo-b13258f42826",
@@ -9964,7 +9975,7 @@
         "start": 1364,
         "end": 1368
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this type"
     },
     {
       "id": "kndo-e7aee3d12268",
@@ -9986,7 +9997,7 @@
         "start": 2489,
         "end": 2495
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this type"
     },
     {
       "id": "kndo-8d5532436a12",
@@ -10008,7 +10019,7 @@
         "start": 29,
         "end": 29
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this declaration"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this declaration"
     },
     {
       "id": "kndo-01046a961d82",
@@ -10030,7 +10041,7 @@
         "start": 77,
         "end": 77
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this type"
     },
     {
       "id": "kndo-38ee0baab9a8",
@@ -10052,7 +10063,7 @@
         "start": 40,
         "end": 43
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this declaration"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this declaration"
     },
     {
       "id": "kndo-40fafb293e43",
@@ -10074,7 +10085,7 @@
         "start": 55,
         "end": 57
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this type"
     },
     {
       "id": "kndo-2353dc7e37af",
@@ -10096,7 +10107,7 @@
         "start": 173,
         "end": 176
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this declaration"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this declaration"
     },
     {
       "id": "kndo-81f4e095269e",
@@ -10118,7 +10129,7 @@
         "start": 1110,
         "end": 1112
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this function"
     },
     {
       "id": "kndo-c82802ed7c56",
@@ -10140,7 +10151,7 @@
         "start": 88,
         "end": 97
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this declaration"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this declaration"
     },
     {
       "id": "kndo-79c0edd018b8",
@@ -10162,7 +10173,7 @@
         "start": 87,
         "end": 88
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this declaration"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this declaration"
     },
     {
       "id": "kndo-7fdbb9f624bc",
@@ -10184,7 +10195,7 @@
         "start": 951,
         "end": 1014
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this function"
     },
     {
       "id": "kndo-fb2d72ff5249",
@@ -10206,7 +10217,7 @@
         "start": 907,
         "end": 937
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this function"
     },
     {
       "id": "kndo-f34659ed8c8f",
@@ -10228,7 +10239,7 @@
         "start": 35,
         "end": 35
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this declaration"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this declaration"
     },
     {
       "id": "kndo-063c5a3dfe54",
@@ -10250,7 +10261,7 @@
         "start": 409,
         "end": 413
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this type"
     },
     {
       "id": "kndo-12fe847decee",
@@ -10272,7 +10283,7 @@
         "start": 644,
         "end": 690
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this function"
     },
     {
       "id": "kndo-67654fea7659",
@@ -10294,7 +10305,7 @@
         "start": 21,
         "end": 31
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this type"
     },
     {
       "id": "kndo-ece5c56907a8",
@@ -10316,7 +10327,7 @@
         "start": 722,
         "end": 725
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this function"
     },
     {
       "id": "kndo-9761391bb812",
@@ -10338,7 +10349,7 @@
         "start": 295,
         "end": 302
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this declaration"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this declaration"
     },
     {
       "id": "kndo-5ab6a883cafc",
@@ -10360,7 +10371,7 @@
         "start": 8,
         "end": 25
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this type"
     },
     {
       "id": "kndo-19c0497adc32",
@@ -10382,7 +10393,7 @@
         "start": 139,
         "end": 149
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this function"
     },
     {
       "id": "kndo-25b7deb6c967",
@@ -10404,7 +10415,7 @@
         "start": 911,
         "end": 1000
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this function"
     },
     {
       "id": "kndo-8f877e7c616d",
@@ -10426,7 +10437,7 @@
         "start": 178,
         "end": 179
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this type"
     },
     {
       "id": "kndo-f4a2f1b542c3",
@@ -10448,7 +10459,7 @@
         "start": 28,
         "end": 59
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this type"
     },
     {
       "id": "kndo-96e5b9d699ea",
@@ -10470,7 +10481,7 @@
         "start": 372,
         "end": 399
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this function"
     },
     {
       "id": "kndo-b975b728f08c",
@@ -10492,7 +10503,7 @@
         "start": 1157,
         "end": 1160
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this type"
     },
     {
       "id": "kndo-58fd74229560",
@@ -10514,7 +10525,7 @@
         "start": 41,
         "end": 41
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this declaration"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this declaration"
     },
     {
       "id": "kndo-b22cbbe05d14",
@@ -10536,7 +10547,7 @@
         "start": 34,
         "end": 34
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this declaration"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this declaration"
     },
     {
       "id": "kndo-bc0a9e17e0b5",
@@ -10558,7 +10569,7 @@
         "start": 77,
         "end": 92
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this function"
     },
     {
       "id": "kndo-4895d09c43cc",
@@ -10580,7 +10591,7 @@
         "start": 480,
         "end": 480
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this declaration"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this declaration"
     },
     {
       "id": "kndo-8572443a1f08",
@@ -10602,7 +10613,7 @@
         "start": 185,
         "end": 185
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this type"
     },
     {
       "id": "kndo-d5247aff766d",
@@ -10624,7 +10635,7 @@
         "start": 820,
         "end": 831
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this function"
     },
     {
       "id": "kndo-d820a85a3352",
@@ -10646,7 +10657,7 @@
         "start": 228,
         "end": 228
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this declaration"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this declaration"
     },
     {
       "id": "kndo-d8bd44f4cb4b",
@@ -10668,7 +10679,7 @@
         "start": 1761,
         "end": 1768
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this function"
     },
     {
       "id": "kndo-483bd3dc5a2f",
@@ -10690,7 +10701,7 @@
         "start": 7,
         "end": 13
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this type"
     },
     {
       "id": "kndo-7eef4ac83b50",
@@ -10712,7 +10723,7 @@
         "start": 11,
         "end": 17
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this type"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this type"
     },
     {
       "id": "kndo-0dcf458543bb",

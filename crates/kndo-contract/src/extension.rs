@@ -10,7 +10,8 @@ use crate::adapter::{
     DependencyDeclaration, PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile,
 };
 use crate::evidence::{
-    CoverageRecords, Declaration, EvidenceSink, EvidenceStreams, Marker, RootKind, SymbolKind,
+    CoverageRecords, Declaration, EvidenceSink, EvidenceStreams, Marker, Reach, RootKind,
+    SymbolKind,
 };
 use crate::finding::Severity;
 use crate::manifest::ManifestSink;
@@ -98,19 +99,23 @@ pub fn is_reserved_coordinate(coordinate: &str) -> bool {
     coordinate.starts_with("kndo:")
 }
 
-/// Whether the language offers an expressible visibility strictly below
-/// `Exported` — can a declaration stop being exported, by editing only itself,
-/// and keep compiling? TypeScript can drop `export`; a language whose only
-/// spelling IS the exported one cannot. The `internal-only` analysis is the
-/// consumer: an exported declaration used only inside its own file is advice
-/// where narrowing is expressible and an impossibility where it is not.
+/// What a unit of this ecosystem publishes — the surface an outside consumer
+/// can name, which no narrowing advice may touch. `Exports` (the default):
+/// every exported declaration is published — a jar, a crate, a Go package, a
+/// Python distribution hand out all of them, so `internal-only` never advises
+/// an exported declaration here until the unit's own publication says nobody
+/// outside consumes it. `Entries`: only what the unit's entries export — an
+/// npm package resolves through `main`/`exports`, so an `export` in a file no
+/// entry reaches is internal however it is spelled, and the analysis may say
+/// so. A language fact, because it is the ecosystem's resolution rule; the
+/// unit's own publication refines it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
 #[serde(rename_all = "lowercase")]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-pub enum ExportNarrowing {
+pub enum PublishedSurface {
     #[default]
-    None,
-    Expressible,
+    Exports,
+    Entries,
 }
 
 /// How the ecosystem's manifests state a dependency's usage scope. `Scoped`
@@ -335,30 +340,84 @@ pub enum NamespaceSpan {
     Compilation,
 }
 
+/// Which declarations can stand on a step. Kotlin's `private` is file-wide on
+/// a top-level declaration and class-wide on a member — two rungs under one
+/// keyword — and Java's `private` exists for members alone. The ladder says
+/// so, and the advice never names a keyword the declaration cannot take.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub enum Bearer {
+    #[default]
+    Any,
+    /// A declaration with no owner.
+    Free,
+    /// A declaration that is a member of another.
+    Member,
+}
+
+impl Bearer {
+    /// Can a declaration with (`has_owner`) stand on a step for this bearer?
+    pub fn admits(self, has_owner: bool) -> bool {
+        match self {
+            Bearer::Any => true,
+            Bearer::Free => !has_owner,
+            Bearer::Member => has_owner,
+        }
+    }
+}
+
 /// One rung as one language spells it. Every judgment and every ordering reads
 /// `rung`; `word` is what a report says out loud, because a Java developer
-/// narrows a `package`-scoped member, not a `namespace`-scoped one. One type,
+/// narrows a `package-private` member, not a `namespace`-scoped one. One type,
 /// so the rung and the word for it can never name different things.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Step {
     pub rung: Rung,
     pub word: SmolStr,
+    /// Which declarations the keyword exists for; `Any` is omitted on the wire.
+    #[serde(default, skip_serializing_if = "is_any")]
+    pub bearer: Bearer,
+}
+
+fn is_any(bearer: &Bearer) -> bool {
+    *bearer == Bearer::Any
 }
 
 impl Step {
-    /// A rung under the language's own word for it.
+    /// A rung under the language's own word for it, for any declaration.
     pub fn new(rung: Rung, word: &'static str) -> Step {
         Step {
             rung,
             word: SmolStr::new_static(word),
+            bearer: Bearer::Any,
+        }
+    }
+
+    /// A step only a declaration with no owner can stand on (TypeScript's
+    /// unexported top level; Kotlin's file-wide `private`).
+    pub fn for_free(rung: Rung, word: &'static str) -> Step {
+        Step {
+            bearer: Bearer::Free,
+            ..Step::new(rung, word)
+        }
+    }
+
+    /// A step only a member can stand on (Java's and Kotlin's class-wide
+    /// `private`).
+    pub fn for_members(rung: Rung, word: &'static str) -> Step {
+        Step {
+            bearer: Bearer::Member,
+            ..Step::new(rung, word)
         }
     }
 }
 
 impl From<Rung> for Step {
-    /// A rung with no language word — the engine's own, which is what a wire
-    /// component that declares rungs alone gets.
+    /// A rung with no language word — the engine's own, which is what a report
+    /// falls back to for a rung the language spelled in its evidence but left
+    /// off its ladder.
     fn from(rung: Rung) -> Step {
         let word = match rung {
             Rung::Owner => "owner",
@@ -367,10 +426,54 @@ impl From<Rung> for Step {
             Rung::Unit => "unit",
             Rung::Exported => "exported",
         };
-        Step {
-            rung,
-            word: SmolStr::new_static(word),
-        }
+        Step::new(rung, word)
+    }
+}
+
+/// The reaches a language can spell with a keyword, narrowest first — the one
+/// fact `internal-only` reads. Two questions, answered here so no analysis
+/// re-derives them: which step a declaration could fall to, and what a rung
+/// is called out loud.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
+#[serde(transparent)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct Ladder(Vec<Step>);
+
+impl Ladder {
+    pub fn new(steps: Vec<Step>) -> Ladder {
+        Ladder(steps)
+    }
+
+    pub fn steps(&self) -> &[Step] {
+        &self.0
+    }
+
+    /// A language that states no ladder: `internal-only` stays silent for it.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// The narrowest step a declaration standing on `declared` could fall to
+    /// while still covering `extent` — the rung its uses actually need — and
+    /// which its shape (owned or not) can take. `None` when the language
+    /// spells nothing between the two: the advice would name a keyword that
+    /// does not exist, so there is no advice.
+    pub fn step_down(&self, declared: Rung, extent: Rung, has_owner: bool) -> Option<&Step> {
+        self.0
+            .iter()
+            .filter(|s| s.rung >= extent && s.rung < declared && s.bearer.admits(has_owner))
+            .min_by_key(|s| s.rung)
+    }
+
+    /// What this language calls `rung`: the ladder's word where it has one,
+    /// the engine's own where the language spelled the rung in its evidence
+    /// but left it off its ladder — never an empty word.
+    pub fn word(&self, rung: Rung) -> SmolStr {
+        self.0
+            .iter()
+            .find(|s| s.rung == rung)
+            .map(|s| s.word.clone())
+            .unwrap_or_else(|| Step::from(rung).word)
     }
 }
 
@@ -481,14 +584,13 @@ pub struct ExtensionSpec {
     version: u32,
     // -- extraction --
     suffixes: Vec<SmolStr>,
-    narrowable_scopes: Vec<SmolStr>,
-    export_narrowing: ExportNarrowing,
+    published_surface: PublishedSurface,
     dependency_scoping: DependencyScoping,
     dependency_identity: DependencyIdentity,
     dependency_importers: Vec<SmolStr>,
     dependency_builtins: DependencyBuiltins,
     import_cycles: CycleTolerance,
-    ladder: Vec<Step>,
+    ladder: Ladder,
     namespace_span: NamespaceSpan,
     dispatch: Vec<DispatchRule>,
     claims: Vec<SmolStr>,
@@ -522,14 +624,13 @@ impl ExtensionSpec {
                 coordinate: SmolStr::new_static(coordinate),
                 version,
                 suffixes: Vec::new(),
-                narrowable_scopes: Vec::new(),
-                export_narrowing: ExportNarrowing::None,
+                published_surface: PublishedSurface::Exports,
                 dependency_scoping: DependencyScoping::Scoped,
                 dependency_identity: DependencyIdentity::Underivable,
                 dependency_importers: Vec::new(),
                 dependency_builtins: DependencyBuiltins::None,
                 import_cycles: CycleTolerance::Tolerated,
-                ladder: Vec::new(),
+                ladder: Ladder::default(),
                 namespace_span: NamespaceSpan::Unit,
                 dispatch: Vec::new(),
                 claims: Vec::new(),
@@ -566,18 +667,10 @@ impl ExtensionSpec {
         &self.suffixes
     }
 
-    /// Scope tokens whose language has a strictly NARROWER rung to demote to —
-    /// the language fact `internal-only` needs before advising anything: Java
-    /// can narrow "package" to private, Go has nothing below "package", so the
-    /// same evidence is advice in one language and noise in the other. Empty
-    /// (the default) means the analysis never fires for this adapter's files.
-    pub fn narrowable_scopes(&self) -> &[SmolStr] {
-        &self.narrowable_scopes
-    }
-
-    /// See [`ExportNarrowing`]; the `internal-only` analysis is the consumer.
-    pub fn export_narrowing(&self) -> ExportNarrowing {
-        self.export_narrowing
+    /// See [`PublishedSurface`]; `internal-only`'s Exported rung is the
+    /// consumer. `Exports` (the default) keeps it silent for this language.
+    pub fn published_surface(&self) -> PublishedSurface {
+        self.published_surface
     }
 
     /// See [`DependencyScoping`]; the dependency subjects of `unused` and
@@ -621,10 +714,10 @@ impl ExtensionSpec {
         &self.dispatch
     }
 
-    /// See [`Step`]; `internal-only` is the consumer — for the judgment and
+    /// See [`Ladder`]; `internal-only` is the consumer — for the judgment and
     /// for the word its message uses. Empty (the default) means the language
     /// states no ladder and the analysis stays silent for its files.
-    pub fn ladder(&self) -> &[Step] {
+    pub fn ladder(&self) -> &Ladder {
         &self.ladder
     }
 
@@ -632,12 +725,6 @@ impl ExtensionSpec {
     /// keeps every namespace inside the unit that compiles it.
     pub fn namespace_span(&self) -> NamespaceSpan {
         self.namespace_span
-    }
-
-    /// Is there a rung strictly narrower than `rung` this language can spell?
-    /// The one question `internal-only` asks of the ladder.
-    pub fn narrower_than(&self, rung: Rung) -> bool {
-        self.ladder.iter().any(|s| s.rung < rung)
     }
 
     pub fn claims(&self) -> &[SmolStr] {
@@ -703,10 +790,9 @@ pub struct ExtensionSpecParts {
     pub coordinate: SmolStr,
     pub version: u32,
     pub suffixes: Vec<SmolStr>,
-    pub narrowable_scopes: Vec<SmolStr>,
-    /// Wire components cannot declare `Expressible` yet — the world speaks no
-    /// narrowing vocabulary; defaults to `None` (silence) like every absence.
-    pub export_narrowing: ExportNarrowing,
+    /// `Exports` (silence for the Exported rung) unless the component says
+    /// its ecosystem publishes through entries.
+    pub published_surface: PublishedSurface,
     /// Wire components cannot declare `Unscoped` yet; defaults to `Scoped`, under
     /// which an unscoped declaration is never a usage claim — silence.
     pub dependency_scoping: DependencyScoping,
@@ -718,10 +804,10 @@ pub struct ExtensionSpecParts {
     /// Wire components cannot declare builtins yet; defaults to none.
     pub dependency_builtins: DependencyBuiltins,
     pub import_cycles: CycleTolerance,
-    /// Wire components cannot declare a ladder yet; defaults to none, under
-    /// which `internal-only` stays silent — the same absence every other
-    /// undeclared capability degrades to.
-    pub ladder: Vec<Step>,
+    /// Empty unless the component states its ladder, under which
+    /// `internal-only` stays silent — the same absence every other undeclared
+    /// capability degrades to.
+    pub ladder: Ladder,
     /// Wire components cannot declare a span yet; defaults to `Unit`, the
     /// narrower answer.
     pub namespace_span: NamespaceSpan,
@@ -759,8 +845,7 @@ impl From<ExtensionSpecParts> for ExtensionSpec {
             coordinate: parts.coordinate,
             version: parts.version,
             suffixes: parts.suffixes,
-            narrowable_scopes: parts.narrowable_scopes,
-            export_narrowing: parts.export_narrowing,
+            published_surface: parts.published_surface,
             dependency_scoping: parts.dependency_scoping,
             dependency_identity: parts.dependency_identity,
             dependency_importers: parts.dependency_importers,
@@ -812,19 +897,11 @@ impl ExtensionSpecBuilder {
         self
     }
 
-    /// Declare which scope tokens can demote to a narrower rung (see
-    /// [`ExtensionSpec::narrowable_scopes`]). Omitted ⇒ none — the
-    /// default-compatibility rule: `internal-only` stays silent.
-    pub fn narrowable(mut self, scopes: &[&'static str]) -> Self {
-        self.spec.narrowable_scopes = scopes.iter().map(|s| SmolStr::new_static(s)).collect();
-        self
-    }
-
-    /// Declare where `Exported` sits on the language's ladder (see
-    /// [`ExportNarrowing`]). Omitted ⇒ `None` — the `internal-only` analysis
-    /// never advises dropping an export for this adapter's files.
-    pub fn export_narrowing(mut self, narrowing: ExportNarrowing) -> Self {
-        self.spec.export_narrowing = narrowing;
+    /// Declare what a unit of this ecosystem publishes (see
+    /// [`PublishedSurface`]). Omitted ⇒ `Exports` — every exported declaration
+    /// is published, and `internal-only` never advises narrowing one.
+    pub fn published_surface(mut self, surface: PublishedSurface) -> Self {
+        self.spec.published_surface = surface;
         self
     }
 
@@ -869,11 +946,11 @@ impl ExtensionSpecBuilder {
         self
     }
 
-    /// Declare the reaches this language can spell (see [`Step`]), narrowest
+    /// Declare the reaches this language can spell (see [`Ladder`]), narrowest
     /// first, each under the word this language uses for it. Omitted ⇒ none:
     /// `internal-only` never advises for its files.
-    pub fn ladder(mut self, rungs: &[Step]) -> Self {
-        self.spec.ladder = rungs.to_vec();
+    pub fn ladder(mut self, steps: &[Step]) -> Self {
+        self.spec.ladder = Ladder::new(steps.to_vec());
         self
     }
 
@@ -1345,21 +1422,23 @@ pub trait Extension: Send + Sync {
         Vec::new()
     }
 
-    /// The files a `Scoped { scope }` declaration at `path` can legally be seen
-    /// FROM — the region behind the adapter's own scope word, enumerated from
-    /// paths and manifests only, never contents (the `sees` stability class: a
-    /// persisted graph trusts it while contents change). `None` = this adapter
-    /// cannot bound that token — the declaration is treated exactly as Exported,
-    /// keep-alive. The default answers nothing, reproducing pre-capability
-    /// behavior; `unused` (and `internal-only` when it lands) are the consumers,
-    /// and the Kotlin `internal` fixtures the conformance case.
+    /// The files a declaration of `reach` at `path` can legally be seen FROM,
+    /// where the engine's own structure cannot bound it: a `Scoped` token
+    /// always (the region behind the adapter's own word), and a `Unit` reach
+    /// until this adapter reports its units through [`Extension::extract_manifest`].
+    /// Enumerated from paths and manifests only, never contents (the `sees`
+    /// stability class: a persisted graph trusts it while contents change).
+    /// `None` = this adapter cannot bound it — the declaration is treated
+    /// exactly as Exported, keep-alive. The default answers nothing; `unused`
+    /// and `internal-only` are the consumers, and the Kotlin `internal`
+    /// fixtures the conformance case.
     fn seen_from(
         &self,
         path: &ProjectPath,
-        scope: &str,
+        reach: &Reach,
         cx: &ResolveContext<'_>,
     ) -> Option<Vec<ProjectPath>> {
-        let _ = (path, scope, cx);
+        let _ = (path, reach, cx);
         None
     }
 

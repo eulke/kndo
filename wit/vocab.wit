@@ -47,11 +47,13 @@ interface types {
         other(string),
     }
 
-    /// Mirrors `Reach` — the binary half every language shares.
-    /// Not a ladder: `scoped` carries the adapter's own token for a bounded
-    /// region; the host asks `seen-from` for its files and judges by the set.
+    /// Mirrors `Reach`. `unit` is the unit's own reach (Kotlin's `internal`,
+    /// Rust's `pub(crate)`); `scoped` carries the adapter's own token for a
+    /// bounded region. For both, the host asks `seen-from` for the files and
+    /// judges by the set.
     variant reach {
         private,
+        unit,
         scoped(string),
         exported,
     }
@@ -260,6 +262,35 @@ interface types {
         confidence: confidence,
     }
 
+    /// Mirrors `Rung` — one reach a language can spell with a keyword.
+    enum rung {
+        owner,
+        file,
+        namespace,
+        unit,
+        exported,
+    }
+
+    /// Mirrors `Bearer` — which declarations a step's keyword exists for.
+    enum bearer {
+        %any,
+        free,
+        member,
+    }
+
+    /// Mirrors `Step` — one rung under the language's own word for it.
+    record step {
+        rung: rung,
+        word: string,
+        bearer: bearer,
+    }
+
+    /// Mirrors `PublishedSurface` — what a unit of the ecosystem publishes.
+    enum published-surface {
+        exports,
+        entries,
+    }
+
     /// Mirrors `ExtensionSpec` — the ONE manifest for every capability, claims
     /// already derived (the guest-side builder does the extension-to-glob
     /// derivation; the wire carries the finished list). `coordinate` is identity
@@ -272,9 +303,12 @@ interface types {
         coordinate: string,
         version: u32,
         suffixes: list<string>,
-        /// Scope tokens with a strictly narrower rung to demote to — the
-        /// language fact behind internal-only; empty keeps it silent.
-        narrowable-scopes: list<string>,
+        /// The reaches the language can spell, narrowest first — the one
+        /// fact behind internal-only; empty keeps it silent.
+        ladder: list<step>,
+        /// What a unit of the ecosystem publishes — `exports` keeps
+        /// internal-only's Exported rung silent.
+        published-surface: published-surface,
         /// Whether import cycles are a hazard here — `cyclic` reads it.
         import-cycles: cycle-tolerance,
         /// What the language's markers mean — the host's dispatch reads it.

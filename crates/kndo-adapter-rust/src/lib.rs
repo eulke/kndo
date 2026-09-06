@@ -21,8 +21,10 @@ mod resolve;
 use kndo_contract::adapter::{
     DependencyDeclaration, PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile,
 };
-use kndo_contract::evidence::{EvidenceSink, EvidenceStream, EvidenceStreams, RootKind};
-use kndo_contract::extension::{DispatchRule, Effect, Extension, ExtensionSpec, Trigger};
+use kndo_contract::evidence::{EvidenceSink, EvidenceStream, EvidenceStreams, Reach, RootKind};
+use kndo_contract::extension::{
+    DispatchRule, Effect, Extension, ExtensionSpec, Rung, Step, Trigger,
+};
 use kndo_contract::vocab::{Confidence, ProjectPath};
 
 pub struct RustAdapter {
@@ -80,17 +82,25 @@ fn dispatch_rules() -> Vec<DispatchRule> {
 impl RustAdapter {
     pub fn new() -> Self {
         RustAdapter {
-            // 7: attributes are markers; their meaning is the spec's dispatch rules.
+            // 8: `pub(crate)` is the unit's reach, not a token.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:rust",
-                7,
+                8,
                 &["rs"],
                 &["**/Cargo.toml"],
-                &["crate"],
                 // Modules within a crate reference each other freely — legal,
                 // routine structure, never an initialization hazard.
                 kndo_contract::extension::CycleTolerance::Tolerated,
             )
+            // No `pub` is the module's own — the narrowest rung Rust spells,
+            // and the file is a module, so a `pub(crate)` item used only in
+            // its file falls to it. `pub(super)`/`pub(in …)` wait for the
+            // module tree.
+            .ladder(&[
+                Step::new(Rung::Namespace, "private"),
+                Step::new(Rung::Unit, "pub(crate)"),
+                Step::new(Rung::Exported, "pub"),
+            ])
             .emits(EvidenceStreams::of(&[
                 EvidenceStream::Comments,
                 EvidenceStream::Metrics,
@@ -136,10 +146,10 @@ impl Extension for RustAdapter {
     fn seen_from(
         &self,
         path: &ProjectPath,
-        scope: &str,
+        reach: &Reach,
         cx: &ResolveContext<'_>,
     ) -> Option<Vec<ProjectPath>> {
-        if scope != "crate" {
+        if !matches!(reach, Reach::Unit) {
             return None;
         }
         resolve::crate_region(path, cx)

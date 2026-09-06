@@ -3523,3 +3523,77 @@ allow's identity moves — it now carries what it allows and no discriminator �
 and no pinned report holds one. The contract fingerprint moves for the
 import's position; the report schema for the two subjects; the CI workflow
 for the gate. The two fixtures with import subjects are byte-identical.
+
+## 2026-09-06 — M8.b.8: `internal-only` reads the ladder and nothing else — `narrowable_scopes` and `export_narrowing` retire, and a unit is a reach
+
+**What was wrong.** Three facts answered one question. The Scoped rung asked
+`narrowable_scopes` whether a token had somewhere narrower to go, the Exported
+rung asked `export_narrowing`, and only the Namespace rung asked the ladder.
+The first two were each a ladder with the words torn off: `narrowable(["module"])`
+said "something below `internal` exists" without saying what, so the advice
+could only read "the narrower rung would suffice", and the message repeated the
+adapter's token — `module`, `crate` — which no Kotlin or Rust developer types.
+And `ExportNarrowing::Expressible` conflated two facts that happen to coincide
+in one ecosystem: that TypeScript spells a rung below `export` (true of Java,
+Kotlin, Swift, Rust and Go as well) and that an npm package publishes through
+its entries (true of npm alone) — the only reason js-ts alone could declare it
+without flooding guava with advice to un-publish its API.
+
+**The ladder is the one fact, and it says more.** `Ladder` answers the two
+questions the analysis asks — the step a declaration standing on `declared`
+could fall to while still covering `extent`, and what a rung is called — so no
+analysis re-derives either. A `Step` now carries its `bearer` (any declaration,
+a free one alone, a member alone), because Kotlin's `private` is two rungs
+under one keyword (the file on a top-level declaration, the class on a member)
+and Java's `private` exists for members alone; the advice never names a keyword
+the declaration cannot take. The extent is read from the evidence: the owner's
+rung when every same-file use sits inside the outermost declaration that owns
+it (nested types share their enclosing type's private members), the file's
+otherwise. What `export_narrowing` had smuggled in becomes its own fact,
+`PublishedSurface`: `Exports` (the default — a jar, a crate, a Go package, a
+Python distribution hand out every exported declaration, so none is advised to
+narrow) or `Entries` (npm resolves through `main`/`exports`, so an export in a
+file no entry reaches is internal however it is spelled). Every adapter
+declares its ladder: Java `private` (members) / `package-private` / `public`;
+Kotlin `private` twice / `internal` / `public`; Swift `private` /
+`fileprivate` / `internal` / `public`; Rust `private` / `pub(crate)` / `pub`;
+Go `unexported` / `exported`; TypeScript `unexported` (free) / `export`, with
+`Entries`; Python none, by the owner's decision.
+
+**A unit is a reach.** `Reach::Unit` is structured, and Kotlin, Swift and Rust
+emit it for `internal` and `pub(crate)` (adapter versions 4, 2 and 8) — the
+token could not stand on a ladder, since core would have had to know which rung
+`module` means. Its pool comes from the adapter through `seen_from`, now typed
+by reach, until the manifest names the unit (M8.d); `Index::pool_of` is the one
+seam the keepers and `internal-only` read a reach through, and the graph keys
+its adapter-bounded regions by reach (`GRAPH_SEMANTICS_VERSION` 14). Go keeps
+its `package` token: its ladder spells nothing below the package, so nothing
+changes until its namespace clause arrives with M8.c. The wire follows:
+`narrowable-scopes` becomes `ladder` and `published-surface`, `reach` gains
+`unit`, `seen-from` takes a reach; the compatibility pins are rebuilt.
+
+**Measurement.** Nine repositories: zero findings added, 28 retired, every
+other identity unchanged. guava 3,204 → 3,184: the 20 are top-level
+package-private classes (`SneakyThrows` across its four packages and the
+Android mirror, `SmoothRateLimiter`, `CollectionFuture`, `ClassPathUtil`,
+`AbstractSortedMultiset`, `ImmutableEnumSet`, `UnmodifiableSortedMultiset`,
+`AbstractFutureState`, `IThenable`, `Promise`) used only in their own file,
+which no Java keyword can narrow — the old advice named a rung that does not
+exist. Exposed 31 → 23: the 8 are `internal` members (`EnumTable.enumColumn`
+and `initEnumColumn` in two test trees, `TestDb.dialects`, `dependencies`,
+`ignoresSpringTests`, `ignoresPluginTests`) used from elsewhere in their own
+file, where `private` would break the build and no file-wide keyword exists
+for a member. Both classes hand-verified in the sources. Every surviving
+message names the declared word and the keyword to type: Alamofire 264 (24
+`private`, 240 `fileprivate`), vapor 85 (16 and 69), Exposed 23 (4 members and
+19 top-level declarations, `private` both), guava 3,184 (`package-private` →
+`private`, every one used only inside its class), ripgrep 1 (`pub(crate)` →
+`private`), vite 51 (`export` → `unexported`). The contract fingerprint moves
+(`Reach::Unit`, `Step.bearer`); the report schema (`published_surface` and
+`ladder` on every row); every conformance fixture regenerated — rows for all
+adapters, ten messages across the java, kotlin, rust and swift fixtures, zero
+findings moved — and the js-ts fixture `export-narrowing` is renamed
+`exported-but-used-only-here`, because the glossary avoids the retired word.
+Two known gaps in the swift ladder fixture (`Widget.d`, `Widget.e`) re-point
+at M8.d: a SwiftPM target publishes every export, so the Exported rung waits
+for the unit's own publication.

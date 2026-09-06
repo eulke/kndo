@@ -54,7 +54,7 @@ use kndo_contract::evidence::{
 };
 use kndo_contract::extension::{
     ConductSink, ContentAccess, DispatchRule, Extension, ExtensionSpec, ExtensionSpecBuilder,
-    GraphAccess,
+    GraphAccess, Step,
 };
 use kndo_contract::manifest::{ManifestSink, Unit, UnitKind};
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
@@ -124,6 +124,13 @@ impl MockExtension {
     /// they mean.
     pub fn dispatching(rules: Vec<DispatchRule>) -> Self {
         MockExtension::speaking(kmock_spec().dispatch(rules).build())
+    }
+
+    /// The kmock language with a ladder — what a test of `internal-only`
+    /// speaks, since the plain mock states none and gets no advice. Its unit
+    /// is the whole project: every kmock file is one compilation.
+    pub fn laddered(steps: &[Step]) -> Self {
+        MockExtension::speaking(kmock_spec().ladder(steps).build())
     }
 
     fn speaking(spec: ExtensionSpec) -> Self {
@@ -427,6 +434,25 @@ impl Extension for MockExtension {
         }
     }
 
+    fn seen_from(
+        &self,
+        _path: &ProjectPath,
+        reach: &Reach,
+        cx: &ResolveContext<'_>,
+    ) -> Option<Vec<ProjectPath>> {
+        // The mock language is one unit: a unit-reaching name is nameable
+        // from every kmock file.
+        matches!(reach, Reach::Unit).then(|| {
+            let mut files: Vec<ProjectPath> = cx
+                .known_files()
+                .filter(|p| p.as_str().ends_with(".kmock"))
+                .cloned()
+                .collect();
+            files.sort();
+            files
+        })
+    }
+
     fn resolve(&self, from: &ProjectPath, specifier: &str, cx: &ResolveContext<'_>) -> Resolution {
         if !self.speaks_kmock {
             return Resolution::Unresolved;
@@ -484,6 +510,12 @@ fn declaration_line(line: &str) -> Option<(Reach, SymbolKind, &str)> {
         // `ns` is the namespace rung: nameable inside the namespace the file
         // declares, and nowhere else.
         Some(rest) => (Reach::Namespace { up: 0 }, rest),
+        None => (reach, rest),
+    };
+    let (reach, rest) = match rest.strip_prefix("unit ") {
+        // `unit` is the unit's rung: nameable from every kmock file, which
+        // is the one unit the mock language compiles.
+        Some(rest) => (Reach::Unit, rest),
         None => (reach, rest),
     };
     let (kind, rest) = [

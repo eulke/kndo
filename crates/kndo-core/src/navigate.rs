@@ -91,6 +91,22 @@ pub struct Index {
     scopes: crate::scopes::Scopes,
 }
 
+/// The files from which an unqualified reference counts as a use of a
+/// declaration — the one reading of [`Reach`] the judge and the navigator
+/// share. A bounded reach names its files from the scope forest or, until a
+/// manifest bounds it, from the adapter's own enumeration; a reach the engine
+/// cannot bound is published surface, the keep-alive direction, so a rung this
+/// build does not know can never accuse.
+#[derive(Debug, Clone, Copy)]
+pub enum Pool<'a> {
+    /// Its own file, plus the files that see it without an import.
+    Own,
+    /// Exactly these files, ascending.
+    Files(&'a [u32]),
+    /// Nameable from anywhere: entries and whole-surface importers keep it.
+    Published,
+}
+
 /// Why a declaration is alive — each variant carries the evidence a navigator
 /// shows and the judge counts.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -274,6 +290,30 @@ impl Index {
         self.scopes.namespace_pool(file, up)
     }
 
+    /// The pool a declaration of `reach` in `file` is nameable from — see
+    /// [`Pool`]. A namespace is bounded by the scope forest; a unit by the
+    /// adapter until a manifest names it; a token only ever by the adapter.
+    pub fn pool_of<'a>(&'a self, graph: &'a Graph, file: usize, reach: &Reach) -> Pool<'a> {
+        let bounded = |files: Option<&'a [u32]>| match files {
+            Some(files) => Pool::Files(files),
+            None => Pool::Published,
+        };
+        match reach {
+            Reach::Private => Pool::Own,
+            Reach::Namespace { up } => bounded(self.scopes.namespace_pool(file, *up)),
+            Reach::Unit | Reach::Scoped { .. } => {
+                let f = &graph.files[file];
+                bounded(
+                    f.regions
+                        .binary_search_by(|(r, _)| r.cmp(reach))
+                        .ok()
+                        .map(|ix| f.regions[ix].1.as_slice()),
+                )
+            }
+            _ => Pool::Published,
+        }
+    }
+
     /// Importing sites binding `name` from `target`'s surface.
     pub fn binding_sites(&self, target: u32, name: &str) -> &[Site] {
         self.bound
@@ -301,10 +341,10 @@ impl Capped {
 /// Everything keeping one declaration alive, capped at `limit`. The rules are
 /// `unused`'s, spelled once:
 ///
-/// - Reach decides the pool: `Private` pools its own file plus the files that
-///   see it; `Scoped` pools its REGION; `Exported` — and any Scoped token the
-///   adapter could not bound — is published surface, kept by entries and
-///   whole-surface importers too.
+/// - Reach decides the pool ([`Index::pool_of`]): `Private` pools its own file
+///   plus the files that see it; a bounded reach pools its files; `Exported`
+///   — and any reach the engine could not bound — is published surface, kept
+///   by entries and whole-surface importers too.
 /// - Members (owned, or method-kind without a local owner) dispatch through
 ///   values: their reference pool is every reachable file, and any
 ///   whole-surface importer keeps them. They ride their owner's handed-out
@@ -328,27 +368,11 @@ pub fn keepers(
         limit: limit.max(1),
     };
 
-    let region_of = |scope: &str| -> Option<&[u32]> {
-        f.scoped_regions
-            .binary_search_by(|(t, _)| t.as_str().cmp(scope))
-            .ok()
-            .map(|ix| f.scoped_regions[ix].1.as_slice())
-    };
-    // The pool a bounded reach names, or `None` for published surface. An
-    // unbounded region and a reach this build does not know both read as
-    // published: the keep-alive direction, so a new rung can never accuse.
-    let (exported, region) = match &d.reach {
-        Reach::Exported => (true, None),
-        Reach::Namespace { up } => match index.namespace_pool(file, *up) {
-            Some(r) => (false, Some(r)),
-            None => (true, None),
-        },
-        Reach::Scoped { scope } => match region_of(scope) {
-            Some(r) => (false, Some(r)),
-            None => (true, None),
-        },
-        Reach::Private => (false, None),
-        _ => (true, None),
+    // The pool a bounded reach names, or `None` for published surface.
+    let (exported, region) = match index.pool_of(graph, file, &d.reach) {
+        Pool::Published => (true, None),
+        Pool::Files(r) => (false, Some(r)),
+        Pool::Own => (false, None),
     };
     if f.exempt.binary_search(&(decl as u32)).is_ok() && kept.push(Keeper::Exempt) {
         return kept.out;
@@ -413,8 +437,8 @@ pub fn keepers(
             Some(owner) => &f.evidence.declarations[owner.index()].reach,
             None => &d.reach,
         };
-        let owner_surface_exported = matches!(surface_reach, Reach::Exported)
-            || matches!(surface_reach, Reach::Scoped { scope } if region_of(scope).is_none());
+        let owner_surface_exported =
+            matches!(index.pool_of(graph, file, surface_reach), Pool::Published);
         if handed_out
             && entry_surface
             && owner_surface_exported

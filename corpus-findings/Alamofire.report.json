@@ -8,7 +8,7 @@
       {
         "id": "kndo:css",
         "files": 4,
-        "export_narrowing": "none",
+        "published_surface": "exports",
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
         "dependency_identity": "underivable"
@@ -16,7 +16,7 @@
       {
         "id": "kndo:html",
         "files": 332,
-        "export_narrowing": "none",
+        "published_surface": "exports",
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
         "dependency_identity": "underivable"
@@ -24,21 +24,47 @@
       {
         "id": "kndo:js-ts",
         "files": 10,
-        "export_narrowing": "expressible",
+        "published_surface": "entries",
         "import_cycles": "hazard",
         "dependency_scoping": "scoped",
-        "dependency_identity": "package-name"
+        "dependency_identity": "package-name",
+        "ladder": [
+          {
+            "rung": "file",
+            "word": "unexported",
+            "bearer": "free"
+          },
+          {
+            "rung": "exported",
+            "word": "export"
+          }
+        ]
       },
       {
         "id": "kndo:swift",
         "files": 98,
-        "narrowable_scopes": [
-          "module"
-        ],
-        "export_narrowing": "none",
+        "published_surface": "exports",
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
-        "dependency_identity": "underivable"
+        "dependency_identity": "underivable",
+        "ladder": [
+          {
+            "rung": "owner",
+            "word": "private"
+          },
+          {
+            "rung": "file",
+            "word": "fileprivate"
+          },
+          {
+            "rung": "unit",
+            "word": "internal"
+          },
+          {
+            "rung": "exported",
+            "word": "public"
+          }
+        ]
       }
     ]
   },
@@ -6477,7 +6503,7 @@
         "start": 29,
         "end": 31
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-01f76b9ffc9a",
@@ -6500,7 +6526,7 @@
         "start": 98,
         "end": 98
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-3e4540a44bf3",
@@ -6523,7 +6549,7 @@
         "start": 93,
         "end": 93
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-648dc8a3dd18",
@@ -6546,7 +6572,7 @@
         "start": 105,
         "end": 105
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within `DataStreamRequest` — `private` would suffice for this declaration"
     },
     {
       "id": "kndo-dd3ca1dffeda",
@@ -6569,7 +6595,7 @@
         "start": 96,
         "end": 96
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-fbaa16e48afe",
@@ -6591,7 +6617,7 @@
         "start": 89,
         "end": 103
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-8bf9be049659",
@@ -6613,7 +6639,7 @@
         "start": 436,
         "end": 441
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this method"
     },
     {
       "id": "kndo-5652e6c64f87",
@@ -6635,7 +6661,7 @@
         "start": 71,
         "end": 74
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this method"
     },
     {
       "id": "kndo-0887eacfb829",
@@ -6659,7 +6685,7 @@
         "start": 46,
         "end": 49
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this method"
     },
     {
       "id": "kndo-c554108d78b2",
@@ -6681,7 +6707,7 @@
         "start": 55,
         "end": 75
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-db2471fbc465",
@@ -6704,7 +6730,7 @@
         "start": 38,
         "end": 41
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this method"
     },
     {
       "id": "kndo-18ec3c3987f6",
@@ -6727,7 +6753,7 @@
         "start": 105,
         "end": 105
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-4824fe9fcd3e",
@@ -6750,7 +6776,7 @@
         "start": 138,
         "end": 138
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-4a08eb911a62",
@@ -6773,7 +6799,7 @@
         "start": 109,
         "end": 109
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-5d7228a63348",
@@ -6796,7 +6822,7 @@
         "start": 118,
         "end": 118
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-71e28cf81cf8",
@@ -6819,7 +6845,7 @@
         "start": 97,
         "end": 97
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-851dab4ea020",
@@ -6842,7 +6868,7 @@
         "start": 140,
         "end": 140
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-a3eee9aecd35",
@@ -6865,7 +6891,7 @@
         "start": 111,
         "end": 111
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-b8f663cdb2cc",
@@ -6888,7 +6914,7 @@
         "start": 107,
         "end": 107
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-d0aefc906539",
@@ -6911,7 +6937,7 @@
         "start": 116,
         "end": 116
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-e51e6b441a00",
@@ -6934,7 +6960,7 @@
         "start": 1258,
         "end": 1258
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this method"
     },
     {
       "id": "kndo-e6877f7f73ee",
@@ -6957,7 +6983,7 @@
         "start": 114,
         "end": 114
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-1a529ab811d4",
@@ -6979,7 +7005,7 @@
         "start": 749,
         "end": 760
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-3c9c8f149c62",
@@ -7001,7 +7027,7 @@
         "start": 735,
         "end": 747
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-7f197cc0bc60",
@@ -7023,7 +7049,7 @@
         "start": 336,
         "end": 350
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-bef3a2e88937",
@@ -7046,7 +7072,7 @@
         "start": 95,
         "end": 95
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-2214ea925d83",
@@ -7069,7 +7095,7 @@
         "start": 68,
         "end": 68
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this method"
     },
     {
       "id": "kndo-53174ae909d6",
@@ -7092,7 +7118,7 @@
         "start": 93,
         "end": 93
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-83e68a30f2cb",
@@ -7115,7 +7141,7 @@
         "start": 65,
         "end": 65
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this method"
     },
     {
       "id": "kndo-022cc3bb7a15",
@@ -7138,7 +7164,7 @@
         "start": 141,
         "end": 141
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within `WebSocketRequest` — `private` would suffice for this declaration"
     },
     {
       "id": "kndo-26f60ab27e12",
@@ -7160,7 +7186,7 @@
         "start": 529,
         "end": 536
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-2f9b8b07d8b4",
@@ -7183,7 +7209,7 @@
         "start": 138,
         "end": 138
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-73946cc81ec3",
@@ -7206,7 +7232,7 @@
         "start": 134,
         "end": 136
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-7861ad14443d",
@@ -7229,7 +7255,7 @@
         "start": 122,
         "end": 122
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-801c2a38545d",
@@ -7251,7 +7277,7 @@
         "start": 36,
         "end": 41
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-bf89cbba13ae",
@@ -7273,7 +7299,7 @@
         "start": 133,
         "end": 139
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-d997815b1986",
@@ -7296,7 +7322,7 @@
         "start": 143,
         "end": 145
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within `WebSocketRequest` — `private` would suffice for this declaration"
     },
     {
       "id": "kndo-f9f087dd57aa",
@@ -7319,7 +7345,7 @@
         "start": 53,
         "end": 53
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-040f77ddf0fe",
@@ -7342,7 +7368,7 @@
         "start": 219,
         "end": 219
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-17a0c0c6f3b0",
@@ -7365,7 +7391,7 @@
         "start": 141,
         "end": 141
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this method"
     },
     {
       "id": "kndo-2e7274509127",
@@ -7388,7 +7414,7 @@
         "start": 109,
         "end": 109
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this method"
     },
     {
       "id": "kndo-41d903174469",
@@ -7411,7 +7437,7 @@
         "start": 213,
         "end": 213
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-78bb23355d28",
@@ -7434,7 +7460,7 @@
         "start": 222,
         "end": 225
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-82175fa04283",
@@ -7457,7 +7483,7 @@
         "start": 84,
         "end": 84
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this method"
     },
     {
       "id": "kndo-b667f4b50ffa",
@@ -7480,7 +7506,7 @@
         "start": 227,
         "end": 231
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this method"
     },
     {
       "id": "kndo-cbddc40984ba",
@@ -7503,7 +7529,7 @@
         "start": 220,
         "end": 220
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-e9319423caa5",
@@ -7526,7 +7552,7 @@
         "start": 216,
         "end": 216
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-ff78fd725354",
@@ -7549,7 +7575,7 @@
         "start": 215,
         "end": 215
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-c7542664e1c0",
@@ -7572,7 +7598,7 @@
         "start": 322,
         "end": 322
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within `CompositeEventMonitor` — `private` would suffice for this declaration"
     },
     {
       "id": "kndo-87f471de51d7",
@@ -7594,7 +7620,7 @@
         "start": 78,
         "end": 90
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-94947cf739fb",
@@ -7617,7 +7643,7 @@
         "start": 81,
         "end": 81
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-bb53af86279d",
@@ -7640,7 +7666,7 @@
         "start": 83,
         "end": 83
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-d7a6da2cd2e2",
@@ -7663,7 +7689,7 @@
         "start": 80,
         "end": 80
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-eee5ddb07ffa",
@@ -7686,7 +7712,7 @@
         "start": 57,
         "end": 62
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this method"
     },
     {
       "id": "kndo-f4a10bc48754",
@@ -7709,7 +7735,7 @@
         "start": 82,
         "end": 82
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-0608f736dd72",
@@ -7731,7 +7757,7 @@
         "start": 281,
         "end": 294
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-138e1f84496f",
@@ -7753,7 +7779,7 @@
         "start": 270,
         "end": 270
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-1afb5c7b6987",
@@ -7776,7 +7802,7 @@
         "start": 114,
         "end": 114
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-345888005492",
@@ -7798,7 +7824,7 @@
         "start": 269,
         "end": 269
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-51c6507ce2dd",
@@ -7821,7 +7847,7 @@
         "start": 110,
         "end": 110
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-67fd644570a9",
@@ -7843,7 +7869,7 @@
         "start": 271,
         "end": 271
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-aade2d4bba8c",
@@ -7865,7 +7891,7 @@
         "start": 268,
         "end": 268
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-c50b1fbc696b",
@@ -7887,7 +7913,7 @@
         "start": 272,
         "end": 278
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-f49b0b08b12e",
@@ -7910,7 +7936,7 @@
         "start": 112,
         "end": 112
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-071fbe7f2e4a",
@@ -7933,7 +7959,7 @@
         "start": 58,
         "end": 58
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-0fe6408f538a",
@@ -7956,7 +7982,7 @@
         "start": 57,
         "end": 57
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-260b4c98035a",
@@ -7979,7 +8005,7 @@
         "start": 54,
         "end": 54
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-aba8b5b8e89f",
@@ -8002,7 +8028,7 @@
         "start": 53,
         "end": 53
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-e70011830af4",
@@ -8025,7 +8051,7 @@
         "start": 56,
         "end": 56
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-5e83f031ea4f",
@@ -8048,7 +8074,7 @@
         "start": 412,
         "end": 412
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this method"
     },
     {
       "id": "kndo-0569b8313837",
@@ -8070,7 +8096,7 @@
         "start": 546,
         "end": 632
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-2f8759151023",
@@ -8093,7 +8119,7 @@
         "start": 576,
         "end": 578
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this method"
     },
     {
       "id": "kndo-36fa6a5efc73",
@@ -8116,7 +8142,7 @@
         "start": 635,
         "end": 635
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-37732bcb95f7",
@@ -8138,7 +8164,7 @@
         "start": 816,
         "end": 848
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-683d02e542d4",
@@ -8160,7 +8186,7 @@
         "start": 960,
         "end": 987
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-745825912eab",
@@ -8183,7 +8209,7 @@
         "start": 964,
         "end": 966
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-84324dddd52d",
@@ -8205,7 +8231,7 @@
         "start": 1048,
         "end": 1115
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-8c9c9297edbf",
@@ -8227,7 +8253,7 @@
         "start": 658,
         "end": 684
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-954196d11bb0",
@@ -8250,7 +8276,7 @@
         "start": 482,
         "end": 482
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-9b62a09d831c",
@@ -8272,7 +8298,7 @@
         "start": 481,
         "end": 506
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-9e435d14599e",
@@ -8295,7 +8321,7 @@
         "start": 636,
         "end": 636
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-a05e9502dda3",
@@ -8317,7 +8343,7 @@
         "start": 634,
         "end": 655
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-c136610d7cf1",
@@ -8340,7 +8366,7 @@
         "start": 817,
         "end": 817
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-c47eb245c9af",
@@ -8362,7 +8388,7 @@
         "start": 538,
         "end": 544
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-de9b7f01869e",
@@ -8385,7 +8411,7 @@
         "start": 547,
         "end": 547
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-e1a655b9a20a",
@@ -8408,7 +8434,7 @@
         "start": 659,
         "end": 659
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-f8fafc1092a1",
@@ -8431,7 +8457,7 @@
         "start": 961,
         "end": 961
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-eeb6649efc73",
@@ -8453,7 +8479,7 @@
         "start": 30,
         "end": 30
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-023211f119a6",
@@ -8476,7 +8502,7 @@
         "start": 237,
         "end": 240
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-0275fb3e58c6",
@@ -8499,7 +8525,7 @@
         "start": 257,
         "end": 260
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-044af507b290",
@@ -8522,7 +8548,7 @@
         "start": 227,
         "end": 230
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-0caf2182d7ca",
@@ -8545,7 +8571,7 @@
         "start": 310,
         "end": 313
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-18b7726f3f05",
@@ -8567,7 +8593,7 @@
         "start": 152,
         "end": 155
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-1daac25ce4e3",
@@ -8589,7 +8615,7 @@
         "start": 147,
         "end": 150
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-1f43a1d11b6e",
@@ -8611,7 +8637,7 @@
         "start": 83,
         "end": 86
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-39c4d1197b37",
@@ -8633,7 +8659,7 @@
         "start": 78,
         "end": 81
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-3dd0bfe2004f",
@@ -8656,7 +8682,7 @@
         "start": 320,
         "end": 323
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-68168ad765b5",
@@ -8678,7 +8704,7 @@
         "start": 98,
         "end": 101
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-6b5bf163fded",
@@ -8701,7 +8727,7 @@
         "start": 315,
         "end": 318
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-880c3b668a1c",
@@ -8723,7 +8749,7 @@
         "start": 296,
         "end": 299
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-a4d54e343046",
@@ -8745,7 +8771,7 @@
         "start": 53,
         "end": 56
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-a70b5a93d8b4",
@@ -8768,7 +8794,7 @@
         "start": 212,
         "end": 215
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-b7e0199ab874",
@@ -8790,7 +8816,7 @@
         "start": 68,
         "end": 71
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-c7655efca87c",
@@ -8812,7 +8838,7 @@
         "start": 188,
         "end": 191
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-d20ee0215d42",
@@ -8834,7 +8860,7 @@
         "start": 157,
         "end": 160
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-d8ae7a5b5df8",
@@ -8857,7 +8883,7 @@
         "start": 242,
         "end": 245
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-e4e8550aef6b",
@@ -8879,7 +8905,7 @@
         "start": 73,
         "end": 76
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-e697cec531ea",
@@ -8902,7 +8928,7 @@
         "start": 232,
         "end": 235
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-07f5df8c5312",
@@ -8924,7 +8950,7 @@
         "start": 125,
         "end": 142
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-520b3cfcefb5",
@@ -8947,7 +8973,7 @@
         "start": 65,
         "end": 65
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-5aaf4672481a",
@@ -8970,7 +8996,7 @@
         "start": 34,
         "end": 34
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-9194df54ba20",
@@ -8993,7 +9019,7 @@
         "start": 64,
         "end": 64
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within `TestAuthenticator` — `private` would suffice for this declaration"
     },
     {
       "id": "kndo-92e9911babea",
@@ -9016,7 +9042,7 @@
         "start": 33,
         "end": 33
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-974d8f90d76d",
@@ -9039,7 +9065,7 @@
         "start": 36,
         "end": 36
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-98ca89330fb1",
@@ -9062,7 +9088,7 @@
         "start": 38,
         "end": 38
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-9a824e05e1b1",
@@ -9085,7 +9111,7 @@
         "start": 63,
         "end": 63
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-a028cfb3db0a",
@@ -9107,7 +9133,7 @@
         "start": 53,
         "end": 55
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-bdd481bfdef4",
@@ -9130,7 +9156,7 @@
         "start": 35,
         "end": 35
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-c33def651a83",
@@ -9153,7 +9179,7 @@
         "start": 126,
         "end": 126
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-c5d2ee3c4bfe",
@@ -9175,7 +9201,7 @@
         "start": 32,
         "end": 51
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-c60c8808ffad",
@@ -9197,7 +9223,7 @@
         "start": 57,
         "end": 123
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-0edc32d860fc",
@@ -9220,7 +9246,7 @@
         "start": 59,
         "end": 59
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within `BaseTestCase` — `private` would suffice for this declaration"
     },
     {
       "id": "kndo-bd09ffc26eb7",
@@ -9242,7 +9268,7 @@
         "start": 30,
         "end": 55
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-f12abd6cb7af",
@@ -9265,7 +9291,7 @@
         "start": 34,
         "end": 45
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-24cb5ab297b5",
@@ -9288,7 +9314,7 @@
         "start": 61,
         "end": 61
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within `CacheTestCase` — `private` would suffice for this declaration"
     },
     {
       "id": "kndo-a837572fb525",
@@ -9310,7 +9336,7 @@
         "start": 46,
         "end": 53
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-5899656a4365",
@@ -9332,7 +9358,7 @@
         "start": 1505,
         "end": 1518
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-ed36f144539b",
@@ -9354,7 +9380,7 @@
         "start": 875,
         "end": 882
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this method"
     },
     {
       "id": "kndo-1a31030b9847",
@@ -9377,7 +9403,7 @@
         "start": 65,
         "end": 68
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this method"
     },
     {
       "id": "kndo-203ee46af2f1",
@@ -9399,7 +9425,7 @@
         "start": 30,
         "end": 32
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-f55214d55107",
@@ -9421,7 +9447,7 @@
         "start": 55,
         "end": 63
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this method"
     },
     {
       "id": "kndo-4ce4dec75ed5",
@@ -9443,7 +9469,7 @@
         "start": 32,
         "end": 36
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-0b133b829bba",
@@ -9466,7 +9492,7 @@
         "start": 89,
         "end": 89
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-2a381232957b",
@@ -9489,7 +9515,7 @@
         "start": 413,
         "end": 413
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-38d31e7c7679",
@@ -9512,7 +9538,7 @@
         "start": 30,
         "end": 30
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-49d65c03267e",
@@ -9534,7 +9560,7 @@
         "start": 29,
         "end": 31
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-500e254619a7",
@@ -9556,7 +9582,7 @@
         "start": 34,
         "end": 36
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-7c837821a430",
@@ -9579,7 +9605,7 @@
         "start": 49,
         "end": 52
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this method"
     },
     {
       "id": "kndo-e64b440e8f0a",
@@ -9601,7 +9627,7 @@
         "start": 33,
         "end": 53
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-0288a175339a",
@@ -9624,7 +9650,7 @@
         "start": 1154,
         "end": 1154
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-0c14e50348fc",
@@ -9647,7 +9673,7 @@
         "start": 1132,
         "end": 1132
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-21c276c487a2",
@@ -9670,7 +9696,7 @@
         "start": 1234,
         "end": 1234
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within `FailingOptionalStruct` — `private` would suffice for this declaration"
     },
     {
       "id": "kndo-2a6fdd834cd9",
@@ -9693,7 +9719,7 @@
         "start": 1138,
         "end": 1138
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-2e147aec7c06",
@@ -9716,7 +9742,7 @@
         "start": 1147,
         "end": 1147
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-4272ee08400e",
@@ -9739,7 +9765,7 @@
         "start": 1128,
         "end": 1128
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-4cfe3ca92735",
@@ -9762,7 +9788,7 @@
         "start": 1131,
         "end": 1131
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-68f26258b1b6",
@@ -9785,7 +9811,7 @@
         "start": 1129,
         "end": 1129
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-84e46cbf077a",
@@ -9807,7 +9833,7 @@
         "start": 1228,
         "end": 1230
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-873d984a3398",
@@ -9830,7 +9856,7 @@
         "start": 1199,
         "end": 1199
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-8bfd2b78dbf9",
@@ -9853,7 +9879,7 @@
         "start": 1148,
         "end": 1148
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-8fe1dcd202cd",
@@ -9876,7 +9902,7 @@
         "start": 1142,
         "end": 1142
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-afb887e2ce15",
@@ -9899,7 +9925,7 @@
         "start": 1170,
         "end": 1170
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-c5cd15829040",
@@ -9922,7 +9948,7 @@
         "start": 1171,
         "end": 1171
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-db23736d1fb1",
@@ -9945,7 +9971,7 @@
         "start": 1143,
         "end": 1143
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-de50addff17c",
@@ -9968,7 +9994,7 @@
         "start": 1200,
         "end": 1200
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within `ManuallyEncodableStruct` — `private` would suffice for this declaration"
     },
     {
       "id": "kndo-f37dc152b696",
@@ -9991,7 +10017,7 @@
         "start": 1153,
         "end": 1153
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-6a6fe451ad03",
@@ -10013,7 +10039,7 @@
         "start": 29,
         "end": 31
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-2c58bac7dffd",
@@ -10036,7 +10062,7 @@
         "start": 95,
         "end": 95
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-2f058a1d4224",
@@ -10059,7 +10085,7 @@
         "start": 111,
         "end": 111
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within `ProtectedHighContentionTests` — `private` would suffice for this declaration"
     },
     {
       "id": "kndo-4decbee6b412",
@@ -10081,7 +10107,7 @@
         "start": 99,
         "end": 105
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-4eea9d1de14f",
@@ -10104,7 +10130,7 @@
         "start": 103,
         "end": 103
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-8754db161299",
@@ -10127,7 +10153,7 @@
         "start": 87,
         "end": 87
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-9453e9b8d81b",
@@ -10150,7 +10176,7 @@
         "start": 93,
         "end": 93
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-a35ff145a3d7",
@@ -10173,7 +10199,7 @@
         "start": 104,
         "end": 104
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-a8f941496952",
@@ -10196,7 +10222,7 @@
         "start": 96,
         "end": 96
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-b2d63d25b3d3",
@@ -10218,7 +10244,7 @@
         "start": 86,
         "end": 89
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-ba94cd07e09d",
@@ -10241,7 +10267,7 @@
         "start": 109,
         "end": 109
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within `ProtectedHighContentionTests` — `private` would suffice for this declaration"
     },
     {
       "id": "kndo-c7b091cf0f14",
@@ -10264,7 +10290,7 @@
         "start": 88,
         "end": 88
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-d49c07a46743",
@@ -10287,7 +10313,7 @@
         "start": 110,
         "end": 110
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within `ProtectedHighContentionTests` — `private` would suffice for this declaration"
     },
     {
       "id": "kndo-d77f7950b5e3",
@@ -10310,7 +10336,7 @@
         "start": 100,
         "end": 100
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-e8182b3ee2e9",
@@ -10332,7 +10358,7 @@
         "start": 91,
         "end": 97
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-f733210ad8cd",
@@ -10355,7 +10381,7 @@
         "start": 101,
         "end": 101
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-01d83a8769bc",
@@ -10378,7 +10404,7 @@
         "start": 647,
         "end": 647
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-07f8552a6672",
@@ -10401,7 +10427,7 @@
         "start": 646,
         "end": 646
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-1bf7e8228eac",
@@ -10423,7 +10449,7 @@
         "start": 715,
         "end": 715
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-22acde055378",
@@ -10446,7 +10472,7 @@
         "start": 590,
         "end": 592
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+      "message": "declared `internal`, but every use is within `StaticAccessorTests` — `private` would suffice for this method"
     },
     {
       "id": "kndo-71c1d8ca1b7f",
@@ -10469,7 +10495,7 @@
         "start": 645,
         "end": 648
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-9138fd6a40b8",
@@ -10492,7 +10518,7 @@
         "start": 663,
         "end": 663
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-a9ca387eb05a",
@@ -10515,7 +10541,7 @@
         "start": 582,
         "end": 584
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+      "message": "declared `internal`, but every use is within `StaticAccessorTests` — `private` would suffice for this method"
     },
     {
       "id": "kndo-ac84cfef9a35",
@@ -10538,7 +10564,7 @@
         "start": 586,
         "end": 588
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+      "message": "declared `internal`, but every use is within `StaticAccessorTests` — `private` would suffice for this method"
     },
     {
       "id": "kndo-b933f130fb50",
@@ -10560,7 +10586,7 @@
         "start": 639,
         "end": 649
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-c2691625591d",
@@ -10583,7 +10609,7 @@
         "start": 630,
         "end": 630
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-c433a47752f3",
@@ -10605,7 +10631,7 @@
         "start": 651,
         "end": 654
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-25cc8c3836bb",
@@ -10628,7 +10654,7 @@
         "start": 1018,
         "end": 1026
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within `RequestCURLDescriptionTestCase` — `private` would suffice for this declaration"
     },
     {
       "id": "kndo-98b671a3ea87",
@@ -10651,7 +10677,7 @@
         "start": 1045,
         "end": 1050
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within `RequestCURLDescriptionTestCase` — `private` would suffice for this declaration"
     },
     {
       "id": "kndo-f01d0d35824a",
@@ -10674,7 +10700,7 @@
         "start": 1028,
         "end": 1036
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within `RequestCURLDescriptionTestCase` — `private` would suffice for this declaration"
     },
     {
       "id": "kndo-07c04a3c4520",
@@ -10696,7 +10722,7 @@
         "start": 583,
         "end": 589
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-34b0f93274c0",
@@ -10718,7 +10744,7 @@
         "start": 1217,
         "end": 1223
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-68864bf97f19",
@@ -10740,7 +10766,7 @@
         "start": 580,
         "end": 778
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-e25ac16b488c",
@@ -10762,7 +10788,7 @@
         "start": 1211,
         "end": 1215
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-0857b593bb11",
@@ -10784,7 +10810,7 @@
         "start": 32,
         "end": 59
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-1b6e9d59140e",
@@ -10807,7 +10833,7 @@
         "start": 82,
         "end": 99
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-328d12620248",
@@ -10830,7 +10856,7 @@
         "start": 79,
         "end": 79
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-4be9312dc72d",
@@ -10853,7 +10879,7 @@
         "start": 71,
         "end": 71
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within `BaseRetryPolicyTestCase` — `private` would suffice for this declaration"
     },
     {
       "id": "kndo-593d780a6c02",
@@ -10876,7 +10902,7 @@
         "start": 36,
         "end": 36
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within `StubRequest` — `private` would suffice for this declaration"
     },
     {
       "id": "kndo-62e91965a469",
@@ -10899,7 +10925,7 @@
         "start": 101,
         "end": 130
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within `BaseRetryPolicyTestCase` — `private` would suffice for this declaration"
     },
     {
       "id": "kndo-6632a8b85344",
@@ -10922,7 +10948,7 @@
         "start": 80,
         "end": 80
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-7ec10f5c64a5",
@@ -10945,7 +10971,7 @@
         "start": 75,
         "end": 75
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-8139543c3861",
@@ -10968,7 +10994,7 @@
         "start": 76,
         "end": 76
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-8a4fa151a578",
@@ -10990,7 +11016,7 @@
         "start": 29,
         "end": 151
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-aeec6ea7b067",
@@ -11013,7 +11039,7 @@
         "start": 63,
         "end": 63
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-b0ddbebf810a",
@@ -11036,7 +11062,7 @@
         "start": 132,
         "end": 134
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-b42521b66579",
@@ -11059,7 +11085,7 @@
         "start": 65,
         "end": 65
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-b6e8eed19005",
@@ -11082,7 +11108,7 @@
         "start": 64,
         "end": 64
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within `BaseRetryPolicyTestCase` — `private` would suffice for this declaration"
     },
     {
       "id": "kndo-ddd633435e19",
@@ -11105,7 +11131,7 @@
         "start": 73,
         "end": 73
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-e1fec6c60b82",
@@ -11128,7 +11154,7 @@
         "start": 77,
         "end": 77
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-e5efdf7d702c",
@@ -11151,7 +11177,7 @@
         "start": 72,
         "end": 72
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-275c19ad6db0",
@@ -11173,7 +11199,7 @@
         "start": 152,
         "end": 158
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-355af3bfd3fd",
@@ -11196,7 +11222,7 @@
         "start": 51,
         "end": 51
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-4e5134f28b1b",
@@ -11219,7 +11245,7 @@
         "start": 43,
         "end": 43
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-675cec5ffb97",
@@ -11242,7 +11268,7 @@
         "start": 48,
         "end": 48
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-69d14a946ae4",
@@ -11265,7 +11291,7 @@
         "start": 50,
         "end": 50
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-6e22bf37f681",
@@ -11288,7 +11314,7 @@
         "start": 128,
         "end": 134
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this method"
     },
     {
       "id": "kndo-75eb4bc5a6fa",
@@ -11311,7 +11337,7 @@
         "start": 49,
         "end": 49
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-8ab4d5057ecd",
@@ -11334,7 +11360,7 @@
         "start": 42,
         "end": 42
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-92830752d040",
@@ -11356,7 +11382,7 @@
         "start": 139,
         "end": 144
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-b2f5b78b3271",
@@ -11379,7 +11405,7 @@
         "start": 80,
         "end": 126
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-c3c047b8458f",
@@ -11402,7 +11428,7 @@
         "start": 44,
         "end": 44
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-ece04dbf73bf",
@@ -11425,7 +11451,7 @@
         "start": 41,
         "end": 41
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-ee950c2d2693",
@@ -11447,7 +11473,7 @@
         "start": 149,
         "end": 149
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-ff8de576e5a6",
@@ -11470,7 +11496,7 @@
         "start": 47,
         "end": 47
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-0a169e7aac54",
@@ -11493,7 +11519,7 @@
         "start": 98,
         "end": 98
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-1759439bf074",
@@ -11516,7 +11542,7 @@
         "start": 34,
         "end": 34
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-1a08f3be7f40",
@@ -11539,7 +11565,7 @@
         "start": 96,
         "end": 96
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-3b62f93b2bd3",
@@ -11562,7 +11588,7 @@
         "start": 204,
         "end": 204
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-50c4ada1fdd3",
@@ -11585,7 +11611,7 @@
         "start": 103,
         "end": 103
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-55748d715713",
@@ -11608,7 +11634,7 @@
         "start": 112,
         "end": 112
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-610842e24d77",
@@ -11631,7 +11657,7 @@
         "start": 207,
         "end": 207
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-61b6a9fe6e5d",
@@ -11655,7 +11681,7 @@
         "start": 195,
         "end": 195
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-67acccbd9986",
@@ -11678,7 +11704,7 @@
         "start": 108,
         "end": 108
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-6a56484af85b",
@@ -11701,7 +11727,7 @@
         "start": 203,
         "end": 203
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-839b3dcc3a9f",
@@ -11724,7 +11750,7 @@
         "start": 99,
         "end": 99
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-8e4bcfef9b88",
@@ -11747,7 +11773,7 @@
         "start": 109,
         "end": 109
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-8f9585e10e7d",
@@ -11770,7 +11796,7 @@
         "start": 61,
         "end": 61
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-94b3f33a45db",
@@ -11793,7 +11819,7 @@
         "start": 92,
         "end": 92
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-94ed218e5684",
@@ -11816,7 +11842,7 @@
         "start": 36,
         "end": 36
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-a4d7182b4fce",
@@ -11839,7 +11865,7 @@
         "start": 93,
         "end": 93
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-a7cd55500a67",
@@ -11862,7 +11888,7 @@
         "start": 102,
         "end": 102
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-a80781684175",
@@ -11884,7 +11910,7 @@
         "start": 91,
         "end": 104
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-b3eae79da68d",
@@ -11907,7 +11933,7 @@
         "start": 100,
         "end": 100
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-b4ee6c94f56c",
@@ -11929,7 +11955,7 @@
         "start": 2030,
         "end": 2032
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-bc041d8cbd9b",
@@ -11953,7 +11979,7 @@
         "start": 194,
         "end": 194
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-bee6f9ab3492",
@@ -11976,7 +12002,7 @@
         "start": 101,
         "end": 101
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-e49689de8d7e",
@@ -11999,7 +12025,7 @@
         "start": 63,
         "end": 63
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-f01b7157c81e",
@@ -12022,7 +12048,7 @@
         "start": 193,
         "end": 199
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-f578a0e75d0c",
@@ -12046,7 +12072,7 @@
         "start": 198,
         "end": 198
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-b88a86c14eb1",
@@ -12069,7 +12095,7 @@
         "start": 36,
         "end": 36
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-3fb64dcd1d72",
@@ -12091,7 +12117,7 @@
         "start": 30,
         "end": 30
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-4100596265bb",
@@ -12114,7 +12140,7 @@
         "start": 245,
         "end": 255
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within `Endpoint` — `private` would suffice for this declaration"
     },
     {
       "id": "kndo-87b4fc44eecc",
@@ -12136,7 +12162,7 @@
         "start": 144,
         "end": 146
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-98a7029d928c",
@@ -12158,7 +12184,7 @@
         "start": 61,
         "end": 142
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-a8846d5a655f",
@@ -12180,7 +12206,7 @@
         "start": 148,
         "end": 150
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-af63d4eb3764",
@@ -12202,7 +12228,7 @@
         "start": 38,
         "end": 47
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-c96fc537228a",
@@ -12224,7 +12250,7 @@
         "start": 333,
         "end": 347
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-db850363cf27",
@@ -12246,7 +12272,7 @@
         "start": 49,
         "end": 59
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-fd09a29e74a9",
@@ -12269,7 +12295,7 @@
         "start": 34,
         "end": 34
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-2cc6376f7597",
@@ -12292,7 +12318,7 @@
         "start": 33,
         "end": 33
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-2f16dc466a3c",
@@ -12314,7 +12340,7 @@
         "start": 29,
         "end": 97
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-902927ba5c05",
@@ -12337,7 +12363,7 @@
         "start": 47,
         "end": 47
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within `ProxyURLProtocol` — `private` would suffice for this declaration"
     },
     {
       "id": "kndo-dca85482b174",
@@ -12359,7 +12385,7 @@
         "start": 32,
         "end": 34
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-79d3e63c2587",
@@ -12381,7 +12407,7 @@
         "start": 713,
         "end": 718
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this method"
     },
     {
       "id": "kndo-add3d7d848f8",
@@ -12404,7 +12430,7 @@
         "start": 726,
         "end": 737
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this method"
     },
     {
       "id": "kndo-70ebf85b1e67",
@@ -12426,7 +12452,7 @@
         "start": 693,
         "end": 700
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this method"
     },
     {
       "id": "kndo-b6dcd66a0e47",
@@ -12448,7 +12474,7 @@
         "start": 55,
         "end": 57
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-366289230288",

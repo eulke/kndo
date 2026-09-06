@@ -8,10 +8,21 @@
       {
         "id": "kndo:js-ts",
         "files": 4,
-        "export_narrowing": "expressible",
+        "published_surface": "entries",
         "import_cycles": "hazard",
         "dependency_scoping": "scoped",
-        "dependency_identity": "package-name"
+        "dependency_identity": "package-name",
+        "ladder": [
+          {
+            "rung": "file",
+            "word": "unexported",
+            "bearer": "free"
+          },
+          {
+            "rung": "exported",
+            "word": "export"
+          }
+        ]
       }
     ]
   },
@@ -26,7 +37,7 @@
     ],
     "by_package": [
       {
-        "name": "export-narrowing",
+        "name": "exported-but-used-only-here",
         "manifest": "package.json",
         "implicated": 1,
         "subjects": 10
@@ -65,7 +76,7 @@
         "start": 2,
         "end": 2
       },
-      "message": "declared exported, but every use is within its own file — nothing else in the tree imports or names it; the narrower visibility would suffice for this function"
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this function"
     }
   ],
   "fixed": [],

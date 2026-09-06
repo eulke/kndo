@@ -8,18 +8,19 @@
       {
         "id": "kndo:java",
         "files": 2,
-        "export_narrowing": "none",
+        "published_surface": "exports",
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
         "dependency_identity": "underivable",
         "ladder": [
           {
             "rung": "owner",
-            "word": "private"
+            "word": "private",
+            "bearer": "member"
           },
           {
             "rung": "namespace",
-            "word": "package"
+            "word": "package-private"
           },
           {
             "rung": "exported",
@@ -65,7 +66,7 @@
         "start": 32,
         "end": 32
       },
-      "message": "declared `package`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+      "message": "declared `package-private`, but every use is within `Widget` — `private` would suffice for this method"
     },
     {
       "id": "kndo-34818836a00b",
@@ -89,7 +90,7 @@
         "start": 28,
         "end": 30
       },
-      "message": "declared `package`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+      "message": "declared `package-private`, but every use is within `Widget` — `private` would suffice for this method"
     },
     {
       "id": "kndo-7a31c9765221",
@@ -112,7 +113,7 @@
         "start": 27,
         "end": 33
       },
-      "message": "declared `package`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `package-private`, but every use is within `Widget` — `private` would suffice for this type"
     }
   ],
   "fixed": [],

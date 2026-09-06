@@ -1,21 +1,27 @@
-//! Declared wider than it is used: a declaration whose every use sits inside
-//! its OWN file could take the language's narrower visibility. Two rungs, one
-//! claim, each gated by what the claiming adapter declared:
+//! Declared wider than it is used: a declaration whose every use sits inside a
+//! narrower reach than the one it declares could take the language's keyword
+//! for that reach. One claim, read off the language's ladder
+//! ([`kndo_contract::extension::Ladder`]): the declaration stands on a rung —
+//! its namespace, its unit, exported — and its uses need a narrower one — the
+//! declaration that owns it, or its file. The advice names the narrowest step
+//! between the two that the declaration's shape can take; a language that
+//! spells nothing between them gets no advice, because the advice would name a
+//! keyword that does not exist. The engine never knows which language it is
+//! judging: the rungs come from the evidence, the pools from the scope forest,
+//! the words from the ladder.
 //!
-//! - a `Scoped` declaration, for scope tokens listed as narrowable — Java can
-//!   demote "package" to private, Go has nothing below "package", so identical
-//!   evidence is advice in one language and noise in the other. Disqualified by
-//!   any use across its ENUMERATED region (the only files that can legally
-//!   resolve the name), pooling reachable files.
-//! - an `Exported` declaration, where the adapter declared narrowing
-//!   expressible ([`kndo_contract::extension::ExportNarrowing`]) — TypeScript
-//!   can drop `export` and tsc turns any missed use into a compile error. An
-//!   Exported name is nameable from ANYWHERE, so the disqualifier is total: a
-//!   binding import, or a same-named reference in any other claimed file —
-//!   reachable or not, because an unreachable file still compiles against the
-//!   export it spells (vite's `__tests_dts__` type-tests proved that vice).
-//!   A whole-file-rooted file is exempt: an entry's exports are the outside
-//!   world's surface, and a test's are its runner's.
+//! The bounded rungs (namespace, unit) are disqualified by any use across their
+//! POOL — the only files that can legally resolve the name — pooling reachable
+//! files. The Exported rung has no pool: an exported name is nameable from
+//! anywhere, so its disqualifier is total — a binding import, or a same-named
+//! reference in ANY other claimed file, reachable or not, because an
+//! unreachable file still compiles against the export it spells (vite's
+//! `__tests_dts__` type-tests proved that vice). And it is judged only where
+//! the ecosystem publishes through entries
+//! ([`kndo_contract::extension::PublishedSurface::Entries`]): where every
+//! export is published, an exported declaration is the outside world's however
+//! it is used inside. A whole-file-rooted file is exempt on that rung: an
+//! entry's exports are that surface, and a test's are its runner's.
 //!
 //! `Probable`/`Info`, derived from this analysis's own evidence: the residuals
 //! below `Certain` are reflection and dynamic access (out of static scope
@@ -24,7 +30,11 @@
 //! nothing uses at all is dead, not demotable.
 
 use super::{Analysis, AnalysisContext, RunContext};
-use kndo_contract::evidence::{EvidenceStream, ImportShape, Reach, RootTarget, SymbolKind};
+use crate::navigate::Pool;
+use kndo_contract::evidence::{
+    Declaration, EvidenceStream, FileEvidence, ImportShape, Reach, RootTarget, SymbolKind,
+};
+use kndo_contract::extension::{PublishedSurface, Rung};
 use kndo_contract::finding::{Finding, Severity};
 use kndo_contract::vocab::{Category, Confidence};
 use std::collections::{BTreeMap, BTreeSet};
@@ -53,7 +63,7 @@ impl Analysis for InternalOnly {
 
         // Names bound out of each file, and names referenced OUTSIDE each file —
         // one pass; a name in either set is used beyond its declaration site.
-        // Two sets: the Scoped rung pools reachable importers (its region is
+        // Two sets: the bounded rungs pool reachable importers (their pool is
         // enumerated); the Exported rung pools EVERY importer, because even an
         // unreachable file compiles against what it imports.
         let mut bound_names: BTreeSet<(u32, &str)> = BTreeSet::new();
@@ -132,41 +142,19 @@ impl Analysis for InternalOnly {
             if !cx.measured[i] || !reachable(i) {
                 continue;
             }
-            let caps = cx.run.capabilities_of(&f.adapter);
-            let narrowable: &[smol_str::SmolStr] =
-                caps.map(|c| c.narrowable_scopes.as_slice()).unwrap_or(&[]);
-            let export_narrowable = caps.is_some_and(|c| {
-                c.export_narrowing == kndo_contract::extension::ExportNarrowing::Expressible
-            });
-            // The ladder's one question: can this language spell a rung below
-            // its namespace? It replaces `narrowable_scopes` rung by rung as
-            // each adapter declares it.
-            let namespace_narrowable = caps.is_some_and(|c| {
-                c.ladder
-                    .iter()
-                    .any(|s| s.rung < kndo_contract::extension::Rung::Namespace)
-            });
-            // What this language calls the namespace rung — `package` in Java,
-            // and the engine's own word when no adapter has said otherwise.
-            let namespace_word = caps
-                .and_then(|c| {
-                    c.ladder
-                        .iter()
-                        .find(|s| s.rung == kndo_contract::extension::Rung::Namespace)
-                })
-                .cloned()
-                .unwrap_or_else(|| {
-                    // The reach was spelled but the rung is missing from the
-                    // ladder: the engine's own word, never an empty one.
-                    kndo_contract::extension::Step::from(kndo_contract::extension::Rung::Namespace)
-                })
-                .word;
-            if narrowable.is_empty() && !export_narrowable && !namespace_narrowable {
+            // The ladder is the one fact this analysis reads about a language;
+            // a language that states none gets no advice.
+            let Some(caps) = cx.run.capabilities_of(&f.adapter) else {
+                continue;
+            };
+            let ladder = &caps.ladder;
+            if ladder.is_empty() {
                 continue;
             }
+            let entries_publish = caps.published_surface == PublishedSurface::Entries;
             // The whole file was namespace-imported: anything here may be used.
             // The Exported rung honors even an unreachable such importer.
-            let scoped_open = !bound_names.contains(&(i as u32, ""));
+            let bounded_open = !bound_names.contains(&(i as u32, ""));
             let exported_open = !bound_all.contains(&(i as u32, ""));
             // An entry, test, or tooling file: its exports ARE an outside
             // surface (a manifest's consumers, a runner), so the Exported rung
@@ -179,62 +167,42 @@ impl Analysis for InternalOnly {
                     _ => None,
                 })
                 .collect();
-            let region_ids = |scope: &str| -> Option<&[u32]> {
-                f.scoped_regions
-                    .binary_search_by(|(t, _)| t.as_str().cmp(scope))
-                    .ok()
-                    .map(|ix| f.scoped_regions[ix].1.as_slice())
-            };
             for (id, d) in f.evidence.declarations_with_ids() {
                 let d_ix = id.index();
-                // The pool an unqualified use must fall inside for this
-                // declaration to be reachable at all. `Some(files)` bounds it;
-                // `None` is the published-surface rung, judged by total
-                // absence instead.
-                let pool: Option<&[u32]> = match &d.reach {
-                    Reach::Namespace { up } => {
-                        if !scoped_open || !namespace_narrowable {
+                // The rung the declaration stands on, and the pool its bounded
+                // reach names. Silence for a reach with no rung (an adapter's
+                // own token), an unbounded pool, and an exported name in an
+                // ecosystem that publishes every export.
+                let (declared, pool): (Rung, Option<&[u32]>) = match &d.reach {
+                    Reach::Namespace { .. } | Reach::Unit => {
+                        if !bounded_open {
                             continue;
                         }
-                        match cx.run.index.namespace_pool(i, *up) {
-                            // Unbounded ⇒ not judgeable on this rung.
-                            None => continue,
-                            pool => pool,
-                        }
-                    }
-                    _ => None,
-                };
-                let scope = match &d.reach {
-                    Reach::Namespace { .. } => None,
-                    Reach::Scoped { scope } => {
-                        if !scoped_open || !narrowable.iter().any(|t| t == scope) {
+                        let Pool::Files(files) = cx.run.index.pool_of(g, i, &d.reach) else {
                             continue;
-                        }
-                        // Unbounded token ⇒ not judgeable here either.
-                        if region_ids(scope).is_none() {
-                            continue;
-                        }
-                        Some(scope)
+                        };
+                        let rung = match d.reach {
+                            Reach::Unit => Rung::Unit,
+                            _ => Rung::Namespace,
+                        };
+                        (rung, Some(files))
                     }
                     Reach::Exported => {
                         // Owned members wait for their own demand; the floor is
                         // the file's own top-level surface.
-                        if !export_narrowable
+                        if !entries_publish
                             || !exported_open
                             || whole_file_rooted
                             || d.owner.is_some()
                         {
                             continue;
                         }
-                        None
+                        (Rung::Exported, None)
                     }
+                    // Private is the floor, a token names no rung, and a reach
+                    // this build does not know is the widest one.
                     _ => continue,
                 };
-                // One rung, two spellings while the adapters migrate: the
-                // enumerated region an adapter computed, or the namespace a
-                // file declares. Both answer "which files could name this".
-                let region_or_pool: Option<&[u32]> =
-                    pool.or_else(|| scope.and_then(|s| region_ids(s)));
                 // A rooted declaration is used from outside the graph's sight.
                 if rooted.contains(&d_ix) || d.owner.is_some_and(|o| rooted.contains(&o.index())) {
                     continue;
@@ -261,13 +229,12 @@ impl Analysis for InternalOnly {
                 if !own_use {
                     continue;
                 }
-                let bounded = pool.is_some() || scope.is_some();
-                let used_beyond = match bounded.then_some(region_or_pool).flatten() {
+                let used_beyond = match pool {
                     // Any use beyond the file disqualifies: a binding importer,
-                    // or a reference in another file of the REGION — the only
+                    // or a reference in another file of the POOL — the only
                     // files that can legally resolve the name. Same-named
-                    // references OUTSIDE the region cannot be this symbol, so
-                    // they neither keep nor disqualify. (A scoped method
+                    // references OUTSIDE the pool cannot be this symbol, so
+                    // they neither keep nor disqualify. (A bounded method
                     // reached through a public supertype stays exported by its
                     // own modifiers, so it never sits here.)
                     Some(region) => {
@@ -322,24 +289,30 @@ impl Analysis for InternalOnly {
                 if used_beyond {
                     continue;
                 }
+                // The rung the uses need, and the step the language spells for
+                // it below the declared one — none, and the advice would name
+                // a keyword this declaration cannot take.
+                let enclosing = enclosing_owner(&f.evidence, d_ix);
+                let extent = match enclosing {
+                    Some(_) => Rung::Owner,
+                    None => Rung::File,
+                };
+                let Some(step) = ladder.step_down(declared, extent, d.owner.is_some()) else {
+                    continue;
+                };
+                let declared_word = ladder.word(declared);
                 let noun = match d.kind {
-                    SymbolKind::Function | SymbolKind::Method => "function",
+                    SymbolKind::Function => "function",
+                    SymbolKind::Method => "method",
                     SymbolKind::Type => "type",
                     _ => "declaration",
                 };
-                let message = match scope
-                    .map(|s| s.to_string())
-                    .or_else(|| pool.map(|_| namespace_word.to_string()))
-                {
-                    Some(scope) => format!(
-                        "declared `{scope}`-scoped, but every use is within its own file — \
-                         the narrower rung would suffice for this {noun}"
-                    ),
-                    None => format!(
-                        "declared exported, but every use is within its own file — nothing \
-                         else in the tree imports or names it; the narrower visibility \
-                         would suffice for this {noun}"
-                    ),
+                let within = match enclosing {
+                    Some(owner) => format!("`{}`", owner.name),
+                    None if declared == Rung::Exported => {
+                        "its own file and nothing else in the tree imports or names it".to_string()
+                    }
+                    None => "its own file".to_string(),
                 };
                 out.push(Finding::new(
                     Category::INTERNAL_ONLY,
@@ -347,10 +320,102 @@ impl Analysis for InternalOnly {
                     Confidence::Probable,
                     f.evidence.subject_of(&f.path, id),
                     "",
-                    message,
+                    format!(
+                        "declared `{declared_word}`, but every use is within {within} — `{}` would \
+                         suffice for this {noun}",
+                        step.word
+                    ),
                 ));
             }
         }
         out
+    }
+}
+
+/// The outermost declaration owning `decl`, when every same-file reference to
+/// its name sits inside that declaration's span — the shape under which the
+/// owner's own keyword (`private`) suffices, since a nested declaration shares
+/// its enclosing declaration's private members. A use anywhere else in the
+/// file, or no owner at all, needs the file's rung.
+fn enclosing_owner(evidence: &FileEvidence, decl: usize) -> Option<&Declaration> {
+    let mut top = evidence.declarations[decl].owner?;
+    while let Some(above) = evidence.declarations[top.index()].owner {
+        top = above;
+    }
+    let owner = &evidence.declarations[top.index()];
+    let name = evidence.declarations[decl].name.as_str();
+    evidence
+        .references
+        .iter()
+        .filter(|r| r.name == name)
+        .all(|r| owner.span.contains(&r.span))
+        .then_some(owner)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::enclosing_owner;
+    use kndo_contract::evidence::Reach;
+    use kndo_contract::evidence::{EvidenceSink, EvidenceStreams, RefKind, SymbolKind};
+    use kndo_contract::vocab::Span;
+
+    #[test]
+    fn the_owner_extent_holds_only_while_every_use_sits_inside_the_outermost_owner() {
+        let mut sink = EvidenceSink::new(1_000, EvidenceStreams::none());
+        let outer = sink.declaration(
+            "Outer",
+            SymbolKind::Type,
+            Span::new(0, 100),
+            Reach::Exported,
+        );
+        let inner = sink.declaration("Inner", SymbolKind::Type, Span::new(10, 60), Reach::Private);
+        sink.member_of(inner, outer);
+        let m = sink.declaration(
+            "m",
+            SymbolKind::Method,
+            Span::new(20, 30),
+            Reach::Namespace { up: 0 },
+        );
+        sink.member_of(m, inner);
+        // A use from the enclosing type's own body — outside `Inner`, inside `Outer`.
+        sink.reference("m", RefKind::Call, Span::new(80, 81));
+        let ev = sink.finish();
+        assert_eq!(
+            enclosing_owner(&ev, m.index()).map(|d| d.name.as_str()),
+            Some("Outer"),
+            "nested declarations share their outermost owner's private members"
+        );
+
+        let mut sink = EvidenceSink::new(1_000, EvidenceStreams::none());
+        let outer = sink.declaration(
+            "Outer",
+            SymbolKind::Type,
+            Span::new(0, 100),
+            Reach::Exported,
+        );
+        let m = sink.declaration(
+            "m",
+            SymbolKind::Method,
+            Span::new(20, 30),
+            Reach::Namespace { up: 0 },
+        );
+        sink.member_of(m, outer);
+        sink.reference("m", RefKind::Call, Span::new(50, 51));
+        // A second top-level declaration in the same file names it too.
+        sink.reference("m", RefKind::Call, Span::new(150, 151));
+        let ev = sink.finish();
+        assert!(
+            enclosing_owner(&ev, m.index()).is_none(),
+            "a use beyond the owner needs the file's rung"
+        );
+
+        let mut sink = EvidenceSink::new(1_000, EvidenceStreams::none());
+        let f = sink.declaration("f", SymbolKind::Function, Span::new(0, 10), Reach::Unit);
+        sink.reference("f", RefKind::Call, Span::new(5, 6));
+        let ev = sink.finish();
+        assert!(
+            enclosing_owner(&ev, f.index()).is_none(),
+            "no owner, no owner extent"
+        );
     }
 }

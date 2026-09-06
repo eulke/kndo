@@ -182,16 +182,15 @@ impl SymbolKind {
     }
 }
 
-/// How far a declaration's name legally reaches. Not a ladder: `Scoped` carries
-/// the ADAPTER'S OWN WORD for a bounded region ("package", "module", "crate",
-/// "in:a::b") — core never parses or compares tokens, it asks the adapter for
-/// the region's files ([`crate::extension::Extension::seen_from`]) and judges by
-/// the SET. Private and Exported stay the shared halves; an unanswerable token
-/// degrades to Exported treatment (keep-alive). Growing this enum was the
-/// deliberate semantic contract change recorded for M6.c — the 2026-08 audit
-/// measured that no false-positive fix ever wanted a rung; every one wanted
-/// scope SHAPE.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ContractFingerprint)]
+/// How far a declaration's name legally reaches, as an address in the scope
+/// forest: the engine names the pool each variant stands for and judges by the
+/// SET of files in it, never by comparing words. Every variant is a rung a
+/// language's [`crate::extension::Ladder`] can name, which is what lets
+/// `internal-only` say which keyword would do; a pool the engine cannot bound
+/// degrades to Exported treatment (keep-alive).
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, ContractFingerprint,
+)]
 #[serde(rename_all = "lowercase")]
 #[non_exhaustive]
 pub enum Reach {
@@ -204,10 +203,16 @@ pub enum Reach {
     Namespace {
         up: u32,
     },
+    /// Nameable within the unit that compiles the file — Kotlin's and Swift's
+    /// `internal`, Rust's `pub(crate)` — and from a unit that is its friend.
+    /// The pool is the unit's files; until the claiming adapter reports its
+    /// units, [`crate::extension::Extension::seen_from`] bounds it from paths.
+    Unit,
     /// Nameable beyond its file, only within a region the declaring adapter can
-    /// enumerate from paths and manifests — never from contents. The
-    /// path-derived predecessor of `Namespace`, retired as each adapter
-    /// declares its namespaces.
+    /// enumerate from paths and manifests — never from contents, and under the
+    /// adapter's own word, which no ladder can place. The path-derived
+    /// predecessor of `Namespace` and `Unit`, retired as each adapter declares
+    /// which of the two it meant.
     Scoped {
         scope: SmolStr,
     },

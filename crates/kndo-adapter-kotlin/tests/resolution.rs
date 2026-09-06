@@ -3,6 +3,7 @@
 
 use kndo_adapter_kotlin::KotlinAdapter;
 use kndo_contract::adapter::{Resolution, ResolveContext};
+use kndo_contract::evidence::Reach;
 use kndo_contract::extension::Extension;
 use kndo_contract::vocab::ProjectPath;
 use kndo_testkit::resolve_in;
@@ -125,8 +126,8 @@ fn the_module_region_is_the_source_set_tree() {
     let a = KotlinAdapter::new();
 
     let region = a
-        .seen_from(&path("core/src/main/kotlin/com/a/A.kt"), "module", &cx)
-        .expect("module is a bounded token");
+        .seen_from(&path("core/src/main/kotlin/com/a/A.kt"), &Reach::Unit, &cx)
+        .expect("the unit is bounded from the source-set layout");
     assert_eq!(
         region,
         vec![
@@ -138,8 +139,14 @@ fn the_module_region_is_the_source_set_tree() {
         "every source under core's src trees, no dao, no manifests"
     );
     assert!(
-        a.seen_from(&path("core/src/main/kotlin/com/a/A.kt"), "package", &cx)
-            .is_none(),
+        a.seen_from(
+            &path("core/src/main/kotlin/com/a/A.kt"),
+            &Reach::Scoped {
+                scope: "package".into()
+            },
+            &cx
+        )
+        .is_none(),
         "an unknown token is unanswerable, never guessed"
     );
 }

@@ -32,14 +32,23 @@ judgments depend on — with a default that keeps the judgment silent where the
 adapter says nothing:
 
 - **The visibility ladder** for `internal-only`: the reaches a language can
-  spell, narrowest first, each under that language's own word for it — Java
-  declares `private`/`package`/`public`, so a package-scoped name used only in
-  its own file has a rung to fall to. The engine judges by the rung and reports
-  by the word, which is why the advice says "declared `package`-scoped" rather
-  than naming the engine's own vocabulary. An adapter still on the older
-  spelling declares the scope tokens that have somewhere narrower to go
-  (`crate` in Rust, `module` in Kotlin and Swift, `export` in TypeScript —
-  where dropping the keyword is checked by the compiler).
+  spell, narrowest first, each under that language's own word for it and,
+  where a keyword exists for members or for top-level declarations alone,
+  saying so — Java declares `private` (members), `package-private`, `public`;
+  Kotlin `private` twice (the class on a member, the file on a top-level
+  declaration), `internal`, `public`; Rust `private`, `pub(crate)`, `pub`;
+  TypeScript `unexported` (top level) and `export`. The engine judges by the
+  rung and reports by the word: a package-private member used only inside its
+  class reads "`private` would suffice", a `pub(crate)` function used only in
+  its file "`private` would suffice", and a language that spells nothing
+  between the declared rung and the one the uses need — Go below its package,
+  Python anywhere — gets no advice at all.
+- **The published surface** for that analysis's Exported rung: whether a unit
+  publishes every export (a jar, a crate, a Go package, a Python distribution
+  — the default, under which an exported declaration is never advised to
+  narrow) or only what its entries export (npm, where `main`/`exports` decide,
+  so an `export` in a file no entry reaches is advised `unexported` when
+  nothing else in the tree names it).
 - **Cycle tolerance** for `cyclic`: a hazard in JavaScript, TypeScript and
   Python (initialization order bites at run time), tolerated in Rust, Go, Java,
   Kotlin and Swift (the compiler or the package model makes cycles benign).

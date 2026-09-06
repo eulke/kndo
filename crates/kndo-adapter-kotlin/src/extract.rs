@@ -100,9 +100,9 @@ fn is_generated(source: &[u8]) -> bool {
 }
 
 /// No modifier means public. `internal` is the compiler's module boundary —
-/// `Scoped("module")`, the region the resolver enumerates from the source-set
-/// layout; `protected` folds to Exported (subclasses are unboundable);
-/// `private` alone is Private.
+/// the unit's reach, bounded by the resolver from the source-set layout until
+/// the manifest names the unit; `protected` folds to Exported (subclasses are
+/// unboundable); `private` alone is Private.
 fn reach_of(item: Node<'_>) -> Reach {
     let Some(modifiers) = tk::child_of_kind(item, "modifiers") else {
         return Reach::Exported;
@@ -117,9 +117,7 @@ fn reach_of(item: Node<'_>) -> Reach {
     if private {
         Reach::Private
     } else if internal {
-        Reach::Scoped {
-            scope: smol_str::SmolStr::new_static("module"),
-        }
+        Reach::Unit
     } else {
         Reach::Exported
     }

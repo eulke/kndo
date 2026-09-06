@@ -16,8 +16,8 @@ mod manifest;
 mod resolve;
 
 use kndo_contract::adapter::{PackageEntry, Resolution, ResolveContext, SourceFile};
-use kndo_contract::evidence::EvidenceSink;
-use kndo_contract::extension::{Extension, ExtensionSpec};
+use kndo_contract::evidence::{EvidenceSink, Reach};
+use kndo_contract::extension::{Extension, ExtensionSpec, Rung, Step};
 use kndo_contract::vocab::ProjectPath;
 
 pub struct GoAdapter {
@@ -33,11 +33,17 @@ impl GoAdapter {
                 4,
                 &["go"],
                 &["**/go.mod"],
-                &[],
                 // The compiler forbids import cycles: one could only be a
                 // resolution artifact here.
                 kndo_contract::extension::CycleTolerance::Tolerated,
             )
+            // Capitalization is the whole ladder: nothing sits below the
+            // package, so a package-private name used only in its file has
+            // nowhere narrower to go and `internal-only` stays silent for it.
+            .ladder(&[
+                Step::new(Rung::Namespace, "unexported"),
+                Step::new(Rung::Exported, "exported"),
+            ])
             // go.mod has no sections: every direct requirement is a build
             // requirement, and "only tests import it" has nowhere to move.
             .dependency_scoping(kndo_contract::extension::DependencyScoping::Unscoped)
@@ -90,9 +96,10 @@ impl Extension for GoAdapter {
     fn seen_from(
         &self,
         path: &ProjectPath,
-        scope: &str,
+        reach: &Reach,
         cx: &ResolveContext<'_>,
     ) -> Option<Vec<ProjectPath>> {
-        (scope == "package").then(|| resolve::package_region(path, cx))
+        matches!(reach, Reach::Scoped { scope } if scope == "package")
+            .then(|| resolve::package_region(path, cx))
     }
 }

@@ -1,5 +1,6 @@
 use kndo_adapter_swift::SwiftAdapter;
 use kndo_contract::adapter::{Resolution, ResolveContext};
+use kndo_contract::evidence::Reach;
 use kndo_contract::extension::Extension;
 use kndo_contract::vocab::ProjectPath;
 use std::collections::BTreeSet;
@@ -68,8 +69,8 @@ fn the_module_region_adds_every_test_tree() {
     let cx = ResolveContext::new(&files);
     let a = SwiftAdapter::new();
     let region = a
-        .seen_from(&path("Sources/App/A.swift"), "module", &cx)
-        .expect("module is bounded");
+        .seen_from(&path("Sources/App/A.swift"), &Reach::Unit, &cx)
+        .expect("the unit is bounded from the target layout");
     assert_eq!(
         region,
         vec![
@@ -79,8 +80,14 @@ fn the_module_region_adds_every_test_tree() {
         "any test target may @testable-import the module; other modules may not"
     );
     assert!(
-        a.seen_from(&path("Sources/App/A.swift"), "package", &cx)
-            .is_none()
+        a.seen_from(
+            &path("Sources/App/A.swift"),
+            &Reach::Scoped {
+                scope: "package".into()
+            },
+            &cx
+        )
+        .is_none()
     );
 }
 

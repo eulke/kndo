@@ -24,12 +24,12 @@ why = "no modifier at all — Swift's default is internal, and the same target-o
 subject = "Sources/App/Widget.swift#Widget.d"
 expect = "dead"
 category = "internal-only"
-why = "same evidence as c but declared public — wider than the target-only usage requires; today the Exported rung is exempt under export_narrowing none"
-fix = "M8.c swift"
+why = "same evidence as c but declared public — wider than the target-only usage requires; a SwiftPM target publishes every export, so the Exported rung waits for the unit's own publication to say nobody outside consumes it"
+fix = "M8.d swift"
 
 [[known_gap]]
 subject = "Sources/App/Widget.swift#Widget.e"
 expect = "dead"
 category = "internal-only"
-why = "same evidence as c but declared open — wider than the target-only usage requires; today the Exported rung is exempt under export_narrowing none"
-fix = "M8.c swift"
+why = "same evidence as c but declared open — wider than the target-only usage requires; a SwiftPM target publishes every export, so the Exported rung waits for the unit's own publication to say nobody outside consumes it"
+fix = "M8.d swift"

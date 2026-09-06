@@ -16,7 +16,7 @@
 world extension {
     use types.{
         extension-spec, file-evidence, resolution, project-root, package-entry,
-        contributed-root, contributed-finding, coverage-records, declared-symbol,
+        contributed-root, contributed-finding, coverage-records, declared-symbol, reach,
     };
 
     // ---- extraction-phase imports: the project as ResolveContext sees it ----
@@ -77,9 +77,10 @@ world extension {
     /// The files whose names `path` can see without an import — must depend only
     /// on the path and the file set (the same purity the native contract demands).
     export sees: func(path: string) -> list<string>;
-    /// The region behind one scope token at `path` — none when the adapter
-    /// cannot bound it (those declarations judge as exported, keep-alive).
-    export seen-from: func(path: string, scope: string) -> option<list<string>>;
+    /// The files a declaration of `reach` at `path` can be seen from — a
+    /// scoped token's region, a unit's files — none when the adapter cannot
+    /// bound it (those declarations judge as exported, keep-alive).
+    export seen-from: func(path: string, reach: reach) -> option<list<string>>;
 
     /// Liveness the language cannot know. Invoked only when the spec declares
     /// `mutates-graph` (and any active mutating extension bypasses the persisted

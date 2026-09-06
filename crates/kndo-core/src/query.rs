@@ -820,6 +820,7 @@ fn describe(cx: &QueryContext<'_>, selector: Selector) -> Answer {
                         kndo_contract::evidence::Reach::Namespace { up } => {
                             format!("namespace+{up}")
                         }
+                        kndo_contract::evidence::Reach::Unit => "unit".to_string(),
                         kndo_contract::evidence::Reach::Scoped { scope } => {
                             format!("scoped:{scope}")
                         }

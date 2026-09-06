@@ -506,12 +506,11 @@ mod tests {
         report.run.extensions.push(ExtensionRun {
             id: SmolStr::new("kndo:python"),
             files: 5,
-            narrowable_scopes: Vec::new(),
-            export_narrowing: Default::default(),
+            published_surface: Default::default(),
             import_cycles: Default::default(),
             dependency_scoping: Default::default(),
             dependency_identity: Default::default(),
-            ladder: Vec::new(),
+            ladder: Default::default(),
         });
         report.findings.push(symbol_finding("_ghost"));
         report.fixed.push(symbol_finding("_gone"));

@@ -338,3 +338,44 @@ fn a_suppression_carries_what_it_allows_and_its_position() {
         "what an allow allows is part of what it is"
     );
 }
+
+#[test]
+fn a_ladder_names_the_narrowest_step_a_declaration_can_take() {
+    use kndo_contract::extension::{Bearer, Ladder, PublishedSurface, Rung, Step};
+    // Kotlin's shape: `private` twice — the class on a member, the file on a
+    // top-level declaration — then `internal`, then `public`.
+    let ladder = Ladder::new(vec![
+        Step::for_members(Rung::Owner, "private"),
+        Step::for_free(Rung::File, "private"),
+        Step::new(Rung::Unit, "internal"),
+        Step::new(Rung::Exported, "public"),
+    ]);
+    fn word(s: Option<&Step>) -> Option<&str> {
+        s.map(|s| s.word.as_str())
+    }
+    // A member used only inside its class falls to the class's `private`.
+    assert_eq!(
+        word(ladder.step_down(Rung::Unit, Rung::Owner, true)),
+        Some("private")
+    );
+    // A top-level declaration used only in its file falls to the file's.
+    assert_eq!(
+        word(ladder.step_down(Rung::Unit, Rung::File, false)),
+        Some("private")
+    );
+    // A member used elsewhere in its file has no keyword between the two.
+    assert_eq!(ladder.step_down(Rung::Unit, Rung::File, true), None);
+    // Nothing falls to its own rung or above it.
+    assert_eq!(ladder.step_down(Rung::Unit, Rung::Unit, false), None);
+    assert_eq!(ladder.step_down(Rung::File, Rung::Unit, false), None);
+    // A rung the language spelled in its evidence but left off its ladder
+    // still has a word — the engine's own, never an empty one.
+    assert_eq!(ladder.word(Rung::Unit), "internal");
+    assert_eq!(ladder.word(Rung::Namespace), "namespace");
+    assert!(Bearer::Any.admits(true) && Bearer::Any.admits(false));
+    assert!(Bearer::Free.admits(false) && !Bearer::Free.admits(true));
+    assert!(Bearer::Member.admits(true) && !Bearer::Member.admits(false));
+    // The defaults are silence: no ladder, and every export published.
+    assert!(Ladder::default().is_empty());
+    assert_eq!(PublishedSurface::default(), PublishedSurface::Exports);
+}

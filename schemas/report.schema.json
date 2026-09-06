@@ -242,6 +242,27 @@
         }
       ]
     },
+    "Bearer": {
+      "description": "Which declarations can stand on a step. Kotlin's `private` is file-wide on\na top-level declaration and class-wide on a member — two rungs under one\nkeyword — and Java's `private` exists for members alone. The ladder says\nso, and the advice never names a keyword the declaration cannot take.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "any"
+          ]
+        },
+        {
+          "description": "A declaration with no owner.",
+          "type": "string",
+          "const": "free"
+        },
+        {
+          "description": "A declaration that is a member of another.",
+          "type": "string",
+          "const": "member"
+        }
+      ]
+    },
     "Categories": {
       "description": "Which categories this run JUDGES — never a display filter. An unselected\ncategory's analysis does not run: it leaves the `judged` set (so its\nsuppressions cannot read as stale), produces no abstention, and the report's\n`run.selection` says the narrowing was asked for. Health follows judgment —\nskip `unused` and health is absent, not padded. Plugin findings pass the same\ntest by category name; a plugin's [`Contribution`] still records what it\nasserted, because activity and selection are different facts.",
       "oneOf": [
@@ -428,14 +449,6 @@
         }
       ]
     },
-    "ExportNarrowing": {
-      "description": "Whether the language offers an expressible visibility strictly below\n`Exported` — can a declaration stop being exported, by editing only itself,\nand keep compiling? TypeScript can drop `export`; a language whose only\nspelling IS the exported one cannot. The `internal-only` analysis is the\nconsumer: an exported declaration used only inside its own file is advice\nwhere narrowing is expressible and an impossibility where it is not.",
-      "type": "string",
-      "enum": [
-        "none",
-        "expressible"
-      ]
-    },
     "ExtensionRun": {
       "type": "object",
       "properties": {
@@ -446,10 +459,6 @@
         "dependency_scoping": {
           "description": "Whether the manifests this extension reads have dependency sections\n(`scoped`) or one flat requirement list (`unscoped`) — under `unscoped`,\n`test-only` never fires on a dependency: there is no section to move it to.",
           "$ref": "#/$defs/DependencyScoping"
-        },
-        "export_narrowing": {
-          "description": "Whether the language can stop exporting a declaration by editing only\nit (`internal-only`'s Exported rung reads it).",
-          "$ref": "#/$defs/ExportNarrowing"
         },
         "files": {
           "type": "integer",
@@ -465,23 +474,17 @@
         },
         "ladder": {
           "description": "The reaches this language can spell, narrowest first, each under the\nword this language uses for it (`internal-only` reads both: the rungs\nto know a narrower one exists, the word to say so). Empty means the\nlanguage states no ladder and that analysis stays silent for its files.",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/Step"
-          }
+          "$ref": "#/$defs/Ladder"
         },
-        "narrowable_scopes": {
-          "description": "The judgment capabilities this extension declared — the one-row answer\nto \"why does kndo (not) report X for this language\". Scope tokens its\nladder can demote (`internal-only`'s Scoped rung reads it); empty means\nthat rung never fires here.",
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
+        "published_surface": {
+          "description": "The judgment capabilities this extension declared — the one-row answer\nto \"why does kndo (not) report X for this language\". What a unit of\nthis ecosystem publishes: under `exports`, every exported declaration is\nthe outside world's and `internal-only`'s Exported rung never fires;\nunder `entries`, only what an entry exports is.",
+          "$ref": "#/$defs/PublishedSurface"
         }
       },
       "required": [
         "id",
         "files",
-        "export_narrowing",
+        "published_surface",
         "import_cycles",
         "dependency_scoping",
         "dependency_identity"
@@ -569,6 +572,13 @@
         "by_category"
       ]
     },
+    "Ladder": {
+      "description": "The reaches a language can spell with a keyword, narrowest first — the one\nfact `internal-only` reads. Two questions, answered here so no analysis\nre-derives them: which step a declaration could fall to, and what a rung\nis called out loud.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Step"
+      }
+    },
     "LineSpan": {
       "description": "1-based, inclusive line range — display data the engine derives from the\nsubject's byte span against the file's actual newlines. Lines are exact in any\nencoding (a newline is one byte); columns are deliberately absent — every\ninterchange format counts them in its own unit, and a slightly-wrong column is\nworse than none.",
       "type": "object",
@@ -641,6 +651,14 @@
     "ProjectPath": {
       "description": "A `/`-separated, project-relative path. The one path spelling that crosses crate\nboundaries; OS paths stay at the discovery edge.",
       "type": "string"
+    },
+    "PublishedSurface": {
+      "description": "What a unit of this ecosystem publishes — the surface an outside consumer\ncan name, which no narrowing advice may touch. `Exports` (the default):\nevery exported declaration is published — a jar, a crate, a Go package, a\nPython distribution hand out all of them, so `internal-only` never advises\nan exported declaration here until the unit's own publication says nobody\noutside consumes it. `Entries`: only what the unit's entries export — an\nnpm package resolves through `main`/`exports`, so an `export` in a file no\nentry reaches is internal however it is spelled, and the analysis may say\nso. A language fact, because it is the ecosystem's resolution rule; the\nunit's own publication refines it.",
+      "type": "string",
+      "enum": [
+        "exports",
+        "entries"
+      ]
     },
     "ReportDiagnostic": {
       "type": "object",
@@ -768,9 +786,13 @@
       ]
     },
     "Step": {
-      "description": "One rung as one language spells it. Every judgment and every ordering reads\n`rung`; `word` is what a report says out loud, because a Java developer\nnarrows a `package`-scoped member, not a `namespace`-scoped one. One type,\nso the rung and the word for it can never name different things.",
+      "description": "One rung as one language spells it. Every judgment and every ordering reads\n`rung`; `word` is what a report says out loud, because a Java developer\nnarrows a `package-private` member, not a `namespace`-scoped one. One type,\nso the rung and the word for it can never name different things.",
       "type": "object",
       "properties": {
+        "bearer": {
+          "description": "Which declarations the keyword exists for; `Any` is omitted on the wire.",
+          "$ref": "#/$defs/Bearer"
+        },
         "rung": {
           "$ref": "#/$defs/Rung"
         },

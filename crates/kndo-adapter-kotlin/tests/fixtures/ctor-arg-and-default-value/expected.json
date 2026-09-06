@@ -8,13 +8,30 @@
       {
         "id": "kndo:kotlin",
         "files": 1,
-        "narrowable_scopes": [
-          "module"
-        ],
-        "export_narrowing": "none",
+        "published_surface": "exports",
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
-        "dependency_identity": "underivable"
+        "dependency_identity": "underivable",
+        "ladder": [
+          {
+            "rung": "owner",
+            "word": "private",
+            "bearer": "member"
+          },
+          {
+            "rung": "file",
+            "word": "private",
+            "bearer": "free"
+          },
+          {
+            "rung": "unit",
+            "word": "internal"
+          },
+          {
+            "rung": "exported",
+            "word": "public"
+          }
+        ]
       }
     ]
   },
@@ -52,7 +69,7 @@
         "start": 9,
         "end": 9
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `private` would suffice for this type"
     },
     {
       "id": "kndo-564989475f65",
@@ -74,7 +91,7 @@
         "start": 11,
         "end": 11
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `private` would suffice for this type"
     }
   ],
   "fixed": [],

@@ -9,10 +9,11 @@
 //! and `src/main/java`).
 //!
 //! Visibility defaults to PUBLIC, the opposite of Java's package-private — a
-//! load-bearing difference. `internal` (module scope) folds to Exported in the
-//! binary reach: wider than a file, narrower than the world, and the analysis
-//! that can tell the difference (internal-only) is exactly what the visibility
-//! ladder waits for.
+//! load-bearing difference. `internal` is the unit's reach: wider than a file,
+//! narrower than the world, bounded from the source-set layout until the
+//! module's manifest names its units. The ladder says what each rung is
+//! called, and that `private` means the file on a top-level declaration and
+//! the class on a member.
 //!
 //! The coordinate carries v1's territory (`kotlin`) under the built-in
 //! namespace, so oracle comparisons line up file-for-file.
@@ -22,7 +23,8 @@ mod resolve;
 
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::EvidenceSink;
-use kndo_contract::extension::{Extension, ExtensionSpec};
+use kndo_contract::evidence::Reach;
+use kndo_contract::extension::{Extension, ExtensionSpec, Rung, Step};
 use kndo_contract::vocab::ProjectPath;
 
 pub struct KotlinAdapter {
@@ -32,7 +34,15 @@ pub struct KotlinAdapter {
 impl KotlinAdapter {
     pub fn new() -> Self {
         KotlinAdapter {
-            spec: kndo_toolkit::jvm_manifest::jvm_spec("kndo:kotlin", 3, &["kt"], &["module"]),
+            // 4: `internal` is the unit's reach, not a token.
+            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:kotlin", 4, &["kt"])
+                .ladder(&[
+                    Step::for_members(Rung::Owner, "private"),
+                    Step::for_free(Rung::File, "private"),
+                    Step::new(Rung::Unit, "internal"),
+                    Step::new(Rung::Exported, "public"),
+                ])
+                .build(),
         }
     }
 }
@@ -81,9 +91,9 @@ impl Extension for KotlinAdapter {
     fn seen_from(
         &self,
         path: &ProjectPath,
-        scope: &str,
+        reach: &Reach,
         cx: &ResolveContext<'_>,
     ) -> Option<Vec<ProjectPath>> {
-        (scope == "module").then(|| resolve::module_region(path, cx))
+        matches!(reach, Reach::Unit).then(|| resolve::module_region(path, cx))
     }
 }

@@ -8,13 +8,24 @@
       {
         "id": "kndo:rust",
         "files": 5,
-        "narrowable_scopes": [
-          "crate"
-        ],
-        "export_narrowing": "none",
+        "published_surface": "exports",
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
-        "dependency_identity": "crate-root"
+        "dependency_identity": "crate-root",
+        "ladder": [
+          {
+            "rung": "namespace",
+            "word": "private"
+          },
+          {
+            "rung": "unit",
+            "word": "pub(crate)"
+          },
+          {
+            "rung": "exported",
+            "word": "pub"
+          }
+        ]
       }
     ]
   },

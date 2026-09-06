@@ -8,7 +8,7 @@
       {
         "id": "kndo:css",
         "files": 5,
-        "export_narrowing": "none",
+        "published_surface": "exports",
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
         "dependency_identity": "underivable"
@@ -16,7 +16,7 @@
       {
         "id": "kndo:html",
         "files": 4336,
-        "export_narrowing": "none",
+        "published_surface": "exports",
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
         "dependency_identity": "underivable"
@@ -24,21 +24,49 @@
       {
         "id": "kndo:js-ts",
         "files": 7,
-        "export_narrowing": "expressible",
+        "published_surface": "entries",
         "import_cycles": "hazard",
         "dependency_scoping": "scoped",
-        "dependency_identity": "package-name"
+        "dependency_identity": "package-name",
+        "ladder": [
+          {
+            "rung": "file",
+            "word": "unexported",
+            "bearer": "free"
+          },
+          {
+            "rung": "exported",
+            "word": "export"
+          }
+        ]
       },
       {
         "id": "kndo:kotlin",
         "files": 802,
-        "narrowable_scopes": [
-          "module"
-        ],
-        "export_narrowing": "none",
+        "published_surface": "exports",
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
-        "dependency_identity": "underivable"
+        "dependency_identity": "underivable",
+        "ladder": [
+          {
+            "rung": "owner",
+            "word": "private",
+            "bearer": "member"
+          },
+          {
+            "rung": "file",
+            "word": "private",
+            "bearer": "free"
+          },
+          {
+            "rung": "unit",
+            "word": "internal"
+          },
+          {
+            "rung": "exported",
+            "word": "public"
+          }
+        ]
       }
     ]
   },
@@ -19574,98 +19602,6 @@
       "message": "structural clone of spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/SpringTransactionTestBase.kt:execute"
     },
     {
-      "id": "kndo-0ede24bde99f",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "buildSrc/src/main/kotlin/org/jetbrains/exposed/gradle/TestDbDsl.kt",
-        "selector": {
-          "owner": "TestDb",
-          "name": "ignoresSpringTests"
-        },
-        "span": {
-          "start": 887,
-          "end": 1005
-        }
-      },
-      "lines": {
-        "start": 27,
-        "end": 29
-      },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
-    },
-    {
-      "id": "kndo-7c4535dd8cc3",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "buildSrc/src/main/kotlin/org/jetbrains/exposed/gradle/TestDbDsl.kt",
-        "selector": {
-          "owner": "TestDb",
-          "name": "dependencies"
-        },
-        "span": {
-          "start": 830,
-          "end": 881
-        }
-      },
-      "lines": {
-        "start": 25,
-        "end": 25
-      },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
-    },
-    {
-      "id": "kndo-938e08c6a58c",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "buildSrc/src/main/kotlin/org/jetbrains/exposed/gradle/TestDbDsl.kt",
-        "selector": {
-          "owner": "TestDb",
-          "name": "ignoresPluginTests"
-        },
-        "span": {
-          "start": 1011,
-          "end": 1129
-        }
-      },
-      "lines": {
-        "start": 31,
-        "end": 33
-      },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
-    },
-    {
-      "id": "kndo-e12782c881e8",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "buildSrc/src/main/kotlin/org/jetbrains/exposed/gradle/TestDbDsl.kt",
-        "selector": {
-          "owner": "TestDb",
-          "name": "dialects"
-        },
-        "span": {
-          "start": 648,
-          "end": 695
-        }
-      },
-      "lines": {
-        "start": 19,
-        "end": 19
-      },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
-    },
-    {
       "id": "kndo-90cda0732825",
       "category": "internal-only",
       "severity": "info",
@@ -19685,7 +19621,7 @@
         "start": 175,
         "end": 180
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+      "message": "declared `internal`, but every use is within its own file — `private` would suffice for this function"
     },
     {
       "id": "kndo-b8924a0f384a",
@@ -19707,7 +19643,7 @@
         "start": 11,
         "end": 26
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `private` would suffice for this type"
     },
     {
       "id": "kndo-5fbf7d765095",
@@ -19729,7 +19665,7 @@
         "start": 43,
         "end": 45
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `private` would suffice for this declaration"
     },
     {
       "id": "kndo-26474a4152d2",
@@ -19751,30 +19687,7 @@
         "start": 449,
         "end": 464
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
-    },
-    {
-      "id": "kndo-7837226c372d",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/ddl/EnumerationTests.kt",
-        "selector": {
-          "owner": "EnumTable",
-          "name": "enumColumn"
-        },
-        "span": {
-          "start": 2595,
-          "end": 2659
-        }
-      },
-      "lines": {
-        "start": 60,
-        "end": 60
-      },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `private` would suffice for this function"
     },
     {
       "id": "kndo-7b9a2f0cd332",
@@ -19796,30 +19709,7 @@
         "start": 34,
         "end": 36
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
-    },
-    {
-      "id": "kndo-7e6e5647f199",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/ddl/EnumerationTests.kt",
-        "selector": {
-          "owner": "EnumTable",
-          "name": "initEnumColumn"
-        },
-        "span": {
-          "start": 2669,
-          "end": 3152
-        }
-      },
-      "lines": {
-        "start": 62,
-        "end": 74
-      },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+      "message": "declared `internal`, but every use is within its own file — `private` would suffice for this type"
     },
     {
       "id": "kndo-9968cb7bcfac",
@@ -19841,7 +19731,7 @@
         "start": 45,
         "end": 47
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `private` would suffice for this declaration"
     },
     {
       "id": "kndo-88c3ba62235e",
@@ -19863,7 +19753,7 @@
         "start": 248,
         "end": 261
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+      "message": "declared `internal`, but every use is within its own file — `private` would suffice for this function"
     },
     {
       "id": "kndo-b427c53d5ceb",
@@ -19885,7 +19775,7 @@
         "start": 271,
         "end": 286
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
+      "message": "declared `internal`, but every use is within its own file — `private` would suffice for this function"
     },
     {
       "id": "kndo-60a3cbf04ece",
@@ -19907,7 +19797,7 @@
         "start": 8,
         "end": 33
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `private` would suffice for this type"
     },
     {
       "id": "kndo-82916e50c5e7",
@@ -19929,7 +19819,7 @@
         "start": 35,
         "end": 74
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `private` would suffice for this type"
     },
     {
       "id": "kndo-06b1f2eca513",
@@ -19951,7 +19841,7 @@
         "start": 23,
         "end": 40
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `private` would suffice for this type"
     },
     {
       "id": "kndo-e9d3234e043f",
@@ -19973,7 +19863,7 @@
         "start": 5,
         "end": 21
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `private` would suffice for this type"
     },
     {
       "id": "kndo-1420afc970d8",
@@ -19995,7 +19885,7 @@
         "start": 29,
         "end": 64
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `private` would suffice for this type"
     },
     {
       "id": "kndo-c1fe3491b65b",
@@ -20017,7 +19907,7 @@
         "start": 5,
         "end": 27
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `private` would suffice for this type"
     },
     {
       "id": "kndo-388a4ee63832",
@@ -20039,7 +19929,7 @@
         "start": 33,
         "end": 107
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `private` would suffice for this type"
     },
     {
       "id": "kndo-77394521bde8",
@@ -20061,7 +19951,7 @@
         "start": 5,
         "end": 31
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `private` would suffice for this type"
     },
     {
       "id": "kndo-6ca63bfdb167",
@@ -20083,7 +19973,7 @@
         "start": 5,
         "end": 32
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `private` would suffice for this type"
     },
     {
       "id": "kndo-f00323a13bd4",
@@ -20105,7 +19995,7 @@
         "start": 34,
         "end": 68
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within its own file — `private` would suffice for this type"
     },
     {
       "id": "kndo-225d530e4f72",
@@ -20127,53 +20017,7 @@
         "start": 29,
         "end": 33
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
-    },
-    {
-      "id": "kndo-4273de1b45e5",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/ddl/EnumerationTests.kt",
-        "selector": {
-          "owner": "EnumTable",
-          "name": "initEnumColumn"
-        },
-        "span": {
-          "start": 1522,
-          "end": 2135
-        }
-      },
-      "lines": {
-        "start": 38,
-        "end": 53
-      },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this function"
-    },
-    {
-      "id": "kndo-e2fd44a2a103",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/ddl/EnumerationTests.kt",
-        "selector": {
-          "owner": "EnumTable",
-          "name": "enumColumn"
-        },
-        "span": {
-          "start": 1448,
-          "end": 1512
-        }
-      },
-      "lines": {
-        "start": 36,
-        "end": 36
-      },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `private` would suffice for this type"
     },
     {
       "id": "kndo-700be17714f9",
@@ -20196,7 +20040,7 @@
         "start": 165,
         "end": 167
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within `EntityTests` — `private` would suffice for this type"
     },
     {
       "id": "kndo-f62d3326af71",
@@ -20219,7 +20063,7 @@
         "start": 164,
         "end": 164
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within `EntityTests` — `private` would suffice for this type"
     },
     {
       "id": "kndo-257efcf262bc",
@@ -20242,7 +20086,7 @@
         "start": 90,
         "end": 93
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within `SpringTransactionAttributeSourceConcurrencyTest` — `private` would suffice for this type"
     },
     {
       "id": "kndo-1d32235431ad",
@@ -20265,7 +20109,7 @@
         "start": 90,
         "end": 93
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `internal`, but every use is within `SpringTransactionAttributeSourceConcurrencyTest` — `private` would suffice for this type"
     },
     {
       "id": "kndo-dc09d51e9b6a",

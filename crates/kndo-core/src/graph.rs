@@ -10,7 +10,7 @@ use crate::cache::EvidenceCache;
 use crate::discover::DiscoveredFile;
 use crate::extract::ClaimedFile;
 use kndo_contract::adapter::{PackageEntry, Resolution, ResolveContext, SourceFile};
-use kndo_contract::evidence::{FileEvidence, ImportTarget, Root, RootKind, RootTarget};
+use kndo_contract::evidence::{FileEvidence, ImportTarget, Reach, Root, RootKind, RootTarget};
 use kndo_contract::extension::Extension;
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use serde::{Deserialize, Serialize};
@@ -20,7 +20,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Bump when the SAME evidence assembles into a DIFFERENT graph — resolution
 /// candidate changes, reachability semantics, new assembled fields. Folded into the
 /// graph cache key beside the contract fingerprint and the adapter set.
-pub const GRAPH_SEMANTICS_VERSION: u32 = 13;
+pub const GRAPH_SEMANTICS_VERSION: u32 = 14;
 
 #[derive(Serialize, Deserialize)]
 pub struct GraphFile {
@@ -35,14 +35,15 @@ pub struct GraphFile {
     /// declare. A pure function of path and file set, so a content-only patch can
     /// trust the persisted values.
     pub sees: Vec<u32>,
-    /// Per scope token this file's evidence uses: the region a `Scoped { scope }`
-    /// declaration here can be seen from, per
-    /// [`kndo_contract::extension::Extension::seen_from`] — indices into
-    /// `Graph::files`, sorted, deduplicated, self included. Sorted by token. A
-    /// token the adapter cannot bound has NO entry: its declarations are judged
+    /// Per adapter-bounded reach this file's evidence uses — a `Scoped` token,
+    /// or `Unit` until a manifest names the unit — the files a declaration of
+    /// that reach can be seen from, per
+    /// [`kndo_contract::extension::Extension::seen_from`]: indices into
+    /// `Graph::files`, sorted, deduplicated, self included. Sorted by reach. A
+    /// reach the adapter cannot bound has NO entry: its declarations are judged
     /// as Exported (keep-alive). Same stability class as `sees` — a pure
-    /// function of path, token and file set.
-    pub scoped_regions: Vec<(SmolStr, Vec<u32>)>,
+    /// function of path, reach and file set.
+    pub regions: Vec<(Reach, Vec<u32>)>,
     /// Roots anchored from OUTSIDE this file's content — a manifest naming it as an
     /// entry point (whole-file), a plugin naming it or one of its declarations. Kept
     /// apart from `evidence.roots` because evidence is cached by this file's content
@@ -442,7 +443,7 @@ pub fn assemble(
                 hash_hex: f.hash.iter().map(|b| format!("{b:02x}")).collect(),
                 evidence: ev,
                 sees: Vec::new(),
-                scoped_regions: Vec::new(),
+                regions: Vec::new(),
                 anchored: Vec::new(),
                 dispatched: dispatched.roots,
                 exempt: dispatched.exempt,
@@ -464,7 +465,7 @@ pub fn assemble(
         let adapter = adapter_by_id(adapters, &gf.adapter);
         let mut edges = resolve_file(&gf.path, &gf.evidence, adapter, &cx, &sorted_paths);
         edges.sees = sees_of(ix, &gf.path, adapter, &cx, &sorted_paths);
-        edges.scoped_regions = regions_of(&gf.path, &gf.evidence, adapter, &cx, &sorted_paths);
+        edges.regions = regions_of(&gf.path, &gf.evidence, adapter, &cx, &sorted_paths);
         resolved.push(edges);
     }
     for (gf, edges) in graph_files.iter_mut().zip(resolved) {
@@ -472,7 +473,7 @@ pub fn assemble(
         gf.import_targets = edges.import_targets;
         gf.unresolved_imports = edges.unresolved_imports;
         gf.sees = edges.sees;
-        gf.scoped_regions = edges.scoped_regions;
+        gf.regions = edges.regions;
         debug_assert_eq!(
             gf.import_targets.len(),
             gf.evidence.imports.len(),
@@ -634,30 +635,29 @@ fn sees_of(
     mates
 }
 
-/// The regions behind one file's scope tokens, as graph ids. Tokens come from
-/// the evidence (which declarations said `Scoped`); each is answered once per
-/// file. An unanswerable token is ABSENT, and judgment treats its declarations
-/// as Exported.
+/// The pools behind one file's adapter-bounded reaches, as graph ids: a
+/// `Scoped` token (the region behind the adapter's own word) and, until a
+/// manifest names the unit, `Unit`. Each distinct reach the evidence uses is
+/// answered once per file. An unanswerable one is ABSENT, and judgment treats
+/// its declarations as Exported.
 fn regions_of(
     path: &ProjectPath,
     evidence: &kndo_contract::evidence::FileEvidence,
     adapter: &dyn Extension,
     cx: &ResolveContext<'_>,
     sorted_paths: &[ProjectPath],
-) -> Vec<(SmolStr, Vec<u32>)> {
-    let mut tokens: Vec<&SmolStr> = evidence
+) -> Vec<(Reach, Vec<u32>)> {
+    let mut reaches: Vec<&Reach> = evidence
         .declarations
         .iter()
-        .filter_map(|d| match &d.reach {
-            kndo_contract::evidence::Reach::Scoped { scope } => Some(scope),
-            _ => None,
-        })
+        .map(|d| &d.reach)
+        .filter(|r| matches!(r, Reach::Scoped { .. } | Reach::Unit))
         .collect();
-    tokens.sort();
-    tokens.dedup();
+    reaches.sort();
+    reaches.dedup();
     let mut out = Vec::new();
-    for token in tokens {
-        let Some(region) = adapter.seen_from(path, token, cx) else {
+    for reach in reaches {
+        let Some(region) = adapter.seen_from(path, reach, cx) else {
             continue;
         };
         let mut ids: Vec<u32> = region
@@ -666,7 +666,7 @@ fn regions_of(
             .collect();
         ids.sort_unstable();
         ids.dedup();
-        out.push((token.clone(), ids));
+        out.push((reach.clone(), ids));
     }
     out
 }
@@ -677,7 +677,7 @@ struct ResolvedEdges {
     import_targets: Vec<Vec<u32>>,
     unresolved_imports: u32,
     sees: Vec<u32>,
-    scoped_regions: Vec<(SmolStr, Vec<u32>)>,
+    regions: Vec<(Reach, Vec<u32>)>,
 }
 
 fn resolve_file(
@@ -735,7 +735,7 @@ fn resolve_file(
         import_targets: per_import,
         unresolved_imports: unresolved,
         sees: Vec::new(),
-        scoped_regions: Vec::new(),
+        regions: Vec::new(),
     }
 }
 
@@ -804,7 +804,7 @@ pub fn patch(
         let edges = resolve_file(&file.path, &evidence, adapter, &cx, &sorted_paths);
         let dispatched = crate::dispatch::apply(&evidence, adapter.spec().dispatch_rules());
         let gf = &mut prev.files[ix];
-        gf.scoped_regions = regions_of(&file.path, &evidence, adapter, &cx, &sorted_paths);
+        gf.regions = regions_of(&file.path, &evidence, adapter, &cx, &sorted_paths);
         gf.evidence = evidence;
         gf.dispatched = dispatched.roots;
         gf.exempt = dispatched.exempt;

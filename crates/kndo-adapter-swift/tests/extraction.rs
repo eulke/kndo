@@ -9,8 +9,8 @@ fn ev(path: &str, src: &str) -> FileEvidence {
     extract_evidence(&SwiftAdapter::new(), path, src)
 }
 
-fn scoped(tok: &str) -> Reach {
-    Reach::Scoped { scope: tok.into() }
+fn unit_wide() -> Reach {
+    Reach::Unit
 }
 
 #[test]
@@ -34,15 +34,15 @@ fn the_default_rung_is_the_module() {
         Reach::Private,
         "fileprivate is a file fact"
     );
-    assert_eq!(declaration_named(&e, "c").reach, scoped("module"));
+    assert_eq!(declaration_named(&e, "c").reach, unit_wide());
     assert_eq!(declaration_named(&e, "d").reach, Reach::Exported);
     assert_eq!(declaration_named(&e, "e").reach, Reach::Exported);
     assert_eq!(
         declaration_named(&e, "plain").reach,
-        scoped("module"),
+        unit_wide(),
         "no modifier IS internal"
     );
-    assert_eq!(declaration_named(&e, "Bare").reach, scoped("module"));
+    assert_eq!(declaration_named(&e, "Bare").reach, unit_wide());
 }
 
 #[test]

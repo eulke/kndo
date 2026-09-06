@@ -20,14 +20,11 @@ pub struct ExtensionRun {
     pub id: SmolStr,
     pub files: u32,
     /// The judgment capabilities this extension declared — the one-row answer
-    /// to "why does kndo (not) report X for this language". Scope tokens its
-    /// ladder can demote (`internal-only`'s Scoped rung reads it); empty means
-    /// that rung never fires here.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub narrowable_scopes: Vec<SmolStr>,
-    /// Whether the language can stop exporting a declaration by editing only
-    /// it (`internal-only`'s Exported rung reads it).
-    pub export_narrowing: kndo_contract::extension::ExportNarrowing,
+    /// to "why does kndo (not) report X for this language". What a unit of
+    /// this ecosystem publishes: under `exports`, every exported declaration is
+    /// the outside world's and `internal-only`'s Exported rung never fires;
+    /// under `entries`, only what an entry exports is.
+    pub published_surface: kndo_contract::extension::PublishedSurface,
     /// Whether the language calls import cycles a hazard (`cyclic` reads it);
     /// `tolerated` is why a cycle-free-by-compiler language reports none.
     pub import_cycles: kndo_contract::extension::CycleTolerance,
@@ -42,8 +39,11 @@ pub struct ExtensionRun {
     /// word this language uses for it (`internal-only` reads both: the rungs
     /// to know a narrower one exists, the word to say so). Empty means the
     /// language states no ladder and that analysis stays silent for its files.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub ladder: Vec<kndo_contract::extension::Step>,
+    #[serde(
+        default,
+        skip_serializing_if = "kndo_contract::extension::Ladder::is_empty"
+    )]
+    pub ladder: kndo_contract::extension::Ladder,
 }
 
 /// What this report's `findings`/`fixed` split was computed against. `full` is a

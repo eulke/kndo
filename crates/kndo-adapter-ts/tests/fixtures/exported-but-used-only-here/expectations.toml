@@ -1,9 +1,9 @@
-# export-narrowing: an export every use of which is in its own file gets the narrowing advice; one named by any other file, even an unreached one, or through a namespace import, does not.
+# exported-but-used-only-here: in an ecosystem that publishes through entries, an export every use of which is in its own file is advised `unexported`; one named by any other file, even an unreached one, or through a namespace import, is not.
 
 [[dead]]
 subject = "lib.js#local"
 category = "internal-only"
-why = "declared exported, but every use is within its own file"
+why = "declared `export`, but every use is within its own file — `unexported` would suffice"
 
 [[dead]]
 subject = "dead.js"

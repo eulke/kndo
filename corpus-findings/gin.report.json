@@ -8,10 +8,20 @@
       {
         "id": "kndo:go",
         "files": 99,
-        "export_narrowing": "none",
+        "published_surface": "exports",
         "import_cycles": "tolerated",
         "dependency_scoping": "unscoped",
-        "dependency_identity": "module-path"
+        "dependency_identity": "module-path",
+        "ladder": [
+          {
+            "rung": "namespace",
+            "word": "unexported"
+          },
+          {
+            "rung": "exported",
+            "word": "exported"
+          }
+        ]
       }
     ]
   },

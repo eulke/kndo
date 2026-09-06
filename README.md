@@ -535,7 +535,7 @@ same mechanism and reasoning as the fixture-corpus exclusion. The quarry entries
 at the root swap.
 
 **Capability legibility**: every `run.extensions` row carries the judgment
-capabilities its adapter declared (`narrowable_scopes`, `export_narrowing`,
+capabilities its adapter declared (`ladder`, `published_surface`,
 `import_cycles`, `dependency_scoping`, `dependency_identity`) — the report's own
 answer to "why does kndo (not) report X for this language". Gating is by declared language facts, never by an adapter
 subscribing to finding categories: a fact carries its reason, composes across

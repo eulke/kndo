@@ -1,10 +1,12 @@
 //! `kndo:swift` — the sixth built-in, on the shared playbook with Swift's own
 //! rules:
 //!
-//! - The DEFAULT visibility is `internal` — module scope: `Scoped("module")`,
-//!   the region mechanism's home rung (`private`/`fileprivate` fold to Private,
-//!   both file-bounded facts; `public`/`open` are Exported). The module can
-//!   narrow to `fileprivate`/`private`, so `narrowable(["module"])`.
+//! - The DEFAULT visibility is `internal` — the unit's reach, bounded from
+//!   the target layout until the manifest names the target (`private` and
+//!   `fileprivate` fold to Private, both file-bounded facts; `public`/`open`
+//!   are Exported). The ladder spells all four rungs, so an `internal` name
+//!   used only in its file is advised `fileprivate`, and one used only in its
+//!   type `private`.
 //! - The unit is the SwiftPM TARGET, and it is flat: subdirectories inside a
 //!   target are organizational, every file of the target shares one namespace,
 //!   and TESTS ARE A DIFFERENT MODULE — they reach the code under test through
@@ -34,8 +36,8 @@ mod manifest;
 mod resolve;
 
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
-use kndo_contract::evidence::EvidenceSink;
-use kndo_contract::extension::{Extension, ExtensionSpec};
+use kndo_contract::evidence::{EvidenceSink, Reach};
+use kndo_contract::extension::{Extension, ExtensionSpec, Rung, Step};
 use kndo_contract::vocab::ProjectPath;
 
 pub struct SwiftAdapter {
@@ -45,16 +47,23 @@ pub struct SwiftAdapter {
 impl SwiftAdapter {
     pub fn new() -> Self {
         SwiftAdapter {
-            spec: kndo_toolkit::source_adapter_spec(
+            // 2: `internal` is the unit's reach, not a token.
+            spec: kndo_toolkit::source_adapter_builder(
                 "kndo:swift",
-                1,
+                2,
                 &["swift"],
                 &["**/Package.swift"],
-                &["module"],
                 // Files in a module compile as one unit; cross-references are
                 // routine, and the compiler rejects target-level cycles.
                 kndo_contract::extension::CycleTolerance::Tolerated,
-            ),
+            )
+            .ladder(&[
+                Step::new(Rung::Owner, "private"),
+                Step::new(Rung::File, "fileprivate"),
+                Step::new(Rung::Unit, "internal"),
+                Step::new(Rung::Exported, "public"),
+            ])
+            .build(),
         }
     }
 }
@@ -88,10 +97,10 @@ impl Extension for SwiftAdapter {
     fn seen_from(
         &self,
         path: &ProjectPath,
-        scope: &str,
+        reach: &Reach,
         cx: &ResolveContext<'_>,
     ) -> Option<Vec<ProjectPath>> {
-        (scope == "module").then(|| resolve::module_region(path, cx))
+        matches!(reach, Reach::Unit).then(|| resolve::module_region(path, cx))
     }
 
     fn manifest_dependencies(

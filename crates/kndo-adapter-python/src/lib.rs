@@ -6,7 +6,7 @@
 //!   underscore is the ecosystem's "module-private" (→ Private — an import that
 //!   names it anyway still keeps it, the engine's binding rule); everything
 //!   else is importable published surface (→ Exported). No enforceable rung
-//!   sits between them — `narrowable` stays empty and `internal-only` stays
+//!   sits between them — the ladder stays empty and `internal-only` stays
 //!   silent, because "add an underscore" is advice about a convention, not a
 //!   language boundary.
 //! - The module IS the file: nothing is visible without an import, so
@@ -54,7 +54,6 @@ impl PythonAdapter {
                     "**/requirements.txt",
                     "**/requirements-*.txt",
                 ],
-                &[],
                 // Circular imports raise at import time (partially-initialized
                 // module AttributeError) — the classic Python hazard.
                 kndo_contract::extension::CycleTolerance::Hazard,

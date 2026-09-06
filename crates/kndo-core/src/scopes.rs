@@ -251,7 +251,7 @@ mod tests {
                 hash_hex: String::new(),
                 evidence: sink.finish(),
                 sees: Vec::new(),
-                scoped_regions: Vec::new(),
+                regions: Vec::new(),
                 anchored: Vec::new(),
                 dispatched: Vec::new(),
                 exempt: Vec::new(),

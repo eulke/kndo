@@ -47,21 +47,18 @@ impl JavaAdapter {
     pub fn new() -> Self {
         JavaAdapter {
             // 6: the package clause IS the namespace — a file declares it, so
-            // two files share one however far apart they sit — and the ladder
-            // replaces the narrowable-scope token.
-            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:java", 9, &["java"], &[])
+            // two files share one however far apart they sit.
+            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:java", 9, &["java"])
                 .ladder(&[
-                    // `private` is class-private, `public` is published, and
-                    // no modifier is the package between them — the rung Java
-                    // has no keyword for, which is why it needs the word.
-                    Step::new(Rung::Owner, "private"),
-                    Step::new(Rung::Namespace, "package"),
+                    // `private` is class-private and exists for members alone
+                    // (a top-level class cannot take it), `public` is
+                    // published, and no modifier is the package between them —
+                    // the rung Java has no keyword for, which is why it needs
+                    // the word its developers use.
+                    Step::for_members(Rung::Owner, "private"),
+                    Step::new(Rung::Namespace, "package-private"),
                     Step::new(Rung::Exported, "public"),
                 ])
-                // A package is a NAME, not a place: two artifacts on one
-                // classpath contributing to `com.google.common.io` see each
-                // other's package-private members, which is how a test module
-                // exercises the library it is compiled against.
                 // A package is a NAME, not a place: two artifacts on one
                 // classpath contributing to `com.google.common.io` see each
                 // other's package-private members, which is how a test module

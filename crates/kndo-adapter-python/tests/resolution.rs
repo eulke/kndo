@@ -1,5 +1,6 @@
 use kndo_adapter_python::PythonAdapter;
 use kndo_contract::adapter::{Resolution, ResolveContext};
+use kndo_contract::evidence::Reach;
 use kndo_contract::extension::Extension;
 use kndo_contract::vocab::ProjectPath;
 use std::collections::BTreeSet;
@@ -78,5 +79,8 @@ fn a_python_file_sees_nothing_without_an_import() {
     let cx = ResolveContext::new(&files);
     let a = PythonAdapter::new();
     assert!(a.sees(&path("src/pkg/a.py"), &cx).is_empty());
-    assert!(a.seen_from(&path("src/pkg/a.py"), "module", &cx).is_none());
+    assert!(
+        a.seen_from(&path("src/pkg/a.py"), &Reach::Unit, &cx)
+            .is_none()
+    );
 }

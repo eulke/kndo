@@ -8,10 +8,21 @@
       {
         "id": "kndo:js-ts",
         "files": 1,
-        "export_narrowing": "expressible",
+        "published_surface": "entries",
         "import_cycles": "hazard",
         "dependency_scoping": "scoped",
-        "dependency_identity": "package-name"
+        "dependency_identity": "package-name",
+        "ladder": [
+          {
+            "rung": "file",
+            "word": "unexported",
+            "bearer": "free"
+          },
+          {
+            "rung": "exported",
+            "word": "export"
+          }
+        ]
       }
     ]
   },

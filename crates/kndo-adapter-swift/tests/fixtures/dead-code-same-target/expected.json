@@ -8,13 +8,28 @@
       {
         "id": "kndo:swift",
         "files": 3,
-        "narrowable_scopes": [
-          "module"
-        ],
-        "export_narrowing": "none",
+        "published_surface": "exports",
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
-        "dependency_identity": "underivable"
+        "dependency_identity": "underivable",
+        "ladder": [
+          {
+            "rung": "owner",
+            "word": "private"
+          },
+          {
+            "rung": "file",
+            "word": "fileprivate"
+          },
+          {
+            "rung": "unit",
+            "word": "internal"
+          },
+          {
+            "rung": "exported",
+            "word": "public"
+          }
+        ]
       }
     ]
   },
@@ -80,7 +95,7 @@
         "start": 1,
         "end": 1
       },
-      "message": "declared `module`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     }
   ],
   "fixed": [],

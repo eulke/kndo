@@ -8,7 +8,7 @@
       {
         "id": "kndo:python",
         "files": 1,
-        "export_narrowing": "none",
+        "published_surface": "exports",
         "import_cycles": "hazard",
         "dependency_scoping": "scoped",
         "dependency_identity": "underivable"

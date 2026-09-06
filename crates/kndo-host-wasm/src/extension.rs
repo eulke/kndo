@@ -322,12 +322,13 @@ impl Extension for WasmExtension {
     fn seen_from(
         &self,
         path: &ProjectPath,
-        scope: &str,
+        reach: &kndo_contract::evidence::Reach,
         cx: &ResolveContext<'_>,
     ) -> Option<Vec<ProjectPath>> {
+        let reach = crate::convert::reach_to_wire(reach);
         // A trap or violation degrades to None — Exported treatment, keep-alive.
         self.call(StoreData::project(cx), |guest, store| {
-            guest.call_seen_from(store, path.as_str(), scope)
+            guest.call_seen_from(store, path.as_str(), &reach)
         })
         .ok()
         .flatten()

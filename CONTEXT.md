@@ -100,6 +100,12 @@ crate is not a friend of the library it tests.
 Whether a library unit's exported API is consumed outside the project. Declared
 (`publish = false`, `private: true`) or inferred when the manifest is silent.
 
+**Published surface**:
+Which exported declarations a unit hands to the outside: every export (a jar, a crate, a
+Go package, a Python distribution) or only what its entries export (npm). The ecosystem's
+resolution rule, so the language declares it; `internal-only` never advises narrowing
+what is on it.
+
 **Namespace**:
 The language's name-space node a file attaches to: a Java or Kotlin package by name,
 a Go package by directory and clause, a Rust module by its mount chain, a Python
@@ -119,8 +125,10 @@ counts as a use of a declaration: the subtree of the node its effective reach na
 plus friend units when the node is a unit.
 
 **Ladder**:
-The reaches a language can spell with a keyword, narrowest first. The rung is what
-`internal-only` advises.
+The reaches a language can spell with a keyword, narrowest first, each step saying which
+declarations can take it: any, a free declaration alone, a member alone. The step is what
+`internal-only` advises: the narrowest one at or above the rung the uses need and below
+the declared one; no such step, no advice.
 _Avoid_: narrowable scopes, export narrowing
 
 **Path alias**:

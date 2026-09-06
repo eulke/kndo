@@ -307,14 +307,15 @@ pub struct AnalysisOutcome {
 /// wherever a lookup misses.
 #[derive(Debug, Clone, Default)]
 pub struct DeclaredCapabilities {
-    pub narrowable_scopes: Vec<smol_str::SmolStr>,
-    pub export_narrowing: kndo_contract::extension::ExportNarrowing,
+    /// What a unit of this language's ecosystem publishes — see
+    /// [`kndo_contract::extension::PublishedSurface`].
+    pub published_surface: kndo_contract::extension::PublishedSurface,
     pub import_cycles: kndo_contract::extension::CycleTolerance,
     pub dependency_scoping: kndo_contract::extension::DependencyScoping,
     pub dependency_identity: kndo_contract::extension::DependencyIdentity,
     /// The reaches this language can spell, narrowest first, each under this
-    /// language's own word for it — see [`kndo_contract::extension::Step`].
-    pub ladder: Vec<kndo_contract::extension::Step>,
+    /// language's own word for it — see [`kndo_contract::extension::Ladder`].
+    pub ladder: kndo_contract::extension::Ladder,
     /// How far one of this language's namespaces reaches across the project's
     /// units — see [`kndo_contract::extension::NamespaceSpan`].
     pub namespace_span: kndo_contract::extension::NamespaceSpan,

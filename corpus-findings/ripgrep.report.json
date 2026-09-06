@@ -8,13 +8,24 @@
       {
         "id": "kndo:rust",
         "files": 110,
-        "narrowable_scopes": [
-          "crate"
-        ],
-        "export_narrowing": "none",
+        "published_surface": "exports",
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
-        "dependency_identity": "crate-root"
+        "dependency_identity": "crate-root",
+        "ladder": [
+          {
+            "rung": "namespace",
+            "word": "private"
+          },
+          {
+            "rung": "unit",
+            "word": "pub(crate)"
+          },
+          {
+            "rung": "exported",
+            "word": "pub"
+          }
+        ]
       }
     ]
   },
@@ -3165,7 +3176,7 @@
         "start": 86,
         "end": 86
       },
-      "message": "declared `crate`-scoped, but every use is within its own file — the narrower rung would suffice for this type"
+      "message": "declared `pub(crate)`, but every use is within its own file — `private` would suffice for this type"
     },
     {
       "id": "kndo-05a66885c639",

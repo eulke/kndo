@@ -19,9 +19,9 @@ use kndo_contract::evidence::{
     self as ev, CoverageRecords, EvidenceSink, EvidenceStream, FileEvidence,
 };
 use kndo_contract::extension::{
-    Activation, ActivationRule, ConductSeverity, ConductSink, ConductTarget, ContentAccess,
+    Activation, ActivationRule, Bearer, ConductSeverity, ConductSink, ConductTarget, ContentAccess,
     CycleTolerance, DeclaredSymbol, DispatchRule, Effect, Extension, ExtensionSpec, GraphAccess,
-    Trigger,
+    PublishedSurface, Rung, Step, Trigger,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use smol_str::SmolStr;
@@ -48,11 +48,11 @@ pub fn spec_to_wire(spec: &ExtensionSpec) -> wire::ExtensionSpec {
         coordinate: spec.coordinate().to_string(),
         version: spec.version(),
         suffixes: spec.suffixes().iter().map(|s| s.to_string()).collect(),
-        narrowable_scopes: spec
-            .narrowable_scopes()
-            .iter()
-            .map(|s| s.to_string())
-            .collect(),
+        ladder: spec.ladder().steps().iter().map(step_to_wire).collect(),
+        published_surface: match spec.published_surface() {
+            PublishedSurface::Exports => wire::PublishedSurface::Exports,
+            PublishedSurface::Entries => wire::PublishedSurface::Entries,
+        },
         import_cycles: match spec.import_cycles() {
             CycleTolerance::Tolerated => wire::CycleTolerance::Tolerated,
             CycleTolerance::Hazard => wire::CycleTolerance::Hazard,
@@ -87,6 +87,49 @@ pub fn spec_to_wire(spec: &ExtensionSpec) -> wire::ExtensionSpec {
             })
             .collect(),
         reads_reports: spec.reads_reports().iter().map(|s| s.to_string()).collect(),
+    }
+}
+
+fn step_to_wire(step: &Step) -> wire::Step {
+    wire::Step {
+        rung: match step.rung {
+            Rung::Owner => wire::Rung::Owner,
+            Rung::File => wire::Rung::File,
+            Rung::Namespace => wire::Rung::Namespace,
+            Rung::Unit => wire::Rung::Unit,
+            Rung::Exported => wire::Rung::Exported,
+            // A rung this wire has no word for is the widest one — it can
+            // never make a narrower step appear.
+            _ => wire::Rung::Exported,
+        },
+        word: step.word.to_string(),
+        bearer: match step.bearer {
+            Bearer::Any => wire::Bearer::Any,
+            Bearer::Free => wire::Bearer::Free,
+            Bearer::Member => wire::Bearer::Member,
+        },
+    }
+}
+
+/// A rung this wire has no word for crosses as the widest one: a guest can
+/// never accuse through a narrowness the host would have to guess at.
+fn reach_to_wire(reach: &ev::Reach) -> wire::Reach {
+    match reach {
+        ev::Reach::Private => wire::Reach::Private,
+        ev::Reach::Unit => wire::Reach::Unit,
+        ev::Reach::Scoped { scope } => wire::Reach::Scoped(scope.to_string()),
+        _ => wire::Reach::Exported,
+    }
+}
+
+fn reach_from_wire(reach: wire::Reach) -> ev::Reach {
+    match reach {
+        wire::Reach::Private => ev::Reach::Private,
+        wire::Reach::Unit => ev::Reach::Unit,
+        wire::Reach::Scoped(scope) => ev::Reach::Scoped {
+            scope: SmolStr::new(scope),
+        },
+        wire::Reach::Exported => ev::Reach::Exported,
     }
 }
 
@@ -222,14 +265,7 @@ pub fn evidence_to_wire(evidence: &FileEvidence) -> wire::FileEvidence {
                 name: d.name.to_string(),
                 kind: symbol_kind_to_wire(&d.kind),
                 span: span_to_wire(d.span),
-                reach: match &d.reach {
-                    ev::Reach::Private => wire::Reach::Private,
-                    ev::Reach::Scoped { scope } => wire::Reach::Scoped(scope.to_string()),
-                    // A rung this wire has no word for crosses as the widest
-                    // one: a guest can never accuse through a narrowness the
-                    // host would have to guess at.
-                    _ => wire::Reach::Exported,
-                },
+                reach: reach_to_wire(&d.reach),
                 owner: d.owner.map(|id| id.index() as u32),
                 exported_as: d.exported_as.as_ref().map(|s| s.to_string()),
                 signature: d.signature.as_ref().map(|s| s.to_string()),
@@ -626,10 +662,10 @@ impl<E: Extension + Default> bindings::Guest for ExportedExtension<E> {
             .collect()
     }
 
-    fn seen_from(path: String, scope: String) -> Option<Vec<String>> {
+    fn seen_from(path: String, reach: wire::Reach) -> Option<Vec<String>> {
         let path = ProjectPath::new(path);
         E::default()
-            .seen_from(&path, &scope, &resolve_context())
+            .seen_from(&path, &reach_from_wire(reach), &resolve_context())
             .map(|files| files.iter().map(|p| p.as_str().to_string()).collect())
     }
 

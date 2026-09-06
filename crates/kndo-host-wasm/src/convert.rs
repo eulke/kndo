@@ -13,8 +13,9 @@ use kndo_contract::evidence::{
     self as ev, DiagnosticLevel, EvidenceSink, EvidenceStream, EvidenceStreams, RootKind,
 };
 use kndo_contract::extension::{
-    Activation, ActivationRule, ConductSeverity, ConductTarget, CycleTolerance, DeclaredSymbol,
-    DispatchRule, Effect, ExtensionSpec, ExtensionSpecParts, RuleDescriptor, Trigger,
+    Activation, ActivationRule, Bearer, ConductSeverity, ConductTarget, CycleTolerance,
+    DeclaredSymbol, DispatchRule, Effect, ExtensionSpec, ExtensionSpecParts, Ladder,
+    PublishedSurface, RuleDescriptor, Rung, Step, Trigger,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use smol_str::SmolStr;
@@ -48,22 +49,20 @@ pub(crate) fn extension_spec(spec: awire::ExtensionSpec) -> ExtensionSpec {
         coordinate: SmolStr::new(spec.coordinate),
         version: spec.version,
         suffixes: spec.suffixes.into_iter().map(SmolStr::new).collect(),
-        narrowable_scopes: spec
-            .narrowable_scopes
-            .into_iter()
-            .map(SmolStr::new)
-            .collect(),
+        ladder: Ladder::new(spec.ladder.into_iter().map(step).collect()),
+        published_surface: match spec.published_surface {
+            awire::PublishedSurface::Exports => PublishedSurface::Exports,
+            awire::PublishedSurface::Entries => PublishedSurface::Entries,
+        },
         claims: spec.claims.into_iter().map(SmolStr::new).collect(),
         import_cycles: match spec.import_cycles {
             awire::CycleTolerance::Tolerated => CycleTolerance::Tolerated,
             awire::CycleTolerance::Hazard => CycleTolerance::Hazard,
         },
         dispatch: spec.dispatch.into_iter().map(dispatch_rule).collect(),
-        ladder: Vec::new(),
         namespace_span: Default::default(),
-        // The wire world speaks no narrowing or dependency vocabulary yet;
-        // absence defaults to silence, like every other undeclared capability.
-        export_narrowing: Default::default(),
+        // The wire world speaks no dependency vocabulary yet; absence
+        // defaults to silence, like every other undeclared capability.
         dependency_scoping: Default::default(),
         dependency_identity: Default::default(),
         dependency_importers: Vec::new(),
@@ -118,6 +117,36 @@ pub(crate) fn extension_spec(spec: awire::ExtensionSpec) -> ExtensionSpec {
         reads_reports: spec.reads_reports.into_iter().map(SmolStr::new).collect(),
     }
     .into()
+}
+
+fn step(s: awire::Step) -> Step {
+    Step {
+        rung: match s.rung {
+            awire::Rung::Owner => Rung::Owner,
+            awire::Rung::File => Rung::File,
+            awire::Rung::Namespace => Rung::Namespace,
+            awire::Rung::Unit => Rung::Unit,
+            awire::Rung::Exported => Rung::Exported,
+        },
+        word: SmolStr::new(s.word),
+        bearer: match s.bearer {
+            awire::Bearer::Any => Bearer::Any,
+            awire::Bearer::Free => Bearer::Free,
+            awire::Bearer::Member => Bearer::Member,
+        },
+    }
+}
+
+/// The reach the host asks a guest's `seen-from` about. A rung the wire has
+/// no word for crosses as the widest one: the guest then bounds nothing, and
+/// the host judges the declaration as exported, keep-alive.
+pub(crate) fn reach_to_wire(reach: &ev::Reach) -> awire::Reach {
+    match reach {
+        ev::Reach::Private => awire::Reach::Private,
+        ev::Reach::Unit => awire::Reach::Unit,
+        ev::Reach::Scoped { scope } => awire::Reach::Scoped(scope.to_string()),
+        _ => awire::Reach::Exported,
+    }
 }
 
 fn dispatch_rule(rule: awire::DispatchRule) -> DispatchRule {
@@ -256,6 +285,7 @@ pub(crate) fn replay_evidence(evidence: awire::FileEvidence, sink: &mut Evidence
                 span(d.span),
                 match &d.reach {
                     awire::Reach::Private => ev::Reach::Private,
+                    awire::Reach::Unit => ev::Reach::Unit,
                     awire::Reach::Scoped(scope) => ev::Reach::Scoped {
                         scope: SmolStr::new(scope),
                     },

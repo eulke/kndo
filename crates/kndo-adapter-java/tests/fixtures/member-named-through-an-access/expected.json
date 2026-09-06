@@ -8,18 +8,19 @@
       {
         "id": "kndo:java",
         "files": 3,
-        "export_narrowing": "none",
+        "published_surface": "exports",
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
         "dependency_identity": "underivable",
         "ladder": [
           {
             "rung": "owner",
-            "word": "private"
+            "word": "private",
+            "bearer": "member"
           },
           {
             "rung": "namespace",
-            "word": "package"
+            "word": "package-private"
           },
           {
             "rung": "exported",
@@ -64,7 +65,7 @@
         "start": 14,
         "end": 14
       },
-      "message": "declared `package`-scoped, but every use is within its own file — the narrower rung would suffice for this declaration"
+      "message": "declared `package-private`, but every use is within `Widget` — `private` would suffice for this declaration"
     }
   ],
   "fixed": [],
