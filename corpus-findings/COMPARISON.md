@@ -1283,3 +1283,17 @@ two added advisories are collision-driven both ways and true. Every other
 repository byte-identical. Instrument: with java's directory conventions
 deleted, every fixture with a pom is byte-identical, and guava moves only by
 the seven GWT super-source files already decomposed.
+
+### The duplicate floor for files (2026-09-06)
+
+| repo | before | after | retired |
+|---|---|---|---|
+| vite | 828 | 689 | 139 fixture stubs and template configs, 0 to 362 raw bytes |
+| guava | 9,593 | 9,555 | 38 `package-info.java` and empty holder classes of the mirror |
+| Exposed | 973 | 971 | 2 hello-world snippets |
+| flask | 28 | 26 | 2 empty `__init__.py` markers |
+
+Zero findings added, zero changed in place, every other repository
+byte-identical. Function clones are untouched: the smallest the token floor
+admits are real, so the byte floor belongs to files, measured outside their
+comments.

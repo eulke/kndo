@@ -296,28 +296,6 @@
       "message": "structural clone of src/flask/sansio/app.py:App.template_filter#3"
     },
     {
-      "id": "kndo-f634d7f89050",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "tests/test_apps/cliapp/__init__.py"
-      },
-      "message": "byte-identical to tests/test_apps/blueprintapp/apps/__init__.py"
-    },
-    {
-      "id": "kndo-19223d72b24c",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "tests/test_apps/cliapp/inner1/inner2/__init__.py"
-      },
-      "message": "byte-identical to tests/test_apps/blueprintapp/apps/__init__.py"
-    },
-    {
       "id": "kndo-232905ccdf4b",
       "category": "duplicate",
       "severity": "info",

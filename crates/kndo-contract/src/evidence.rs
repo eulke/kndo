@@ -511,6 +511,10 @@ pub struct FileEvidence {
     /// The pairing rule's carrier: which optional streams the claiming adapter
     /// declared. Analyses read it to abstain over what was never reported.
     pub declared: EvidenceStreams,
+    /// The file's length in bytes — what every span is bounded by, and what a
+    /// whole-file judgment measures the file against. The sink's, never an
+    /// adapter's statement.
+    pub len: u32,
     /// The namespace this file declares itself into, as SEGMENTS — `package
     /// com.foo;` is `["com", "foo"]`. Segments, not a joined name, so the
     /// engine can walk the tree without knowing the language's separator.
@@ -600,6 +604,7 @@ impl EvidenceSink {
             file_len,
             out: FileEvidence {
                 declared: declares,
+                len: file_len,
                 namespace: Vec::new(),
                 declarations: Vec::new(),
                 references: Vec::new(),

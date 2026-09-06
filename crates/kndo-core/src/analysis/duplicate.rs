@@ -3,6 +3,14 @@
 //! structural clones — renames and re-valued literals included, because adapters
 //! normalize those leaves before fingerprinting). The first member in path order is
 //! the canonical copy; every other member is the finding.
+//!
+//! Each granularity has a floor below which identity is not duplication: a
+//! function of too few normalized tokens fingerprints too easily, and a file
+//! with too few bytes outside its comments is identical to another by having
+//! nothing in it — an empty package marker, a one-line stub, a license header
+//! over a `package` clause — not by having been copied. Comments are excluded
+//! from the measure because a license header makes every trivial file look
+//! substantial; the floor reads what could have been duplicated.
 
 use super::{Analysis, AnalysisContext};
 use kndo_contract::evidence::{DeclarationId, EvidenceStream};
@@ -17,6 +25,14 @@ use std::collections::BTreeMap;
 /// designed clones (76 tokens). Becomes a config key when the registry lands; until
 /// then, one owner here.
 const MIN_TOKENS: u32 = 60;
+
+/// Files with fewer bytes than this outside their comments are not judged for
+/// byte-identity. Corpus-measured (2026-09-06, DECISIONS): below it sit empty
+/// `__init__.py` markers, one-line fixture stubs, `package-info.java` files
+/// whose thousand bytes are Javadoc over one clause; above it, classes with
+/// methods and modules with functions — and the smallest function clone the
+/// token floor admits is about this size.
+const MIN_FILE_BYTES: u32 = 200;
 
 pub struct Duplicate;
 
@@ -52,7 +68,12 @@ impl Analysis for Duplicate {
                 continue;
             };
             for &i in rest {
+                // Shadowed whatever its size: a copied file must not also
+                // duplicate every function inside itself.
                 shadowed[i] = true;
+                if bytes_outside_comments(&g.files[i].evidence) < MIN_FILE_BYTES {
+                    continue;
+                }
                 out.push(Finding::new(
                     Category::DUPLICATE,
                     Severity::Info,
@@ -101,6 +122,18 @@ impl Analysis for Duplicate {
         }
         out
     }
+}
+
+/// What a file holds beyond its comments — the size a byte-identity judgment
+/// measures against. Every built-in declares the comments stream; a file whose
+/// adapter does not is measured whole, the keep-judging direction.
+fn bytes_outside_comments(evidence: &kndo_contract::evidence::FileEvidence) -> u32 {
+    let commented: u32 = evidence
+        .comments
+        .iter()
+        .map(|c| c.span.end.saturating_sub(c.span.start))
+        .sum();
+    evidence.len.saturating_sub(commented)
 }
 
 fn render(g: &crate::graph::Graph, (file, decl): (usize, DeclarationId)) -> String {

@@ -53261,17 +53261,6 @@
       "message": "byte-identical to android/guava-testlib/src/com/google/common/collect/testing/AbstractTester.java"
     },
     {
-      "id": "kndo-d2f5a2afce05",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava-testlib/src/com/google/common/collect/testing/AnEnum.java"
-      },
-      "message": "byte-identical to android/guava-testlib/src/com/google/common/collect/testing/AnEnum.java"
-    },
-    {
       "id": "kndo-0d8cfb7c7129",
       "category": "duplicate",
       "severity": "info",
@@ -55660,17 +55649,6 @@
       "message": "byte-identical to android/guava-testlib/src/com/google/common/collect/testing/UnhashableObject.java"
     },
     {
-      "id": "kndo-77ec32125f61",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava-testlib/src/com/google/common/collect/testing/WrongType.java"
-      },
-      "message": "byte-identical to android/guava-testlib/src/com/google/common/collect/testing/WrongType.java"
-    },
-    {
       "id": "kndo-b52cc1632000",
       "category": "duplicate",
       "severity": "info",
@@ -55779,17 +55757,6 @@
         "path": "guava-testlib/src/com/google/common/collect/testing/features/TesterRequirements.java"
       },
       "message": "byte-identical to android/guava-testlib/src/com/google/common/collect/testing/features/TesterRequirements.java"
-    },
-    {
-      "id": "kndo-b587414fe304",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava-testlib/src/com/google/common/collect/testing/features/package-info.java"
-      },
-      "message": "byte-identical to android/guava-testlib/src/com/google/common/collect/testing/features/package-info.java"
     },
     {
       "id": "kndo-5fd7d00d1f83",
@@ -57582,28 +57549,6 @@
         "end": 140
       },
       "message": "structural clone of android/guava-testlib/src/com/google/common/collect/testing/google/UnmodifiableCollectionTests.java:UnmodifiableCollectionTests.assertCollectionIsUnmodifiable(Collection<E>, E)"
-    },
-    {
-      "id": "kndo-ff4b357163e6",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava-testlib/src/com/google/common/collect/testing/google/package-info.java"
-      },
-      "message": "byte-identical to android/guava-testlib/src/com/google/common/collect/testing/google/package-info.java"
-    },
-    {
-      "id": "kndo-cce8650ce412",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava-testlib/src/com/google/common/collect/testing/package-info.java"
-      },
-      "message": "byte-identical to android/guava-testlib/src/com/google/common/collect/testing/package-info.java"
     },
     {
       "id": "kndo-bfc652ffebd7",
@@ -59666,17 +59611,6 @@
       "message": "byte-identical to android/guava-testlib/src/com/google/common/collect/testing/testers/TestExceptions.java"
     },
     {
-      "id": "kndo-c17e52754beb",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava-testlib/src/com/google/common/collect/testing/testers/package-info.java"
-      },
-      "message": "byte-identical to android/guava-testlib/src/com/google/common/collect/testing/testers/package-info.java"
-    },
-    {
       "id": "kndo-02912df6a0a7",
       "category": "duplicate",
       "severity": "info",
@@ -59686,17 +59620,6 @@
         "path": "guava-testlib/src/com/google/common/escape/testing/EscaperAsserts.java"
       },
       "message": "byte-identical to android/guava-testlib/src/com/google/common/escape/testing/EscaperAsserts.java"
-    },
-    {
-      "id": "kndo-a8979fc78ab8",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava-testlib/src/com/google/common/escape/testing/package-info.java"
-      },
-      "message": "byte-identical to android/guava-testlib/src/com/google/common/escape/testing/package-info.java"
     },
     {
       "id": "kndo-3dcb146dbb01",
@@ -60364,17 +60287,6 @@
         "path": "guava-testlib/src/com/google/common/testing/TestLogHandler.java"
       },
       "message": "byte-identical to android/guava-testlib/src/com/google/common/testing/TestLogHandler.java"
-    },
-    {
-      "id": "kndo-eeb269af4db5",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava-testlib/src/com/google/common/testing/package-info.java"
-      },
-      "message": "byte-identical to android/guava-testlib/src/com/google/common/testing/package-info.java"
     },
     {
       "id": "kndo-92ac4d8332e0",
@@ -61451,17 +61363,6 @@
         "end": 467
       },
       "message": "structural clone of guava-testlib/test/com/google/common/testing/NullPointerTesterTest.java:NullPointerTesterTest.twoArgNormalNullable(TwoArg.Action, TwoArg.Action)"
-    },
-    {
-      "id": "kndo-d2ee328c443a",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava-testlib/test/com/google/common/testing/PackageSanityTest.java"
-      },
-      "message": "byte-identical to android/guava-testlib/test/com/google/common/testing/PackageSanityTest.java"
     },
     {
       "id": "kndo-bc7a2d89b123",
@@ -102930,17 +102831,6 @@
       "message": "byte-identical to android/guava-tests/test/com/google/common/reflect/TypesTest.java"
     },
     {
-      "id": "kndo-c07d0d41404e",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava-tests/test/com/google/common/reflect/subpackage/ClassInSubPackage.java"
-      },
-      "message": "byte-identical to android/guava-tests/test/com/google/common/reflect/subpackage/ClassInSubPackage.java"
-    },
-    {
       "id": "kndo-4a839f66aa06",
       "category": "duplicate",
       "severity": "info",
@@ -104788,28 +104678,6 @@
       "message": "byte-identical to android/guava/src/com/google/common/annotations/J2ktIncompatible.java"
     },
     {
-      "id": "kndo-632acc931d73",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava/src/com/google/common/annotations/VisibleForTesting.java"
-      },
-      "message": "byte-identical to android/guava/src/com/google/common/annotations/VisibleForTesting.java"
-    },
-    {
-      "id": "kndo-3adef1dcc3a1",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava/src/com/google/common/annotations/package-info.java"
-      },
-      "message": "byte-identical to android/guava/src/com/google/common/annotations/package-info.java"
-    },
-    {
       "id": "kndo-1e122db411db",
       "category": "duplicate",
       "severity": "info",
@@ -105374,17 +105242,6 @@
         "end": 338
       },
       "message": "structural clone of android/guava/src/com/google/common/base/Equivalence.java:EquivalentToPredicate.equals(Object)"
-    },
-    {
-      "id": "kndo-8d07a2534a07",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava/src/com/google/common/base/ExtraObjectsMethodsForWeb.java"
-      },
-      "message": "byte-identical to android/guava/src/com/google/common/base/ExtraObjectsMethodsForWeb.java"
     },
     {
       "id": "kndo-00835e5aef42",
@@ -106232,17 +106089,6 @@
         "path": "guava/src/com/google/common/base/internal/Finalizer.java"
       },
       "message": "byte-identical to android/guava/src/com/google/common/base/internal/Finalizer.java"
-    },
-    {
-      "id": "kndo-41bcd25e2f60",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava/src/com/google/common/base/package-info.java"
-      },
-      "message": "byte-identical to android/guava/src/com/google/common/base/package-info.java"
     },
     {
       "id": "kndo-30d0e56c44e5",
@@ -108242,17 +108088,6 @@
       "message": "structural clone of android/guava/src/com/google/common/cache/LocalCache.java:Segment.drainKeyReferenceQueue()"
     },
     {
-      "id": "kndo-7414cadd9abe",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava/src/com/google/common/cache/LongAddable.java"
-      },
-      "message": "byte-identical to android/guava/src/com/google/common/cache/LongAddable.java"
-    },
-    {
       "id": "kndo-d7c78edb1849",
       "category": "duplicate",
       "severity": "info",
@@ -108317,17 +108152,6 @@
         "path": "guava/src/com/google/common/cache/RemovalNotification.java"
       },
       "message": "byte-identical to android/guava/src/com/google/common/cache/RemovalNotification.java"
-    },
-    {
-      "id": "kndo-0567add0e3c1",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava/src/com/google/common/cache/package-info.java"
-      },
-      "message": "byte-identical to android/guava/src/com/google/common/cache/package-info.java"
     },
     {
       "id": "kndo-19cec54bff7e",
@@ -109468,17 +109292,6 @@
         "end": 472
       },
       "message": "structural clone of android/guava/src/com/google/common/collect/ArrayTable.java:ArrayTable.put(R, C, V)"
-    },
-    {
-      "id": "kndo-71bae3ea3251",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava/src/com/google/common/collect/BaseImmutableMultimap.java"
-      },
-      "message": "byte-identical to android/guava/src/com/google/common/collect/BaseImmutableMultimap.java"
     },
     {
       "id": "kndo-e4ac5d77081f",
@@ -112116,39 +111929,6 @@
         "path": "guava/src/com/google/common/collect/ForwardingDeque.java"
       },
       "message": "byte-identical to android/guava/src/com/google/common/collect/ForwardingDeque.java"
-    },
-    {
-      "id": "kndo-17e98182678f",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava/src/com/google/common/collect/ForwardingImmutableList.java"
-      },
-      "message": "byte-identical to android/guava/src/com/google/common/collect/ForwardingImmutableList.java"
-    },
-    {
-      "id": "kndo-d59497f46a3c",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava/src/com/google/common/collect/ForwardingImmutableMap.java"
-      },
-      "message": "byte-identical to android/guava/src/com/google/common/collect/ForwardingImmutableMap.java"
-    },
-    {
-      "id": "kndo-562fdb704fb4",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava/src/com/google/common/collect/ForwardingImmutableSet.java"
-      },
-      "message": "byte-identical to android/guava/src/com/google/common/collect/ForwardingImmutableSet.java"
     },
     {
       "id": "kndo-876e63b15ad3",
@@ -125298,17 +125078,6 @@
       "message": "byte-identical to android/guava/src/com/google/common/collect/UsingToStringOrdering.java"
     },
     {
-      "id": "kndo-54fbb2cf9a06",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava/src/com/google/common/collect/package-info.java"
-      },
-      "message": "byte-identical to android/guava/src/com/google/common/collect/package-info.java"
-    },
-    {
       "id": "kndo-de984b4a984b",
       "category": "duplicate",
       "severity": "info",
@@ -125417,17 +125186,6 @@
         "path": "guava/src/com/google/common/escape/UnicodeEscaper.java"
       },
       "message": "byte-identical to android/guava/src/com/google/common/escape/UnicodeEscaper.java"
-    },
-    {
-      "id": "kndo-6642034c0032",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava/src/com/google/common/escape/package-info.java"
-      },
-      "message": "byte-identical to android/guava/src/com/google/common/escape/package-info.java"
     },
     {
       "id": "kndo-1712e436571c",
@@ -125590,17 +125348,6 @@
       "message": "byte-identical to android/guava/src/com/google/common/eventbus/SubscriberExceptionContext.java"
     },
     {
-      "id": "kndo-d89d378e6c5d",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava/src/com/google/common/eventbus/SubscriberExceptionHandler.java"
-      },
-      "message": "byte-identical to android/guava/src/com/google/common/eventbus/SubscriberExceptionHandler.java"
-    },
-    {
       "id": "kndo-f208ded50f89",
       "category": "duplicate",
       "severity": "info",
@@ -125610,17 +125357,6 @@
         "path": "guava/src/com/google/common/eventbus/SubscriberRegistry.java"
       },
       "message": "byte-identical to android/guava/src/com/google/common/eventbus/SubscriberRegistry.java"
-    },
-    {
-      "id": "kndo-bd84b31c14ab",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava/src/com/google/common/eventbus/package-info.java"
-      },
-      "message": "byte-identical to android/guava/src/com/google/common/eventbus/package-info.java"
     },
     {
       "id": "kndo-b08e296cb5d9",
@@ -126753,17 +126489,6 @@
       "message": "byte-identical to android/guava/src/com/google/common/graph/ValueGraphBuilder.java"
     },
     {
-      "id": "kndo-0a533032cabe",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava/src/com/google/common/graph/package-info.java"
-      },
-      "message": "byte-identical to android/guava/src/com/google/common/graph/package-info.java"
-    },
-    {
       "id": "kndo-1166679c81cc",
       "category": "duplicate",
       "severity": "info",
@@ -127528,17 +127253,6 @@
       "message": "byte-identical to android/guava/src/com/google/common/hash/SneakyThrows.java"
     },
     {
-      "id": "kndo-78aeef17cf9b",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava/src/com/google/common/hash/package-info.java"
-      },
-      "message": "byte-identical to android/guava/src/com/google/common/hash/package-info.java"
-    },
-    {
       "id": "kndo-f1d569d047a1",
       "category": "duplicate",
       "severity": "info",
@@ -127559,17 +127273,6 @@
         "path": "guava/src/com/google/common/html/ParametricNullness.java"
       },
       "message": "byte-identical to android/guava/src/com/google/common/html/ParametricNullness.java"
-    },
-    {
-      "id": "kndo-3ebf8f9a437a",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava/src/com/google/common/html/package-info.java"
-      },
-      "message": "byte-identical to android/guava/src/com/google/common/html/package-info.java"
     },
     {
       "id": "kndo-eb682c9c6403",
@@ -128692,17 +128395,6 @@
       "message": "byte-identical to android/guava/src/com/google/common/io/TempFileCreator.java"
     },
     {
-      "id": "kndo-edaf77b5c748",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava/src/com/google/common/io/package-info.java"
-      },
-      "message": "byte-identical to android/guava/src/com/google/common/io/package-info.java"
-    },
-    {
       "id": "kndo-0deea476c476",
       "category": "duplicate",
       "severity": "info",
@@ -129097,17 +128789,6 @@
       "message": "byte-identical to android/guava/src/com/google/common/math/ToDoubleRounder.java"
     },
     {
-      "id": "kndo-b8b70462192c",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava/src/com/google/common/math/package-info.java"
-      },
-      "message": "byte-identical to android/guava/src/com/google/common/math/package-info.java"
-    },
-    {
       "id": "kndo-8d3a56332673",
       "category": "duplicate",
       "severity": "info",
@@ -129205,17 +128886,6 @@
         "path": "guava/src/com/google/common/net/UrlEscapers.java"
       },
       "message": "byte-identical to android/guava/src/com/google/common/net/UrlEscapers.java"
-    },
-    {
-      "id": "kndo-f64c158142d7",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava/src/com/google/common/net/package-info.java"
-      },
-      "message": "byte-identical to android/guava/src/com/google/common/net/package-info.java"
     },
     {
       "id": "kndo-6f1278f11e4a",
@@ -129587,17 +129257,6 @@
       "message": "structural clone of android/guava/src/com/google/common/primitives/Booleans.java:BooleanArrayAsList.subList(int, int)"
     },
     {
-      "id": "kndo-9e219b7508c9",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava/src/com/google/common/primitives/DoublesMethodsForWeb.java"
-      },
-      "message": "byte-identical to android/guava/src/com/google/common/primitives/DoublesMethodsForWeb.java"
-    },
-    {
       "id": "kndo-9d7237792f17",
       "category": "duplicate",
       "severity": "info",
@@ -129607,17 +129266,6 @@
         "path": "guava/src/com/google/common/primitives/Floats.java"
       },
       "message": "byte-identical to android/guava/src/com/google/common/primitives/Floats.java"
-    },
-    {
-      "id": "kndo-7f49d0828598",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava/src/com/google/common/primitives/FloatsMethodsForWeb.java"
-      },
-      "message": "byte-identical to android/guava/src/com/google/common/primitives/FloatsMethodsForWeb.java"
     },
     {
       "id": "kndo-66b3630ce66d",
@@ -130375,17 +130023,6 @@
       "message": "structural clone of android/guava/src/com/google/common/primitives/Ints.java:Ints.min(int...)"
     },
     {
-      "id": "kndo-eafa950641c0",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava/src/com/google/common/primitives/IntsMethodsForWeb.java"
-      },
-      "message": "byte-identical to android/guava/src/com/google/common/primitives/IntsMethodsForWeb.java"
-    },
-    {
       "id": "kndo-0b300be908ae",
       "category": "duplicate",
       "severity": "info",
@@ -130838,17 +130475,6 @@
       "message": "byte-identical to android/guava/src/com/google/common/primitives/Shorts.java"
     },
     {
-      "id": "kndo-ce5bf7d0deb9",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava/src/com/google/common/primitives/ShortsMethodsForWeb.java"
-      },
-      "message": "byte-identical to android/guava/src/com/google/common/primitives/ShortsMethodsForWeb.java"
-    },
-    {
       "id": "kndo-7c8e61b77c5e",
       "category": "duplicate",
       "severity": "info",
@@ -131142,17 +130768,6 @@
         "path": "guava/src/com/google/common/primitives/UnsignedLongs.java"
       },
       "message": "byte-identical to android/guava/src/com/google/common/primitives/UnsignedLongs.java"
-    },
-    {
-      "id": "kndo-35d969f0c35c",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava/src/com/google/common/primitives/package-info.java"
-      },
-      "message": "byte-identical to android/guava/src/com/google/common/primitives/package-info.java"
     },
     {
       "id": "kndo-53de0d493087",
@@ -131776,17 +131391,6 @@
         "end": 138
       },
       "message": "structural clone of android/guava/src/com/google/common/reflect/Types.java:ClassOwnership.detectJvmBehavior()"
-    },
-    {
-      "id": "kndo-c05e988f76c7",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava/src/com/google/common/reflect/package-info.java"
-      },
-      "message": "byte-identical to android/guava/src/com/google/common/reflect/package-info.java"
     },
     {
       "id": "kndo-0f0838ea381d",
@@ -135859,17 +135463,6 @@
       "message": "byte-identical to android/guava/src/com/google/common/util/concurrent/WrappingScheduledExecutorService.java"
     },
     {
-      "id": "kndo-938b0517b5cd",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava/src/com/google/common/util/concurrent/package-info.java"
-      },
-      "message": "byte-identical to android/guava/src/com/google/common/util/concurrent/package-info.java"
-    },
-    {
       "id": "kndo-a3fe86e19d88",
       "category": "duplicate",
       "severity": "info",
@@ -135890,17 +135483,6 @@
         "path": "guava/src/com/google/common/xml/XmlEscapers.java"
       },
       "message": "byte-identical to android/guava/src/com/google/common/xml/XmlEscapers.java"
-    },
-    {
-      "id": "kndo-696dbbcdcf9c",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava/src/com/google/common/xml/package-info.java"
-      },
-      "message": "byte-identical to android/guava/src/com/google/common/xml/package-info.java"
     },
     {
       "id": "kndo-3d1ec235f947",

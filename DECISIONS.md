@@ -3716,3 +3716,51 @@ fixture.
 **Knobs.** `GRAPH_SEMANTICS_VERSION` 15 → 16: the same manifests anchor more.
 The contract fingerprint, the report schema and every conformance fixture are
 unchanged.
+
+## 2026-09-06 — M8.b.11: the duplicate floor for files is 200 bytes outside comments, measured — and the function floor needs no byte twin
+
+**Measure first, and the number pointed elsewhere.** The plan named a byte
+floor for `duplicate`; the corpus said where it belongs. Function clones: the
+smallest the 60-token floor admits is 155 bytes (`ImmutableList.of` with nine
+elements, against its Android mirror), and every sampled small one is a real
+clone — a byte floor on functions would retire nothing worth retiring, so
+there is none. Byte-identical FILES are another matter: vite's 148 included
+21 empty files, 57 under 40 bytes (`export default 'a'`, `import './a.js'`,
+`invalid code`) and 111 under 100; flask reported two empty `__init__.py`
+package markers as duplicates of each other; Exposed two 64-byte hello-world
+snippets; and guava's mirror carried `package-info.java` files of 900 to 5,000
+bytes whose content outside Javadoc is one annotated `package` clause, plus
+empty holder classes under a 600-byte license header.
+
+**The measure is bytes outside comments.** Raw bytes would keep every one of
+guava's: a license header makes a stub look substantial, and a header is the
+one thing every file of a project shares by design. So `FileEvidence` now
+carries `len` — the sink's own file length, what every span is bounded by —
+and `duplicate` measures a file as its length minus its comment spans (every
+built-in declares the comments stream; a file whose adapter does not is
+measured whole, the keep-judging direction). The floor is 200: below it sit
+the markers, stubs and clause-only files above; at and above it, classes with
+methods and modules with functions — and it is about the size of the smallest
+function clone the token floor admits. Members of an exact group stay
+shadowed from the structural pass whatever their size, since a copied file
+must not also duplicate every function inside itself; only the file finding
+is floored.
+
+**Measurement.** Nine repositories: 181 findings retired, zero added, zero
+changed in place. vite 828 → 689 (139: 0 to 362 raw bytes, median 33 —
+fixture stubs and create-vite template configs); guava 9,593 → 9,555 (38: 22
+`package-info.java` and 16 empty holders, forwarding shells, one-method
+interfaces and an enum of test constants, every one a mirror of boilerplate;
+raw sizes 95 to 5,122, content under 200); Exposed 973 → 971 (the two
+hello-world snippets); flask 28 → 26 (the two empty markers). Every retired
+file checked by name and content. Alternatives measured: at 150 bytes guava
+keeps 24 of the 38 and vite 4 of the 139; at 256, guava loses 8 more and vite
+4 more; nothing at either boundary changes the character of what is retired,
+and 200 is where the samples turn from clause-only files into classes with
+bodies.
+
+**Knobs.** The contract fingerprint moves for `FileEvidence::len`; no report
+shape, no conformance fixture and no adapter version moves — the wire's file
+evidence never carried a length, since the host replays it through a sink
+that knows the content's. Both floors stay constants beside the analysis
+until the config registry names them.

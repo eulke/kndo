@@ -1023,28 +1023,6 @@
       "message": "byte-identical to documentation-website/Writerside/snippets/exposed-gradle-plugin/src/main/kotlin/org/example/tables/UsersTable.kt"
     },
     {
-      "id": "kndo-322f4de33c92",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "documentation-website/Writerside/snippets/exposed-modules-kotlin-gradle/src/main/kotlin/com/example/Main.kt"
-      },
-      "message": "byte-identical to documentation-website/Writerside/snippets/exposed-modules-groovy-gradle/src/main/kotlin/com/example/Main.kt"
-    },
-    {
-      "id": "kndo-aa66ebee1d26",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "documentation-website/Writerside/snippets/exposed-modules-maven/src/main/kotlin/com/example/Main.kt"
-      },
-      "message": "byte-identical to documentation-website/Writerside/snippets/exposed-modules-groovy-gradle/src/main/kotlin/com/example/Main.kt"
-    },
-    {
       "id": "kndo-9caaa4faa5ea",
       "category": "duplicate",
       "severity": "info",
