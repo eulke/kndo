@@ -480,3 +480,76 @@ activation on `*.storyboard` could root the named classes. Demand: the guava
 slice above. No plugin is built until an experiment shows the roots land on real
 corpus findings — and no finding is suppressed core-side in the meantime just
 because v1 happened to ship the same false positives.
+
+## The legacy ledger: every old/new pair, with its ablation number (2026-09-07)
+
+Each row is a mechanism that coexists today with the mechanism the plan says
+replaces it. The number is the corpus finding delta from ablating the OLD one
+alone — how much it currently carries, which is what decides whether it can be
+retired now, needs its replacement wired first, or has to be replaced with a
+measured change. Every ablation restored the tree byte-for-byte, and the run
+that follows every restore reproduces the pinned reports exactly.
+
+### Duplicate: both mechanisms live, and the new one is wired
+
+| # | old | replaced by | ablation | disposition |
+|---|---|---|---|---|
+| 1a | `sees` (kndo:swift) | the scope forest | **0** | retire now, no number moves |
+| 1b | `sees` (kndo:java) | the scope forest | 2 (guava, `untested`) | retire with the delta explained |
+| 1c | `sees` (kndo:kotlin) | the scope forest | 15 (Exposed, `untested`) | blocked: kotlin declares no namespace clause |
+| 2 | member dispatch pool at rung 3, unscoped, every member | the plan's rung 3 (pool-scoped) + rung 9 (Exported only) | **+232** to conform | a judgment call for the owner, below |
+
+### Blocked: the replacement is not wired for that adapter
+
+| # | old | replaced by | ablation | blocked on |
+|---|---|---|---|---|
+| 3a | `seen_from` (kndo:kotlin) | units from `extract_manifest` | 42 (Exposed) | M8.d — kotlin has no `extract_manifest` |
+| 3b | `seen_from` (kndo:swift) | units from `extract_manifest` | **486** (Alamofire 346, vapor 140) | M8.d — swift has no `extract_manifest` |
+| 4a | library-mode whole-file Production root (java) | `publishes()` in core | 18 findings move (net −2) | the residual is real; needs its own slice |
+| 4b | the same (kotlin) | `publishes()` | 84 move (net +50) | M8.d — no units, so nothing publishes |
+| 4c | the same (swift) | `publishes()` | 39 (Alamofire; vapor 0) | M8.d |
+| 4d | the same (python) | `publishes()` | 16 (flask) | M8.d |
+| 5 | `roots` (kndo:js-ts) | `extract_manifest` | **332** (vite 317, lodash 15) | M8.d |
+| 6 | `packages` / `manifest_dependencies` / `manifest_mentions` | `extract_manifest` | not ablated: they carry resolution wholesale | M8.d |
+
+Row 6 is not duplication. Java is the one adapter with both, and they are
+disjoint by manifest kind: `extract_manifest` reads `pom.xml`, `packages` reads
+Gradle settings. The trait's own invariant ("one or the other populated, never
+both") holds.
+
+### The forest is fed by two adapters out of nine
+
+`out.namespace` is emitted by **go and java** only. Rust declares its namespaces
+structurally instead (mount chains). Kotlin, swift, python, js-ts, html and css
+declare none — which is why rows 1c, 3a, 3b and 4b–4d are blocked rather than
+free: their visibility still comes from `sees`, `seen_from` and path
+conventions, and the forest has nothing to answer with. This is the single
+fact behind most of the ledger.
+
+### Row 2 in full: the member ladder
+
+The plan's ladder ends "… superficie publicada solo para efectivo `Exported` en
+unidades publicadas; pool de despacho de miembros solo para miembros
+`Exported`". Today the member branch puts an UNSCOPED pool — any reachable
+reference to the name, whatever its reach — at rung 3, and has no pool-scoped
+rung at all. Four shapes, measured:
+
+| shape | corpus delta |
+|---|---|
+| today (unscoped pool at rung 3, every member) | baseline |
+| no member pool at all | **+21,641** (guava +19,148) |
+| the plan's rung 9 alone (Exported members, last) | **+21,641** — identical |
+| the plan's rung 3 (pool-scoped) + rung 9 | **+232** (guava 144, vite 66, Exposed 15, flask 4, vapor 3) |
+
+Two things fall out. First, the plan's rung 9 is **vacuous**: it recovers
+nothing over rung 3, because every Exported member it could keep is already
+kept by the published surface, the entry surface or an owner binding. Second,
+the real cost of conforming is 232, not 21,641 — the earlier partial
+measurement (guava 27,405 vs 27,398) was measuring a ladder with no rung 3 at
+all and is superseded.
+
+The 232 are members whose only use is a same-named reference from OUTSIDE the
+pool their reach names. Deciding whether they are dead members the unscoped
+keeper hides, or dynamic dispatch v2 cannot see, needs a sample read before
+anything is changed — the owner's call, and the reason nothing here is shipped
+by this ledger.
