@@ -10,8 +10,8 @@ use crate::adapter::{
     DependencyDeclaration, PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile,
 };
 use crate::evidence::{
-    CoverageRecords, Declaration, EvidenceSink, EvidenceStreams, Marker, Reach, RootKind,
-    SymbolKind,
+    CoverageRecords, Declaration, DeclarationId, EvidenceSink, EvidenceStreams, Marker, Reach,
+    RootKind, SymbolKind,
 };
 use crate::finding::Severity;
 use crate::manifest::ManifestSink;
@@ -548,11 +548,27 @@ pub enum Trigger {
     /// (`TestXxx`, `test_*`), a runtime's (`main`, `init`). `kind` narrows it
     /// to one kind of symbol; `in_files` to the files where the convention
     /// holds. Only a declaration nothing owns matches: a member dispatched by
-    /// name is its owner's business and belongs to a trigger that says so.
+    /// name is its owner's business, and [`Trigger::MemberOf`] is how a rule
+    /// says so.
     Name {
         pattern: SmolStr,
         kind: Option<SymbolKind>,
         in_files: InFiles,
+    },
+    /// A MEMBER of a type that declares a relation to a base matching `base`,
+    /// named by one of `members` — `compareTo` of a `Comparable`, `readObject`
+    /// of a `Serializable`, `body` of a `View`. One rule states a base and
+    /// every requirement it declares, which is what knowledge of a type the
+    /// GRAPH CANNOT SEE looks like as data: where the base is in the project,
+    /// its own members are the requirements and no rule is needed.
+    ///
+    /// The base is matched through the WHOLE supertype chain the project
+    /// declares: `Absent extends Optional` and `Optional implements
+    /// Serializable` makes `Absent`'s `readResolve` a witness, because the
+    /// runtime does not care which link named the base either.
+    ExternalWitness {
+        base: SmolStr,
+        members: Vec<SmolStr>,
     },
 }
 
@@ -597,6 +613,15 @@ impl Trigger {
         }
     }
 
+    /// The members a base outside the project requires of whatever declares a
+    /// relation to it.
+    pub fn required_by(base: &'static str, members: &[&'static str]) -> Trigger {
+        Trigger::ExternalWitness {
+            base: SmolStr::new_static(base),
+            members: members.iter().map(|m| SmolStr::new_static(m)).collect(),
+        }
+    }
+
     /// Does this trigger fire on `marker`? Dispatch reads each trigger in the
     /// phase that holds its evidence, so a trigger watching something else
     /// never fires here.
@@ -608,30 +633,78 @@ impl Trigger {
                         .as_ref()
                         .is_none_or(|a| marker.args.iter().any(|x| pattern_matches(a, x)))
             }
-            Trigger::Name { .. } => false,
+            _ => false,
         }
     }
 
-    /// Does this trigger fire on a declaration named `name` of `kind`, in a
-    /// file the project rooted with `colors` (sorted, deduplicated)? As with
+    /// Does this trigger fire on the declaration `id` of `cx`'s file? As with
     /// [`Trigger::matches`], a trigger watching other evidence never fires.
-    pub fn matches_name(&self, name: &str, kind: &SymbolKind, colors: &[RootKind]) -> bool {
+    pub fn matches_declaration(&self, cx: &DeclarationCx<'_>, id: DeclarationId) -> bool {
+        let d = &cx.evidence.declarations[id.index()];
         match self {
             Trigger::Marker { .. } => false,
             Trigger::Name {
                 pattern,
-                kind: want,
+                kind,
                 in_files,
             } => {
-                pattern_matches(pattern, name)
-                    && want.as_ref().is_none_or(|k| k == kind)
+                // A member is its owner's business — `MemberOf` is the trigger
+                // that reaches one.
+                d.owner.is_none()
+                    && pattern_matches(pattern, &d.name)
+                    && kind.as_ref().is_none_or(|k| *k == d.kind)
                     && match in_files {
                         InFiles::Any => true,
-                        InFiles::Rooted(c) => colors.contains(c),
-                        InFiles::NotRooted(c) => !colors.contains(c),
+                        InFiles::Rooted(c) => cx.colors.contains(c),
+                        InFiles::NotRooted(c) => !cx.colors.contains(c),
                     }
             }
+            Trigger::ExternalWitness { base, members } => {
+                members.contains(&d.name)
+                    && d.owner.is_some_and(|o| {
+                        let owner = &cx.evidence.declarations[o.index()].name;
+                        cx.reaches_base(owner, base)
+                    })
+            }
         }
+    }
+}
+
+/// What a declaration-shaped [`Trigger`] reads: the file's own evidence, the
+/// colors the project rooted the file with (sorted, deduplicated), and the
+/// project's supertype edges by name.
+pub struct DeclarationCx<'a> {
+    pub evidence: &'a crate::evidence::FileEvidence,
+    pub colors: &'a [RootKind],
+    /// Direct supertype NAMES by type name, over the whole project. Names,
+    /// not declarations, because the base a rule cares about is precisely the
+    /// one the project does not declare — `Serializable` appears here as the
+    /// target of an edge and never as a key.
+    pub supertypes: &'a BTreeMap<SmolStr, Vec<SmolStr>>,
+}
+
+impl DeclarationCx<'_> {
+    /// Does `owner` reach a supertype matching `base`, directly or through
+    /// another type the project declares? Cycle-safe: a type graph should be
+    /// acyclic, and defective evidence must not hang the run.
+    fn reaches_base(&self, owner: &SmolStr, base: &str) -> bool {
+        let mut seen: BTreeSet<&SmolStr> = BTreeSet::new();
+        let mut queue: Vec<&SmolStr> = vec![owner];
+        while let Some(name) = queue.pop() {
+            if !seen.insert(name) {
+                continue;
+            }
+            let Some(supers) = self.supertypes.get(name) else {
+                continue;
+            };
+            for s in supers {
+                if pattern_matches(base, s) {
+                    return true;
+                }
+                queue.push(s);
+            }
+        }
+        false
     }
 }
 
@@ -683,6 +756,13 @@ pub enum Effect {
     /// it. Only a file marker carries it — a generator owns files, not
     /// declarations.
     Generated,
+    /// The declaration satisfies a surface its owner promised — an override,
+    /// an interface method, a protocol requirement, a runtime hook a base
+    /// declares. Alive while its OWNER is, and of no color: nothing outside
+    /// the graph is ENTERED here, the caller simply holds the supertype and
+    /// dispatches through it. A root would say something stronger and paint
+    /// the file a color the source never claimed.
+    Witness,
 }
 
 /// One rule of a language or a framework, as data: when this evidence

@@ -176,6 +176,12 @@ fn dispatch_rule_to_wire(rule: &DispatchRule) -> wire::DispatchRule {
                 path: path.to_string(),
                 arg: arg.as_ref().map(|a| a.to_string()),
             }),
+            Trigger::ExternalWitness { base, members } => {
+                wire::Trigger::ExternalWitness(wire::ExternalWitnessTrigger {
+                    base: base.to_string(),
+                    members: members.iter().map(|m| m.to_string()).collect(),
+                })
+            }
             Trigger::Name {
                 pattern,
                 kind,
@@ -194,6 +200,7 @@ fn dispatch_rule_to_wire(rule: &DispatchRule) -> wire::DispatchRule {
             Effect::Root(kind) => wire::Effect::Root(root_kind_to_wire(kind)),
             Effect::Exempt => wire::Effect::Exempt,
             Effect::Generated => wire::Effect::Generated,
+            Effect::Witness => wire::Effect::Witness,
         },
         confidence: confidence_to_wire(rule.confidence),
     }

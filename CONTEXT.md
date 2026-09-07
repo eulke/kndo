@@ -76,8 +76,15 @@ An override is not reported: it is what the engine derives when a member's name 
 on a type its owner relates to.
 
 **Witness**:
-A member whose name satisfies a requirement of a type its owner relates to (an
-interface method, a protocol requirement, an override). Alive while its owner is.
+A member that satisfies a surface its OWNER promised — an override, an interface
+method, a runtime hook a base declares. Alive while its owner is, and of no color:
+nothing outside the graph is entered there, the caller simply holds the supertype and
+dispatches through it. Two sources, one verdict: the supertype the graph RESOLVED
+(its members are the requirements), and — for a base the project does not contain — the
+requirements a rule NAMES, matched through the whole declared supertype chain. Every
+judgment that stands down for one stands down for the other, `internal-only` included:
+narrowing a witness is a compile error, not advice.
+_Avoid_: conformer, override root (a witness is never a root)
 
 **Namespace clause**:
 What a file says its namespace is (`package com.a`, `package x`).
@@ -215,10 +222,10 @@ surface. Roots carry a color: production, test or tooling.
 Which roots reach a file: production, test, tooling. Verdicts read colors.
 
 **Dispatch rule**:
-Data: a trigger (a marker path, a name pattern in files of a given role, a relation, a
-member of a matching owner, an external base's required members) and an effect (a root
-of a color, a witness, an exemption from `unused`, a generated file), with a confidence.
-The language's own rules ride its spec; a framework's ride a rule pack.
+Data: a trigger (a marker path, a name pattern in files of a given role, the members an
+external base requires) and an effect (a root of a color, a witness, an exemption from
+`unused`, a generated file), with a confidence. The language's own rules ride its spec;
+a framework's ride a rule pack.
 
 **File role**:
 What the project says a file IS — a test, a tooling artifact — stated by its unit's

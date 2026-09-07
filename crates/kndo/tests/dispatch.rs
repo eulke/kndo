@@ -206,3 +206,63 @@ fn a_name_rule_reads_the_role_the_project_gave_the_file() {
         ]
     );
 }
+
+#[test]
+fn a_witness_is_kept_by_the_surface_its_owner_promised_and_by_no_color() {
+    let certain = |when: Trigger, then: Effect| DispatchRule {
+        when,
+        then,
+        confidence: Confidence::Certain,
+    };
+    let rules = vec![
+        // What a base OUTSIDE the project requires — the graph can never
+        // resolve `Closer`, so the rule names it and its one requirement.
+        certain(Trigger::required_by("Closer", &["shut"]), Effect::Witness),
+        // And the source's own statement that a supertype declares this,
+        // wherever that supertype lives.
+        certain(Trigger::marker("Override"), Effect::Witness),
+    ];
+    let p = TempProject::new();
+    p.file(
+        "app.kmock",
+        "root-file\n\
+         type Handle\n\
+         implements Handle Closer\n\
+         pub member Handle.shut\n\
+         pub member Handle.drop\n\
+         type Plain\n\
+         pub member Plain.shut\n\
+         type Sub\n\
+         pub member Sub.render\n\
+         mark render Override\n",
+    );
+    let snap = common::analyze(&p, vec![Box::new(MockExtension::dispatching(rules))]);
+
+    // The base names it: kept, and the keeper SAYS which base.
+    assert_eq!(
+        keeper_kinds(&snap, "app.kmock#Handle.shut"),
+        ["witness:Closer"]
+    );
+    assert_eq!(
+        keeper_kinds(&snap, "app.kmock#Sub.render"),
+        ["witness:Override"]
+    );
+    // A witness is not a root: no color rides on it, so the file's own
+    // production root is the only thing coloring anything here.
+    assert_eq!(common::color(&snap, "app.kmock#Handle.shut"), "production");
+
+    // The same NAME on a type that promised nothing is judged like any other
+    // member, and so is a member the base does not require. The owners are
+    // accused too, and that is the law working: a witness is alive WHILE ITS
+    // OWNER IS — it never argues the owner's case.
+    assert_eq!(
+        reported(&snap, &Category::UNUSED),
+        [
+            "app.kmock — Handle",
+            "app.kmock — Handle.drop",
+            "app.kmock — Plain",
+            "app.kmock — Plain.shut",
+            "app.kmock — Sub",
+        ]
+    );
+}

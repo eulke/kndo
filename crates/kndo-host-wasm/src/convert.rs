@@ -198,6 +198,10 @@ fn dispatch_rule(rule: awire::DispatchRule) -> DispatchRule {
                 path: SmolStr::new(m.path),
                 arg: m.arg.map(SmolStr::new),
             },
+            awire::Trigger::ExternalWitness(w) => Trigger::ExternalWitness {
+                base: SmolStr::new(w.base),
+                members: w.members.into_iter().map(SmolStr::new).collect(),
+            },
             awire::Trigger::Name(n) => Trigger::Name {
                 pattern: SmolStr::new(n.pattern),
                 kind: n.kind.map(symbol_kind_from_wire),
@@ -212,6 +216,7 @@ fn dispatch_rule(rule: awire::DispatchRule) -> DispatchRule {
             awire::Effect::Root(kind) => Effect::Root(root_kind(kind)),
             awire::Effect::Exempt => Effect::Exempt,
             awire::Effect::Generated => Effect::Generated,
+            awire::Effect::Witness => Effect::Witness,
         },
         confidence: confidence(rule.confidence),
     }

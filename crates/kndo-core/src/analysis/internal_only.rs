@@ -256,7 +256,11 @@ impl Analysis for InternalOnly {
                 // overrider needs it at least this visible, and a member that
                 // itself overrides is fixed by what it overrides. Both
                 // directions of the same fact, which is why one relation
-                // stream answers both.
+                // stream answers both — and where the base is outside the
+                // project, the language's own rule states it instead.
+                if f.stated_witness(d_ix).is_some() {
+                    continue;
+                }
                 if let Some(owner) = d.owner {
                     let owner = f.evidence.declarations[owner.index()].name.as_str();
                     if cx.run.index.is_overridden(owner, d.name.as_str())

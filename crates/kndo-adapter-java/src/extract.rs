@@ -337,14 +337,6 @@ fn handle_body(body: Node<'_>, source: &[u8], ctx: &Ctx, out: &mut EvidenceSink)
     }
 }
 
-const SERIALIZATION_HOOKS: [&str; 5] = [
-    "readObject",
-    "writeObject",
-    "readResolve",
-    "writeReplace",
-    "readObjectNoData",
-];
-
 fn handle_method(item: Node<'_>, source: &[u8], ctx: &Ctx, out: &mut EvidenceSink) {
     let Some(name_node) = item.child_by_field_name("name") else {
         return;
@@ -364,19 +356,10 @@ fn handle_method(item: Node<'_>, source: &[u8], ctx: &Ctx, out: &mut EvidenceSin
         out.metrics(id, function_metrics(item, source));
     }
 
-    // The JVM entry point, any class.
+    // The JVM entry point, any class. The one root left in this pass, and it
+    // is a MODIFIER fact as much as a name one — `static` and `public` are
+    // half the rule, and a member-shaped name trigger spells neither yet.
     if name == "main" && has_modifier(item, "static") && reach_of(item, ctx) == Reach::Exported {
-        out.root(
-            RootTarget::Declaration(id),
-            RootKind::Production,
-            Confidence::Probable,
-        );
-    }
-    // Dispatch the source never names: a serialization hook is called
-    // reflectively by the JVM, so no call site can exist by specification.
-    // `@Override` is the same story told by a marker, and its rule lives in
-    // the spec beside the rest of the language's.
-    if SERIALIZATION_HOOKS.contains(&name) {
         out.root(
             RootTarget::Declaration(id),
             RootKind::Production,

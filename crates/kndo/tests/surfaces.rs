@@ -76,8 +76,8 @@ fn a_member_on_a_promised_surface_is_kept_by_the_promise() {
     );
     assert_eq!(
         keeper_kinds(&snap, "impl.kmock#Impl.handle"),
-        ["witness"],
-        "the promise alone keeps it — no reference names it anywhere"
+        ["witness:Base"],
+        "the promise alone keeps it, and the keeper names the type that made it"
     );
 }
 

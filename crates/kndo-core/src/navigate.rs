@@ -138,7 +138,9 @@ pub enum Keeper {
     /// The member satisfies a surface its owner promised: an override, an
     /// interface method, a protocol requirement. Alive while its owner is —
     /// no call site can be required to exist, because the caller holds the
-    /// SUPERTYPE.
+    /// SUPERTYPE. `of` names it: the supertype the graph resolved, or — where
+    /// the base is outside the project — the base or marker the language's
+    /// own rule named.
     Witness { of: SmolStr },
     /// The unit compiling this file publishes its exported API, and this
     /// declaration is on it: the outside world is the consumer no call site
@@ -533,12 +535,19 @@ pub fn keepers(
     if member {
         // A surface its owner promised: no call site can be required to exist,
         // because every caller holds the SUPERTYPE and dispatches through it.
+        // Two halves, one keeper: the supertype the graph RESOLVED, and the
+        // base a rule NAMED where the supertype is outside the project.
         if let Some(owner) = d.owner
             && let Some(of) = index.witnessed_type(
                 f.evidence.declarations[owner.index()].name.as_str(),
                 d.name.as_str(),
             )
             && kept.push(Keeper::Witness { of })
+        {
+            return kept.out;
+        }
+        if let Some(of) = f.stated_witness(decl)
+            && kept.push(Keeper::Witness { of: of.clone() })
         {
             return kept.out;
         }

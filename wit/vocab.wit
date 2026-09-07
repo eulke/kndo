@@ -294,17 +294,27 @@ interface types {
         in-files: in-files,
     }
 
+    /// Mirrors the `ExternalWitness` trigger — the members a base outside the
+    /// project requires of whatever declares a relation to it.
+    record external-witness-trigger {
+        base: string,
+        members: list<string>,
+    }
+
     variant trigger {
         marker(marker-trigger),
         %name(name-trigger),
+        external-witness(external-witness-trigger),
     }
 
-    /// Mirrors `Effect` — a root of a color, an exemption from `unused`, or
-    /// a generator's ownership of the whole file.
+    /// Mirrors `Effect` — a root of a color, an exemption from `unused`, a
+    /// generator's ownership of the whole file, or a surface an owner
+    /// promised.
     variant effect {
         root(root-kind),
         exempt,
         generated,
+        witness,
     }
 
     /// Mirrors `DispatchRule`.

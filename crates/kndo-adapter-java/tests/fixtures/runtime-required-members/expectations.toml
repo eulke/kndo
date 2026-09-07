@@ -1,0 +1,31 @@
+# runtime-required-members: what a base OUTSIDE the project requires. The graph
+# can never resolve `Comparable` or `Serializable`, so java's spec names them
+# and the members they require; the engine keeps those as witnesses of the
+# base, alive while their owner is and of no color. A type that promised
+# nothing gets no such keeper, which is what makes the rule a rule and not a
+# name list.
+
+[[alive]]
+subject = "src/main/java/com/foo/Ticket.java#Ticket.compareTo(Ticket)"
+category = "unused"
+why = "Comparable requires it; no call site names it and no supertype in this project declares it"
+
+[[alive]]
+subject = "src/main/java/com/foo/Ticket.java#Ticket.writeObject(ObjectOutputStream)"
+category = "unused"
+why = "the serialization runtime calls it reflectively — private, so nothing else could keep it"
+
+[[alive]]
+subject = "src/main/java/com/foo/Ticket.java#Ticket.readObject(ObjectInputStream)"
+category = "unused"
+why = "the same hook, the other direction"
+
+[[dead]]
+subject = "src/main/java/com/foo/Ticket.java#Ticket.auditTrail()"
+category = "unused"
+why = "private, unnamed, and required by nothing — the control beside the hooks"
+
+[[dead]]
+subject = "src/main/java/com/foo/Plain.java#Plain.writeObject(java.io.ObjectOutputStream)"
+category = "unused"
+why = "the same NAME on a type that implements nothing: a rule about a base, not about a name"

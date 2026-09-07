@@ -1,9 +1,10 @@
 //! Extraction facts: reach mapping, nominal members, dispatch roots, imports,
 //! and the file-role roots the standard layout dictates.
 
+use kndo_contract::extension::Extension;
 use kndo_adapter_java::JavaAdapter;
 use kndo_contract::evidence::{
-    ImportShape, ImportTarget, MarkerTarget, Reach, RootKind, RootTarget,
+    ImportShape, ImportTarget, MarkerTarget, Reach, RelationKind, RootKind, RootTarget,
 };
 use kndo_testkit::{declaration_named, extract_evidence, import_named};
 
@@ -67,11 +68,11 @@ fn interface_members_are_implicitly_public_and_members_are_owned() {
 }
 
 #[test]
-fn dispatch_and_entry_points_are_rooted_not_guessed() {
+fn the_only_root_left_is_the_jvm_entry() {
     let ev = ev(
         "src/main/java/com/foo/App.java",
         "package com.foo;\n\
-         public class App {\n\
+         public class App implements java.io.Serializable {\n\
            public static void main(String[] args) {}\n\
            @Override public String toString() { return \"x\"; }\n\
            private void readObject(java.io.ObjectInputStream in) {}\n\
@@ -85,25 +86,48 @@ fn dispatch_and_entry_points_are_rooted_not_guessed() {
             _ => None,
         })
         .collect();
-    // What the grammar alone proves: the JVM entry, and a hook the runtime
-    // calls reflectively.
-    for name in ["main", "readObject"] {
-        let ix = ev.declarations.iter().position(|d| d.name == name).unwrap();
-        assert!(
-            rooted.contains(&ix),
-            "{name} must be rooted: {:#?}",
-            ev.roots
-        );
-    }
-    // `@Override` is a marker; the root is the spec's rule, derived by the
-    // engine — extraction states the annotation and stops there.
+    // The JVM entry is a modifier fact as much as a name one, and this pass
+    // is where `static` and `public` are visible.
+    let main = ev.declarations.iter().position(|d| d.name == "main").unwrap();
+    assert!(rooted.contains(&main), "{:#?}", ev.roots);
+
+    // Everything else a Java name means is the spec's data. `@Override` is
+    // stated as a marker; `readObject` is stated as a member of a type that
+    // says `implements Serializable`, and what the pair MEANS is one rule.
     assert_eq!(markers_on(&ev, "toString"), [("Override", vec![])]);
-    let ix = ev
-        .declarations
+    for name in ["toString", "readObject"] {
+        let ix = ev.declarations.iter().position(|d| d.name == name).unwrap();
+        assert!(!rooted.contains(&ix), "{name} is no longer rooted here");
+    }
+    assert!(
+        ev.relations
+            .iter()
+            .any(|r| r.to == "Serializable" && r.kind == RelationKind::Implements),
+        "{:#?}",
+        ev.relations
+    );
+
+    // The rules that read them, in the spec where a reader finds them once.
+    let spec = JavaAdapter::new().spec().clone();
+    let rules: Vec<String> = spec
+        .dispatch_rules()
         .iter()
-        .position(|d| d.name == "toString")
-        .unwrap();
-    assert!(!rooted.contains(&ix));
+        .map(|r| format!("{:?} => {:?}", r.when, r.then))
+        .collect();
+    assert!(
+        rules
+            .iter()
+            .any(|r| r.contains("\"Override\"") && r.ends_with("Witness")),
+        "{rules:#?}"
+    );
+    assert!(
+        rules
+            .iter()
+            .any(|r| r.contains("\"Serializable\"")
+                && r.contains("\"readObject\"")
+                && r.ends_with("Witness")),
+        "{rules:#?}"
+    );
 }
 
 /// `(path, args)` of every marker on the declaration `name`, in source order.

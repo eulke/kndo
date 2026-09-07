@@ -203,7 +203,9 @@ pub struct NodeRef {
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct EdgeRef {
-    pub kind: &'static str,
+    /// The keeper's name, with the fact that identifies it where there is one
+    /// (`root:production`, `witness:Comparable`).
+    pub kind: SmolStr,
     /// The concrete source site, when the keeper has one (roots and entry
     /// surface are facts, not sites).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -680,31 +682,33 @@ fn node_ref(cx: &QueryContext<'_>, file: usize, decl: Option<usize>) -> NodeRef 
 }
 
 fn edge_ref(cx: &QueryContext<'_>, keeper: &Keeper) -> EdgeRef {
-    let (kind, site) = match keeper {
-        Keeper::Reference { site } => ("reference", Some(*site)),
-        Keeper::Binding { site } => ("binding", Some(*site)),
+    let (kind, site): (SmolStr, _) = match keeper {
+        Keeper::Reference { site } => (SmolStr::new_static("reference"), Some(*site)),
+        Keeper::Binding { site } => (SmolStr::new_static("binding"), Some(*site)),
         Keeper::Root { kind } => (
-            match kind {
+            SmolStr::new_static(match kind {
                 kndo_contract::evidence::RootKind::Production => "root:production",
                 kndo_contract::evidence::RootKind::Test => "root:test",
                 kndo_contract::evidence::RootKind::Tooling => "root:tooling",
-            },
+            }),
             None,
         ),
         Keeper::Dispatch { kind } => (
-            match kind {
+            SmolStr::new_static(match kind {
                 kndo_contract::evidence::RootKind::Production => "dispatch:production",
                 kndo_contract::evidence::RootKind::Test => "dispatch:test",
                 kndo_contract::evidence::RootKind::Tooling => "dispatch:tooling",
-            },
+            }),
             None,
         ),
-        Keeper::Exempt => ("exempt", None),
-        Keeper::Witness { .. } => ("witness", None),
-        Keeper::EntrySurface => ("entry-surface", None),
-        Keeper::Published { .. } => ("published", None),
-        Keeper::SurfaceImport { site } => ("surface-import", Some(*site)),
-        Keeper::OwnerBinding { site } => ("owner-binding", Some(*site)),
+        Keeper::Exempt => (SmolStr::new_static("exempt"), None),
+        // The base is the whole of the answer to "why is this alive": a
+        // reader who sees `witness:Comparable` needs no second question.
+        Keeper::Witness { of } => (SmolStr::new(format!("witness:{of}")), None),
+        Keeper::EntrySurface => (SmolStr::new_static("entry-surface"), None),
+        Keeper::Published { .. } => (SmolStr::new_static("published"), None),
+        Keeper::SurfaceImport { site } => (SmolStr::new_static("surface-import"), Some(*site)),
+        Keeper::OwnerBinding { site } => (SmolStr::new_static("owner-binding"), Some(*site)),
     };
     EdgeRef {
         kind,

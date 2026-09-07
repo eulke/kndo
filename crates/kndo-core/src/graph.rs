@@ -23,7 +23,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Bump when the SAME evidence assembles into a DIFFERENT graph — resolution
 /// candidate changes, reachability semantics, new assembled fields. Folded into the
 /// graph cache key beside the contract fingerprint and the adapter set.
-pub const GRAPH_SEMANTICS_VERSION: u32 = 25;
+pub const GRAPH_SEMANTICS_VERSION: u32 = 26;
 
 #[derive(Serialize, Deserialize)]
 pub struct GraphFile {
@@ -92,6 +92,11 @@ pub struct GraphFile {
     /// to judge — see [`kndo_contract::extension::Effect::Generated`]. The
     /// file is judged like any other: nothing roots it for being generated.
     pub generated: bool,
+    /// Declarations a dispatch rule made witnesses, by index, each with the
+    /// base whose surface it satisfies — the half of
+    /// [`crate::navigate::Keeper::Witness`] a language STATES, beside the half
+    /// the graph's own relations resolve.
+    pub witnesses: Vec<(u32, SmolStr)>,
     /// The unit compiling this file, as an index into `Graph::project`'s units
     /// — [`crate::project::Project::unit_of`]. `None` until the claiming
     /// adapter reports its manifest's units, which is what every consumer
@@ -125,6 +130,17 @@ impl GraphFile {
             .iter()
             .chain(&self.dispatched)
             .chain(&self.anchored)
+    }
+
+    /// The base whose surface this declaration satisfies, where a rule of the
+    /// language STATED one — the half of a witness the graph's own relations
+    /// cannot resolve, because the base is outside the project. Every
+    /// judgment that stands down for a resolved witness reads this beside it.
+    pub fn stated_witness(&self, decl: usize) -> Option<&SmolStr> {
+        self.witnesses
+            .binary_search_by_key(&(decl as u32), |(ix, _)| *ix)
+            .ok()
+            .map(|i| &self.witnesses[i].1)
     }
 
     /// The one spelling of "something anchors this file": a root, or the
@@ -506,6 +522,7 @@ pub fn assemble(
                 exempt: Vec::new(),
                 dispatch_notes: Vec::new(),
                 generated: false,
+                witnesses: Vec::new(),
                 unit,
                 imports: Vec::new(),
                 import_targets: Vec::new(),
@@ -834,6 +851,7 @@ fn mount_and_own(files: &mut [GraphFile], project: &crate::project::Project) {
 /// adapter has to read a path and conclude a role. It recomputes from
 /// evidence alone, so a patched graph and a full build agree to the byte.
 fn dispatch_files(files: &mut [GraphFile], adapters: &[Box<dyn Extension>]) {
+    let supertypes = crate::dispatch::supertype_edges(files.iter().map(|f| &f.evidence));
     for f in files.iter_mut() {
         let rules = adapter_by_id(adapters, &f.adapter).spec().dispatch_rules();
         let mut d = crate::dispatch::apply(&f.evidence, rules);
@@ -847,13 +865,18 @@ fn dispatch_files(files: &mut [GraphFile], adapters: &[Box<dyn Extension>]) {
             .collect();
         colors.sort_by_key(|k| *k as u8);
         colors.dedup();
-        d.roots
-            .extend(crate::dispatch::name_roots(&f.evidence, &colors, rules));
+        let (roots, witnesses) =
+            crate::dispatch::declaration_effects(&f.evidence, &colors, &supertypes, rules);
+        d.roots.extend(roots);
         crate::dispatch::sort_roots(&mut d.roots);
+        d.witnesses.extend(witnesses);
+        d.witnesses.sort();
+        d.witnesses.dedup_by_key(|(ix, _)| *ix);
         f.dispatched = d.roots;
         f.exempt = d.exempt;
         f.dispatch_notes = d.notes;
         f.generated = d.generated;
+        f.witnesses = d.witnesses;
     }
 }
 

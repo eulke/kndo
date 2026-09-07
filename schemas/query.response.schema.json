@@ -136,6 +136,7 @@
       "type": "object",
       "properties": {
         "kind": {
+          "description": "The keeper's name, with the fact that identifies it where there is one\n(`root:production`, `witness:Comparable`).",
           "type": "string"
         },
         "site": {

@@ -390,6 +390,23 @@ both the qualifiers and the keeper, and the audit's G10 for go closes as a
 FINDING ABOUT GO's SHAPE rather than a defect: `pkg.Name` is always spelled,
 but nothing in Go's corpus is accusable behind it.
 
+### The member name-collision keeper, sized — measured 2026-09-07
+
+`keepers` keeps a MEMBER alive on any reachable reference to its name, anywhere
+("dispatch is not lexical"). The plan says witnesses replace that keep-alive,
+so the slice that landed `Effect::Witness` sized what replacing it would cost.
+Ablating the keeper on guava takes 8,250 findings to **27,405** — it is holding
+roughly nineteen thousand members alive by name alone. With java's
+`ExternalWitness` table in place the same ablation gives 27,396: the precise
+keeper covers **9** of the nineteen thousand today.
+
+The number says the retirement is not a rule-table away. What replaces the
+keeper is qualified references (`Reference::on`, which java already emits) plus
+witnesses, and the honest next step is to measure how far the QUALIFIER gets
+before any of the keeper comes off — the same instrument, one variable at a
+time. Recorded so nobody reads "9" as the witness table failing: it is the
+keeper masking it.
+
 ## The v1 surface ledger (owner directive, 2026-08-31)
 
 v1's shipped surface is a floor: every capability it offers is either present in v2,

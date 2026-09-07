@@ -1595,3 +1595,38 @@ nothing narrower. Of gin's 658 runner entries, none would be over-matched by
 the bare prefix, and where it could happen the direction is keep-alive inside a
 file already rooted Test. The grammar stays as it is until a repository pays
 for the difference.
+
+### A promise its owner made: `Effect::Witness` (2026-09-07)
+
+| repo | before | after | what moved |
+|---|---|---|---|
+| every repository | — | — | byte-identical |
+
+java's `@Override` Production root and its hardcoded `SERIALIZATION_HOOKS`
+name list left extraction for two spec rules — `@Override` means WITNESS, and
+the JDK bases the graph can never resolve name their own requirements — and
+every report agrees with the previous run to the byte. The ablations are where
+the numbers are.
+
+**`@Override` keeps 52 members on guava**, and it now keeps them without
+painting their files production: a root asserts that something outside the
+graph is entered, and an override asserts nothing of the kind.
+
+**The base table is 9 members, and invisible behind a broader keeper.**
+Removing it changes nothing (8250 → 8250) because `keepers` keeps any member
+alive on a reachable reference to its NAME, anywhere. Ablate that keeper and
+the table's contribution appears: 27,405 findings without it, 27,396 with.
+The same ablation sizes the keeper itself at roughly nineteen thousand guava
+members — recorded in EXPERIMENTS as the first measurement of the plan's
+"witnesses replace the keep-alive by name collision".
+
+**The first attempt over-narrowed, and the corpus said so.** Matching only
+the relation a file reports itself put 18 new `unused` on guava, all
+`readResolve` on classes serializable through a base (`Absent` through
+`Optional`). The runtime does not care which link named `Serializable`, so the
+matcher walks the whole declared supertype chain by name.
+
+**A defect the change exposed.** `internal-only` stood down for a witness the
+graph resolved but not for one a rule states, so guava's 37 JUnit
+`setUp`/`tearDown` overrides became findings the moment `@Override` stopped
+being a root. Both halves read one seam now, and the 37 are gone again.

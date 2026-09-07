@@ -24,30 +24,68 @@ pub struct JavaAdapter {
     spec: ExtensionSpec,
 }
 
-/// What Java's annotations mean, as data. `@Override` is dispatch the source
-/// never names — the body is reached through its supertype's contract, so no
-/// call site can exist — and `Probable` because an override of a method the
-/// project itself declares and nobody calls is still dead, one supertype up.
+/// What Java's annotations and its own runtime mean, as data.
+///
+/// `@Override` is a WITNESS, not a root: the body is reached through its
+/// supertype's contract, so no call site can be required to exist — and
+/// nothing outside the graph is ENTERED there, so the file takes no color
+/// from it. `Certain`: the compiler rejects the annotation where no supertype
+/// declares the member.
+///
+/// The `java.lang`/`java.io` bases are the same fact for types the project
+/// does not contain: their requirements are named here because the graph can
+/// never resolve them. `Serializable` is the marker interface whose hooks the
+/// serialization runtime calls reflectively — four names, all private by
+/// convention, none of them ever called from source.
+///
 /// `@SuppressWarnings("unused")` exempts: the author answered this analysis's
 /// question before it was asked (the owner's 2026-09-05 decision).
 fn dispatch_rules() -> Vec<kndo_contract::extension::DispatchRule> {
-    vec![
-        kndo_contract::extension::DispatchRule {
-            when: kndo_contract::extension::Trigger::marker("Override"),
-            then: kndo_contract::extension::Effect::Root(
-                kndo_contract::evidence::RootKind::Production,
-            ),
-            confidence: kndo_contract::vocab::Confidence::Probable,
-        },
+    use kndo_contract::extension::{DispatchRule, Effect, Trigger};
+    use kndo_contract::vocab::Confidence;
+    let witness = |when: Trigger| DispatchRule {
+        when,
+        then: Effect::Witness,
+        confidence: Confidence::Certain,
+    };
+    let mut rules = vec![
+        witness(Trigger::marker("Override")),
         kndo_toolkit::jvm_manifest::suppresses_unused("SuppressWarnings"),
-    ]
+    ];
+    rules.extend(
+        [
+            ("Comparable", &["compareTo"][..]),
+            ("Comparator", &["compare"]),
+            ("Iterable", &["iterator"]),
+            ("Iterator", &["hasNext", "next", "remove"]),
+            ("Runnable", &["run"]),
+            ("Callable", &["call"]),
+            ("AutoCloseable", &["close"]),
+            ("Closeable", &["close"]),
+            ("Cloneable", &["clone"]),
+            (
+                "Serializable",
+                &[
+                    "readObject",
+                    "writeObject",
+                    "readResolve",
+                    "writeReplace",
+                    "readObjectNoData",
+                ],
+            ),
+        ]
+        .into_iter()
+        .map(|(base, members)| witness(Trigger::required_by(base, members))),
+    );
+    rules
 }
 
 impl JavaAdapter {
     pub fn new() -> Self {
         JavaAdapter {
-            // 12: the generated banner is reported, never concluded.
-            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:java", 12, &["java"])
+            // 13: `@Override` and the runtime's own bases state a witness,
+            // not a root.
+            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:java", 13, &["java"])
                 .ladder(&[
                     // `private` is class-private and exists for members alone
                     // (a top-level class cannot take it), `public` is

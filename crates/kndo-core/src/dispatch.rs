@@ -8,7 +8,9 @@
 //! in the evidence cache, so a rule change never has to re-extract anything.
 
 use kndo_contract::evidence::{FileEvidence, Marker, MarkerTarget, Root, RootKind, RootTarget};
-use kndo_contract::extension::{DispatchRule, Effect};
+use kndo_contract::extension::{DeclarationCx, DispatchRule, Effect};
+use smol_str::SmolStr;
+use std::collections::BTreeMap;
 
 /// What the rules derived for one file.
 #[derive(Debug, Default)]
@@ -24,6 +26,10 @@ pub struct Dispatched {
     /// A generator owns this file — see
     /// [`kndo_contract::extension::Effect::Generated`].
     pub generated: bool,
+    /// Declarations a rule made witnesses, by index, each with the base whose
+    /// surface it satisfies as the rule spells it — see
+    /// [`kndo_contract::extension::Effect::Witness`]. Sorted by index.
+    pub witnesses: Vec<(u32, SmolStr)>,
 }
 
 pub fn apply(evidence: &FileEvidence, rules: &[DispatchRule]) -> Dispatched {
@@ -62,6 +68,11 @@ pub fn apply(evidence: &FileEvidence, rules: &[DispatchRule]) -> Dispatched {
                         ));
                     }
                 }
+                Effect::Witness => {
+                    if let MarkerTarget::Declaration(id) = &marker.on {
+                        out.witnesses.push((id.index() as u32, spell_path(marker)));
+                    }
+                }
                 Effect::Exempt => match &marker.on {
                     MarkerTarget::File => {
                         let n = evidence.declarations.len();
@@ -94,41 +105,89 @@ pub fn apply(evidence: &FileEvidence, rules: &[DispatchRule]) -> Dispatched {
     sort_roots(&mut out.roots);
     out.exempt.sort_unstable();
     out.exempt.dedup();
+    sort_witnesses(&mut out.witnesses);
     out
 }
 
-/// The roots a file's DECLARATION NAMES derive — a runner's `TestXxx`, a
-/// runtime's `main` and `init`. Separate from [`apply`] because the qualifier
-/// these rules read is the file's ROLE, which the project states and only the
-/// assembled graph knows: what a unit's kind and a declared file role say
-/// lands as a root on the file, and `colors` is what those roots carry
-/// (sorted and deduplicated). Only a declaration nothing owns is matched — a
-/// member dispatched by name is its owner's business.
-pub fn name_roots(evidence: &FileEvidence, colors: &[RootKind], rules: &[DispatchRule]) -> Vec<Root> {
-    let mut out = Vec::new();
-    if rules.is_empty() {
-        return out;
-    }
-    for (id, d) in evidence.declarations_with_ids() {
-        if d.owner.is_some() {
-            continue;
+/// Every supertype edge the project declares, by NAME — what an
+/// `ExternalWitness` rule walks. Names on both sides: the base such a rule
+/// names is the one the project does not declare, so it is only ever a
+/// target.
+pub fn supertype_edges<'a>(
+    files: impl Iterator<Item = &'a FileEvidence>,
+) -> BTreeMap<SmolStr, Vec<SmolStr>> {
+    let mut out: BTreeMap<SmolStr, Vec<SmolStr>> = BTreeMap::new();
+    for ev in files {
+        for r in &ev.relations {
+            let from = ev.declarations[r.from.index()].name.clone();
+            out.entry(from).or_default().push(r.to.clone());
         }
+    }
+    for supers in out.values_mut() {
+        supers.sort();
+        supers.dedup();
+    }
+    out
+}
+
+/// What the DECLARATION-shaped rules derive: roots from a name a runner or a
+/// runtime calls, witnesses from a surface an owner promised. Separate from
+/// [`apply`] because the qualifier these rules read is the file's ROLE, which
+/// the project states and only the assembled graph knows: what a unit's kind
+/// and a declared file role say lands as a root on the file, and `colors` is
+/// what those roots carry (sorted and deduplicated).
+pub fn declaration_effects(
+    evidence: &FileEvidence,
+    colors: &[RootKind],
+    supertypes: &BTreeMap<SmolStr, Vec<SmolStr>>,
+    rules: &[DispatchRule],
+) -> (Vec<Root>, Vec<(u32, SmolStr)>) {
+    let mut roots = Vec::new();
+    let mut witnesses = Vec::new();
+    if rules.is_empty() {
+        return (roots, witnesses);
+    }
+    let cx = DeclarationCx {
+        evidence,
+        colors,
+        supertypes,
+    };
+    for (id, _) in evidence.declarations_with_ids() {
         for rule in rules {
-            if !rule.when.matches_name(&d.name, &d.kind, colors) {
+            if !rule.when.matches_declaration(&cx, id) {
                 continue;
             }
-            let Effect::Root(kind) = rule.then else {
-                continue;
-            };
-            out.push(Root {
-                target: RootTarget::Declaration(id),
-                kind,
-                confidence: rule.confidence,
-            });
+            match rule.then {
+                Effect::Root(kind) => roots.push(Root {
+                    target: RootTarget::Declaration(id),
+                    kind,
+                    confidence: rule.confidence,
+                }),
+                Effect::Witness => {
+                    witnesses.push((id.index() as u32, witness_base(&rule.when)));
+                }
+                Effect::Exempt | Effect::Generated => {}
+            }
         }
     }
-    sort_roots(&mut out);
-    out
+    sort_roots(&mut roots);
+    sort_witnesses(&mut witnesses);
+    (roots, witnesses)
+}
+
+/// The name a reader recognizes behind a witness: the base a rule named, or
+/// the rule's own subject where it named none.
+fn witness_base(trigger: &kndo_contract::extension::Trigger) -> SmolStr {
+    use kndo_contract::extension::Trigger;
+    match trigger {
+        Trigger::ExternalWitness { base, .. } => base.clone(),
+        Trigger::Marker { path, .. } | Trigger::Name { pattern: path, .. } => path.clone(),
+    }
+}
+
+fn sort_witnesses(witnesses: &mut Vec<(u32, SmolStr)>) {
+    witnesses.sort();
+    witnesses.dedup_by_key(|(ix, _)| *ix);
 }
 
 /// The one order derived roots are held in — by target, then color, then
@@ -143,6 +202,11 @@ pub fn sort_roots(roots: &mut Vec<Root>) {
     roots.dedup_by(|a, b| {
         target_key(a) == target_key(b) && a.kind == b.kind && a.confidence == b.confidence
     });
+}
+
+/// The marker's path alone — what a witness derived from one is spelled by.
+fn spell_path(marker: &Marker) -> SmolStr {
+    marker.path.clone()
 }
 
 /// The marker as a reader would recognize it, language-neutral: `path` or

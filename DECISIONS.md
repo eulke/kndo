@@ -4929,3 +4929,80 @@ components are re-pinned in the same commit. One conformance fixture is added,
 `main-in-every-target` (kndo-adapter-rust), pinning that a build script's, a
 binary's and an example's `fn main` are each kept in the color cargo's target
 kind implies; no existing fixture's pinned report moves.
+
+## 2026-09-07 — `Effect::Witness`: a promise its owner made, not a root, and not a hardcoded name list
+
+**Two adapters were concluding, in two different registers.** `kndo:java`
+turned `@Override` into a Production ROOT and carried a five-name
+`SERIALIZATION_HOOKS` list in extraction that rooted `readObject`,
+`writeObject`, `readResolve`, `writeReplace` and `readObjectNoData` wherever
+they appeared — by name, on any class, whether or not it was serializable at
+all. A root is a claim that something OUTSIDE the graph is entered here, and
+it paints the file with a color; an override makes no such claim, and neither
+does a method on a class the runtime will never serialize.
+
+**The vocabulary.** `Effect::Witness` joins `Root`, `Exempt` and `Generated`:
+the declaration satisfies a surface its OWNER promised, so it is alive while
+its owner is and carries no color. `Trigger::ExternalWitness { base, members }`
+states the requirements of a base the project does not contain — the case the
+graph can never resolve, because `Comparable` and `Serializable` live in the
+JDK. Where the base IS in the project, its own members are the requirements
+and no rule is needed: that half has worked since M8.b, and this slice makes
+the two halves one keeper, `Keeper::Witness { of }`, which now RENDERS the
+base it names (`witness:Comparable`, `witness:Override`) instead of carrying
+it write-only.
+
+**The deviation, named, and it is one decision and not three.** The plan
+sketches four trigger shapes: `Marker`, `Name`, `Relation`, `MemberOf` and
+`ExternalWitness`. Two of them are the same predicate in another position.
+`MemberOf { owner: Relation { base }, name }` IS `ExternalWitness { base,
+members }` with one name instead of a list, and a standalone `Relation`
+trigger — one that fires ON a type — has no consumer in any language's own
+rules: every case the plan gives for it (`: XCTestCase`, `: View`, `:
+Codable`) is a FRAMEWORK's, which the plan itself assigns to a rule pack
+(M8.e). Shipping all three would hand a rule author two spellings for one
+fact. `ExternalWitness` ships, with the plan's exact name and shape; the
+general `MemberOf` lands in M8.e beside the first rule that needs a member
+NAME PATTERN and a Root rather than a Witness (`test*` of an `XCTestCase`),
+and the type-shaped `Relation` with it.
+
+**A relation is matched through the whole declared chain, and the first
+attempt got that wrong.** Reading only the relation the file itself reports
+put 18 new `unused` findings on guava — every one a `readResolve` on a class
+like `Absent`, which is serializable through `Optional` and never says so
+itself. The serialization runtime does not care which link named the base, so
+neither does the rule: the matcher walks the project's supertype edges by NAME
+(the base a rule names is only ever a target, never a key), cycle-safe.
+
+**Measured on the corpus: every report byte-identical, and three ablations
+behind it.**
+
+| what | guava |
+| --- | --- |
+| shipped (both rules) | 8250 — byte-identical to the previous run |
+| without `@Override` | 8302 (+52 members it keeps) |
+| without the base table | 8250 (+0 — the name-collision keeper covers them) |
+| without the base table, name-collision keeper ablated | 27405 vs 27396 (+9) |
+
+The base table is invisible today because a much broader keeper is standing in
+front of it: `keepers` keeps a member alive on ANY reachable reference to its
+name, and ablating that takes guava from 8,250 to 27,405. The table is 9 of
+those nineteen thousand, precisely. EXPERIMENTS carries the number, because
+the plan's "witnesses replace the keep-alive by name collision" is a real
+direction and this is its first measurement.
+
+**A defect the change exposed, fixed in the same commit.** `internal-only`
+already stood down for a witness the graph RESOLVED — narrowing one is a
+compile error, not advice — but read only that half, so the 37 `setUp`/
+`tearDown` overrides guava declares against JUnit's `TestCase` became findings
+the moment `@Override` stopped being a root. `GraphFile::stated_witness` is
+the seam both halves now read.
+
+`GRAPH_SEMANTICS_VERSION` moves to 26; `kndo:java` bumps to 13 (it emits one
+root fewer per serialization hook, and none at all for `@Override`). The
+contract fingerprint does not move. The WIT `effect` variant gains `witness`
+and `trigger` gains `external-witness`, with the pinned reference components
+re-pinned. One conformance fixture is added, `runtime-required-members`
+(kndo-adapter-java), which pins that a `writeObject` on a class implementing
+nothing is judged like any other member — the control that makes it a rule
+about a base and not about a name; no existing fixture's pinned report moves.
