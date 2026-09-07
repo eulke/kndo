@@ -1215,6 +1215,8 @@ name = "kndo-toolkit"
 version = "0.0.0"
 dependencies = [
  "kndo-contract",
+ "roxmltree",
+ "serde_json",
  "smol_str",
  "tree-sitter",
  "yaml-rust2",

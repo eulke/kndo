@@ -5449,3 +5449,45 @@ kndo's dogfood reported the fourth verbatim copy of that harness as a
 fingerprint nor `GRAPH_SEMANTICS_VERSION` moves — an adapter emitting
 different evidence is the adapter's knob. Eight conformance fixtures move, all
 in kndo-adapter-python fixtures.
+
+## 2026-09-07 — M8.d: the pom is read as a document, and one manifest states a unit once
+
+`pom.xml` is parsed with `roxmltree` instead of scanned by line, and the two
+line scanners it replaces are deleted. The scanner could not tell a
+`<dependency>` from the `<exclusion>` inside it, nor a declared dependency from
+a `<dependencyManagement>` entry nobody declared — and both are Maven's own
+answers, captured here rather than reasoned about:
+`crates/kndo-toolkit/tests/captured/maven.json` is what `mvn help:effective-pom`
+(Maven 3.9.11) returned for the two-pom reactor beside it, and `tests/maven.rs`
+asks the reader the same questions.
+
+**What the scanner actually answered, on those exact files.** For the child it
+reported `hamcrest-core` and `org.hamcrest:hamcrest-core` — an EXCLUSION — and
+lost `junit` entirely, because the exclusion's `<artifactId>` overwrote the
+dependency's before the closing tag. For the parent, which declares no
+dependency at all, it reported `managed-only`, reading the
+`<dependencyManagement>` block as declarations. A document parser makes both
+impossible rather than harder.
+
+The corpus does not move, and that is the honest result: java's
+`DependencyIdentity` is `Underivable` — a JVM coordinate names no importable
+package — so every usage judgment on these already abstains and a wrong
+dependency list changed no finding. The defect was real and invisible, which is
+exactly the kind a capture catches and a corpus cannot.
+
+**One manifest states a thing once, however many adapters claim it.** java and
+kotlin both claim `**/pom.xml`, because a project with both languages has one
+Maven build; with kotlin now reading `extract_manifest` too, the merge would
+have produced two of every unit. The engine unions per manifest instead of
+concatenating — what each adapter adds is what the others did not already say.
+
+java's and kotlin's `packages` and `manifest_dependencies` hooks are gone, and
+the toolkit's `dependencies` dispatcher and `maven` scanner with them. Four of
+the eight remaining trait-impl hooks retire here; js-ts's four are M8.d's last
+row. `kndo:java` moves to 18 and `kndo:kotlin` to 12 — kotlin now reads a
+manifest it did not before. Neither the fingerprint nor
+`GRAPH_SEMANTICS_VERSION` moves, and no conformance fixture moves.
+
+Gradle keeps its scanner for now, moved inside the one hook rather than left as
+a second door: the block scanner and the version catalog the plan calls for are
+their own slice, and it is the one that lets kotlin's library-mode root die.

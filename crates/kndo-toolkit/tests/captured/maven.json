@@ -1,0 +1,28 @@
+{
+  "child": {
+    "artifactId": "child",
+    "dependencies": [
+      {
+        "artifactId": "junit",
+        "exclusions": [
+          "hamcrest-core"
+        ],
+        "groupId": "junit",
+        "scope": "test",
+        "version": "4.13.2"
+      },
+      {
+        "artifactId": "managed-only",
+        "exclusions": [],
+        "groupId": "com.managed",
+        "scope": "compile",
+        "version": "9.9"
+      }
+    ],
+    "packaging": "jar",
+    "sourceDirectory": "src/main/java",
+    "testSourceDirectory": "test-src"
+  },
+  "note": "mvn help:effective-pom on the child of a two-pom reactor: an inherited testSourceDirectory, a ${junit.version} property resolved from the parent, a dependency with an exclusion, and a dependencyManagement entry the child declares. Paths are relative to the child's own directory, which is what Maven resolves an inherited relative directory against.",
+  "producer": "Apache Maven 3.9.11 (3e54c93a704957b63ee3494413a2b544fd3d825b)"
+}

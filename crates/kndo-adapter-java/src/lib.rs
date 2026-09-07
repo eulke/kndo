@@ -94,7 +94,7 @@ impl JavaAdapter {
         JavaAdapter {
             // 14: `@Override` states a witness on a METHOD, and the bases
             // are named as the source writes them, qualified by its imports.
-            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:java", 17, &["java"])
+            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:java", 18, &["java"])
                 // The conventions, as DATA the engine applies where no unit
                 // spoke for the file — never a root an adapter concluded. The
                 // library-mode "every non-test class is importable surface"
@@ -167,20 +167,5 @@ impl Extension for JavaAdapter {
         out: &mut kndo_contract::manifest::ManifestSink,
     ) {
         kndo_toolkit::jvm_manifest::structure(manifest, cx, out);
-    }
-
-    fn packages(
-        &self,
-        manifest: &SourceFile<'_>,
-        _cx: &ResolveContext<'_>,
-    ) -> Vec<kndo_contract::adapter::PackageEntry> {
-        kndo_toolkit::jvm_manifest::packages(manifest)
-    }
-
-    fn manifest_dependencies(
-        &self,
-        manifest: &SourceFile<'_>,
-    ) -> Vec<kndo_contract::adapter::DependencyDeclaration> {
-        kndo_toolkit::jvm_manifest::dependencies(manifest)
     }
 }

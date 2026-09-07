@@ -176,11 +176,22 @@ pub fn read_manifests(
             return;
         }
         claimants.push(SmolStr::new(adapter.spec().coordinate()));
-        merged.units.extend(read.units);
-        merged.members.extend(read.members);
-        merged.packages.extend(read.packages);
-        merged.dependencies.extend(read.dependencies);
-        merged.mentions.extend(read.mentions);
+        // ONE manifest states a thing once, however many adapters claim it: a
+        // Maven pom is read by java and by kotlin, and a project with both
+        // does not thereby have two of every unit. What each adapter adds is
+        // what the others did not already say.
+        fn union<T: PartialEq>(into: &mut Vec<T>, from: Vec<T>) {
+            for value in from {
+                if !into.contains(&value) {
+                    into.push(value);
+                }
+            }
+        }
+        union(&mut merged.units, read.units);
+        union(&mut merged.members, read.members);
+        union(&mut merged.packages, read.packages);
+        union(&mut merged.dependencies, read.dependencies);
+        union(&mut merged.mentions, read.mentions);
         // The bridge, until every adapter speaks the one hook: what the four
         // hooks this replaces return joins the same evidence, so every
         // consumer reads ONE value and the bridge retires by deleting these

@@ -376,15 +376,33 @@ pub mod jvm_manifest {
         out: &mut kndo_contract::manifest::ManifestSink,
     ) {
         let path = manifest.path.as_str();
-        if !path.ends_with("pom.xml") {
-            return;
-        }
+        let file = path.rsplit('/').next().unwrap_or_default();
         let Ok(text) = std::str::from_utf8(manifest.content) else {
             return;
         };
-        let Some(project) = children(text, "project").into_iter().next() else {
+        if file != "pom.xml" {
+            // Gradle states its structure in a language, not a document: the
+            // block scanner and its version catalog are their own reading.
+            // What it does say plainly is read here.
+            gradle_structure(manifest, text, out);
+            return;
+        }
+        // A pom is XML and is read as XML. The shallow scanner this replaces
+        // could not tell a `<dependency>` from the `<exclusion>` inside it,
+        // nor a declared dependency from a `<dependencyManagement>` entry
+        // nobody declared — both graded against `mvn help:effective-pom` in
+        // `tests/maven.rs`.
+        let Ok(doc) = roxmltree::Document::parse(text) else {
             return;
         };
+        let project = doc.root_element();
+        if project.tag_name().name() != "project" {
+            return;
+        }
+        let properties = properties_of(project);
+        let resolve = |raw: &str| interpolate(raw, &properties);
+        maven_dependencies(project, out);
+        maven_package(project, path, out);
         let dir = path.rsplit_once('/').map_or("", |(d, _)| d);
         let join = |rel: &str| -> String {
             if dir.is_empty() {
@@ -393,9 +411,10 @@ pub mod jvm_manifest {
                 format!("{dir}/{rel}")
             }
         };
-        for module in children(project, "modules")
+        for module in child(project, "modules")
             .into_iter()
-            .flat_map(|m| children(m, "module"))
+            .flat_map(|m| children_named(m, "module"))
+            .map(|m| text_of(m))
         {
             let module = module.trim();
             if module.is_empty() {
@@ -411,32 +430,29 @@ pub mod jvm_manifest {
             // against the units that actually exist anyway.
             out.member(kndo_contract::vocab::ProjectPath::new(join(&rel)));
         }
-        let packaging = children(project, "packaging")
-            .into_iter()
-            .next()
-            .map_or("jar", str::trim);
-        if packaging == "pom" {
+        let packaging = child(project, "packaging").map_or("jar".to_string(), text_of);
+        if packaging.trim() == "pom" {
             // An aggregator: it lists modules and compiles none of them.
             return;
         }
-        let Some(name) = children(project, "artifactId")
-            .into_iter()
-            .next()
-            .map(str::trim)
+        let Some(name) = child(project, "artifactId")
+            .map(text_of)
+            .map(|n| n.trim().to_string())
             .filter(|n| !n.is_empty())
         else {
             return;
         };
-        let mut depends_on: Vec<SmolStr> = children(project, "dependencies")
+        let name = name.as_str();
+        let mut depends_on: Vec<SmolStr> = declared_dependencies(project)
             .into_iter()
-            .flat_map(|d| children(d, "dependency"))
-            .filter_map(|d| children(d, "artifactId").into_iter().next())
-            .map(|a| SmolStr::new(a.trim()))
+            .filter_map(|d| child(d, "artifactId"))
+            .map(|a| SmolStr::new(text_of(a).trim()))
             .filter(|a| !a.is_empty())
             .collect();
         depends_on.sort_unstable();
         depends_on.dedup();
-        let mut test_roots: Vec<SmolStr> = match test_source_directory(project, path, cx) {
+        let mut test_roots: Vec<SmolStr> = match test_source_directory(project, path, cx, &resolve)
+        {
             Some(dir) => vec![SmolStr::new(join(&dir))],
             None => vec![
                 SmolStr::new(join("src/test/java")),
@@ -482,24 +498,47 @@ pub mod jvm_manifest {
     /// what keeps `<parent>`'s own `<artifactId>` and
     /// `<dependencyManagement>`'s `<dependencies>` out of a project's
     /// direct children, where reading them would be a bug.
+    /// What a Gradle build file states plainly, until the block scanner and
+    /// the version catalog read the rest (M8.d): its dependency coordinates,
+    /// and — for a `settings.gradle(.kts)` — the modules it includes, whose
+    /// name is positional and held by the settings file rather than by each
+    /// module's own build script.
+    fn gradle_structure(
+        manifest: &SourceFile<'_>,
+        text: &str,
+        out: &mut kndo_contract::manifest::ManifestSink,
+    ) {
+        let mut declarations = gradle(text);
+        declarations.sort_by(|a, b| {
+            (a.name.as_str(), a.scope.map(|s| s as u8))
+                .cmp(&(b.name.as_str(), b.scope.map(|s| s as u8)))
+        });
+        declarations.dedup();
+        for declaration in declarations {
+            out.dependency(declaration);
+        }
+        for package in gradle_packages(manifest, text) {
+            out.package(package);
+        }
+    }
+
     /// A pom's own `<build><testSourceDirectory>`, else the nearest ancestor's
     /// along `<parent>` — Maven's inheritance, read through the context. A
     /// relative directory, to be joined under the INHERITING pom's own
-    /// directory: `<testSourceDirectory>test</testSourceDirectory>` in a
-    /// parent means each child's `test`. A value the pom computes
-    /// (`${…}` beyond the basedir) is unreadable here and counts as unstated.
+    /// directory: `<testSourceDirectory>test-src</testSourceDirectory>` in a
+    /// parent means each child's `test-src`, which is what
+    /// `mvn help:effective-pom` answers for the captured reactor.
     fn test_source_directory(
-        project: &str,
+        project: roxmltree::Node<'_, '_>,
         path: &str,
         cx: &kndo_contract::adapter::ResolveContext<'_>,
+        resolve: &dyn Fn(&str) -> String,
     ) -> Option<String> {
-        let declared = |body: &str| -> Option<String> {
-            let raw = children(body, "build")
-                .into_iter()
-                .next()
-                .and_then(|b| children(b, "testSourceDirectory").into_iter().next())?
-                .trim()
-                .to_string();
+        let declared = |node: roxmltree::Node<'_, '_>| -> Option<String> {
+            let raw = child(node, "build")
+                .and_then(|b| child(b, "testSourceDirectory"))
+                .map(text_of)?;
+            let raw = resolve(raw.trim());
             let raw = raw
                 .strip_prefix("${project.basedir}/")
                 .or_else(|| raw.strip_prefix("${basedir}/"))
@@ -511,21 +550,32 @@ pub mod jvm_manifest {
         if let Some(dir) = declared(project) {
             return Some(dir);
         }
-        let mut body = project.to_string();
         let mut at = path.to_string();
+        let mut next = parent_pom(project, &at);
         let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-        while let Some(parent) = parent_pom(&body, &at) {
+        while let Some(parent) = next {
             if !seen.insert(parent.clone()) {
                 return None;
             }
             let content = cx.manifest(&kndo_contract::vocab::ProjectPath::new(&parent))?;
             let text = std::str::from_utf8(content).ok()?;
-            body = children(text, "project").into_iter().next()?.to_string();
-            if let Some(dir) = declared(&body) {
-                return Some(dir);
+            let doc = roxmltree::Document::parse(text).ok()?;
+            let root = doc.root_element();
+            if root.tag_name().name() != "project" {
+                return None;
             }
+            // The ancestor's own properties resolve the ancestor's own value:
+            // a `${…}` a pom writes is answered where it is written.
+            let properties = properties_of(root);
+            let up = |raw: &str| interpolate(raw, &properties);
+            if let Some(dir) = declared(root) {
+                return Some(interpolate(&dir, &properties));
+            }
+            let _ = &up;
+            next = parent_pom(root, &parent);
             at = parent;
         }
+        let _ = at;
         None
     }
 
@@ -533,16 +583,16 @@ pub mod jvm_manifest {
     /// `<relativePath>` when spelled (a directory means its `pom.xml`; an
     /// empty one means "only the repository", so no pom here), else Maven's
     /// default `../pom.xml`.
-    fn parent_pom(project: &str, path: &str) -> Option<String> {
-        let parent = children(project, "parent").into_iter().next()?;
-        let relative = match children(parent, "relativePath").into_iter().next() {
+    fn parent_pom(project: roxmltree::Node<'_, '_>, path: &str) -> Option<String> {
+        let parent = child(project, "parent")?;
+        let relative = match child(parent, "relativePath").map(text_of) {
             Some(spelled) => {
-                let spelled = spelled.trim();
+                let spelled = spelled.trim().to_string();
                 if spelled.is_empty() {
                     return None;
                 }
                 if spelled.ends_with(".xml") {
-                    spelled.to_string()
+                    spelled
                 } else {
                     format!("{}/pom.xml", spelled.trim_end_matches('/'))
                 }
@@ -555,112 +605,183 @@ pub mod jvm_manifest {
     /// The directories the pom's `build-helper-maven-plugin` adds to the
     /// test set (`add-test-source` executions' `<sources>`), relative to the
     /// pom's directory.
-    fn helper_added_test_sources(project: &str) -> Vec<String> {
+    fn helper_added_test_sources(project: roxmltree::Node<'_, '_>) -> Vec<String> {
         let mut out = Vec::new();
-        for build in children(project, "build") {
-            for plugins in children(build, "plugins") {
-                for plugin in children(plugins, "plugin") {
-                    let is_helper = children(plugin, "artifactId")
-                        .into_iter()
-                        .next()
-                        .is_some_and(|a| a.trim() == "build-helper-maven-plugin");
-                    if !is_helper {
-                        continue;
-                    }
-                    for executions in children(plugin, "executions") {
-                        for execution in children(executions, "execution") {
-                            let adds_tests = children(execution, "goals")
-                                .into_iter()
-                                .flat_map(|g| children(g, "goal"))
-                                .any(|g| g.trim() == "add-test-source");
-                            if !adds_tests {
-                                continue;
-                            }
-                            for configuration in children(execution, "configuration") {
-                                for sources in children(configuration, "sources") {
-                                    for source in children(sources, "source") {
-                                        let dir = source.trim().trim_end_matches('/');
-                                        if !dir.is_empty() && !dir.contains("${") {
-                                            out.push(dir.to_string());
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+        for plugin in child(project, "build")
+            .into_iter()
+            .flat_map(|b| child(b, "plugins"))
+            .flat_map(|p| children_named(p, "plugin"))
+        {
+            let is_helper = child(plugin, "artifactId")
+                .map(text_of)
+                .is_some_and(|a| a.trim() == "build-helper-maven-plugin");
+            if !is_helper {
+                continue;
+            }
+            for execution in child(plugin, "executions")
+                .into_iter()
+                .flat_map(|e| children_named(e, "execution"))
+            {
+                let adds_tests = child(execution, "goals")
+                    .into_iter()
+                    .flat_map(|g| children_named(g, "goal"))
+                    .any(|g| text_of(g).trim() == "add-test-source");
+                if !adds_tests {
+                    continue;
                 }
-            }
-        }
-        out
-    }
-
-    fn children<'a>(body: &'a str, name: &str) -> Vec<&'a str> {
-        let mut out = Vec::new();
-        let mut depth = 0usize;
-        let mut start: Option<usize> = None;
-        let mut i = 0usize;
-        while let Some(lt) = body[i..].find('<') {
-            let at = i + lt;
-            if body[at..].starts_with("<!--") {
-                i = body[at..].find("-->").map_or(body.len(), |e| at + e + 3);
-                continue;
-            }
-            let Some(gt) = body[at..].find('>') else {
-                break;
-            };
-            let end = at + gt;
-            let tag = &body[at + 1..end];
-            i = end + 1;
-            if tag.starts_with('?') || tag.starts_with('!') || tag.ends_with('/') {
-                continue;
-            }
-            if let Some(closing) = tag.strip_prefix('/') {
-                depth = depth.saturating_sub(1);
-                if depth == 0
-                    && closing.trim() == name
-                    && let Some(s) = start.take()
+                for source in child(execution, "configuration")
+                    .into_iter()
+                    .flat_map(|c| child(c, "sources"))
+                    .flat_map(|s| children_named(s, "source"))
                 {
-                    out.push(&body[s..at]);
+                    let text = text_of(source);
+                    let dir = text.trim().trim_end_matches('/');
+                    if !dir.is_empty() && !dir.contains("${") {
+                        out.push(dir.to_string());
+                    }
                 }
-                continue;
             }
-            if depth == 0 && tag.split_whitespace().next().unwrap_or(tag) == name {
-                start = Some(i);
-            }
-            depth += 1;
         }
         out
     }
 
-    /// Dependency declarations from one manifest, dispatched by file name —
-    /// the whole activation read (names) plus each line's scope where the
-    /// build file states one, shared verbatim by the JVM adapters. Version
-    /// requirements stay `None` until BOM/catalog modeling exists.
-    pub fn dependencies(
-        manifest: &SourceFile<'_>,
-    ) -> Vec<kndo_contract::adapter::DependencyDeclaration> {
-        let name = manifest
-            .path
-            .as_str()
-            .rsplit('/')
-            .next()
-            .unwrap_or_default();
-        let Ok(text) = std::str::from_utf8(manifest.content) else {
-            return Vec::new();
-        };
-        let mut out = match name {
-            "pom.xml" => maven(text),
-            "build.gradle" | "build.gradle.kts" | "settings.gradle" | "settings.gradle.kts" => {
-                gradle(text)
+    /// The `<dependency>` elements a pom DECLARES: its own `<dependencies>`
+    /// and never `<dependencyManagement>`'s, which state a version for a
+    /// dependency somebody else declares. `mvn help:effective-pom` on the
+    /// captured reactor shows the difference — `managed-only` appears because
+    /// the child declares it, not because the parent manages it.
+    fn declared_dependencies<'a, 'i>(
+        project: roxmltree::Node<'a, 'i>,
+    ) -> Vec<roxmltree::Node<'a, 'i>> {
+        child(project, "dependencies")
+            .into_iter()
+            .flat_map(|d| children_named(d, "dependency"))
+            .collect()
+    }
+
+    /// Each declared dependency under the scope its `<scope>` states, both the
+    /// full coordinate and the bare artifact spelling. An `<exclusion>` is
+    /// NOT one of these: it names an artifact this dependency must NOT drag
+    /// in, and reading it as a declaration is the defect a document parser
+    /// makes impossible.
+    fn maven_dependencies(
+        project: roxmltree::Node<'_, '_>,
+        out: &mut kndo_contract::manifest::ManifestSink,
+    ) {
+        use kndo_contract::adapter::{DependencyDeclaration, DependencyScope};
+        let mut declared: Vec<(SmolStr, Option<DependencyScope>)> = Vec::new();
+        for dependency in declared_dependencies(project) {
+            let Some(artifact) = child(dependency, "artifactId").map(text_of) else {
+                continue;
+            };
+            let artifact = artifact.trim().to_string();
+            if artifact.is_empty() {
+                continue;
             }
-            _ => Vec::new(),
-        };
-        out.sort_by(|a, b| {
-            (a.name.as_str(), a.scope.map(|s| s as u8))
-                .cmp(&(b.name.as_str(), b.scope.map(|s| s as u8)))
+            let scope = child(dependency, "scope")
+                .map(text_of)
+                .filter(|s| s.trim() == "test")
+                .map(|_| DependencyScope::Dev);
+            if let Some(group) = child(dependency, "groupId").map(text_of) {
+                let group = group.trim();
+                if !group.is_empty() {
+                    declared.push((SmolStr::new(format!("{group}:{artifact}")), scope));
+                }
+            }
+            declared.push((SmolStr::new(&artifact), scope));
+        }
+        declared.sort_by(|a, b| {
+            (a.0.as_str(), a.1.map(|s| s as u8)).cmp(&(b.0.as_str(), b.1.map(|s| s as u8)))
         });
-        out.dedup();
+        declared.dedup();
+        for (name, scope) in declared {
+            out.dependency(DependencyDeclaration {
+                name,
+                scope,
+                version_req: None,
+            });
+        }
+    }
+
+    /// A pom describes ITSELF: its `<artifactId>`, prefixed by `<groupId>`
+    /// when the pom states one — an inherited groupId stays bare, matching the
+    /// bare spelling a dependency also gets.
+    fn maven_package(
+        project: roxmltree::Node<'_, '_>,
+        path: &str,
+        out: &mut kndo_contract::manifest::ManifestSink,
+    ) {
+        let Some(artifact) = child(project, "artifactId")
+            .map(text_of)
+            .map(|a| a.trim().to_string())
+            .filter(|a| !a.is_empty())
+        else {
+            return;
+        };
+        let name = match child(project, "groupId")
+            .map(text_of)
+            .map(|g| g.trim().to_string())
+            .filter(|g| !g.is_empty())
+        {
+            Some(group) => format!("{group}:{artifact}"),
+            None => artifact,
+        };
+        out.package(kndo_contract::adapter::PackageEntry {
+            name: SmolStr::new(name),
+            entry: None,
+            dir: SmolStr::new(path.rsplit_once('/').map_or("", |(d, _)| d)),
+        });
+    }
+
+    /// `<properties>` as a table, for the `${…}` a pom writes into a path.
+    fn properties_of(
+        project: roxmltree::Node<'_, '_>,
+    ) -> std::collections::BTreeMap<String, String> {
+        child(project, "properties")
+            .into_iter()
+            .flat_map(|p| p.children().filter(roxmltree::Node::is_element))
+            .map(|e| {
+                (
+                    e.tag_name().name().to_string(),
+                    text_of(e).trim().to_string(),
+                )
+            })
+            .collect()
+    }
+
+    /// `${name}` replaced where the pom's own properties answer it, once —
+    /// enough for the paths this reader takes, and short of Maven's full
+    /// recursive interpolation, which a value it cannot resolve says by
+    /// keeping its `${…}` and being refused upstream.
+    fn interpolate(raw: &str, properties: &std::collections::BTreeMap<String, String>) -> String {
+        let mut out = raw.to_string();
+        for (key, value) in properties {
+            out = out.replace(&format!("${{{key}}}"), value);
+        }
         out
+    }
+
+    /// The first direct child element named `name`.
+    fn child<'a, 'i>(node: roxmltree::Node<'a, 'i>, name: &str) -> Option<roxmltree::Node<'a, 'i>> {
+        children_named(node, name).into_iter().next()
+    }
+
+    /// Every direct child element named `name`, in document order.
+    fn children_named<'a, 'i>(
+        node: roxmltree::Node<'a, 'i>,
+        name: &str,
+    ) -> Vec<roxmltree::Node<'a, 'i>> {
+        node.children()
+            .filter(|c| c.is_element() && c.tag_name().name() == name)
+            .collect()
+    }
+
+    /// An element's text, comments and child markup excluded.
+    fn text_of(node: roxmltree::Node<'_, '_>) -> String {
+        node.children()
+            .filter(roxmltree::Node::is_text)
+            .filter_map(|t| t.text())
+            .collect()
     }
 
     /// The scope a gradle configuration word states: the `test*` family never
@@ -689,191 +810,70 @@ pub mod jvm_manifest {
         }
     }
 
-    /// The packages one JVM manifest declares. A `settings.gradle(.kts)` names
-    /// every included module (`include(":a", ":b")`) — dir = the module path
-    /// with `:` as `/`, relative to the settings file. A `pom.xml` describes
-    /// ITSELF: its `<artifactId>` (prefixed by `<groupId>` when the pom states
-    /// one — inherited groupIds stay bare, matching the bare spelling
-    /// [`dependencies`] also emits). Build files declare nothing — a gradle
-    /// module's name is positional, held by the settings file.
-    pub fn packages(manifest: &SourceFile<'_>) -> Vec<kndo_contract::adapter::PackageEntry> {
+    /// The modules a `settings.gradle(.kts)` includes: `include(":a", ":b")`
+    /// names each one, and the directory is the module path with `:` as `/`,
+    /// relative to the settings file. A module's own `build.gradle` declares
+    /// no package — a Gradle module's name is positional and the settings
+    /// file holds it.
+    fn gradle_packages(
+        manifest: &SourceFile<'_>,
+        text: &str,
+    ) -> Vec<kndo_contract::adapter::PackageEntry> {
         let file = manifest
             .path
             .as_str()
             .rsplit('/')
             .next()
             .unwrap_or_default();
-        let Ok(text) = std::str::from_utf8(manifest.content) else {
+        if !matches!(file, "settings.gradle" | "settings.gradle.kts") {
             return Vec::new();
-        };
+        }
         let dir_of_manifest = manifest
             .path
             .as_str()
             .rsplit_once('/')
             .map(|(d, _)| d)
             .unwrap_or("");
-        match file {
-            "settings.gradle" | "settings.gradle.kts" => {
-                let mut out = Vec::new();
-                for line in text.lines() {
-                    let line = line.trim();
-                    if line.starts_with("//") || !line.contains("include") {
-                        continue;
-                    }
-                    for quote in ['"', '\''] {
-                        let mut rest = line;
-                        while let Some(start) = rest.find(quote) {
-                            let after = &rest[start + 1..];
-                            let Some(end) = after.find(quote) else { break };
-                            let literal = &after[..end];
-                            rest = &after[end + 1..];
-                            {
-                                // `include(":a")` and `include("a")` are the
-                                // same declaration; the colon is optional.
-                                let module = literal.strip_prefix(':').unwrap_or(literal);
-                                let ok = !module.is_empty()
-                                    && module
-                                        .chars()
-                                        .all(|c| c.is_alphanumeric() || ".-_:".contains(c));
-                                if ok {
-                                    let name = module.rsplit(':').next().unwrap_or(module);
-                                    let rel = module.replace(':', "/");
-                                    let dir = if dir_of_manifest.is_empty() {
-                                        rel
-                                    } else {
-                                        format!("{dir_of_manifest}/{rel}")
-                                    };
-                                    out.push(kndo_contract::adapter::PackageEntry {
-                                        name: SmolStr::new(name),
-                                        entry: None,
-                                        dir: SmolStr::new(dir),
-                                    });
-                                }
-                            }
-                        }
-                    }
-                }
-                out.sort_by(|a, b| a.name.cmp(&b.name));
-                out.dedup_by(|a, b| a.name == b.name);
-                out
-            }
-            "pom.xml" => {
-                // The pom's OWN identity: the first artifactId outside any
-                // <parent> or <dependency> block.
-                let mut in_other = 0i32;
-                let mut group: Option<&str> = None;
-                let mut artifact: Option<&str> = None;
-                for line in text.lines() {
-                    let line = line.trim();
-                    for open in ["<parent>", "<dependencies>", "<build>", "<plugins>"] {
-                        if line.contains(open) {
-                            in_other += 1;
-                        }
-                    }
-                    for close in ["</parent>", "</dependencies>", "</build>", "</plugins>"] {
-                        if line.contains(close) {
-                            in_other -= 1;
-                        }
-                    }
-                    if in_other > 0 {
-                        continue;
-                    }
-                    if group.is_none()
-                        && let Some(v) = tag_value(line, "groupId")
-                    {
-                        group = Some(v);
-                    }
-                    if artifact.is_none()
-                        && let Some(v) = tag_value(line, "artifactId")
-                    {
-                        artifact = Some(v);
-                    }
-                }
-                let Some(a) = artifact else {
-                    return Vec::new();
-                };
-                let name = match group {
-                    Some(g) => format!("{g}:{a}"),
-                    None => a.to_string(),
-                };
-                vec![kndo_contract::adapter::PackageEntry {
-                    name: SmolStr::new(name),
-                    entry: None,
-                    dir: SmolStr::new(dir_of_manifest),
-                }]
-            }
-            _ => Vec::new(),
-        }
-    }
-
-    /// `<dependency>` blocks inside `<dependencies>`: pair each `<groupId>` with
-    /// its `<artifactId>` in document order — both the full coordinate and the
-    /// bare artifact spelling, `<scope>test</scope>` marked `Dev` (publish-safe),
-    /// everything else honestly unstated.
-    pub fn maven(text: &str) -> Vec<kndo_contract::adapter::DependencyDeclaration> {
-        use kndo_contract::adapter::{DependencyDeclaration, DependencyScope};
         let mut out = Vec::new();
-        let mut in_dependencies = false;
-        let mut group: Option<&str> = None;
-        let mut artifact: Option<&str> = None;
-        let mut scope: Option<DependencyScope> = None;
-        let mut push = |g: Option<&str>, a: &str, scope: Option<DependencyScope>| {
-            if let Some(g) = g {
-                out.push(DependencyDeclaration {
-                    name: SmolStr::new(format!("{g}:{a}")),
-                    scope,
-                    version_req: None,
-                });
-            }
-            out.push(DependencyDeclaration {
-                name: SmolStr::new(a),
-                scope,
-                version_req: None,
-            });
-        };
         for line in text.lines() {
             let line = line.trim();
-            if line.contains("<dependencies>") {
-                in_dependencies = true;
-            }
-            if line.contains("</dependencies>") {
-                in_dependencies = false;
-            }
-            if !in_dependencies {
+            if line.starts_with("//") || !line.contains("include") {
                 continue;
             }
-            if line.contains("<dependency>") {
-                group = None;
-                artifact = None;
-                scope = None;
-            }
-            if let Some(v) = tag_value(line, "groupId") {
-                group = Some(v);
-            }
-            if let Some(v) = tag_value(line, "artifactId") {
-                artifact = Some(v);
-            }
-            if let Some(v) = tag_value(line, "scope") {
-                scope = (v == "test").then_some(DependencyScope::Dev);
-            }
-            if line.contains("</dependency>") {
-                if let Some(a) = artifact {
-                    push(group, a, scope);
+            for quote in ['"', '\''] {
+                let mut rest = line;
+                while let Some(start) = rest.find(quote) {
+                    let after = &rest[start + 1..];
+                    let Some(end) = after.find(quote) else { break };
+                    let literal = &after[..end];
+                    rest = &after[end + 1..];
+                    // `include(":a")` and `include("a")` are the same
+                    // declaration; the colon is optional.
+                    let module = literal.strip_prefix(':').unwrap_or(literal);
+                    let ok = !module.is_empty()
+                        && module
+                            .chars()
+                            .all(|c| c.is_alphanumeric() || ".-_:".contains(c));
+                    if ok {
+                        let name = module.rsplit(':').next().unwrap_or(module);
+                        let rel = module.replace(':', "/");
+                        let dir = if dir_of_manifest.is_empty() {
+                            rel
+                        } else {
+                            format!("{dir_of_manifest}/{rel}")
+                        };
+                        out.push(kndo_contract::adapter::PackageEntry {
+                            name: SmolStr::new(name),
+                            entry: None,
+                            dir: SmolStr::new(dir),
+                        });
+                    }
                 }
-                group = None;
-                artifact = None;
-                scope = None;
             }
         }
+        out.sort_by(|a, b| a.name.cmp(&b.name));
+        out.dedup_by(|a, b| a.name == b.name);
         out
-    }
-
-    fn tag_value<'a>(line: &'a str, tag: &str) -> Option<&'a str> {
-        let open = format!("<{tag}>");
-        let close = format!("</{tag}>");
-        let start = line.find(&open)? + open.len();
-        let end = line.find(&close)?;
-        (start <= end).then(|| line[start..end].trim())
     }
 
     /// Quoted `group:artifact[:version]` coordinates anywhere in the script — the

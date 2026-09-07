@@ -1,8 +1,7 @@
 //! Resolution by path suffix and the nearest-module preference.
 
 use kndo_adapter_java::JavaAdapter;
-use kndo_contract::adapter::{Resolution, SourceFile};
-use kndo_contract::extension::Extension;
+use kndo_contract::adapter::Resolution;
 use kndo_contract::vocab::ProjectPath;
 use kndo_testkit::resolve_in;
 
@@ -107,22 +106,26 @@ fn third_party_packages_stay_unresolved() {
 
 #[test]
 fn manifest_dependencies_carry_both_spellings() {
-    let a = JavaAdapter::new();
-    let pom = path("pom.xml");
-    let deps = a.manifest_dependencies(&SourceFile {
-        path: &pom,
-        content: b"<project><dependencies>\n  <dependency>\n    <groupId>com.squareup.okhttp3</groupId>\n    <artifactId>okhttp</artifactId>\n  </dependency>\n</dependencies></project>",
-        region: None,
-    });
+    // A JVM coordinate is `group:artifact`, and code imports neither — so both
+    // spellings are declared and a usage judgment abstains on both rather than
+    // picking one to be wrong about.
+    let deps = kndo_testkit::manifest_evidence(
+        &JavaAdapter::new(),
+        "pom.xml",
+        "<project><dependencies>\n  <dependency>\n    <groupId>com.squareup.okhttp3</groupId>\n    <artifactId>okhttp</artifactId>\n  </dependency>\n</dependencies></project>",
+        &[],
+    )
+    .dependencies;
     assert!(deps.iter().any(|d| d.name == "com.squareup.okhttp3:okhttp"));
     assert!(deps.iter().any(|d| d.name == "okhttp"));
 
-    let gradle = path("build.gradle");
-    let deps = a.manifest_dependencies(&SourceFile {
-        path: &gradle,
-        content: b"dependencies {\n  implementation 'io.vertx:vertx-core:4.5.0'\n}\n",
-        region: None,
-    });
+    let deps = kndo_testkit::manifest_evidence(
+        &JavaAdapter::new(),
+        "build.gradle",
+        "dependencies {\n  implementation 'io.vertx:vertx-core:4.5.0'\n}\n",
+        &[],
+    )
+    .dependencies;
     assert!(deps.iter().any(|d| d.name == "io.vertx:vertx-core"));
     assert!(deps.iter().any(|d| d.name == "vertx-core"));
 }

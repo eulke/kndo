@@ -34,7 +34,7 @@ impl KotlinAdapter {
     pub fn new() -> Self {
         KotlinAdapter {
             // 7: the generated banner is reported, never concluded.
-            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:kotlin", 11, &["kt"])
+            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:kotlin", 12, &["kt"])
                 // The conventions as data; the library-mode root's replacement
                 // is the engine's published surface, read from the unit.
                 .file_roles(&[
@@ -85,18 +85,15 @@ impl Extension for KotlinAdapter {
         resolve::resolve(from, specifier, cx)
     }
 
-    fn packages(
+    fn extract_manifest(
         &self,
         manifest: &SourceFile<'_>,
-        _cx: &ResolveContext<'_>,
-    ) -> Vec<kndo_contract::adapter::PackageEntry> {
-        kndo_toolkit::jvm_manifest::packages(manifest)
-    }
-
-    fn manifest_dependencies(
-        &self,
-        manifest: &SourceFile<'_>,
-    ) -> Vec<kndo_contract::adapter::DependencyDeclaration> {
-        kndo_toolkit::jvm_manifest::dependencies(manifest)
+        cx: &ResolveContext<'_>,
+        out: &mut kndo_contract::manifest::ManifestSink,
+    ) {
+        // A pom is a pom whichever JVM language reads it, so both read the
+        // same one — the engine keeps one statement per manifest however many
+        // adapters claim it.
+        kndo_toolkit::jvm_manifest::structure(manifest, cx, out);
     }
 }
