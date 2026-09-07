@@ -4737,3 +4737,38 @@ their namespaces: if any of them needs a shape the evidence cannot express,
 spec field is part of the graph cache key, not of the shape hash), no
 conformance fixture moves, and `kndo:go` does not bump: its evidence is
 unchanged.
+
+## 2026-09-06 — `file_roles`: a convention is declared, never concluded
+
+**The adapter was saying "dog".** `kndo:go` read a path, decided the file was a
+test, and wrote a whole-file Test root into its evidence. That is a conclusion
+about the ANALYSIS, reached inside an adapter, from a fact the adapter could
+have simply stated. Forty-five sites across the nine adapters read a path or a
+name and conclude a role that way; this is the vocabulary that lets them stop.
+
+**The capability.** `FileRole { glob, kind, confidence }` on the spec, with the
+two constructors a language actually needs: `certain` for a rule the toolchain
+enforces (`go test` compiles exactly the `_test.go` files and runs nothing
+else) and `probable` for a habit the ecosystem keeps but nothing checks
+(`test_*.py`). The named consumer is root anchoring, and the PRECEDENCE is the
+engine's, stated once: a unit that declared its files' role — a Cargo test
+target, a Maven test source set — has already said so, and the conventions are
+read only for a file no unit spoke for. Nine adapters would otherwise each have
+to remember that ordering.
+
+**What it retires.** go's whole-file Test root leaves extraction; the adapter
+keeps only the narrower fact that pass still needs — which of two binaries a
+declaration compiles into, since that changes what a root ON it means. The
+glob compiles through the same `path_glob_set` an ignore does, so `**/*_test.go`
+reads identically in both, and the engine matches it against the project path
+rather than an adapter re-deriving a suffix test.
+
+**Measured: the corpus is byte-identical.** A mechanism swap with the same
+verdict is what a faithful one looks like: gin's `_test.go` files are anchored
+Test by the engine now instead of by the adapter, and every report agrees to
+the byte. `kndo:go` bumps to 10 — its evidence genuinely changed, one root fewer
+per test file. `GRAPH_SEMANTICS_VERSION` deliberately does NOT move: the fact
+is one (go declares the role rather than emitting the root), the adapter
+version names it, and the spec is already part of the graph cache key, so no
+warm graph can answer for a tree read under the old spelling. Bumping both
+would be two places for one fact.

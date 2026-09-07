@@ -875,6 +875,34 @@ fn mount_cap(files: &[GraphFile], file: usize) -> Option<Reach> {
     cap.filter(|r| !matches!(r, Reach::Exported))
 }
 
+/// One adapter's file-role conventions, compiled: the globs as a set and the
+/// verdict each carries, index-parallel — see
+/// [`kndo_contract::extension::FileRole`].
+struct DeclaredRoles {
+    adapter: SmolStr,
+    globs: globset::GlobSet,
+    verdicts: Vec<(RootKind, Confidence)>,
+}
+
+impl DeclaredRoles {
+    fn of(adapter: &dyn Extension) -> DeclaredRoles {
+        let spec = adapter.spec();
+        let declared = spec.file_roles();
+        DeclaredRoles {
+            adapter: SmolStr::new(spec.coordinate()),
+            globs: crate::extract::path_glob_set(declared.iter().map(|r| r.glob.as_str())),
+            verdicts: declared.iter().map(|r| (r.kind, r.confidence)).collect(),
+        }
+    }
+
+    fn matching(&self, path: &ProjectPath) -> impl Iterator<Item = (RootKind, Confidence)> + '_ {
+        self.globs
+            .matches(path.as_str())
+            .into_iter()
+            .map(|i| self.verdicts[i])
+    }
+}
+
 /// Is this file on its unit's published surface? Only where the language's
 /// units publish every export ([`PublishedSurface::Exports`] — under
 /// `Entries` the entries already anchor the surface), the unit is a
@@ -1170,7 +1198,8 @@ fn anchor_manifest_roots(
     // something else — the manifest said which set the directory is, hence
     // Certain. A library's files are reached through its published surface
     // and an executable's through its entries, so neither anchors here.
-    for gf in graph_files.iter() {
+    let mut role_declared: Vec<bool> = vec![false; graph_files.len()];
+    for (ix, gf) in graph_files.iter().enumerate() {
         let Some(unit) = gf.unit else { continue };
         let kind = match project.units[unit as usize].kind {
             UnitKind::Test | UnitKind::Bench => RootKind::Test,
@@ -1178,7 +1207,32 @@ fn anchor_manifest_roots(
             UnitKind::Library | UnitKind::Executable => continue,
             _ => RootKind::Tooling,
         };
+        role_declared[ix] = true;
         anchor(&gf.path, kind, Confidence::Certain);
+    }
+    // Where no unit said what a file IS, its language's own tooling may still
+    // have a convention for it — `go test` compiles exactly the `_test.go`
+    // files. The adapter declares the convention as data
+    // ([`kndo_contract::extension::FileRole`]) rather than reading a path and
+    // concluding a root, so the precedence above is the engine's to apply and
+    // not nine adapters' to remember.
+    let roles: Vec<DeclaredRoles> = adapters
+        .iter()
+        .map(|a| DeclaredRoles::of(a.as_ref()))
+        .collect();
+    let matched: Vec<(ProjectPath, RootKind, Confidence)> = graph_files
+        .iter()
+        .enumerate()
+        .filter(|(ix, _)| !role_declared[*ix])
+        .flat_map(|(_, gf)| {
+            roles
+                .iter()
+                .filter(|r| r.adapter == gf.adapter)
+                .flat_map(|r| r.matching(&gf.path).map(|(k, c)| (gf.path.clone(), k, c)))
+        })
+        .collect();
+    for (path, kind, confidence) in matched {
+        anchor(&path, kind, confidence);
     }
     for read in reads {
         for root in &read.evidence.roots {

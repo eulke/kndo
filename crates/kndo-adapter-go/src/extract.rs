@@ -25,11 +25,11 @@ pub fn extract(
     tree: &tree_sitter::Tree,
     out: &mut EvidenceSink,
 ) {
+    // WHAT a `_test.go` file is, the spec declares as a file role and the
+    // engine anchors; what this pass needs it for is narrower — which of two
+    // binaries a declaration is compiled into, which changes what a root on it
+    // means.
     let is_test_file = path.as_str().ends_with("_test.go");
-    // The test runner's own convention, visible in the path before any parse.
-    if is_test_file {
-        out.root(RootTarget::WholeFile, RootKind::Test, Confidence::Certain);
-    }
 
     let root = tree.root_node();
     let package = package_name(root, source);

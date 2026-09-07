@@ -21,7 +21,8 @@ mod resolve;
 
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::EvidenceSink;
-use kndo_contract::extension::{Extension, ExtensionSpec, Rung, Step};
+use kndo_contract::evidence::RootKind;
+use kndo_contract::extension::{Extension, ExtensionSpec, FileRole, Rung, Step};
 use kndo_contract::manifest::ManifestSink;
 use kndo_contract::vocab::ProjectPath;
 
@@ -32,11 +33,11 @@ pub struct GoAdapter {
 impl GoAdapter {
     pub fn new() -> Self {
         GoAdapter {
-            // 9: the generated marker is a header fact whatever the length
-            // of the licence above it.
+            // 10: `_test.go` is a declared file role, not a root this
+            // adapter concludes from a path.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:go",
-                9,
+                10,
                 &["go"],
                 &["**/go.mod"],
                 // The compiler forbids import cycles: one could only be a
@@ -51,6 +52,10 @@ impl GoAdapter {
             // `go build ./app` on a package importing `example.com/m/_scratch`
             // succeeds under go1.24.7 — so they are discovered and judged.
             .ignores(&["**/vendor/**", "**/_*.go"])
+            // `go test` compiles exactly the `_test.go` files of a package and
+            // runs nothing else — the toolchain's own rule, not a habit, and
+            // the adapter's whole statement about what such a file IS.
+            .file_roles(&[FileRole::certain("**/*_test.go", RootKind::Test)])
             // Capitalization is the whole ladder: nothing sits below the
             // package, so a package-private name used only in its file has
             // nowhere narrower to go and `internal-only` stays silent for it.

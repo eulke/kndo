@@ -349,6 +349,45 @@ pub enum NamespaceSpan {
     Compilation,
 }
 
+/// What a file IS by the convention of its language's own tooling, where no
+/// manifest says otherwise: the go runner's `*_test.go`, pytest's `test_*.py`,
+/// a page that is its own entry. A glob over the project path, the colour a
+/// matching file anchors, and the confidence the convention deserves — a rule
+/// the toolchain itself enforces is `Certain`, a community habit is
+/// `Probable`.
+///
+/// A convention, never a claim over a manifest: a unit that declares its files'
+/// role (a Cargo test target, a Maven test source set) has said so already, and
+/// these are read only where none did. That is what keeps a language from
+/// asserting what a build system knows better.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct FileRole {
+    pub glob: SmolStr,
+    pub kind: RootKind,
+    pub confidence: Confidence,
+}
+
+impl FileRole {
+    /// A rule the language's own toolchain enforces — `go test` compiles
+    /// exactly the `_test.go` files, and runs nothing else.
+    pub fn certain(glob: &'static str, kind: RootKind) -> FileRole {
+        FileRole {
+            glob: SmolStr::new_static(glob),
+            kind,
+            confidence: Confidence::Certain,
+        }
+    }
+
+    /// A habit the ecosystem keeps but nothing enforces.
+    pub fn probable(glob: &'static str, kind: RootKind) -> FileRole {
+        FileRole {
+            glob: SmolStr::new_static(glob),
+            kind,
+            confidence: Confidence::Probable,
+        }
+    }
+}
+
 /// Which declarations can stand on a step. Kotlin's `private` is file-wide on
 /// a top-level declaration and class-wide on a member — two rungs under one
 /// keyword — and Java's `private` exists for members alone. The ladder says
@@ -608,6 +647,7 @@ pub struct ExtensionSpec {
     import_cycles: CycleTolerance,
     ladder: Ladder,
     namespace_span: NamespaceSpan,
+    file_roles: Vec<FileRole>,
     dispatch: Vec<DispatchRule>,
     claims: Vec<SmolStr>,
     emits: EvidenceStreams,
@@ -649,6 +689,7 @@ impl ExtensionSpec {
                 import_cycles: CycleTolerance::Tolerated,
                 ladder: Ladder::default(),
                 namespace_span: NamespaceSpan::Unit,
+                file_roles: Vec::new(),
                 dispatch: Vec::new(),
                 claims: Vec::new(),
                 emits: EvidenceStreams::none(),
@@ -745,6 +786,10 @@ impl ExtensionSpec {
         self.namespace_span
     }
 
+    pub fn file_roles(&self) -> &[FileRole] {
+        &self.file_roles
+    }
+
     pub fn claims(&self) -> &[SmolStr] {
         &self.claims
     }
@@ -837,6 +882,7 @@ pub struct ExtensionSpecParts {
     /// Wire components cannot declare a span yet; defaults to `Unit`, the
     /// narrower answer.
     pub namespace_span: NamespaceSpan,
+    pub file_roles: Vec<FileRole>,
     pub dispatch: Vec<DispatchRule>,
     pub claims: Vec<SmolStr>,
     pub emits: EvidenceStreams,
@@ -880,6 +926,7 @@ impl From<ExtensionSpecParts> for ExtensionSpec {
             import_cycles: parts.import_cycles,
             ladder: parts.ladder,
             namespace_span: parts.namespace_span,
+            file_roles: parts.file_roles,
             dispatch: parts.dispatch,
             claims: parts.claims,
             emits: parts.emits,
@@ -985,6 +1032,14 @@ impl ExtensionSpecBuilder {
     /// Declare how far a namespace reaches across units (see
     /// [`NamespaceSpan`]). Omitted ⇒ `Unit`: a namespace stops at the unit
     /// that compiles it, which keeps every advisory a wider span would silence.
+    /// What this language's own tooling makes of a file by its path — see
+    /// [`FileRole`]. The consumer is root anchoring, which reads them only for
+    /// a file whose unit declared no role of its own.
+    pub fn file_roles(mut self, roles: &[FileRole]) -> Self {
+        self.spec.file_roles = roles.to_vec();
+        self
+    }
+
     pub fn namespace_span(mut self, span: NamespaceSpan) -> Self {
         self.spec.namespace_span = span;
         self

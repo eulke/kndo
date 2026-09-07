@@ -7,6 +7,7 @@ use kndo_adapter_go::GoAdapter;
 use kndo_contract::evidence::{
     FileEvidence, ImportShape, ImportTarget, Reach, RootKind, RootTarget, SymbolKind,
 };
+use kndo_contract::extension::Extension;
 
 fn extract(path: &str, source: &str) -> FileEvidence {
     kndo_testkit::extract_evidence(&GoAdapter::new(), path, source)
@@ -70,10 +71,24 @@ fn entry_and_test_roots() {
         "pkg/a_test.go",
         "package pkg\n\nfunc TestA(t *testing.T) {}\nfunc init() {}\n",
     );
+    // WHAT a `_test.go` file is, the spec declares as a file role and the
+    // engine anchors where no unit said otherwise — extraction no longer
+    // concludes it from the path.
     assert!(
-        test.roots
+        !test
+            .roots
             .iter()
-            .any(|r| r.kind == RootKind::Test && matches!(r.target, RootTarget::WholeFile))
+            .any(|r| matches!(r.target, RootTarget::WholeFile)),
+        "the path is not this pass's to read: {:?}",
+        test.roots
+    );
+    let declared = GoAdapter::new().spec().file_roles().to_vec();
+    assert_eq!(declared.len(), 1);
+    assert_eq!(declared[0].glob, "**/*_test.go");
+    assert_eq!(declared[0].kind, RootKind::Test);
+    assert_eq!(
+        declared[0].confidence,
+        kndo_contract::vocab::Confidence::Certain
     );
     // An `init` runs when the binary it is compiled into loads, and a
     // `_test.go` file is compiled into the test binary alone: rooting it

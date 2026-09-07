@@ -55,6 +55,14 @@ pub(crate) fn ignore_sets(adapters: &[Box<dyn Extension>]) -> Vec<globset::GlobS
         .collect()
 }
 
+/// A set of globs over project paths, `*` staying inside one segment — the
+/// spelling every path-shaped capability uses, so `**/*_test.go` reads the
+/// same way in an ignore and in a file role.
+pub(crate) fn path_glob_set<'a>(globs: impl Iterator<Item = &'a str>) -> globset::GlobSet {
+    let owned: Vec<smol_str::SmolStr> = globs.map(smol_str::SmolStr::new).collect();
+    ignore_set(&owned)
+}
+
 /// One adapter's ignores as a set — see [`ignore_sets`].
 pub(crate) fn ignore_set(globs: &[smol_str::SmolStr]) -> globset::GlobSet {
     glob_set(globs, |g| {
