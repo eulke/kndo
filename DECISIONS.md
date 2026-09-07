@@ -4640,3 +4640,54 @@ byte-identical across the change; the new `grammar-fields` fixture reports one
 finding per defect (`deadGrouped`, `first`, `gram`, `unreferenced`) and pins
 the live counterpart of each beside it. `kndo:go` bumps to 8; no engine knob
 moves.
+
+## 2026-09-06 — M8.c go close-out: a header is as long as it is, and G10 is measured shut
+
+**A generated marker sits in the HEADER, not in the first 24 lines.** Eight
+adapters shared `kndo_toolkit::generated_marked`, which read the first 24 lines
+of the first 2 KiB; `kndo:go` had its own stricter scan with the same bound at
+20 lines. Both find a marker under a short licence and miss the same marker
+under a long one, and then accuse code the generator owns — a `Certain` false
+positive on every file with a long copyright block. `cmd/go` states the rule in
+as many words: before the first non-comment, non-blank text. The toolkit now
+answers exactly that with `header_lines` — a shebang, then every blank or
+comment line (block comments carried) until the first line that is neither, no
+line or byte cap — and `generated_marked` is that scan plus the needles. Go
+keeps only what is Go's: the anchoring its toolchain writes, a line that IS
+`// Code generated … DO NOT EDIT.` rather than a comment mentioning the words.
+The mechanism promoted, the grammar knowledge stayed.
+
+**A `_`-prefixed directory is NOT an ignore, and the toolchain said so.** The
+audit filed `_ignored/i.go` beside `vendor/` as a path the go tool never
+compiles, so the ignore list grew `**/_*/**` — and the `tool-ignored-paths`
+fixture failed, exactly as it was written to: its own module imports its own
+`_scratch` package, and an unclaimed directory turns that import into a
+dependency no manifest declares. The question is decidable, and go1.24.7 is on
+this machine, so it was decided by asking: `go list ./...` omits
+`example.com/ask/_scratch`, and `go build ./app` on a package importing
+`example.com/ask/_scratch` SUCCEEDS. The `_` rule governs pattern expansion,
+not importability. The ignore is reverted and the criterion recorded in
+M8.b.12 — a path the tool NEVER compiles — holds for `_`-prefixed directories
+exactly as it holds for `testdata`. What the audit saw was a directory nothing
+imports, which is an unreached file and a true finding.
+
+**G10 closes as a measurement, not as code.** The audit's largest go gap — no
+exported name in an imported package is ever accusable, though Go always
+spells `pkg.Name` — was measured at zero for gin before the migration, and the
+migration changed which keeper holds an exported name, so it was measured
+again as an ablation: the whole-surface-importer keeper made inert, which is
+the most a see-through keeper could ever retire. gin 110 → 110 and flask
+29 → 29, against vapor 199 → 215 and Exposed 971 → 975. Go's zero is
+structural: an exported Go name is kept by its module's published surface, so
+the surface import is never its only keeper, and a keeper reading
+`Reference::on` would retire nothing. Go therefore does not emit qualifiers
+either — the evidence would have no consumer — and both the keeper and the
+first qualifier emission belong to the swift and kotlin slices, where the
+prize was measured twice. EXPERIMENTS carries the table.
+
+**Measured: the whole corpus byte-identical.** No repository in the corpus
+stamps a generated marker under a header longer than 24 lines, so the fix has
+no corpus population and the probes are the measurement: a file with the
+marker at line 26 reported its declaration `unused certain` before and is
+silent now, and the `generated-late-marker` fixture pins it. Every existing
+fixture is byte-identical. `kndo:go` bumps to 9; no engine knob moves.

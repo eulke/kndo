@@ -1,0 +1,17 @@
+# generated-late-marker: `cmd/go` places the marker before the first
+# non-comment, non-blank text — anywhere in the header, however long the licence
+# above it. A scan bounded by a line count finds the marker under a short header
+# and misses the same marker under a long one, and then accuses code the
+# generator owns. Here it sits at line 26, under a 24-line licence.
+
+[[alive]]
+subject = "pkg/late.pb.go"
+why = "a generated file declares nothing accusable, and its package's exported surface reaches it"
+
+[[alive]]
+subject = "pkg/api.go#Api"
+why = "the module's published surface"
+
+[[alive]]
+subject = "pkg/api.go#mentioned"
+why = "the package's own init calls it — proof the non-generated file is read normally"

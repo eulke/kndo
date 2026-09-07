@@ -201,23 +201,49 @@ pub fn comment_evidence(
 
 /// The marker convention shared across ecosystems whose tools stamp generated
 /// output (`@generated`, protobuf/codegen banners): the one needle list the
-/// marker-scanning adapters declare. Go's own scan stays stricter and separate —
-/// its convention is line-anchored by the toolchain itself.
+/// marker-scanning adapters declare. Go's convention is anchored more strictly
+/// than a needle can say, so that adapter reads [`header_lines`] itself.
 pub const GENERATED_NEEDLES: &[&str] = &["@generated", "Code generated", "DO NOT EDIT"];
 
-/// A generated-file marker scan over the head of a source file: any of the
-/// declared needles inside a comment line marks the whole file. The mechanics;
-/// the needles AND the language's comment openers are the adapter's declaration —
-/// a `#`-commented language passes its own openers rather than inheriting
-/// C-family ones that could never match.
-pub fn generated_marked(source: &[u8], needles: &[&str], openers: &[&str]) -> bool {
-    let head = &source[..source.len().min(2048)];
-    std::str::from_utf8(head).is_ok_and(|s| {
-        s.lines().take(24).any(|l| {
-            let l = l.trim();
-            openers.iter().any(|o| l.starts_with(o)) && needles.iter().any(|n| l.contains(n))
+/// A source file's HEADER: its shebang, if any, and every blank or comment line
+/// before the first line that is neither. Where a generated-file marker may
+/// sit, in every ecosystem that stamps one — `cmd/go` says it in as many words
+/// ("before the first non-comment, non-blank text") — and the reason the scan
+/// is bounded by the header rather than by a line count: a count finds the
+/// marker under a short licence and misses the same marker under a long one.
+/// Lines arrive trimmed; the language's comment openers are the adapter's
+/// declaration, so a `#`-commented language passes its own rather than
+/// inheriting C-family ones that could never match.
+pub fn header_lines<'a>(
+    source: &'a [u8],
+    openers: &'a [&'a str],
+) -> impl Iterator<Item = &'a str> + 'a {
+    let mut in_block = false;
+    source
+        .split(|&b| b == b'\n')
+        .map_while(|line| std::str::from_utf8(line).ok().map(str::trim))
+        .enumerate()
+        .take_while(move |(i, line)| {
+            if in_block {
+                in_block = !line.contains("*/");
+                return true;
+            }
+            if line.is_empty() || (*i == 0 && line.starts_with("#!")) {
+                return true;
+            }
+            if line.starts_with("/*") && !line.contains("*/") {
+                in_block = true;
+                return true;
+            }
+            openers.iter().any(|o| line.starts_with(o))
         })
-    })
+        .map(|(_, line)| line)
+}
+
+/// A generated-file marker scan over a source file's header: any of the
+/// declared needles on a header line marks the whole file.
+pub fn generated_marked(source: &[u8], needles: &[&str], openers: &[&str]) -> bool {
+    header_lines(source, openers).any(|l| needles.iter().any(|n| l.contains(n)))
 }
 
 pub mod jvm_manifest {

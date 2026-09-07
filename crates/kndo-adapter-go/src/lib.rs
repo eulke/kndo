@@ -33,22 +33,24 @@ pub struct GoAdapter {
 impl GoAdapter {
     pub fn new() -> Self {
         GoAdapter {
-            // 8: the grammar's fields read correctly — grouped `var`,
-            // multi-name specs, the package clause, the receiver's type.
+            // 9: the generated marker is a header fact whatever the length
+            // of the licence above it.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:go",
-                8,
+                9,
                 &["go"],
                 &["**/go.mod"],
                 // The compiler forbids import cycles: one could only be a
                 // resolution artifact here.
                 kndo_contract::extension::CycleTolerance::Tolerated,
             )
-            // The go tool's own rule: a file beginning with `_` is in no
-            // package it builds, and `vendor` holds copies of other modules,
+            // The go tool's own rule: a file whose NAME begins with `_` is in
+            // no package at all, and `vendor` holds copies of other modules,
             // compiled as the dependencies they are. A `testdata` or
-            // `_`-prefixed directory is not one: `./...` skips it, and an
-            // import from a package compiles it.
+            // `_`-prefixed DIRECTORY is neither: `./...` skips both when it
+            // expands a pattern, but an explicit import compiles them —
+            // `go build ./app` on a package importing `example.com/m/_scratch`
+            // succeeds under go1.24.7 — so they are discovered and judged.
             .ignores(&["**/vendor/**", "**/_*.go"])
             // Capitalization is the whole ladder: nothing sits below the
             // package, so a package-private name used only in its file has

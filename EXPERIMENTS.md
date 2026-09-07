@@ -361,6 +361,35 @@ a forced decision: either an experiment by then justifies the variant, or the
 set {production, test, tooling} is declared closed and docs-liveness, if it
 ever comes, arrives by another mechanism.
 
+### See-through re-measured after the go migration — 2026-09-06
+The 2026-09-06 measurement above was taken at `ad81711`, before go declared its
+namespaces and units, and the go migration changed which keeper holds an
+exported name (a library-mode whole-file root became a published surface). So
+the number was taken again, this time as an ABLATION rather than an instrument:
+the whole-surface-importer keeper made unconditionally inert, which is the
+maximum a see-through keeper could ever retire, and the corpus re-run.
+
+| repo | with the keeper | keeper ablated | upper bound |
+|---|---|---|---|
+| gin | 110 | 110 | **0** |
+| flask | 29 | 29 | 0 |
+| vapor | 199 | 215 | 16 |
+| Exposed | 971 | 975 | 4 |
+| vite | 711 | 753 | 42 (39 behind side-effect imports) |
+| ripgrep | 151 | 155 | 4 |
+
+Go's zero is unchanged by the migration, with 518 namespace imports in gin: an
+exported Go name in an imported package is kept by its module's published
+surface, and the surface import is never its only keeper. So the keeper that
+reads `Reference::on` against a namespace import's local does NOT land in the
+go slice — it has nothing to retire there — and go does not emit qualifiers
+yet either, since the only consumer of that evidence would be the keeper. The
+disposition already recorded stands and is now measured twice: the prize is
+vapor's 16 and Exposed's 4, so swift and kotlin are the adapters that bring
+both the qualifiers and the keeper, and the audit's G10 for go closes as a
+FINDING ABOUT GO's SHAPE rather than a defect: `pkg.Name` is always spelled,
+but nothing in Go's corpus is accusable behind it.
+
 ## The v1 surface ledger (owner directive, 2026-08-31)
 
 v1's shipped surface is a floor: every capability it offers is either present in v2,

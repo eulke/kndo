@@ -1482,3 +1482,25 @@ anything. Eleven percent of the reference stream was carrying nothing. The
 oracle offers nothing to compare against here — it publishes findings, not
 declaration or reference counts, and on gin it reports one `duplicate` where v2
 reports 108, so the two are not counting the same population.
+
+### The generated header, and G10 measured shut (2026-09-06)
+
+| repo | before | after | what moved |
+|---|---|---|---|
+| every repository | — | — | nothing |
+
+Two go close-out items, neither with a corpus population. The generated-file
+marker scan is now bounded by the file's HEADER rather than by 24 lines —
+`cmd/go`'s own rule, promoted to the toolkit where eight adapters shared the
+bound — which no corpus repository exercises, because none stamps a marker
+under a licence that long. The probe is the measurement: a file with the marker
+at line 26 reported its declaration `unused certain` and is silent now.
+
+And the audit's largest go gap closes as a number rather than as code. Ablating
+the whole-surface-importer keeper — the most a see-through keeper could ever
+retire — leaves gin at 110 and flask at 29, against vapor 199 → 215 and
+Exposed 971 → 975. An exported Go name is kept by its module's published
+surface, so the surface import is never its only keeper: Go is the language
+that always spells `pkg.Name`, and the language where nothing is accusable
+behind it. The keeper and the first qualifier emission belong to swift and
+kotlin, where the prize is.

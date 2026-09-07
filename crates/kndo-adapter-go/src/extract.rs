@@ -201,16 +201,13 @@ fn runner_entry(name: &str) -> bool {
         })
 }
 
-/// golang.org/s/generatedcode: a line `// Code generated … DO NOT EDIT.` before
-/// the package clause marks the whole file.
+/// golang.org/s/generatedcode: the toolchain anchors this one at both ends —
+/// a line that IS `// Code generated … DO NOT EDIT.`, not a comment that
+/// merely mentions the words — and places it before the first non-comment,
+/// non-blank text, which is the header the toolkit bounds.
 fn is_generated(source: &[u8]) -> bool {
-    let head = &source[..source.len().min(2048)];
-    std::str::from_utf8(head).is_ok_and(|s| {
-        s.lines().take(20).any(|l| {
-            let l = l.trim();
-            l.starts_with("// Code generated") && l.ends_with("DO NOT EDIT.")
-        })
-    })
+    tk::header_lines(source, &["//", "/*", "*"])
+        .any(|l| l.starts_with("// Code generated") && l.ends_with("DO NOT EDIT."))
 }
 
 /// Capitalization IS Go's visibility story: uppercase exports, lowercase
