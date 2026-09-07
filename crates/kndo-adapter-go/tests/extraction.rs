@@ -256,3 +256,86 @@ fn the_internal_fence_and_generated_files() {
             .any(|i| matches!(&i.target, ImportTarget::Package(p) if p == "fmt"))
     );
 }
+
+#[test]
+fn the_grammars_fields_say_what_they_say() {
+    let ev = extract(
+        "gram/gram.go",
+        r#"
+package gram
+
+var (
+	grouped  = 1
+	Exported = 2
+)
+
+const one, two = 3, 4
+
+var a, b int
+
+func gram() {}
+
+type owner struct{}
+
+func (o owner) Method() {}
+
+func (o *owner) Pointer() {}
+
+func use() {
+	x := grouped
+	for k, v := range []int{} {
+		_ = k
+		_ = v
+	}
+	_ = x
+}
+"#,
+    );
+    let names: Vec<&str> = ev.declarations.iter().map(|d| d.name.as_str()).collect();
+    // A grouped `var` block hides its specs under a `var_spec_list`.
+    assert!(
+        names.contains(&"grouped") && names.contains(&"Exported"),
+        "{names:?}"
+    );
+    // A multi-name spec declares every name and no separator: the grammar
+    // labels the commas of a `const` with the `name` field too.
+    assert!(
+        names.contains(&"one") && names.contains(&"two"),
+        "{names:?}"
+    );
+    assert!(names.contains(&"a") && names.contains(&"b"), "{names:?}");
+    assert!(
+        !names.contains(&","),
+        "a comma is not a declaration: {names:?}"
+    );
+
+    let refs: Vec<&str> = ev.references.iter().map(|r| r.name.as_str()).collect();
+    // The package clause names the namespace, not a declaration.
+    assert!(
+        !refs.contains(&"gram"),
+        "the package clause is not a use of the function that shares its name: {refs:?}"
+    );
+    // A receiver's type is part of the type's own definition — Go requires it
+    // to be declared in this package.
+    assert!(
+        !refs.contains(&"owner"),
+        "a method receiver is not a use of its type: {refs:?}"
+    );
+    // A `:=` binds on the left and reads on the right: `x := grouped` gives
+    // one reference to `grouped` and none to `x`, and the later `_ = x` is the
+    // only reference `x` has.
+    assert_eq!(
+        refs.iter().filter(|r| **r == "x").count(),
+        1,
+        "the binding is not a use, the read below it is: {refs:?}"
+    );
+    assert!(refs.contains(&"grouped"), "the right side reads: {refs:?}");
+    // Same for a range clause's own names: one reference each, from the body.
+    for bound in ["k", "v"] {
+        assert_eq!(
+            refs.iter().filter(|r| **r == bound).count(),
+            1,
+            "a range clause binds {bound} rather than naming it: {refs:?}"
+        );
+    }
+}

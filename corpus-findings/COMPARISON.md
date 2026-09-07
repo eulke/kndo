@@ -1457,3 +1457,28 @@ unchanged, which is the result this kind of swap must produce: the forest holds
 exactly what the hook re-derived. What proves the capability load-bearing is
 the conformance case, which reports `unreachable` in place of `production` when
 the declaration is removed.
+
+### Go's grammar fields: five thousand references that were never uses (2026-09-06)
+
+| repo | before | after | what moved |
+|---|---|---|---|
+| gin | 110 | 110 | no finding — but 1205 → 1253 declarations and 43,995 → 38,999 references |
+
+Four field misreadings and a receiver, each verified against the grammar: a
+grouped `var` hides its specs under a `var_spec_list` a one-level walk never
+entered (48 names invisible in gin); a multi-name `const` labels its separating
+commas with the `name` field, so an unfiltered read declares a symbol called
+`,`; `is_use` excluded only the FIRST `name` child, so the second name of
+`var a, b int` was a use of itself; `package_clause` carries no field, so the
+clause read as a use of anything sharing the package's name; and a method's
+receiver type — which Go requires to be declared in the same package — was a
+use rather than part of its type's definition, making any type with a method
+unaccusable. The `:=` binder positions go with them.
+
+gin's verdict does not move, which is the result worth reading: none of the 48
+newly visible grouped names is dead, no type there is kept alive only by its
+own receiver, and none of the ~5,000 removed references was the last keeper of
+anything. Eleven percent of the reference stream was carrying nothing. The
+oracle offers nothing to compare against here — it publishes findings, not
+declaration or reference counts, and on gin it reports one `duplicate` where v2
+reports 108, so the two are not counting the same population.

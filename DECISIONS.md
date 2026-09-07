@@ -4585,3 +4585,58 @@ for those three. The hook's doc-comment now says it is the pre-forest mechanism
 and goes with the last adapter to leave it. `GRAPH_SEMANTICS_VERSION` moves to
 22; the contract fingerprint does not move (the spec is not part of it — it is
 part of the graph cache key, which the new field moves on its own).
+
+## 2026-09-06 — M8.c go 3/3: the grammar's fields, read correctly
+
+**Four fields and a receiver.** The audit's highest-severity go rows were not
+design disagreements; they were readings of tree-sitter-go that the grammar
+contradicts, each producing a wrong finding or hiding a right one.
+
+- **Grouped `var`.** `var ( … )` wraps its specs in a `var_spec_list` and
+  `const ( … )` does not — a grammar asymmetry, not a language one. A
+  one-level walk over `var_declaration` reached the wrapper and stopped, so
+  every name in a grouped `var` was invisible: not declared, not judged, not
+  counted. The walk now descends through the wrapper and no further, because a
+  `var` inside a function literal on the right of one declares a local.
+- **The separating comma.** `const a, b = 1, 2` labels its commas with the
+  `name` field, so reading the `name` children unfiltered declared a symbol
+  called `,` — a finding on legal code that `go vet` is happy with. Only a
+  NAMED child is a name.
+- **Every name, not the first.** The same multi-name shape on the reading
+  side: `is_use` asked whether a node WAS its parent's one `name` child, so
+  the second name of `var a, b int` fell through as a use — of itself, on its
+  own line. It now asks whether the node is ANY of them, which also covers
+  `[T any]` type parameters for free.
+- **The package clause.** `package_clause` carries no field at all, so the
+  arm meant to exclude it never fired and `package foo` read as a use of
+  anything named `foo` in the package.
+- **The receiver.** Go requires a method's receiver base type to be declared
+  in the same package: the receiver is part of that type's definition, not a
+  use of it. Counting it made every type with at least one method unaccusable
+  — the audit's G12.
+
+Two binder classes go with them: the left of a `:=` (a short declaration, a
+range clause, a receive) binds a local rather than naming a package
+declaration, while the same position under `=` is an assignment whose names
+must already exist, so writing one there IS a use.
+
+**Two readings deliberately left as uses.** A composite literal's key
+(`T{Field: v}`) is one grammar node for two languages' worth of meaning — a
+struct field name, or a constant used as a map key — and the reading that
+could ACCUSE is the one to avoid, so a key stays a reference. A selector's
+operand (`fmt` in `fmt.Println`) stays one too: dropping it would lose the
+evidence that the qualified-reference work resolves.
+
+**Measured on gin: 1205 → 1253 declarations, 43,995 → 38,999 references,
+110 → 110 findings.** Forty-eight names a grouped `var` was hiding are now
+declared and judged, and roughly five thousand references that were never uses
+— every `:=` binding, one package clause per file, the second name of every
+multi-name spec, and a receiver for each of gin's ~430 methods — leave the
+pool. The verdict does
+not move, and that is itself the finding: gin has no dead grouped variable and
+no type kept alive only by its own receiver, so eleven percent of its
+reference stream was carrying nothing. Every existing conformance fixture is
+byte-identical across the change; the new `grammar-fields` fixture reports one
+finding per defect (`deadGrouped`, `first`, `gram`, `unreferenced`) and pins
+the live counterpart of each beside it. `kndo:go` bumps to 8; no engine knob
+moves.

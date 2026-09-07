@@ -31,14 +31,14 @@
   },
   "health": {
     "implicated": 0,
-    "subjects": 1319,
+    "subjects": 1367,
     "by_category": [],
     "by_package": [
       {
         "name": "github.com/gin-gonic/gin",
         "manifest": "go.mod",
         "implicated": 0,
-        "subjects": 1319
+        "subjects": 1367
       }
     ]
   },

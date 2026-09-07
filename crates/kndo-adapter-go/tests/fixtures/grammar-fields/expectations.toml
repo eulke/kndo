@@ -1,0 +1,35 @@
+# grammar-fields: four places where tree-sitter-go's fields say something other
+# than what a first reading assumes, and the receiver. Each one produced a
+# finding this fixture pins, or hid one it now shows.
+
+[[dead]]
+subject = "gram/gram.go#deadGrouped"
+category = "unused"
+why = "a grouped `var` hides its specs under a `var_spec_list`, so every name in the block was invisible — including the dead one"
+
+[[dead]]
+subject = "gram/gram.go#first"
+category = "unused"
+why = "`const first, second` labels its separating comma with the `name` field too; reading only named children declares two names and no `,`"
+
+[[dead]]
+subject = "gram/gram.go#gram"
+category = "unused"
+why = "the package clause carries no `name` field, so its identifier was reading as a use of the function that shares the name"
+
+[[dead]]
+subject = "gram/gram.go#unreferenced"
+category = "unused"
+why = "Go requires a method's receiver base type to be declared in the same package: the receiver is part of this type's definition, and counting it made any type with a method unaccusable"
+
+[[alive]]
+subject = "gram/gram.go#usedGrouped"
+why = "`usedGrouped := usedGrouped` binds on the left and READS on the right — the second is the use"
+
+[[alive]]
+subject = "gram/gram.go#second"
+why = "the second name of a multi-name spec is a declaration like the first, and `Use` returns it"
+
+[[alive]]
+subject = "gram/gram.go#referenced"
+why = "`var r referenced` names the type outside its own declaration"

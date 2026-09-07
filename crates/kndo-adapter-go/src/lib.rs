@@ -33,11 +33,11 @@ pub struct GoAdapter {
 impl GoAdapter {
     pub fn new() -> Self {
         GoAdapter {
-            // 7: co-visibility is the namespace's, not a directory this
-            // adapter enumerates.
+            // 8: the grammar's fields read correctly — grouped `var`,
+            // multi-name specs, the package clause, the receiver's type.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:go",
-                7,
+                8,
                 &["go"],
                 &["**/go.mod"],
                 // The compiler forbids import cycles: one could only be a

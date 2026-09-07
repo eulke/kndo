@@ -133,13 +133,34 @@ pub fn extract(
                 } else {
                     SymbolKind::Variable
                 };
+                // `var ( … )` wraps its specs in a `var_spec_list` and
+                // `const ( … )` does not — a grammar asymmetry, not a
+                // language one. One level of descent through the wrapper and
+                // no further: a `var` inside a function literal on the right
+                // of this one declares a local, not a package name.
                 let mut c = item.walk();
-                for spec in item.named_children(&mut c) {
+                let specs: Vec<Node<'_>> = item
+                    .named_children(&mut c)
+                    .flat_map(|child| match child.kind() {
+                        "var_spec_list" | "const_spec_list" => {
+                            let mut lc = child.walk();
+                            child.named_children(&mut lc).collect::<Vec<_>>()
+                        }
+                        _ => vec![child],
+                    })
+                    .collect();
+                for spec in specs {
                     if !matches!(spec.kind(), "const_spec" | "var_spec") {
                         continue;
                     }
                     let mut sc = spec.walk();
                     for n in spec.children_by_field_name("name", &mut sc) {
+                        // `const a, b = 1, 2` labels its separating commas
+                        // with the `name` field too; only a named node is a
+                        // name.
+                        if !n.is_named() {
+                            continue;
+                        }
                         let name = tk::text(n, source);
                         // The blank identifier binds nothing nameable.
                         if name == "_" {
@@ -288,23 +309,86 @@ fn references_and_comments(root: Node<'_>, source: &[u8], out: &mut EvidenceSink
 }
 
 /// Binding and naming positions are not uses; the bias stays keep-alive — only
-/// unambiguous declarations and bindings are excluded.
+/// unambiguous declarations and bindings are excluded. Four shapes:
+///
+/// 1. a `name` field of its parent — EVERY one, since `var a, b int` and
+///    `[T any]` each label more than one;
+/// 2. the package clause's own identifier, which the grammar gives no field
+///    at all, so a package named like one of its declarations was reading as
+///    a use of it;
+/// 3. the left side of a `:=`, which binds a local rather than naming
+///    anything the package declares (`=` is an assignment: those names must
+///    already exist, so writing one IS a use);
+/// 4. the receiver's type in a method declaration — Go requires the base type
+///    to be declared in the same package, so the receiver is part of the
+///    type's own definition, and counting it made any type with a method
+///    unaccusable.
+///
+/// Deliberately still uses: a composite literal's key (`T{Field: v}`), which
+/// names a struct field in one reading and a constant in another — the
+/// grammar gives one node for both, and the reading that could accuse is the
+/// one to avoid; and a selector's operand (`fmt` in `fmt.Println`), which the
+/// qualified-reference work resolves rather than drops.
 fn is_use(n: Node<'_>, parent: Node<'_>) -> bool {
-    match parent.kind() {
-        "function_declaration"
-        | "method_declaration"
-        | "type_spec"
-        | "type_alias"
-        | "const_spec"
-        | "var_spec"
-        | "field_declaration"
-        | "method_elem"
-        | "parameter_declaration"
-        | "variadic_parameter_declaration"
-        | "label_name"
-        | "package_clause" => parent.child_by_field_name("name") != Some(n),
-        _ => true,
+    if parent.kind() == "package_clause" {
+        return false;
     }
+    let mut c = parent.walk();
+    if parent
+        .children_by_field_name("name", &mut c)
+        .any(|f| f == n)
+    {
+        return false;
+    }
+    if binds_a_local(parent) {
+        return false;
+    }
+    !in_receiver_type(n)
+}
+
+/// Is this name's list the left side of a `:=` — a short declaration, a range
+/// clause or a receive? An `=` in the same place is an assignment, whose names
+/// must already exist, so writing one there IS a use.
+fn binds_a_local(parent: Node<'_>) -> bool {
+    if parent.kind() != "expression_list" {
+        return false;
+    }
+    let Some(clause) = parent.parent() else {
+        return false;
+    };
+    if !matches!(
+        clause.kind(),
+        "short_var_declaration" | "range_clause" | "receive_statement"
+    ) || clause.child_by_field_name("left") != Some(parent)
+    {
+        return false;
+    }
+    let mut c = clause.walk();
+    clause.children(&mut c).any(|ch| ch.kind() == ":=")
+}
+
+/// Is this name the type a method is declared ON? The receiver's type sits
+/// under the `type` field of the one `parameter_declaration` of the
+/// `parameter_list` a `method_declaration` holds as its `receiver`, possibly
+/// behind a pointer or a generic instantiation.
+fn in_receiver_type(n: Node<'_>) -> bool {
+    let mut cursor = n;
+    while let Some(parent) = cursor.parent() {
+        match parent.kind() {
+            "pointer_type" | "generic_type" | "type_arguments" => cursor = parent,
+            "parameter_declaration" => {
+                return parent.child_by_field_name("type") == Some(cursor)
+                    && parent.parent().is_some_and(|list| {
+                        list.parent().is_some_and(|method| {
+                            method.kind() == "method_declaration"
+                                && method.child_by_field_name("receiver") == Some(list)
+                        })
+                    });
+            }
+            _ => return false,
+        }
+    }
+    false
 }
 
 fn classify(n: Node<'_>, parent: Node<'_>) -> RefKind {
