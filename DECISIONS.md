@@ -5142,3 +5142,49 @@ compilation", so a silent widening would be worse than the missing rule.
 `kndo:js-ts` to 11 and `kndo:html` to 3. No conformance fixture moves. The
 four pinned reference components are re-pinned, and the kmock DSL gains
 `test-only` beside `test-file` so a fixture can state the two facts apart.
+
+## 2026-09-07 — `sees` retires in java and swift: the forest answers
+
+**Measured first, then deleted.** Ablating `Extension::sees` one adapter at a
+time: swift **0** findings, java **2**, kotlin 15. Swift's carried nothing
+because its `internal` declarations already pool over `seen_from`'s
+`module_region`, a superset of the target files `sees` enumerated, and its
+public ones ride the whole-file root its extraction still emits. Java's two
+were the co-visibility edge a test needs to reach the class it exercises, and
+that edge belongs to the forest.
+
+**The forest's missing half: what a build PULLS IN.** `Scopes` already spanned
+a namespace across units for POOLS — who may name a package-private member:
+the units that compile against mine. `covisible`, which reachability floods
+over, read only the node's own files, so a Java test module never reached the
+library it exercises. It now reads the span in the OPPOSITE direction — the
+same-named files of every unit THIS one compiles against — and the asymmetry
+is the whole point: a test build holds the library, a library build holds no
+test of it.
+
+Taking the union of both directions was the first attempt and guava says why
+it is wrong: its GWT super-source declares `com.google.common.base`, guava-gwt
+depends on guava, and `src-super/…/Platform.java` is compiled INSTEAD of the
+library's, never beside it. The union made fifteen replacement-source files
+look exercised. A dependent's files are never in the dependency's build.
+
+**Measured: guava 8250 → 8249, every other repository byte-identical.** The
+one finding is `guava-gwt/src/com/google/common/ForceGuavaCompilationEntryPoint.java`,
+which stops being `untested`. guava's parent pom declares
+`<sourceDirectory>src</sourceDirectory>`, so guava-gwt's main set is `src/` and
+its test set `test/` — a layout java's directory mirror (`src/main/java` ↔
+`src/test/java`) could never pair, which is why `sees` missed that
+`guava-gwt/test/com/google/common/GwtTestSuite.java` is that file's own
+package-mate in its own module's test set. The forest reads the pom and gets
+it right where a path convention was blind. v2 reporting one finding LESS,
+because it read the project instead of guessing at directories.
+
+Kotlin's `sees` stays: kotlin emits no namespace clause, so the forest has
+nothing to answer with. Its 15 are the EXPERIMENTS ledger's row 1c, and they
+go with M8.d.
+
+`GRAPH_SEMANTICS_VERSION` moves to 29. One conformance fixture moves,
+package-private-across-modules (kndo-adapter-java), which loses an `untested`
+finding on a library file its tests module demonstrably calls — the fixture's
+own `[[alive]]` and `[[dead]]` claims are unchanged. The contract fingerprint
+does not move, and no adapter version does: `sees` was never evidence.

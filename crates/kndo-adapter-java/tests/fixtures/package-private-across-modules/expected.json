@@ -83,17 +83,6 @@
         "end": 17
       },
       "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-d2367df875f3",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "lib/src/main/java/com/foo/Widget.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
     }
   ],
   "fixed": [],

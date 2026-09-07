@@ -169,8 +169,4 @@ impl Extension for JavaAdapter {
     ) -> Vec<kndo_contract::adapter::DependencyDeclaration> {
         kndo_toolkit::jvm_manifest::dependencies(manifest)
     }
-
-    fn sees(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
-        resolve::sees(path, cx)
-    }
 }

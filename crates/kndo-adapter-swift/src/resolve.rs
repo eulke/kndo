@@ -57,18 +57,6 @@ pub fn resolve(_from: &ProjectPath, specifier: &str, cx: &ResolveContext<'_>) ->
     }
 }
 
-/// The rest of the file's own target — one flat namespace, tests included when
-/// the file IS a test (its own module's siblings): no mirror in either
-/// direction, because crossing modules always takes an import.
-pub fn sees(path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
-    let Some((target, _)) = target_of(path.as_str()) else {
-        return Vec::new();
-    };
-    target_files(target, cx)
-        .into_iter()
-        .filter(|p| p != path)
-        .collect()
-}
 
 /// The region behind `internal`: the module's own files, plus every file under
 /// a `Tests/` tree — any test target may hold an `@testable import` of this

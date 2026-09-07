@@ -32,6 +32,9 @@ pub struct Scopes {
     /// a unit that compiles against this node's, ascending. Equal to `files`
     /// wherever no manifest said otherwise.
     spanned: Vec<Vec<u32>>,
+    /// namespace node → the files it is BUILT TOGETHER with — `spanned` made
+    /// symmetric. Reachability's input; see [`Scopes::covisible`].
+    cobuilt: Vec<Vec<u32>>,
     /// file → whether the language that claims it says a namespace spans the
     /// compilation. Per file, because the DECLARATION's language decides who
     /// may name it, and one namespace can hold two languages' files.
@@ -145,6 +148,7 @@ impl Scopes {
             .collect();
         let forest: Vec<bool> = chains.iter().map(Option::is_some).collect();
         let spanned = span_nodes(graph, &files, &unit_of_node, &segments_of_node);
+        let cobuilt = cobuilt_nodes(graph, &files, &unit_of_node, &segments_of_node);
         let spans = graph
             .files
             .iter()
@@ -159,6 +163,7 @@ impl Scopes {
             of_file,
             files,
             spanned,
+            cobuilt,
             spans,
             unit_pool: unit_pools(graph),
             group_pool: group_pools(graph),
@@ -202,12 +207,20 @@ impl Scopes {
     }
 
     /// The files this one COMPILES WITH, where the language says its namespace
-    /// compiles as one: its namespace node's files. Reachability's input, not a
-    /// pool — a pool asks who may NAME a declaration, this asks what the
-    /// compiler builds together, and only the second makes a file with no
-    /// exported name alive because its package is.
+    /// compiles as one: its namespace node's files, plus every file spelling
+    /// the same name in a unit that compiles against it where the language
+    /// says a namespace spans the compilation — a Java test source set is
+    /// built into the same package as the main one it compiles against.
+    /// Reachability's input, not a pool — a pool asks who may NAME a
+    /// declaration, this asks what the compiler builds together, and only the
+    /// second makes a file with no exported name alive because its package is.
     pub fn covisible(&self, file: usize) -> &[u32] {
-        &self.files[self.of_file[file] as usize]
+        let node = self.of_file[file] as usize;
+        if self.spans[file] {
+            &self.cobuilt[node]
+        } else {
+            &self.files[node]
+        }
     }
 
     /// The files a `Reach::Named { namespace }` declaration in `file` pools
@@ -429,6 +442,54 @@ enum Compilation {
 /// compiles against this one's — what a language spanning the compilation
 /// pools over. Nodes with no unit span nothing: without a manifest there is no
 /// statement that two compilations meet.
+/// What each node's build PULLS IN: its own files, plus the files of every
+/// same-named node in a unit this one COMPILES AGAINST. The opposite
+/// direction from [`span_nodes`], and the asymmetry is the point — a pool
+/// asks who may NAME me and answers with my dependents (a test set may name
+/// the library's package-private members); this asks what MY build holds and
+/// answers with my dependencies (the test build holds the library, so the
+/// test colour flows into the library file its package-mate exercises).
+///
+/// Taking the union of the two directions is wrong, and guava says why: its
+/// GWT super-source declares `com.google.common.base` and guava-gwt depends
+/// on guava, but `src-super/…/Platform.java` is compiled INSTEAD of the
+/// library's, never beside it. The dependent's files are never in the
+/// dependency's build.
+fn cobuilt_nodes(
+    graph: &Graph,
+    files: &[Vec<u32>],
+    unit_of_node: &[Option<u32>],
+    segments_of_node: &[Vec<SmolStr>],
+) -> Vec<Vec<u32>> {
+    let mut by_segments: BTreeMap<&[SmolStr], Vec<usize>> = BTreeMap::new();
+    for (n, segments) in segments_of_node.iter().enumerate() {
+        if unit_of_node[n].is_some() {
+            by_segments.entry(segments).or_default().push(n);
+        }
+    }
+    (0..files.len())
+        .map(|n| {
+            let Some(mine) = unit_of_node[n] else {
+                return files[n].clone();
+            };
+            let mut out = files[n].clone();
+            for &other in by_segments
+                .get(segments_of_node[n].as_slice())
+                .into_iter()
+                .flatten()
+            {
+                let theirs = unit_of_node[other].expect("grouped only units");
+                if other != n && graph.project.sees_into(mine, theirs) {
+                    out.extend_from_slice(&files[other]);
+                }
+            }
+            out.sort_unstable();
+            out.dedup();
+            out
+        })
+        .collect()
+}
+
 fn span_nodes(
     graph: &Graph,
     files: &[Vec<u32>],
@@ -700,6 +761,27 @@ mod tests {
             scopes.namespace_pool(1, 0),
             Some([1u32].as_slice()),
             "seeing is directional: the library does not name its tests"
+        );
+        // What the compiler BUILDS TOGETHER is the same span, and it is not
+        // directional: the test build holds both, so the test colour flows
+        // into the library file its package-mate exercises. The pool above
+        // asks who may NAME; this asks what is built as one.
+        assert_eq!(
+            scopes.covisible(1),
+            [0u32, 1].as_slice(),
+            "the test build holds the library file its package-mate exercises"
+        );
+        assert_eq!(
+            scopes.covisible(0),
+            [0u32].as_slice(),
+            "and the library's build holds no test of it — the naming \
+             direction, inverted, which is what keeps a dependent's \
+             replacement source out of the dependency's build"
+        );
+        assert_eq!(
+            scopes.covisible(2),
+            [2u32].as_slice(),
+            "the mirror is on nobody's classpath here"
         );
     }
 

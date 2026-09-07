@@ -1678,3 +1678,29 @@ sets, SwiftPM test targets), the unit already answered and the attachment
 only agrees with it. Where none does — go's `_test.go`, the web's
 `__tests__/` — the file is the only witness, and without it the runners are
 accused and the test dependencies lose their colour.
+
+### `sees` retires in java and swift (2026-09-07)
+
+| repo | before | after | what moved |
+|---|---|---|---|
+| guava | 8250 | 8249 | −1 `untested` |
+| every other repository | — | — | byte-identical |
+
+Swift's `sees` measured zero before it went, so nothing could move there.
+Java's carried the co-visibility edge a test needs to reach the class it
+exercises, and `Scopes::covisible` now carries it instead — spanning the
+namespace across the units this one COMPILES AGAINST, the inverse of the pool
+direction.
+
+The one finding is `guava-gwt/.../ForceGuavaCompilationEntryPoint.java`, which
+stops being `untested`. guava's parent pom declares
+`<sourceDirectory>src</sourceDirectory>`; guava-gwt's main set is therefore
+`src/` and its test set `test/`, and `guava-gwt/test/com/google/common/GwtTestSuite.java`
+is that file's package-mate in its own module's test set. Java's directory
+mirror only knew `src/main/java` ↔ `src/test/java` and could not see it. v2
+reports one finding fewer because it read the project's manifest instead of
+guessing from directory names — the difference the plan was built to make.
+
+The union of both span directions was tried first and rejected by measurement:
+it made fifteen guava-gwt GWT super-source files (compiled INSTEAD of the
+library's, never beside them) look exercised.

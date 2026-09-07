@@ -90,10 +90,6 @@ impl Extension for SwiftAdapter {
         resolve::resolve(from, specifier, cx)
     }
 
-    fn sees(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
-        resolve::sees(path, cx)
-    }
-
     fn seen_from(
         &self,
         path: &ProjectPath,

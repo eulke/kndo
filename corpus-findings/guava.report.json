@@ -179709,17 +179709,6 @@
       "message": "production-reachable, but no test reaches this file"
     },
     {
-      "id": "kndo-e617f9a27dbd",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src/com/google/common/ForceGuavaCompilationEntryPoint.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
       "id": "kndo-09cecdbd785e",
       "category": "untested",
       "severity": "info",

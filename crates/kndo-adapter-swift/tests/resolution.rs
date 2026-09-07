@@ -38,28 +38,6 @@ fn an_import_names_a_local_target_or_nothing() {
 }
 
 #[test]
-fn sight_is_the_target_with_no_test_mirror() {
-    let files = known(&[
-        "Sources/App/A.swift",
-        "Sources/App/Sub/B.swift",
-        "Sources/Other/C.swift",
-        "Tests/AppTests/ATests.swift",
-    ]);
-    let cx = ResolveContext::new(&files);
-    let a = SwiftAdapter::new();
-    assert_eq!(
-        a.sees(&path("Sources/App/A.swift"), &cx),
-        vec![path("Sources/App/Sub/B.swift")],
-        "tests are a DIFFERENT module: reaching main takes an explicit import"
-    );
-    assert_eq!(
-        a.sees(&path("Tests/AppTests/ATests.swift"), &cx),
-        Vec::<ProjectPath>::new(),
-        "a lone test file sees only its own target's siblings"
-    );
-}
-
-#[test]
 fn the_module_region_adds_every_test_tree() {
     let files = known(&[
         "Sources/App/A.swift",
@@ -98,9 +76,15 @@ fn a_path_override_layout_takes_its_first_segment_as_the_target() {
     ]);
     let cx = ResolveContext::new(&files);
     let a = SwiftAdapter::new();
+    // The fact is the target, and `seen_from` is what reads it: `internal`
+    // in `Source/AF.swift` is bounded by the module that layout names.
     assert_eq!(
-        a.sees(&path("Source/AF.swift"), &cx),
-        vec![path("Source/Core/Request.swift")],
+        a.seen_from(&path("Source/AF.swift"), &Reach::Unit { up: 0 }, &cx),
+        Some(vec![
+            path("Source/AF.swift"),
+            path("Source/Core/Request.swift"),
+            path("Tests/RequestTests.swift"),
+        ]),
         "Alamofire's Source/** compiles as one module"
     );
 }

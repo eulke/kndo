@@ -155,9 +155,12 @@ _Avoid_: sees, seen_from, region
 The files a language compiles TOGETHER, read off the scope forest where the language
 says its namespace compiles as one (Go's package). Reachability's input, not a pool:
 a pool asks who may NAME a declaration, this asks what the compiler builds, and only
-the second makes a file exporting nothing alive because its package is. A file that
-is a test as a whole is the one asymmetry — the production build never compiles it,
-so no production colour crosses through it.
+the second makes a file exporting nothing alive because its package is. Where a
+namespace spans the compilation (Java), it also holds the same-named files of every
+unit this one compiles AGAINST — the inverse of the pool's direction, since a test
+build holds the library while the library's build holds no test of it. A file that
+is a test as a whole is the other asymmetry — the production build never compiles
+it, so no production colour crosses through it.
 _Avoid_: sees, unit mates
 
 **Pool**:

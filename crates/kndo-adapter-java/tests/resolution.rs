@@ -1,12 +1,10 @@
-//! Resolution by path suffix, the nearest-module preference, and the
-//! directory-plus-mirror unit.
+//! Resolution by path suffix and the nearest-module preference.
 
 use kndo_adapter_java::JavaAdapter;
-use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
+use kndo_contract::adapter::{Resolution, SourceFile};
 use kndo_contract::extension::Extension;
 use kndo_contract::vocab::ProjectPath;
 use kndo_testkit::resolve_in;
-use std::collections::BTreeSet;
 
 fn path(p: &str) -> ProjectPath {
     ProjectPath::new(p)
@@ -105,36 +103,6 @@ fn third_party_packages_stay_unresolved() {
         "org.junit.Assert",
     );
     assert_eq!(r, Resolution::Unresolved);
-}
-
-#[test]
-fn the_unit_is_the_directory_plus_the_test_mirror() {
-    let files = [
-        "src/main/java/com/foo/Widget.java",
-        "src/main/java/com/foo/Helper.java",
-        "src/main/java/com/bar/Other.java",
-        "src/test/java/com/foo/WidgetTest.java",
-    ];
-    let known: BTreeSet<ProjectPath> = files.iter().map(|p| ProjectPath::new(*p)).collect();
-    let cx = ResolveContext::new(&known);
-    let a = JavaAdapter::new();
-
-    let main_mates = a.sees(&path("src/main/java/com/foo/Widget.java"), &cx);
-    assert_eq!(
-        main_mates,
-        vec![path("src/main/java/com/foo/Helper.java")],
-        "production sees its siblings, never the test tree"
-    );
-
-    let test_mates = a.sees(&path("src/test/java/com/foo/WidgetTest.java"), &cx);
-    assert_eq!(
-        test_mates,
-        vec![
-            path("src/main/java/com/foo/Helper.java"),
-            path("src/main/java/com/foo/Widget.java"),
-        ],
-        "a test class shares its package with the mirrored main directory"
-    );
 }
 
 #[test]
