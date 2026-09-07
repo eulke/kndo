@@ -23,7 +23,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Bump when the SAME evidence assembles into a DIFFERENT graph — resolution
 /// candidate changes, reachability semantics, new assembled fields. Folded into the
 /// graph cache key beside the contract fingerprint and the adapter set.
-pub const GRAPH_SEMANTICS_VERSION: u32 = 24;
+pub const GRAPH_SEMANTICS_VERSION: u32 = 25;
 
 #[derive(Serialize, Deserialize)]
 pub struct GraphFile {
@@ -486,7 +486,6 @@ pub fn assemble(
         .map(|(c, ev)| {
             let f = &files[c.file_index];
             let spec = adapters[c.adapter_index].spec();
-            let dispatched = crate::dispatch::apply(&ev, spec.dispatch_rules());
             let unit = project.unit_of(&f.path);
             GraphFile {
                 path: f.path.clone(),
@@ -501,10 +500,12 @@ pub fn assemble(
                 mounted_by: None,
                 mount_cap: None,
                 anchored: Vec::new(),
-                dispatched: dispatched.roots,
-                exempt: dispatched.exempt,
-                dispatch_notes: dispatched.notes,
-                generated: dispatched.generated,
+                // Dispatch waits for `dispatch_files` below: a name rule's
+                // qualifier is the file's role, and the project states that.
+                dispatched: Vec::new(),
+                exempt: Vec::new(),
+                dispatch_notes: Vec::new(),
+                generated: false,
                 unit,
                 imports: Vec::new(),
                 import_targets: Vec::new(),
@@ -546,6 +547,7 @@ pub fn assemble(
     }
     mount_and_own(&mut graph_files, &project);
     anchor_manifest_roots(files, adapters, &cx, &project, &reads, &mut graph_files);
+    dispatch_files(&mut graph_files, adapters);
     publish_surfaces(&mut graph_files, adapters, &project);
 
     let manifest_declarations = collect_manifest_declarations(&reads);
@@ -824,6 +826,37 @@ fn mount_and_own(files: &mut [GraphFile], project: &crate::project::Project) {
 /// on the file — the anchors included — because a file that is a test as a
 /// whole is on no surface: `go build` never compiles a `_test.go`, and no
 /// importer can name what it exports, whatever the module publishes.
+/// Dispatch, for every file, once the project has said what each file IS. A
+/// marker's meaning is a pure function of the file's evidence, but a NAME
+/// rule's qualifier is the file's ROLE — which the manifest states through its
+/// units and a `FileRole` glob states for the files no unit spoke for. Both
+/// land as a root on the file, so this pass runs after anchoring, and no
+/// adapter has to read a path and conclude a role. It recomputes from
+/// evidence alone, so a patched graph and a full build agree to the byte.
+fn dispatch_files(files: &mut [GraphFile], adapters: &[Box<dyn Extension>]) {
+    for f in files.iter_mut() {
+        let rules = adapter_by_id(adapters, &f.adapter).spec().dispatch_rules();
+        let mut d = crate::dispatch::apply(&f.evidence, rules);
+        let mut colors: Vec<RootKind> = f
+            .evidence
+            .roots
+            .iter()
+            .chain(&d.roots)
+            .chain(&f.anchored)
+            .map(|r| r.kind)
+            .collect();
+        colors.sort_by_key(|k| *k as u8);
+        colors.dedup();
+        d.roots
+            .extend(crate::dispatch::name_roots(&f.evidence, &colors, rules));
+        crate::dispatch::sort_roots(&mut d.roots);
+        f.dispatched = d.roots;
+        f.exempt = d.exempt;
+        f.dispatch_notes = d.notes;
+        f.generated = d.generated;
+    }
+}
+
 fn publish_surfaces(
     files: &mut [GraphFile],
     adapters: &[Box<dyn Extension>],
@@ -1079,14 +1112,9 @@ pub fn patch(
         let adapter = adapter_by_id(adapters, &prev.files[ix].adapter);
         let evidence = crate::extract::extract_one(file, adapter, adapters, cache);
         let edges = resolve_file(&file.path, &evidence, adapter, adapters, &cx, &sorted_paths);
-        let dispatched = crate::dispatch::apply(&evidence, adapter.spec().dispatch_rules());
         let gf = &mut prev.files[ix];
         gf.regions = regions_of(&file.path, &evidence, adapter, &cx, &sorted_paths);
         gf.evidence = evidence;
-        gf.dispatched = dispatched.roots;
-        gf.exempt = dispatched.exempt;
-        gf.dispatch_notes = dispatched.notes;
-        gf.generated = dispatched.generated;
         gf.imports = edges.imports;
         gf.import_targets = edges.import_targets;
         gf.unresolved_imports = edges.unresolved_imports;
@@ -1104,6 +1132,7 @@ pub fn patch(
     }
     let project = std::mem::take(&mut prev.project);
     mount_and_own(&mut prev.files, &project);
+    dispatch_files(&mut prev.files, adapters);
     publish_surfaces(&mut prev.files, adapters, &project);
     prev.project = project;
     Some(prev)

@@ -21,7 +21,7 @@ mod resolve;
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{EvidenceSink, EvidenceStream, EvidenceStreams, RootKind};
 use kndo_contract::extension::{
-    DispatchRule, Effect, Extension, ExtensionSpec, Rung, Step, Trigger,
+    DispatchRule, Effect, Extension, ExtensionSpec, InFiles, Rung, Step, Trigger,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath};
 
@@ -74,16 +74,36 @@ fn dispatch_rules() -> Vec<DispatchRule> {
             rules.push(rule(Trigger::marker_with(lint, group), Effect::Exempt));
         }
     }
+    // A top-level `fn main` is the language's entry convention: whatever target
+    // links the file, the runtime calls it. Its COLOR is the target's, and
+    // cargo already said which target the file belongs to — a build script and
+    // an example are tooling, everything else is the program. `Probable`: the
+    // convention, not this file's own statement.
+    for (in_files, kind) in [
+        (InFiles::Rooted(RootKind::Tooling), RootKind::Tooling),
+        (InFiles::NotRooted(RootKind::Tooling), RootKind::Production),
+    ] {
+        rules.push(DispatchRule {
+            when: Trigger::name(
+                "main",
+                kndo_contract::evidence::SymbolKind::Function,
+                in_files,
+            ),
+            then: Effect::Root(kind),
+            confidence: Confidence::Probable,
+        });
+    }
     rules
 }
 
 impl RustAdapter {
     pub fn new() -> Self {
         RustAdapter {
-            // 13: the generated banner is reported, never concluded.
+            // 14: `fn main`'s color is the cargo target's, read from the
+            // manifest, not guessed from the path.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:rust",
-                13,
+                14,
                 &["rs"],
                 &["**/Cargo.toml"],
                 // Modules within a crate reference each other freely — legal,

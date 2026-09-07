@@ -9,8 +9,8 @@ mod common;
 
 use common::{keeper_kinds, reported};
 use kndo::Category;
-use kndo_contract::evidence::RootKind;
-use kndo_contract::extension::{DispatchRule, Effect, Trigger};
+use kndo_contract::evidence::{RootKind, SymbolKind};
+use kndo_contract::extension::{DispatchRule, Effect, InFiles, Trigger};
 use kndo_contract::vocab::Confidence;
 use kndo_testkit::{MockExtension, TempProject};
 
@@ -134,4 +134,75 @@ fn a_generators_output_nobody_imports_is_still_dead_weight() {
     );
     let snap = run(&p);
     assert_eq!(reported(&snap, &Category::UNUSED), ["orphan.kmock"]);
+}
+
+#[test]
+fn a_name_rule_reads_the_role_the_project_gave_the_file() {
+    let certain = |when: Trigger, then: Effect| DispatchRule {
+        when,
+        then,
+        confidence: Confidence::Certain,
+    };
+    // A runner's convention and a runtime's: `Check*` is run by name where the
+    // tests are, and `boot` runs in whichever binary links the file — so its
+    // color is the file's, which takes two rules and not a guess.
+    let rules = vec![
+        certain(
+            Trigger::name(
+                "Check*",
+                SymbolKind::Function,
+                InFiles::Rooted(RootKind::Test),
+            ),
+            Effect::Root(RootKind::Test),
+        ),
+        certain(
+            Trigger::name(
+                "boot",
+                SymbolKind::Function,
+                InFiles::Rooted(RootKind::Test),
+            ),
+            Effect::Root(RootKind::Test),
+        ),
+        certain(
+            Trigger::name(
+                "boot",
+                SymbolKind::Function,
+                InFiles::NotRooted(RootKind::Test),
+            ),
+            Effect::Root(RootKind::Production),
+        ),
+    ];
+    let p = TempProject::new();
+    p.file(
+        "check.kmock",
+        "test-file\nfn CheckOne\nfn boot\nfn helper\ntype Fixture\nmember Fixture.CheckTwo\n",
+    )
+    .file("app.kmock", "root-file\nfn boot\nfn stale\ntype CheckKind\n");
+    let snap = common::analyze(&p, vec![Box::new(MockExtension::dispatching(rules))]);
+
+    // The rule fires where the file's role says it should, and its color is
+    // the one that role implies.
+    assert_eq!(
+        keeper_kinds(&snap, "check.kmock#CheckOne"),
+        ["dispatch:test"]
+    );
+    assert_eq!(keeper_kinds(&snap, "check.kmock#boot"), ["dispatch:test"]);
+    assert_eq!(
+        keeper_kinds(&snap, "app.kmock#boot"),
+        ["dispatch:production"]
+    );
+
+    // And nowhere else. `CheckKind` is a type, not the function the rule
+    // names; `Fixture.CheckTwo` is a MEMBER, dispatched by its owner and not
+    // by a name rule; `helper` and `stale` match nothing.
+    assert_eq!(
+        reported(&snap, &Category::UNUSED),
+        [
+            "app.kmock — CheckKind",
+            "app.kmock — stale",
+            "check.kmock — Fixture",
+            "check.kmock — Fixture.CheckTwo",
+            "check.kmock — helper",
+        ]
+    );
 }

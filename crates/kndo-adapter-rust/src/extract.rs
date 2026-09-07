@@ -30,7 +30,6 @@ pub fn extract(
     tk::mark_generated(source, tk::GENERATED_NEEDLES, &["//", "/*", "*"], out);
     let mut cx = ItemPass {
         source,
-        main_root_kind: main_root_kind(path),
         mod_rs: crate::resolve::is_mod_rs(path),
         types: BTreeMap::new(),
         free_declarations: BTreeMap::new(),
@@ -117,21 +116,8 @@ fn macro_template_roots(
     });
 }
 
-/// What a top-level `fn main` anchors, by cargo's own path conventions: a build
-/// script and an example are tooling targets; anywhere else it is the binary entry.
-fn main_root_kind(path: &kndo_contract::vocab::ProjectPath) -> RootKind {
-    let p = path.as_str();
-    let name = p.rsplit('/').next().unwrap_or(p);
-    if name == "build.rs" || p.starts_with("examples/") || p.contains("/examples/") {
-        RootKind::Tooling
-    } else {
-        RootKind::Production
-    }
-}
-
 struct ItemPass<'a, 'o> {
     source: &'a [u8],
-    main_root_kind: RootKind,
     /// Whether this file's child modules live in its own directory — which is
     /// where a top-level `#[path]` is anchored. See [`redirect_specifier`].
     mod_rs: bool,
@@ -240,19 +226,6 @@ impl<'a> ItemPass<'a, '_> {
                     self.free_declarations.entry(name.to_string()).or_insert(id);
                     self.out.metrics(id, function_metrics(item, self.source));
                     self.markers(&attrs, id);
-                    // A top-level `fn main` is the language's entry convention: in
-                    // any target the runtime calls it, and extraction cannot see
-                    // the manifest that would say which files are targets. Probable
-                    // — convention, not this file's own statement — and colored by
-                    // the path's own convention (build scripts and examples are
-                    // tooling).
-                    if name == "main" && self.stack.is_empty() {
-                        self.out.root(
-                            RootTarget::Declaration(id),
-                            self.main_root_kind,
-                            Confidence::Probable,
-                        );
-                    }
                 }
             }
             "struct_item" | "enum_item" | "union_item" | "trait_item" | "type_item" => {

@@ -26,12 +26,6 @@ pub fn extract(
     tree: &tree_sitter::Tree,
     out: &mut EvidenceSink,
 ) {
-    // WHAT a `_test.go` file is, the spec declares as a file role and the
-    // engine anchors; what this pass needs it for is narrower — which of two
-    // binaries a declaration is compiled into, which changes what a root on it
-    // means.
-    let is_test_file = path.as_str().ends_with("_test.go");
-
     let root = tree.root_node();
     let package = package_name(root, source);
     let package_main = package.as_deref() == Some("main");
@@ -70,34 +64,16 @@ pub fn extract(
                         reach_of(name, path.as_str()),
                     );
                     out.metrics(id, function_metrics(item, source));
-                    // The runner's own rule: in a `_test.go` file it runs every
-                    // `TestXxx`, `BenchmarkXxx`, `ExampleXxx` and `FuzzXxx` by
-                    // name — a root on the function, whatever its reach.
-                    if is_test_file && runner_entry(name) {
-                        out.root(
-                            RootTarget::Declaration(id),
-                            RootKind::Test,
-                            Confidence::Certain,
-                        );
-                    }
+                    // The one entry left in extraction, and it is a NAMESPACE
+                    // fact, not a name one: `func main` runs because its file
+                    // declares `package main`. `go build` says which packages
+                    // those are, and until the unit model carries them (the
+                    // module's entries), the clause this file declared is the
+                    // only place the fact exists.
                     if package_main && name == "main" {
                         out.root(
                             RootTarget::Declaration(id),
                             RootKind::Production,
-                            Confidence::Certain,
-                        );
-                    }
-                    if name == "init" {
-                        // The runtime calls every init on package load — the
-                        // load of the binary this file is compiled into, which
-                        // for a `_test.go` file is the test binary alone.
-                        out.root(
-                            RootTarget::Declaration(id),
-                            if is_test_file {
-                                RootKind::Test
-                            } else {
-                                RootKind::Production
-                            },
                             Confidence::Certain,
                         );
                     }
@@ -184,18 +160,6 @@ fn package_name(root: Node<'_>, source: &[u8]) -> Option<String> {
     let clause = tk::child_of_kind(root, "package_clause")?;
     let ident = tk::child_of_kind(clause, "package_identifier")?;
     Some(tk::text(ident, source).to_string())
-}
-
-/// `go test` runs a top-level function named `Test`, `Benchmark`, `Example`
-/// or `Fuzz` followed by nothing or by a character that is not a lowercase
-/// letter — `TestFoo` and `Test_foo` are entries, `Testing` is a function.
-fn runner_entry(name: &str) -> bool {
-    ["Test", "Benchmark", "Example", "Fuzz"]
-        .iter()
-        .any(|prefix| {
-            name.strip_prefix(prefix)
-                .is_some_and(|rest| !rest.chars().next().is_some_and(|c| c.is_lowercase()))
-        })
 }
 
 /// golang.org/s/generatedcode: the toolchain anchors this one at both ends —

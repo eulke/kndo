@@ -4854,3 +4854,78 @@ pre-release rule requires. Four conformance fixtures move: `generated-file`
 (kndo-adapter-ts), and `generated-sheet-stays-silent` (kndo-adapter-css), which
 is renamed `generated-sheet-is-an-orphan-like-any-other` because its old name
 claimed the verdict the owner just reversed.
+
+## 2026-09-07 — `Trigger::Name`: a name that dispatches is declared, and the file's ROLE is what qualifies it
+
+**The adapters were concluding again.** `go test` runs a `_test.go` file's
+`TestXxx` by name; the Go runtime calls every `init` when the package loads;
+cargo calls a target's `fn main`. Three toolchain behaviors, and all three were
+`if name == …` inside extraction, with the qualifier read off a PATH:
+`ends_with("_test.go")` in go, `build.rs || examples/` in rust. A path is not
+what a toolchain reads.
+
+**The vocabulary.** `Trigger::Name { pattern, kind, in_files }` joins
+`Trigger::Marker`: a declaration whose own name matches the pattern, narrowed
+to a symbol kind and to the files where the convention holds. Only a
+declaration NOTHING OWNS matches — a member dispatched by name (`test*` on an
+`XCTestCase`, JUnit 3's `testFoo`) is its owner's business and waits for the
+trigger that says so.
+
+**The deviation, named.** The plan spells the qualifier `in_unit:
+Option<UnitKind>`, and its own go row then asks for rules "in TestOnly" and
+"outside TestOnly" — a per-FILE attachment, not a unit kind. Both cannot be the
+same field, and go is the case that decides: a Go module is ONE library unit,
+so a unit kind can never say "the `_test.go` files". What both sentences
+actually mean is the file's ROLE, and v2 already has one spelling for it — a
+unit's kind and a declared `FileRole` glob both land as a whole-file root, so
+`InFiles::{Any, Rooted(color), NotRooted(color)}` reads either without the rule
+knowing which the project used. `NotRooted` is not a convenience: `init` runs
+in whichever binary links the file, so coloring it takes both halves.
+
+**What it retires.** go's `runner_entry` helper and its `init` root leave
+extraction, and rust's `main_root_kind` path convention goes with the root it
+colored — rust now reads the target kind CARGO declared, so a `fn main` under
+`examples/` is tooling because cargo said the file is an example, not because
+the path contains the word. The one root extraction still concludes is go's
+`func main`, and it is deliberately left: it is a NAMESPACE fact (`package
+main`), not a name one, and the plan's own answer for it — a module's entries
+are its `main` packages — is manifest work (M8.d). Named here so it cannot go
+quiet.
+
+**Where the phase runs.** A marker's meaning is a pure function of a file's
+evidence; a name rule's qualifier is the file's role, which only the assembled
+project knows. So dispatch moved out of the graph constructor into one pass
+(`dispatch_files`) that runs after manifest anchoring and before publication,
+in both the full and the patched build. One place where dispatch happens, and
+the patched graph and a full build still agree to the byte.
+
+**Measured: the corpus is byte-identical, and the ablation says the rules
+earn their place.** All nine repositories agree with the previous run to the
+byte — a mechanism swap with the same verdict is what a faithful one looks
+like. The number that shows the rules are load-bearing comes from ablating
+them: dropping go's runner rule takes gin from 109 findings to 119, and all
+ten are `TestXxx`/`BenchmarkXxx` under `internal/bytesconv` and `internal/fs`
+— exactly where the `internal` fence caps an exported name's reach below the
+published surface, so the runner's root is its only keeper. Everywhere else in
+gin the entry surface already keeps them; under the fence, nothing does.
+
+**The pattern grammar's cost, measured.** `Test*` is a prefix glob, while
+`go test` runs a name only when the character after the prefix is not a
+lowercase letter (`TestFoo` yes, `Testing` no). Across gin's 658 runner
+entries, zero names would be over-matched by the bare prefix; the direction
+where it happens is keep-alive (a `Testing` in a test file kept, never accused
+wrongly), and it can only reach a declaration in a file already rooted Test.
+The grammar gains a character class the day a corpus repository pays for it,
+and not before.
+
+`GRAPH_SEMANTICS_VERSION` moves to 25 — the engine derives roots from evidence
+it derived none from before, and an external adapter could trigger it with no
+built-in changing. `kndo:go` bumps to 12 and `kndo:rust` to 14: each emits
+genuinely different evidence (two conclusions fewer, one fewer). The contract
+fingerprint does not move (a trigger is spec data, part of the graph cache key
+rather than the shape hash). The WIT `trigger` variant gains `name` with its
+`in-files` and `name-trigger` records, and the four pinned reference
+components are re-pinned in the same commit. One conformance fixture is added,
+`main-in-every-target` (kndo-adapter-rust), pinning that a build script's, a
+binary's and an example's `fn main` are each kept in the color cargo's target
+kind implies; no existing fixture's pinned report moves.

@@ -7,7 +7,7 @@
 //! evidence moves, stored on the graph beside the manifest anchors and never
 //! in the evidence cache, so a rule change never has to re-extract anything.
 
-use kndo_contract::evidence::{FileEvidence, Marker, MarkerTarget, Root, RootTarget};
+use kndo_contract::evidence::{FileEvidence, Marker, MarkerTarget, Root, RootKind, RootTarget};
 use kndo_contract::extension::{DispatchRule, Effect};
 
 /// What the rules derived for one file.
@@ -91,18 +91,58 @@ pub fn apply(evidence: &FileEvidence, rules: &[DispatchRule]) -> Dispatched {
             }
         }
     }
+    sort_roots(&mut out.roots);
+    out.exempt.sort_unstable();
+    out.exempt.dedup();
+    out
+}
+
+/// The roots a file's DECLARATION NAMES derive — a runner's `TestXxx`, a
+/// runtime's `main` and `init`. Separate from [`apply`] because the qualifier
+/// these rules read is the file's ROLE, which the project states and only the
+/// assembled graph knows: what a unit's kind and a declared file role say
+/// lands as a root on the file, and `colors` is what those roots carry
+/// (sorted and deduplicated). Only a declaration nothing owns is matched — a
+/// member dispatched by name is its owner's business.
+pub fn name_roots(evidence: &FileEvidence, colors: &[RootKind], rules: &[DispatchRule]) -> Vec<Root> {
+    let mut out = Vec::new();
+    if rules.is_empty() {
+        return out;
+    }
+    for (id, d) in evidence.declarations_with_ids() {
+        if d.owner.is_some() {
+            continue;
+        }
+        for rule in rules {
+            if !rule.when.matches_name(&d.name, &d.kind, colors) {
+                continue;
+            }
+            let Effect::Root(kind) = rule.then else {
+                continue;
+            };
+            out.push(Root {
+                target: RootTarget::Declaration(id),
+                kind,
+                confidence: rule.confidence,
+            });
+        }
+    }
+    sort_roots(&mut out);
+    out
+}
+
+/// The one order derived roots are held in — by target, then color, then
+/// strongest confidence first — so a graph is byte-identical however its
+/// roots were derived.
+pub fn sort_roots(roots: &mut Vec<Root>) {
     let target_key = |r: &Root| match &r.target {
         RootTarget::Declaration(id) => id.index() as u32,
         _ => u32::MAX,
     };
-    out.roots
-        .sort_by_key(|r| (target_key(r), r.kind as u8, std::cmp::Reverse(r.confidence)));
-    out.roots.dedup_by(|a, b| {
+    roots.sort_by_key(|r| (target_key(r), r.kind as u8, std::cmp::Reverse(r.confidence)));
+    roots.dedup_by(|a, b| {
         target_key(a) == target_key(b) && a.kind == b.kind && a.confidence == b.confidence
     });
-    out.exempt.sort_unstable();
-    out.exempt.dedup();
-    out
 }
 
 /// The marker as a reader would recognize it, language-neutral: `path` or

@@ -22,7 +22,9 @@ mod resolve;
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::EvidenceSink;
 use kndo_contract::evidence::RootKind;
-use kndo_contract::extension::{Extension, ExtensionSpec, FileRole, Rung, Step};
+use kndo_contract::extension::{
+    DispatchRule, Effect, Extension, ExtensionSpec, FileRole, InFiles, Rung, Step, Trigger,
+};
 use kndo_contract::manifest::ManifestSink;
 use kndo_contract::vocab::ProjectPath;
 
@@ -30,13 +32,61 @@ pub struct GoAdapter {
     spec: ExtensionSpec,
 }
 
+/// What Go's own toolchain does with a name, as data. `go test` compiles a
+/// package's `_test.go` files into a test binary and runs every top-level
+/// `TestXxx`, `BenchmarkXxx`, `ExampleXxx` and `FuzzXxx` in it by name; the
+/// runtime calls every `init` when the package loads, and which BINARY that
+/// load belongs to is the file's role — the test binary for a test file, the
+/// program for every other. `Certain` throughout: this is the toolchain's
+/// behavior, not a habit its users keep.
+fn dispatch_rules() -> Vec<DispatchRule> {
+    let rule = |when: Trigger, then: Effect| DispatchRule {
+        when,
+        then,
+        confidence: kndo_contract::vocab::Confidence::Certain,
+    };
+    let runner = |pattern| {
+        rule(
+            Trigger::name(
+                pattern,
+                kndo_contract::evidence::SymbolKind::Function,
+                InFiles::Rooted(RootKind::Test),
+            ),
+            Effect::Root(RootKind::Test),
+        )
+    };
+    vec![
+        runner("Test*"),
+        runner("Benchmark*"),
+        runner("Example*"),
+        runner("Fuzz*"),
+        rule(
+            Trigger::name(
+                "init",
+                kndo_contract::evidence::SymbolKind::Function,
+                InFiles::Rooted(RootKind::Test),
+            ),
+            Effect::Root(RootKind::Test),
+        ),
+        rule(
+            Trigger::name(
+                "init",
+                kndo_contract::evidence::SymbolKind::Function,
+                InFiles::NotRooted(RootKind::Test),
+            ),
+            Effect::Root(RootKind::Production),
+        ),
+    ]
+}
+
 impl GoAdapter {
     pub fn new() -> Self {
         GoAdapter {
-            // 11: the generated banner is reported, never concluded.
+            // 12: `go test`'s discovery and the runtime's `init` are
+            // declared rules, not roots this pass concludes from a path.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:go",
-                11,
+                12,
                 &["go"],
                 &["**/go.mod"],
                 // The compiler forbids import cycles: one could only be a
@@ -55,6 +105,7 @@ impl GoAdapter {
             // runs nothing else — the toolchain's own rule, not a habit, and
             // the adapter's whole statement about what such a file IS.
             .file_roles(&[FileRole::certain("**/*_test.go", RootKind::Test)])
+            .dispatch(dispatch_rules())
             // Capitalization is the whole ladder: nothing sits below the
             // package, so a package-private name used only in its file has
             // nowhere narrower to go and `internal-only` stays silent for it.

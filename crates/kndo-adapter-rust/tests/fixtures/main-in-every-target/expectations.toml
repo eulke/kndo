@@ -1,0 +1,40 @@
+# main-in-every-target: `fn main` is the language's entry convention, and its
+# COLOR is the cargo target's — a build script and an example are tooling, a
+# binary is the program. Cargo already stated which target each file belongs
+# to, so the rule reads the role the manifest gave the file instead of reading
+# the path and guessing at it. `publish = false` and a module that is no
+# target's entry stand both surfaces down, so what NAMES a library item is the
+# whole of its keep-alive.
+
+[[alive]]
+subject = "build.rs#main"
+category = "unused"
+why = "cargo runs the build script through it; nothing in the crate ever names it"
+
+[[alive]]
+subject = "build.rs#emit_feature"
+why = "the build script's own entry reaches it"
+
+[[alive]]
+subject = "src/bin/tool.rs#main"
+category = "unused"
+why = "the binary target's entry"
+
+[[alive]]
+subject = "examples/demo.rs#main"
+category = "unused"
+why = "the example target's entry — tooling, and still an entry"
+
+[[alive]]
+subject = "src/thing.rs#shown_in_the_example"
+why = "the binary and the example both name it, and no surface would have"
+
+[[dead]]
+subject = "src/thing.rs#never_shown"
+category = "unused"
+why = "unpublished, in no entry's file, and nothing names it"
+
+[[dead]]
+subject = "src/lib.rs#only_here"
+category = "unused"
+why = "private to the crate root and named nowhere — the control beside the entries"

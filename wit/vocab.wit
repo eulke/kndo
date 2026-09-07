@@ -277,8 +277,26 @@ interface types {
         arg: option<string>,
     }
 
+    /// Mirrors `InFiles` — which files a name rule reads, by the color the
+    /// project rooted the file with.
+    variant in-files {
+        any,
+        rooted(root-kind),
+        not-rooted(root-kind),
+    }
+
+    /// Mirrors the `Name` trigger — a declaration whose own name matches the
+    /// pattern, optionally narrowed to one symbol kind and to the files a
+    /// role qualifies.
+    record name-trigger {
+        pattern: string,
+        kind: option<symbol-kind>,
+        in-files: in-files,
+    }
+
     variant trigger {
         marker(marker-trigger),
+        %name(name-trigger),
     }
 
     /// Mirrors `Effect` — a root of a color, an exemption from `unused`, or

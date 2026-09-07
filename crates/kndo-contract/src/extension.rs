@@ -544,6 +544,34 @@ pub enum Trigger {
     /// which matches any run of characters: `*::test` matches `tokio::test`
     /// and `rstest::test`, never a bare `test`, which is its own pattern.
     Marker { path: SmolStr, arg: Option<SmolStr> },
+    /// A DECLARATION whose own name matches `pattern` — a runner's convention
+    /// (`TestXxx`, `test_*`), a runtime's (`main`, `init`). `kind` narrows it
+    /// to one kind of symbol; `in_files` to the files where the convention
+    /// holds. Only a declaration nothing owns matches: a member dispatched by
+    /// name is its owner's business and belongs to a trigger that says so.
+    Name {
+        pattern: SmolStr,
+        kind: Option<SymbolKind>,
+        in_files: InFiles,
+    },
+}
+
+/// Which files a [`Trigger::Name`] reads, by the ROLE the project gave the
+/// file. A unit's kind and a declared [`FileRole`] both land as a whole-file
+/// root, so one qualifier says "where the tests are" for a language that
+/// compiles its tests as their own target and for one that marks them by
+/// filename — and the rule never has to know which of the two its project
+/// used.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum InFiles {
+    /// Every file the extension claims.
+    Any,
+    /// Only files the project roots with this color …
+    Rooted(RootKind),
+    /// … and only files it does not. `init` runs in whichever binary links
+    /// the file, so a language needs both halves to color it.
+    NotRooted(RootKind),
 }
 
 impl Trigger {
@@ -561,7 +589,17 @@ impl Trigger {
         }
     }
 
-    /// Does this trigger fire on `marker`?
+    pub fn name(pattern: &'static str, kind: SymbolKind, in_files: InFiles) -> Trigger {
+        Trigger::Name {
+            pattern: SmolStr::new_static(pattern),
+            kind: Some(kind),
+            in_files,
+        }
+    }
+
+    /// Does this trigger fire on `marker`? Dispatch reads each trigger in the
+    /// phase that holds its evidence, so a trigger watching something else
+    /// never fires here.
     pub fn matches(&self, marker: &Marker) -> bool {
         match self {
             Trigger::Marker { path, arg } => {
@@ -569,6 +607,29 @@ impl Trigger {
                     && arg
                         .as_ref()
                         .is_none_or(|a| marker.args.iter().any(|x| pattern_matches(a, x)))
+            }
+            Trigger::Name { .. } => false,
+        }
+    }
+
+    /// Does this trigger fire on a declaration named `name` of `kind`, in a
+    /// file the project rooted with `colors` (sorted, deduplicated)? As with
+    /// [`Trigger::matches`], a trigger watching other evidence never fires.
+    pub fn matches_name(&self, name: &str, kind: &SymbolKind, colors: &[RootKind]) -> bool {
+        match self {
+            Trigger::Marker { .. } => false,
+            Trigger::Name {
+                pattern,
+                kind: want,
+                in_files,
+            } => {
+                pattern_matches(pattern, name)
+                    && want.as_ref().is_none_or(|k| k == kind)
+                    && match in_files {
+                        InFiles::Any => true,
+                        InFiles::Rooted(c) => colors.contains(c),
+                        InFiles::NotRooted(c) => !colors.contains(c),
+                    }
             }
         }
     }

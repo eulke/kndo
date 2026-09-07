@@ -1560,3 +1560,38 @@ one).
 v2's rust, ts and css had inherited. v2 does not, and the reason is not a
 number: a root asserts that something outside the graph USES the file, and a
 `DO NOT EDIT` banner asserts nothing of the kind. It says who WROTE it.
+
+### A name that dispatches is declared: `Trigger::Name` (2026-09-07)
+
+| repo | before | after | what moved |
+|---|---|---|---|
+| every repository | — | — | byte-identical |
+
+go's `TestXxx`/`init` roots and rust's `fn main` root left extraction for the
+spec, qualified by the file's ROLE instead of by its path, and every report
+agrees with the previous run to the byte. That is what a faithful mechanism
+swap looks like; the interesting numbers are the two ablations behind it.
+
+**The runner rule earns its place: gin 109 → 119 without it.** Dropping go's
+`Test*`/`Benchmark*`/`Example*`/`Fuzz*` rule adds ten `unused` findings, all
+under `internal/bytesconv` and `internal/fs`. Everywhere else in gin an
+exported `TestFoo` rides its file's entry surface; under the `internal` fence
+its reach is the fenced subtree rather than the published surface, so the
+runner's own root is the only thing that keeps it. A rule that changes nothing
+on the corpus would have been the one to delete — this one is load-bearing in
+exactly the place Go's visibility rules make it necessary.
+
+**rust's color now comes from cargo, not from the path.** `main_root_kind`
+read `build.rs` and `examples/` out of the path; the rule reads the target kind
+cargo declared for the file. The two agree on every corpus repository, so
+nothing moves — but they disagree on a `src/examples/` module (library code in
+a directory that shares an example's name), which the path convention would
+have colored tooling. The fixture `main-in-every-target` pins the three
+targets a `fn main` can sit in.
+
+**The prefix glob's measured cost: zero.** `go test` runs a name only when the
+character after `Test` is not lowercase; the pattern grammar has `*` and
+nothing narrower. Of gin's 658 runner entries, none would be over-matched by
+the bare prefix, and where it could happen the direction is keep-alive inside a
+file already rooted Test. The grammar stays as it is until a repository pays
+for the difference.

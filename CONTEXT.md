@@ -215,10 +215,17 @@ surface. Roots carry a color: production, test or tooling.
 Which roots reach a file: production, test, tooling. Verdicts read colors.
 
 **Dispatch rule**:
-Data: a trigger (a marker path, a relation, a name pattern in a unit kind, a member
-of a matching owner, an external base's required members) and an effect (a root of
-a color, a witness, an exemption from `unused`, a generated file), with a confidence.
+Data: a trigger (a marker path, a name pattern in files of a given role, a relation, a
+member of a matching owner, an external base's required members) and an effect (a root
+of a color, a witness, an exemption from `unused`, a generated file), with a confidence.
 The language's own rules ride its spec; a framework's ride a rule pack.
+
+**File role**:
+What the project says a file IS — a test, a tooling artifact — stated by its unit's
+kind or, where no unit spoke for it, by a `FileRole` glob the language declares. Both
+land as a whole-file root, so one qualifier reads either: `Trigger::Name` says "where
+the tests are" and never has to know which of the two a project used.
+_Avoid_: attachment, test-only (that names a finding)
 
 **Rule pack**:
 A conduct extension that declares dispatch rules and an activation and nothing else.

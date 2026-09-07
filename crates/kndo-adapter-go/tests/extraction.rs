@@ -1,5 +1,6 @@
 //! Extraction against inline sources: the namespace the package clause names,
-//! capitalization reach, entry and test roots, the never-declared method class,
+//! capitalization reach, the one root left in this pass, the never-declared
+//! method class,
 //! every import spelling, the internal fence and the generated banner,
 //! reference exclusions, and comment spans.
 
@@ -48,7 +49,12 @@ var counter = 0
 }
 
 #[test]
-fn entry_and_test_roots() {
+fn the_only_root_extraction_still_concludes_is_the_package_clause() {
+    // `func main` runs because the file says `package main` — a NAMESPACE
+    // fact, and the one entry this pass still reads. Everything else a Go
+    // name means is the spec's data: `go test`'s discovery and the runtime's
+    // `init` are rules the engine applies once the project has said what the
+    // file IS.
     let main = extract(
         "cmd/app/main.go",
         "package main\n\nfunc main() {}\nfunc init() {}\nfunc helper() {}\n",
@@ -60,7 +66,7 @@ fn entry_and_test_roots() {
             .any(|r| matches!(r.target, RootTarget::Declaration(id) if id.index() == ix))
     };
     assert!(rooted(&main, "main"));
-    assert!(rooted(&main, "init"));
+    assert!(!rooted(&main, "init"));
     assert!(!rooted(&main, "helper"));
 
     // `func main` outside `package main` is just a function.
@@ -71,18 +77,13 @@ fn entry_and_test_roots() {
         "pkg/a_test.go",
         "package pkg\n\nfunc TestA(t *testing.T) {}\nfunc init() {}\n",
     );
+    assert!(test.roots.is_empty(), "{:?}", test.roots);
+
     // WHAT a `_test.go` file is, the spec declares as a file role and the
-    // engine anchors where no unit said otherwise — extraction no longer
-    // concludes it from the path.
-    assert!(
-        !test
-            .roots
-            .iter()
-            .any(|r| matches!(r.target, RootTarget::WholeFile)),
-        "the path is not this pass's to read: {:?}",
-        test.roots
-    );
-    let declared = GoAdapter::new().spec().file_roles().to_vec();
+    // engine anchors where no unit said otherwise; the rules that read that
+    // role ride the spec beside it.
+    let spec = GoAdapter::new().spec().clone();
+    let declared = spec.file_roles().to_vec();
     assert_eq!(declared.len(), 1);
     assert_eq!(declared[0].glob, "**/*_test.go");
     assert_eq!(declared[0].kind, RootKind::Test);
@@ -90,21 +91,34 @@ fn entry_and_test_roots() {
         declared[0].confidence,
         kndo_contract::vocab::Confidence::Certain
     );
-    // An `init` runs when the binary it is compiled into loads, and a
-    // `_test.go` file is compiled into the test binary alone: rooting it
-    // Production would flood the package's production color from its tests.
-    let init_ix = test
-        .declarations
+    let rules: Vec<String> = spec
+        .dispatch_rules()
         .iter()
-        .position(|d| d.name == "init")
-        .unwrap();
-    let init_roots: Vec<RootKind> = test
-        .roots
-        .iter()
-        .filter(|r| matches!(r.target, RootTarget::Declaration(id) if id.index() == init_ix))
-        .map(|r| r.kind)
+        .map(|r| format!("{:?} => {:?}", r.when, r.then))
         .collect();
-    assert_eq!(init_roots, [RootKind::Test]);
+    // `go test` runs them by name where the tests are; an `init` runs when
+    // the binary it is compiled into loads, so its color is the file's — and
+    // that takes both halves, not a default.
+    for pattern in ["Test*", "Benchmark*", "Example*", "Fuzz*"] {
+        assert!(
+            rules.iter().any(|r| r.contains(pattern)
+                && r.contains("Rooted(Test)")
+                && r.ends_with("Root(Test)")),
+            "{rules:#?}"
+        );
+    }
+    assert!(
+        rules
+            .iter()
+            .any(|r| r.contains("\"init\"") && r.contains("Rooted(Test)") && r.ends_with("Root(Test)")),
+        "{rules:#?}"
+    );
+    assert!(
+        rules.iter().any(|r| r.contains("\"init\"")
+            && r.contains("NotRooted(Test)")
+            && r.ends_with("Root(Production)")),
+        "{rules:#?}"
+    );
 }
 
 #[test]

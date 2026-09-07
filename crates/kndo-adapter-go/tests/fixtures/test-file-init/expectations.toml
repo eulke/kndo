@@ -1,5 +1,6 @@
 # test-file-init: what a `_test.go` file compiles into is the TEST binary, and
-# two rules follow. Its `init` runs when that binary loads, so it roots Test —
+# three rules follow, all of them the spec's data rather than extraction's
+# conclusions. Its `init` runs when that binary loads, so it roots Test —
 # rooting it Production would paint the whole package production through the
 # sight a test file has of its siblings. And its exported names are on no
 # published surface: no importer can name `TestWant`, whatever the module
@@ -9,6 +10,11 @@
 subject = "internal/testutil/util.go"
 category = "test-only"
 why = "only lib's test file imports this package, and its own test file's init and exports no longer paint it production"
+
+[[alive]]
+subject = "internal/testutil/util_test.go#TestWant"
+category = "unused"
+why = "`go test` runs it by name — and it is under `internal/`, so the fence caps its reach and nothing else could keep it"
 
 [[alive]]
 subject = "internal/testutil/util.go#Want"

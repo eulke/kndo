@@ -16,7 +16,7 @@ use kndo_contract::evidence::{
 use kndo_contract::extension::{
     Activation, ActivationRule, Bearer, ConductSeverity, ConductTarget, CycleTolerance,
     DeclaredSymbol, DispatchRule, Effect, ExtensionSpec, ExtensionSpecParts, Ladder,
-    PublishedSurface, RuleDescriptor, Rung, Step, Trigger,
+    InFiles, PublishedSurface, RuleDescriptor, Rung, Step, Trigger,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use smol_str::SmolStr;
@@ -197,6 +197,15 @@ fn dispatch_rule(rule: awire::DispatchRule) -> DispatchRule {
             awire::Trigger::Marker(m) => Trigger::Marker {
                 path: SmolStr::new(m.path),
                 arg: m.arg.map(SmolStr::new),
+            },
+            awire::Trigger::Name(n) => Trigger::Name {
+                pattern: SmolStr::new(n.pattern),
+                kind: n.kind.map(symbol_kind_from_wire),
+                in_files: match n.in_files {
+                    awire::InFiles::Any => InFiles::Any,
+                    awire::InFiles::Rooted(k) => InFiles::Rooted(root_kind(k)),
+                    awire::InFiles::NotRooted(k) => InFiles::NotRooted(root_kind(k)),
+                },
             },
         },
         then: match rule.then {
