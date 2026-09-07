@@ -1440,3 +1440,20 @@ own test siblings. Alamofire, Exposed, flask, guava, lodash, ripgrep, vapor
 and vite are byte-identical: no other language's test files sit inside a
 published library unit, because every other build system gives tests a unit of
 their own.
+
+### Co-visibility off the forest: the same numbers by the right mechanism (2026-09-06)
+
+| repo | before | after | what moved |
+|---|---|---|---|
+| every repository | — | — | nothing — every report byte-identical |
+
+`Extension::sees` asked each adapter to enumerate, from paths, the files a
+given file compiles with; go's answer was its directory, with `_test.go`
+handled asymmetrically. The scope forest already holds that set as a namespace
+node, so go now declares `Covisibility::Namespace` and reachability floods over
+the node instead of over an enumerated directory — with the test asymmetry
+stated once in the engine rather than per adapter. Every corpus report is
+unchanged, which is the result this kind of swap must produce: the forest holds
+exactly what the hook re-derived. What proves the capability load-bearing is
+the conformance case, which reports `unreachable` in place of `production` when
+the declaration is removed.

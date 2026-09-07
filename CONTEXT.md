@@ -137,6 +137,15 @@ evidence and manifest evidence. Pools, effective reach and the narrowest express
 rung are read from it.
 _Avoid_: sees, seen_from, region
 
+**Co-visibility**:
+The files a language compiles TOGETHER, read off the scope forest where the language
+says its namespace compiles as one (Go's package). Reachability's input, not a pool:
+a pool asks who may NAME a declaration, this asks what the compiler builds, and only
+the second makes a file exporting nothing alive because its package is. A file that
+is a test as a whole is the one asymmetry — the production build never compiles it,
+so no production colour crosses through it.
+_Avoid_: sees, unit mates
+
 **Pool**:
 The files, or the span within a file, from which an unqualified reference to a name
 counts as a use of a declaration: the subtree of the node its effective reach names,

@@ -4532,3 +4532,56 @@ the WIT variant drops `scoped` and the compat guests are re-pinned;
 `GRAPH_SEMANTICS_VERSION` moves to 21 (the same evidence now assembles a
 different `published`); `kndo:go` bumps to 6. The report and query schemas do
 not move.
+
+## 2026-09-06 — M8.c go 2/3: `sees` retires, co-visibility comes off the forest
+
+**The mechanism the forest replaced.** `Extension::sees` asks each adapter to
+enumerate, from paths, the files a given file compiles with. Four adapters
+answer it and each answers with its own layout knowledge: go walked the
+directory (asymmetric on `_test.go`), java the directory plus its main/test
+mirror, kotlin the directory plus its mirrored main dirs, swift the target. All
+four are re-derivations of structures the engine now holds — a namespace node
+and a unit — which is why the design filed `sees` and `seen_from` under what
+disappears. The go slice before this one declared go's namespace and then kept
+`sees` anyway, on the true observation that reachability had no other input;
+the honest reading of that observation is that reachability was missing a
+capability, not that the old hook had earned its place.
+
+**What a language compiles together is a language fact.** `Covisibility`, on
+the spec: `Imports` (the default — the module graph is the whole story, which
+is what rust, python and js-ts have always meant) or `Namespace` (go: `go build`
+compiles every `.go` of the directory, so an importer that reaches one file
+reaches all of them, and a file exporting nothing is alive because its package
+is). The named consumer is reachability: `Reachability::compute` now takes the
+scope forest and floods over `Scopes::covisible` — a namespace node's files —
+beside the import edges. `Scopes` therefore moves ahead of both `Reachability`
+and `Index` instead of being built inside the latter; one forest, read twice.
+
+**The asymmetry is the engine's, once.** A file that is a test AS A WHOLE is
+compiled into the test binary alone, so it neither carries the production
+colour into the namespace it shares with production files nor takes it from
+one; the test colour crosses in both directions. That is exactly what go's
+`sees` encoded per file, and it is now one condition in the flood, expressed
+against the whole-file test root the engine already computes for every
+language. The same sentence already governs publication (M8.c go 1/3), so a
+test file is off its unit's published surface and out of the production flood
+for one reason rather than two.
+
+**Measured: nothing moves.** gin stays at 110 and every corpus report is
+byte-identical, which is the result a mechanism swap must produce when the new
+mechanism holds what the old one re-derived. The proof that the capability is
+load-bearing is the conformance case, not the corpus: kmock grows a `test-file`
+line and `MockExtension::covisible()`, and the new engine test —
+`a_covisible_namespace_reaches_its_own_files_but_never_through_a_test` — fails
+with `unreachable` where it expects `production` when the extension is swapped
+for the plain mock. `kndo:go` bumps to 7 and its `sees` test is replaced by one
+that pins the declaration instead of an enumeration.
+
+**What is left of the hook.** java, kotlin and swift still implement `sees`,
+and until their slices declare their namespaces and units the engine has
+nothing to read for them; `GraphFile.sees` therefore still carries two writers
+— an `Include` import, which is sight a file states about itself, and the hook
+for those three. The hook's doc-comment now says it is the pre-forest mechanism
+and goes with the last adapter to leave it. `GRAPH_SEMANTICS_VERSION` moves to
+22; the contract fingerprint does not move (the spec is not part of it — it is
+part of the graph cache key, which the new field moves on its own).

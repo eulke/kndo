@@ -201,6 +201,15 @@ impl Scopes {
         self.directories.get(dir).map(Vec::as_slice)
     }
 
+    /// The files this one COMPILES WITH, where the language says its namespace
+    /// compiles as one: its namespace node's files. Reachability's input, not a
+    /// pool — a pool asks who may NAME a declaration, this asks what the
+    /// compiler builds together, and only the second makes a file with no
+    /// exported name alive because its package is.
+    pub fn covisible(&self, file: usize) -> &[u32] {
+        &self.files[self.of_file[file] as usize]
+    }
+
     /// The files a `Reach::Named { namespace }` declaration in `file` pools
     /// over: the node of that name inside the file's own compilation. `None`
     /// when no file of that compilation declares the name — unbounded.

@@ -574,8 +574,9 @@ impl Snapshot {
     /// read a [`Response`].
     pub fn query(&self, request: &Request) -> Response {
         let (reach, index) = self.navigation.get_or_init(|| {
-            let reach = Reachability::compute(&self.graph);
-            let index = Index::build(&self.graph, &reach, &self.capabilities);
+            let scopes = crate::scopes::Scopes::build(&self.graph, &self.capabilities);
+            let reach = Reachability::compute(&self.graph, &scopes, &self.capabilities);
+            let index = Index::build(&self.graph, &reach, scopes);
             (reach, index)
         });
         let cx = QueryContext {

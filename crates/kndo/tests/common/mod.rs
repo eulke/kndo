@@ -44,6 +44,25 @@ pub fn reported(snap: &kndo::Snapshot, category: &Category) -> Vec<String> {
 // binary uses reads as dead here — the harness's wart, per item rather than a
 // file-level blanket, which kndo would (rightly) report as one.
 #[allow(dead_code)]
+/// The colour `describe` gives a node: which root sets reach it.
+pub fn color(snap: &kndo::Snapshot, selector: &str) -> String {
+    let response = snap.query(&Request {
+        verb: Verb::Describe,
+        inputs: vec![selector.to_string()],
+        options: Default::default(),
+    });
+    match &response.results[0] {
+        Outcome::Ok {
+            answer: Answer::Describe(d),
+        } => d.node.color.as_str().to_string(),
+        _ => panic!("{selector}: not a node this graph holds"),
+    }
+}
+
+// Rust compiles a shared test module once per test BINARY, so a helper another
+// binary uses reads as dead here — the harness's wart, per item rather than a
+// file-level blanket, which kndo would (rightly) report as one.
+#[allow(dead_code)]
 /// What `describe` says a declaration reaches: as declared, and effectively.
 pub fn reaches(snap: &kndo::Snapshot, selector: &str) -> (String, String) {
     let response = snap.query(&Request {

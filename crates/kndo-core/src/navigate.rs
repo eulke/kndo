@@ -147,11 +147,7 @@ pub enum Keeper {
 }
 
 impl Index {
-    pub fn build(
-        graph: &Graph,
-        reach: &Reachability,
-        capabilities: &[(SmolStr, crate::analysis::DeclaredCapabilities)],
-    ) -> Index {
+    pub fn build(graph: &Graph, reach: &Reachability, scopes: crate::scopes::Scopes) -> Index {
         let n = graph.files.len();
         let reachable: Vec<bool> = (0..n).map(|i| reach.any(i)).collect();
         let mut sites_by_name: BTreeMap<SmolStr, Vec<Site>> = BTreeMap::new();
@@ -225,7 +221,7 @@ impl Index {
             members_of,
             supertypes_of,
             subtypes_of,
-            scopes: crate::scopes::Scopes::build(graph, capabilities),
+            scopes,
             heirs_pools: BTreeMap::new(),
         };
         index.heirs_pools = index.heirs_pools_of(graph);

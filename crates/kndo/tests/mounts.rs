@@ -157,3 +157,41 @@ fn an_include_makes_the_target_content_this_file_s_own() {
         "sight is not a surface: what the includer never names is still dead"
     );
 }
+
+#[test]
+fn a_covisible_namespace_reaches_its_own_files_but_never_through_a_test() {
+    let p = TempProject::new();
+    p.file(
+        "kmock.pkg",
+        "unit core library roots=src entries=src/lib.kmock\n",
+    )
+    // One namespace, three files: only the first exports, and the language
+    // says its namespace compiles as one.
+    .file("src/lib.kmock", "package pkg\nexport fn Api\n")
+    .file("src/helpers.kmock", "package pkg\nns fn helper\n")
+    // A test file of the same namespace: it may name what the namespace holds,
+    // and the production colour neither enters nor leaves through it.
+    .file(
+        "src/lib_test.kmock",
+        "package pkg\ntest-file\nexport fn TestApi\ncall helper\n",
+    )
+    // Another namespace entirely, exporting nothing and imported by nobody.
+    .file("src/other/dead.kmock", "package other\nns fn alone\n");
+    let snap = common::analyze(&p, vec![Box::new(MockExtension::covisible())]);
+
+    // The exported file roots on the unit's published surface, and the
+    // namespace carries that colour to the file that exports nothing.
+    assert_eq!(common::color(&snap, "src/helpers.kmock"), "production");
+    // Not through the test file, and not into it.
+    assert_eq!(common::color(&snap, "src/lib_test.kmock"), "test-only");
+    // A namespace nothing reaches stays unreached, whole file and all.
+    let unused = reported(&snap, &Category::UNUSED);
+    assert!(
+        unused.iter().any(|s| s.contains("src/other/dead.kmock")),
+        "{unused:?}"
+    );
+    assert!(
+        !unused.iter().any(|s| s.contains("helpers")),
+        "a file the namespace reaches is not dead: {unused:?}"
+    );
+}

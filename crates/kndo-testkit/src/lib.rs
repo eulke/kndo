@@ -35,6 +35,7 @@
 //! import ./x { a, b }  binding import
 //! root name            production root anchored on the declaration `name`
 //! root-file            whole-file production root
+//! test-file            whole-file test root: this file IS a test
 //! mark name path a,b   a marker `path(a, b)` on the declaration `name`
 //! mark-file path a,b   a marker on the whole file
 //! # text               a comment (the Comments stream, declared)
@@ -187,6 +188,17 @@ impl MockExtension {
         MockExtension::speaking(
             kmock_spec()
                 .namespace_span(kndo_contract::extension::NamespaceSpan::Compilation)
+                .build(),
+        )
+    }
+
+    /// The kmock language whose namespace compiles as one — what a test of
+    /// co-visible reachability speaks, since the plain mock says the module
+    /// graph is the whole story.
+    pub fn covisible() -> Self {
+        MockExtension::speaking(
+            kmock_spec()
+                .covisibility(kndo_contract::extension::Covisibility::Namespace)
                 .build(),
         )
     }
@@ -417,6 +429,8 @@ impl Extension for MockExtension {
                     RootKind::Production,
                     Confidence::Certain,
                 );
+            } else if line == "test-file" {
+                out.root(RootTarget::WholeFile, RootKind::Test, Confidence::Certain);
             } else if let Some(name) = line.strip_prefix("root ") {
                 match decls.get(name.trim()) {
                     Some(id) => out.root(

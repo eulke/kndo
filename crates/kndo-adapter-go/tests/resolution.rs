@@ -4,7 +4,7 @@
 
 use kndo_adapter_go::GoAdapter;
 use kndo_contract::adapter::{PackageEntry, Resolution, ResolveContext};
-use kndo_contract::extension::Extension;
+use kndo_contract::extension::{Covisibility, Extension};
 use kndo_contract::vocab::ProjectPath;
 use smol_str::SmolStr;
 use std::collections::{BTreeMap, BTreeSet};
@@ -18,34 +18,21 @@ fn files(paths: &[&str]) -> Resolution {
 }
 
 #[test]
-fn sight_is_the_package_with_test_asymmetry() {
-    let known = project(&[
-        "pkg/a.go",
-        "pkg/b.go",
-        "pkg/b_test.go",
-        "pkg/c_test.go",
-        "pkg/sub/c.go",
-        "other/d.go",
-    ]);
-    let cx = ResolveContext::new(&known);
+fn sight_is_declared_not_enumerated() {
+    // What a Go package compiles together used to be a directory this adapter
+    // walked (`Extension::sees`). It is a property of the LANGUAGE, and the
+    // engine reads it off the namespace node extraction declares — so the
+    // adapter's whole statement is one capability, and the asymmetry that made
+    // the old enumeration subtle (a test file is compiled into the test binary
+    // alone) is the engine's, pinned by `crates/kndo/tests/mounts.rs`.
     let adapter = GoAdapter::new();
-    let mates = |p: &str| -> Vec<String> {
-        adapter
-            .sees(&ProjectPath::new(p), &cx)
-            .iter()
-            .map(|m| m.as_str().to_string())
-            .collect()
-    };
-    // A production file sees its non-test siblings — never itself, the
-    // subdirectory, or the tests: the package never consumes its tests.
-    assert_eq!(mates("pkg/a.go"), ["pkg/b.go"]);
-    // A test file sees the whole package, test siblings included.
-    assert_eq!(
-        mates("pkg/b_test.go"),
-        ["pkg/a.go", "pkg/b.go", "pkg/c_test.go"]
+    assert_eq!(adapter.spec().covisibility(), Covisibility::Namespace);
+    let known = project(&["pkg/a.go", "pkg/b.go"]);
+    let cx = ResolveContext::new(&known);
+    assert!(
+        adapter.sees(&ProjectPath::new("pkg/a.go"), &cx).is_empty(),
+        "the hook is the pre-forest mechanism and this adapter has left it"
     );
-    // A lone file has no mates.
-    assert_eq!(mates("other/d.go"), Vec::<String>::new());
 }
 
 #[test]

@@ -1,15 +1,14 @@
 //! Go, through the tree-sitter-go grammar. What Go imports is the package — a
 //! directory of files sharing one namespace with no imports between siblings —
-//! and this adapter says so twice, because the package is two facts. It is a
-//! NAMESPACE, which extraction declares from the package clause and the
-//! directory, so a lower-case name reaches it and nothing wider. And its files
-//! CO-COMPILE, which [`Extension::sees`] declares from the file set (a
-//! production file sees its non-test siblings; a test file sees the whole
-//! package) — sight no file's own bytes could state, and the edge that carries
-//! reachability from an exported name to the file next to it. Imports resolve
-//! to [`Resolution::Files`], every non-test `.go` in the package dir.
-//! Capitalization IS the visibility: an upper-case initial is exported,
-//! anything else package-private.
+//! and this adapter states it ONCE, as the namespace extraction declares from
+//! the package clause and the directory. Everything else follows from that
+//! node: a lower-case name reaches it and nothing wider, and `go build`
+//! compiles the whole of it, which the adapter declares as
+//! [`Covisibility::Namespace`] and the engine reads off the scope forest — so
+//! reaching one file of a package reaches its siblings without this adapter
+//! enumerating a directory. Imports resolve to [`Resolution::Files`], every
+//! non-test `.go` in the package dir. Capitalization IS the visibility: an
+//! upper-case initial is exported, anything else package-private.
 //!
 //! The unit is the MODULE: `go.mod` is the one manifest, it names what other
 //! modules import, and Go has no per-target section to split it.
@@ -23,7 +22,7 @@ mod resolve;
 
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::EvidenceSink;
-use kndo_contract::extension::{Extension, ExtensionSpec, Rung, Step};
+use kndo_contract::extension::{Covisibility, Extension, ExtensionSpec, Rung, Step};
 use kndo_contract::manifest::ManifestSink;
 use kndo_contract::vocab::ProjectPath;
 
@@ -34,11 +33,11 @@ pub struct GoAdapter {
 impl GoAdapter {
     pub fn new() -> Self {
         GoAdapter {
-            // 6: the package clause names a namespace, an unexported name
-            // reaches it, and go.mod declares the module unit.
+            // 7: co-visibility is the namespace's, not a directory this
+            // adapter enumerates.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:go",
-                6,
+                7,
                 &["go"],
                 &["**/go.mod"],
                 // The compiler forbids import cycles: one could only be a
@@ -54,6 +53,10 @@ impl GoAdapter {
             // Capitalization is the whole ladder: nothing sits below the
             // package, so a package-private name used only in its file has
             // nowhere narrower to go and `internal-only` stays silent for it.
+            // `go build` compiles every file of a package: reaching one of
+            // them reaches the rest, which is why a file exporting nothing is
+            // alive while its package is.
+            .covisibility(Covisibility::Namespace)
             .ladder(&[
                 Step::new(Rung::Namespace, "unexported"),
                 // An exported name in an `internal` package is spelled the
@@ -104,9 +107,5 @@ impl Extension for GoAdapter {
         out: &mut ManifestSink,
     ) {
         manifest::structure(manifest, cx, out);
-    }
-
-    fn sees(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
-        resolve::sees(path, cx)
     }
 }

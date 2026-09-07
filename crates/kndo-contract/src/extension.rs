@@ -349,6 +349,31 @@ pub enum NamespaceSpan {
     Compilation,
 }
 
+/// Whether reaching one file of a compilation reaches the rest of it — what a
+/// compiler compiles TOGETHER, which is not always what a module graph spells.
+///
+/// Go builds a package: `go build` compiles every `.go` file of the directory,
+/// so an importer that reaches one of them reaches all of them, and a file
+/// declaring nothing exported is alive because its package is. Rust, Python
+/// and JavaScript are the opposite: the module graph is the whole story, and a
+/// file nothing imports is reached by nothing. The default is the module
+/// graph — the narrower answer, under which a language that has not spoken
+/// accuses rather than keeps.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub enum Covisibility {
+    /// Only an import reaches a file.
+    #[default]
+    Imports,
+    /// The namespace compiles as one, so reaching any of its files reaches
+    /// them all. A file that is a test AS A WHOLE is the one asymmetry: the
+    /// production build does not compile it, so no production colour flows
+    /// through it into the namespace.
+    Namespace,
+}
+
 /// Which declarations can stand on a step. Kotlin's `private` is file-wide on
 /// a top-level declaration and class-wide on a member — two rungs under one
 /// keyword — and Java's `private` exists for members alone. The ladder says
@@ -608,6 +633,7 @@ pub struct ExtensionSpec {
     import_cycles: CycleTolerance,
     ladder: Ladder,
     namespace_span: NamespaceSpan,
+    covisibility: Covisibility,
     dispatch: Vec<DispatchRule>,
     claims: Vec<SmolStr>,
     emits: EvidenceStreams,
@@ -649,6 +675,7 @@ impl ExtensionSpec {
                 import_cycles: CycleTolerance::Tolerated,
                 ladder: Ladder::default(),
                 namespace_span: NamespaceSpan::Unit,
+                covisibility: Covisibility::Imports,
                 dispatch: Vec::new(),
                 claims: Vec::new(),
                 emits: EvidenceStreams::none(),
@@ -745,6 +772,10 @@ impl ExtensionSpec {
         self.namespace_span
     }
 
+    pub fn covisibility(&self) -> Covisibility {
+        self.covisibility
+    }
+
     pub fn claims(&self) -> &[SmolStr] {
         &self.claims
     }
@@ -837,6 +868,7 @@ pub struct ExtensionSpecParts {
     /// Wire components cannot declare a span yet; defaults to `Unit`, the
     /// narrower answer.
     pub namespace_span: NamespaceSpan,
+    pub covisibility: Covisibility,
     pub dispatch: Vec<DispatchRule>,
     pub claims: Vec<SmolStr>,
     pub emits: EvidenceStreams,
@@ -880,6 +912,7 @@ impl From<ExtensionSpecParts> for ExtensionSpec {
             import_cycles: parts.import_cycles,
             ladder: parts.ladder,
             namespace_span: parts.namespace_span,
+            covisibility: parts.covisibility,
             dispatch: parts.dispatch,
             claims: parts.claims,
             emits: parts.emits,
@@ -985,6 +1018,14 @@ impl ExtensionSpecBuilder {
     /// Declare how far a namespace reaches across units (see
     /// [`NamespaceSpan`]). Omitted ⇒ `Unit`: a namespace stops at the unit
     /// that compiles it, which keeps every advisory a wider span would silence.
+    /// What this language compiles together — see [`Covisibility`]. The
+    /// consumer is reachability: a namespace-covisible language reaches every
+    /// file of a namespace node it reaches one file of.
+    pub fn covisibility(mut self, covisibility: Covisibility) -> Self {
+        self.spec.covisibility = covisibility;
+        self
+    }
+
     pub fn namespace_span(mut self, span: NamespaceSpan) -> Self {
         self.spec.namespace_span = span;
         self
@@ -1460,6 +1501,13 @@ pub trait Extension: Send + Sync {
     /// `path` and the file SET, never on content — which is what lets a
     /// persisted graph trust it while only contents change. The default — sees
     /// nothing beyond itself — reproduces pre-capability behavior.
+    /// The files this one co-compiles with, enumerated from paths — the
+    /// PRE-FOREST mechanism, retiring. A language that declares its namespaces
+    /// (an `EvidenceSink::namespace` clause) and says how they compile
+    /// ([`ExtensionSpecBuilder::covisibility`]) gets the same answer from the
+    /// engine's scope forest, which knows the node without re-deriving a
+    /// directory layout; this hook exists for the adapters that have not made
+    /// that move, and goes with the last of them.
     fn sees(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
         let _ = (path, cx);
         Vec::new()

@@ -23,7 +23,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Bump when the SAME evidence assembles into a DIFFERENT graph — resolution
 /// candidate changes, reachability semantics, new assembled fields. Folded into the
 /// graph cache key beside the contract fingerprint and the adapter set.
-pub const GRAPH_SEMANTICS_VERSION: u32 = 21;
+pub const GRAPH_SEMANTICS_VERSION: u32 = 22;
 
 #[derive(Serialize, Deserialize)]
 pub struct GraphFile {
@@ -37,6 +37,13 @@ pub struct GraphFile {
     /// like import edges, and analyses pool references over the visibility they
     /// declare. A pure function of path and file set, so a content-only patch can
     /// trust the persisted values.
+    ///
+    /// Two writers, and only one of them lasts: an `Include` import, which is
+    /// sight the file itself states, and [`Extension::sees`] for the adapters
+    /// that have not yet declared their namespaces — for a language that has,
+    /// the same fact is the scope forest's
+    /// ([`crate::scopes::Scopes::covisible`]) and this list holds only its
+    /// includes.
     pub sees: Vec<u32>,
     /// Per adapter-bounded reach this file's evidence uses — a `Scoped` token,
     /// or `Unit` until a manifest names the unit — the files a declaration of
