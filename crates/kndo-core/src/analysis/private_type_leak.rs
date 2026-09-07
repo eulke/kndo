@@ -7,7 +7,7 @@
 //! — absent means silence, never accusation).
 //!
 //! The precision floor, each rule bought with a measured oracle vice:
-//! - **Exported-vs-Private only.** Any `Scoped` reach on either side is
+//! - **Exported-vs-file-private only.** Any bounded reach on either side is
 //!   silence: v1 folded rust's `pub(crate)` to exported and accused crate-wide
 //!   methods of leaking crate-wide types (ripgrep, four findings about nothing),
 //!   and flagged Java package-private types in package-visible signatures. A

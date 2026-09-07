@@ -582,3 +582,41 @@ reason to leave the ladder as it is:
 **Order, therefore**: M8.e first, then the entry-surface member rung, then
 re-measure and decide family 3. Tightening the ladder before those two would
 ship 150 findings whose cause is known and addressable elsewhere.
+
+## What the plan says disappears, verified (2026-09-07)
+
+The plan's removal list, checked against the tree rather than remembered. Run
+the commands to re-check: this section is a claim with its evidence, not a
+promise.
+
+### Gone
+
+| mechanism | check |
+|---|---|
+| `Extension::sees` | `grep -rn "fn sees" crates/ abi/ wit/` — one hit, `Project::sees_into`, which is UNIT FRIENDSHIP (the plan's own vocabulary) and not the hook |
+| `Extension::seen_from` | `grep -rn "seen_from\|seen-from" crates/ abi/ wit/` — none |
+| `sees_of`, `regions_of`, `GraphFile.regions`, `region_of`, `Index::seen_by` | none; `GraphFile.includes` and `Index::included_by` hold what remained, the file's own `Include` imports |
+| `Reach::Scoped { token }` | none; the `Scoped` hits are `DependencyScoping::Scoped`, an unrelated capability |
+| `narrowable_scopes`, `export_narrowing` | none |
+| the second `TypeScriptAdapter` inside html | none |
+| `InFiles` | none |
+| `Covisibility` | none |
+
+### Still here, with the mechanism that replaces each
+
+| mechanism | how much | replaced by | lands in |
+|---|---|---|---|
+| the four manifest hooks — `roots` ×4, `packages` ×7, `manifest_dependencies` ×7, `manifest_mentions` ×1 | see `grep -rn "fn roots(\|fn packages(\|fn manifest_dependencies(\|fn manifest_mentions(" crates/kndo-adapter-*/src` | `extract_manifest` + the structural parsers | M8.d, parser by parser |
+| line scanners for pom / Gradle / pyproject | 4 in `kndo-toolkit::jvm_manifest`, 2 in `kndo-adapter-python::manifest` | the same structural parsers (`roxmltree`, block scanner + TOML catalog, `toml`) | M8.d |
+| whole-file roots per adapter | 20 sites: java 4, kotlin 3, swift 5, python 3, ts 3, html 2 | `FileRole` (declared data, engine-applied) + the unit's kind | next, measured |
+
+Deleting the first two rows before their parser exists leaves the engine with
+NO mechanism, not a cleaner one: js-ts's `roots` hook alone carries 332 corpus
+findings (`EXPERIMENTS`, the legacy ledger, row 5). They die parser by parser,
+which is what M8.d is.
+
+The third row is different and is the next thing to go. Its replacement is
+already wired; the care it needs is that `FileRole` globs are ADDITIVE where
+the current code is exclusive (`if test { … } else { … }`), so a test file
+would take the library-mode Production role too unless the globs are written to
+exclude it. That is a measurement, not a design question.
