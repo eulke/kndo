@@ -80,11 +80,10 @@ fn dispatch_rules() -> Vec<DispatchRule> {
 impl RustAdapter {
     pub fn new() -> Self {
         RustAdapter {
-            // 12: a `#[path]` redirect is anchored where the Reference says
-            // and substituted in every path, and an `include!` draws its edge.
+            // 13: the generated banner is reported, never concluded.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:rust",
-                12,
+                13,
                 &["rs"],
                 &["**/Cargo.toml"],
                 // Modules within a crate reference each other freely — legal,

@@ -143,6 +143,17 @@ impl EvidenceStreams {
         self.set.contains(&stream)
     }
 
+    /// Declare everything `other` declares, on top of what is already here.
+    /// Declaration is a claim about what an adapter reports, and two claims
+    /// never cancel: a builder that composes a base with an adapter's own list
+    /// unions them, so a base's stream cannot be dropped by an adapter that
+    /// never mentioned it.
+    pub fn declare_all(&mut self, other: &EvidenceStreams) {
+        self.set.extend(other.iter());
+        self.set.sort();
+        self.set.dedup();
+    }
+
     /// The declared streams, sorted — what a wire spelling serializes; membership
     /// and iteration come from the ONE set, so a new stream variant can never be
     /// silently stripped by an enumeration someone else kept.

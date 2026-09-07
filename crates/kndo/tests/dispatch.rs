@@ -1,7 +1,9 @@
 //! Markers mean what the claiming extension's dispatch rules say: a marker the
 //! rules root becomes an entry of that color, a marker they exempt keeps the
-//! declaration out of the unused judgment, and a file-level exemption is said
-//! aloud in the report — the same engine path every language rides.
+//! declaration out of the unused judgment, a marker naming the file a
+//! generator's output takes what it DECLARES out of every judgment while
+//! leaving the file itself judged, and a file-level exemption is said aloud in
+//! the report — the same engine path every language rides.
 
 mod common;
 
@@ -21,6 +23,7 @@ fn rules() -> Vec<DispatchRule> {
     vec![
         certain(Trigger::marker("test"), Effect::Root(RootKind::Test)),
         certain(Trigger::marker_with("allow", "dead_code"), Effect::Exempt),
+        certain(Trigger::marker("generated"), Effect::Generated),
     ]
 }
 
@@ -91,4 +94,44 @@ fn a_file_level_exemption_covers_everything_and_is_said_aloud() {
         report.diagnostics[0].message,
         "`allow(dead_code)` at file level exempts every declaration here (2) from the unused judgment"
     );
+}
+
+#[test]
+fn a_generators_output_declares_nothing_this_project_answers_for() {
+    let p = TempProject::new();
+    // `codegen.kmock` is a generator's output that the app imports: the names
+    // in it are the generator's, so the two nobody calls are not accusations
+    // against this project — while `stale`, in hand-written code, still is.
+    p.file(
+        "main.kmock",
+        "root-file\nimport ./codegen { Wire }\nfn stale\n",
+    )
+    .file(
+        "codegen.kmock",
+        "mark-file generated\npub fn Wire\npub fn Unused\npub fn AlsoUnused\n",
+    );
+    let snap = run(&p);
+    assert_eq!(reported(&snap, &Category::UNUSED), ["main.kmock — stale"]);
+    let report = snap.report();
+    assert_eq!(report.diagnostics.len(), 1, "{:?}", report.diagnostics);
+    assert_eq!(report.diagnostics[0].path.as_str(), "codegen.kmock");
+    assert_eq!(
+        report.diagnostics[0].message,
+        "`generated` marks this file a generator's output: what it declares is not judged, \
+         what it imports and names still is"
+    );
+}
+
+#[test]
+fn a_generators_output_nobody_imports_is_still_dead_weight() {
+    let p = TempProject::new();
+    // Being generated is not a root: an orphan `.pb` nobody ever imports is
+    // as removable as an orphan anyone wrote, and the FILE is the finding —
+    // no declaration inside it is ever named.
+    p.file("main.kmock", "root-file\n").file(
+        "orphan.kmock",
+        "mark-file generated\npub fn Wire\npub fn Unused\n",
+    );
+    let snap = run(&p);
+    assert_eq!(reported(&snap, &Category::UNUSED), ["orphan.kmock"]);
 }

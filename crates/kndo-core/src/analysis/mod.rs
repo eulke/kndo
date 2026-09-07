@@ -75,6 +75,16 @@ impl Reachability {
 }
 
 impl RunContext<'_> {
+    /// Is what this file DECLARES this project's to judge? A generator's
+    /// output is not: the names in it are the generator's, so accusing one of
+    /// being unused, of duplicating another, or of being too complex asks the
+    /// wrong party. What the file IMPORTS and NAMES is still evidence about
+    /// the code that is — and the file itself is judged like any other, since
+    /// a generated file nothing imports is dead weight whoever wrote it.
+    pub fn judges_declarations(&self, file: usize) -> bool {
+        !self.graph.files[file].generated
+    }
+
     /// What the extension claiming `coordinate` declared about its language.
     pub fn capabilities_of(&self, coordinate: &smol_str::SmolStr) -> Option<&DeclaredCapabilities> {
         self.capabilities

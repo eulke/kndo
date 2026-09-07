@@ -46,9 +46,8 @@ fn dispatch_rules() -> Vec<kndo_contract::extension::DispatchRule> {
 impl JavaAdapter {
     pub fn new() -> Self {
         JavaAdapter {
-            // 6: the package clause IS the namespace — a file declares it, so
-            // two files share one however far apart they sit.
-            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:java", 11, &["java"])
+            // 12: the generated banner is reported, never concluded.
+            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:java", 12, &["java"])
                 .ladder(&[
                     // `private` is class-private and exists for members alone
                     // (a top-level class cannot take it), `public` is

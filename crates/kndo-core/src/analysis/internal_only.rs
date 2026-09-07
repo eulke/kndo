@@ -157,7 +157,7 @@ impl Analysis for InternalOnly {
 
         let mut out = Vec::new();
         for (i, f) in g.files.iter().enumerate() {
-            if !cx.measured[i] || !reachable(i) {
+            if !cx.measured[i] || !cx.run.judges_declarations(i) || !reachable(i) {
                 continue;
             }
             // The ladder is the one fact this analysis reads about a language;

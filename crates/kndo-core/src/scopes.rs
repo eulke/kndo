@@ -565,6 +565,7 @@ mod tests {
                 dispatched: Vec::new(),
                 exempt: Vec::new(),
                 dispatch_notes: Vec::new(),
+                generated: false,
                 unit: None,
                 imports: Vec::new(),
                 import_targets: Vec::new(),

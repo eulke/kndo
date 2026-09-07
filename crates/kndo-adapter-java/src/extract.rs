@@ -78,7 +78,7 @@ pub fn extract(
     // The `@generated` / `DO NOT EDIT` convention: generated code is the
     // generator's business — it declares nothing accusable here, while its
     // imports and references stay real evidence about YOUR code.
-    let generated = is_generated(source);
+    tk::mark_generated(source, tk::GENERATED_NEEDLES, &["//", "/*", "*"], out);
 
     let root = tree.root_node();
     let mut cursor = root.walk();
@@ -106,9 +106,7 @@ pub fn extract(
             | "interface_declaration"
             | "enum_declaration"
             | "record_declaration"
-            | "annotation_type_declaration"
-                if !generated =>
-            {
+            | "annotation_type_declaration" => {
                 let ctx = Ctx {
                     owner: None,
                     implicit_public: false,
@@ -127,10 +125,6 @@ pub fn extract(
 struct Ctx {
     owner: Option<DeclarationId>,
     implicit_public: bool,
-}
-
-fn is_generated(source: &[u8]) -> bool {
-    tk::generated_marked(source, tk::GENERATED_NEEDLES, &["//", "/*", "*"])
 }
 
 /// `public` → Exported; `protected` → the owner's heirs and the package,

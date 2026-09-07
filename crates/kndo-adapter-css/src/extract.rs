@@ -1,10 +1,10 @@
 //! The at-rule walk: `@import`, `@use` and `@forward` reduce to one shape — the
 //! string or `url()` argument the statement names — and each becomes one
-//! side-effect import. Comments feed suppression; a generated sheet roots
-//! itself as tooling output.
+//! side-effect import. Comments feed suppression; a generated banner is
+//! reported as a marker, and what it means is the engine's.
 
 use kndo_contract::adapter::SourceFile;
-use kndo_contract::evidence::{EvidenceSink, ImportShape, ImportTarget, RootKind, RootTarget};
+use kndo_contract::evidence::{EvidenceSink, ImportShape, ImportTarget};
 use kndo_contract::vocab::Confidence;
 use kndo_toolkit as tk;
 use smol_str::SmolStr;
@@ -27,16 +27,9 @@ pub(crate) fn extract(file: &SourceFile<'_>, out: &mut EvidenceSink) {
     let Some(tree) = tk::parse_reporting(&language, file.content, out) else {
         return;
     };
-    // A generated sheet (a tool's `DO NOT EDIT` output) is the generator's,
-    // never accused of being unreferenced; what it imports still keeps the
-    // rest of the project alive.
-    if tk::generated_marked(file.content, tk::GENERATED_NEEDLES, &["/*", "*", "//"]) {
-        out.root(
-            RootTarget::WholeFile,
-            RootKind::Tooling,
-            Confidence::Probable,
-        );
-    }
+    // A generated sheet carries its tool's `DO NOT EDIT` banner; the marker
+    // is the report, and `Effect::Generated` is what it means.
+    tk::mark_generated(file.content, tk::GENERATED_NEEDLES, &["/*", "*", "//"], out);
     let source = file.content;
     tk::walk(tree.root_node(), &mut |n| match n.kind() {
         kind if kind.ends_with("comment") => tk::comment_evidence(n, source, &COMMENT_MARKERS, out),

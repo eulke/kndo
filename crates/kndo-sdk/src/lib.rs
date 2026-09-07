@@ -180,6 +180,7 @@ fn dispatch_rule_to_wire(rule: &DispatchRule) -> wire::DispatchRule {
         then: match rule.then {
             Effect::Root(kind) => wire::Effect::Root(root_kind_to_wire(kind)),
             Effect::Exempt => wire::Effect::Exempt,
+            Effect::Generated => wire::Effect::Generated,
         },
         confidence: confidence_to_wire(rule.confidence),
     }

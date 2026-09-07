@@ -23,7 +23,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Bump when the SAME evidence assembles into a DIFFERENT graph — resolution
 /// candidate changes, reachability semantics, new assembled fields. Folded into the
 /// graph cache key beside the contract fingerprint and the adapter set.
-pub const GRAPH_SEMANTICS_VERSION: u32 = 23;
+pub const GRAPH_SEMANTICS_VERSION: u32 = 24;
 
 #[derive(Serialize, Deserialize)]
 pub struct GraphFile {
@@ -88,6 +88,10 @@ pub struct GraphFile {
     /// What dispatch wants the run to say about this file (a blanket
     /// exemption) — reported as diagnostics.
     pub dispatch_notes: Vec<String>,
+    /// A generator wrote this file, so what it DECLARES is not this project's
+    /// to judge — see [`kndo_contract::extension::Effect::Generated`]. The
+    /// file is judged like any other: nothing roots it for being generated.
+    pub generated: bool,
     /// The unit compiling this file, as an index into `Graph::project`'s units
     /// — [`crate::project::Project::unit_of`]. `None` until the claiming
     /// adapter reports its manifest's units, which is what every consumer
@@ -500,6 +504,7 @@ pub fn assemble(
                 dispatched: dispatched.roots,
                 exempt: dispatched.exempt,
                 dispatch_notes: dispatched.notes,
+                generated: dispatched.generated,
                 unit,
                 imports: Vec::new(),
                 import_targets: Vec::new(),
@@ -1081,6 +1086,7 @@ pub fn patch(
         gf.dispatched = dispatched.roots;
         gf.exempt = dispatched.exempt;
         gf.dispatch_notes = dispatched.notes;
+        gf.generated = dispatched.generated;
         gf.imports = edges.imports;
         gf.import_targets = edges.import_targets;
         gf.unresolved_imports = edges.unresolved_imports;

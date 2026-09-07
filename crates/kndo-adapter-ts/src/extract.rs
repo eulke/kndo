@@ -26,22 +26,11 @@ pub fn extract(
 ) {
     let root = tree.root_node();
     let globals = mode == Some(RegionMode::Script);
-    // The `@generated`/`DO NOT EDIT` convention (graphql-codegen, protobuf):
-    // generated code is the generator's business — it declares nothing
-    // accusable and the FILE is the generator's output, rooted Tooling so it is
-    // never accused of being unimported; its imports and references still keep
-    // the rest of the project alive. Same needles as the JVM adapters, whose
-    // library-mode roots already cover the file half.
-    if tk::generated_marked(source, tk::GENERATED_NEEDLES, &["//", "/*", "*"]) {
-        out.root(
-            kndo_contract::evidence::RootTarget::WholeFile,
-            kndo_contract::evidence::RootKind::Tooling,
-            kndo_contract::vocab::Confidence::Probable,
-        );
-    } else {
-        let aliases = export_aliases(root, source);
-        declarations(root, source, &aliases, globals, out);
-    }
+    // The `@generated`/`DO NOT EDIT` convention (graphql-codegen, protobuf) is
+    // reported as a marker; `Effect::Generated` is what it means.
+    tk::mark_generated(source, tk::GENERATED_NEEDLES, &["//", "/*", "*"], out);
+    let aliases = export_aliases(root, source);
+    declarations(root, source, &aliases, globals, out);
     imports(root, source, out);
     literal_specifiers(root, source, out);
     references_and_comments(root, source, out);

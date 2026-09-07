@@ -47,10 +47,10 @@ pub struct SwiftAdapter {
 impl SwiftAdapter {
     pub fn new() -> Self {
         SwiftAdapter {
-            // 2: `internal` is the unit's reach, not a token.
+            // 4: the generated banner is reported, never concluded.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:swift",
-                3,
+                4,
                 &["swift"],
                 &["**/Package.swift"],
                 // Files in a module compile as one unit; cross-references are

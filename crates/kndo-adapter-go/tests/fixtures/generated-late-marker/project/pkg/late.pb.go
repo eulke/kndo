@@ -27,5 +27,6 @@
 
 package pkg
 
-// Nothing here is accusable: the generator owns this file.
+// The banner sits under the licence, where `cmd/go` allows it: a generator
+// owns this name, so nothing here is accused.
 func unusedGenerated() {}

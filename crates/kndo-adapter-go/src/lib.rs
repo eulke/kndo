@@ -33,11 +33,10 @@ pub struct GoAdapter {
 impl GoAdapter {
     pub fn new() -> Self {
         GoAdapter {
-            // 10: `_test.go` is a declared file role, not a root this
-            // adapter concludes from a path.
+            // 11: the generated banner is reported, never concluded.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:go",
-                10,
+                11,
                 &["go"],
                 &["**/go.mod"],
                 // The compiler forbids import cycles: one could only be a

@@ -45,9 +45,10 @@ pub struct PythonAdapter {
 impl PythonAdapter {
     pub fn new() -> Self {
         PythonAdapter {
+            // 3: the generated banner is reported, never concluded.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:python",
-                2,
+                3,
                 &["py"],
                 &[
                     "**/pyproject.toml",

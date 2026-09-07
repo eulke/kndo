@@ -240,10 +240,46 @@ pub fn header_lines<'a>(
         .map(|(_, line)| line)
 }
 
-/// A generated-file marker scan over a source file's header: any of the
-/// declared needles on a header line marks the whole file.
-pub fn generated_marked(source: &[u8], needles: &[&str], openers: &[&str]) -> bool {
-    header_lines(source, openers).any(|l| needles.iter().any(|n| l.contains(n)))
+/// The token every language's generated-file banner is reported under. What an
+/// adapter SAW is its own ecosystem's spelling (`@generated`,
+/// `// Code generated … DO NOT EDIT.`); what it SAYS is this one word, and
+/// what the word means is [`kndo_contract::extension::Effect::Generated`],
+/// carried as a rule in the spec — so no adapter decides that a file is
+/// beyond judgment.
+pub const GENERATED_MARKER: &str = "generated";
+
+/// The default rule every marker-scanning language carries: the banner it
+/// reports means the generator owns the file.
+pub fn generated_rule() -> kndo_contract::extension::DispatchRule {
+    kndo_contract::extension::DispatchRule {
+        when: kndo_contract::extension::Trigger::marker(GENERATED_MARKER),
+        then: kndo_contract::extension::Effect::Generated,
+        confidence: kndo_contract::vocab::Confidence::Certain,
+    }
+}
+
+/// Report the generated-file banner this file carries, if any, as a file
+/// marker: the LINE the adapter matched is the argument, so a reader of
+/// `describe` sees what convinced it. Reports nothing where the header carries
+/// no banner.
+pub fn mark_generated(
+    source: &[u8],
+    needles: &[&str],
+    openers: &[&str],
+    out: &mut kndo_contract::evidence::EvidenceSink,
+) {
+    let Some(line) = header_lines(source, openers)
+        .find(|l| needles.iter().any(|n| l.contains(n)))
+        .map(str::to_string)
+    else {
+        return;
+    };
+    out.marker(
+        kndo_contract::evidence::MarkerTarget::File,
+        GENERATED_MARKER,
+        vec![smol_str::SmolStr::new(line)],
+        kndo_contract::vocab::Span::new(0, 0),
+    );
 }
 
 pub mod jvm_manifest {
@@ -1019,10 +1055,16 @@ pub fn source_adapter_builder(
     use kndo_contract::evidence::{EvidenceStream, EvidenceStreams};
     kndo_contract::extension::ExtensionSpec::builder(coordinate, version)
         .suffixes(suffixes)
+        // `Markers` and the generated rule ride together with
+        // [`mark_generated`]: every source adapter reports the banner its
+        // ecosystem writes, so the pairing is the builder's, not each
+        // adapter's to remember.
         .emits(EvidenceStreams::of(&[
             EvidenceStream::Comments,
             EvidenceStream::Metrics,
+            EvidenceStream::Markers,
         ]))
+        .dispatch(vec![generated_rule()])
         .manifests(manifests)
         .import_cycles(import_cycles)
 }

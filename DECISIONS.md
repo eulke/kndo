@@ -4772,3 +4772,85 @@ is one (go declares the role rather than emitting the root), the adapter
 version names it, and the spec is already part of the graph cache key, so no
 warm graph can answer for a tree read under the old spelling. Bumping both
 would be two places for one fact.
+
+## 2026-09-07 — `Effect::Generated`: a generator's output is judged by one law, not by eight adapters
+
+**Eight adapters, four different answers.** Every source adapter recognised its
+ecosystem's generated banner and each DECIDED for itself what that meant.
+go, java, kotlin, python and swift skipped the file's declarations and rooted
+nothing. rust, ts and css skipped the declarations AND rooted the whole file
+`Tooling` at `Probable` — so the same fact produced a whole-file `unused`
+finding in one language and silence in another, for reasons no reader could
+find in one place. The adapters were saying "dog": each concluded a verdict
+from a fact it could have simply reported.
+
+**The vocabulary.** `Effect::Generated` joins `Root` and `Exempt` in the spec's
+dispatch effects: the adapter reports the banner it found as a file marker
+under one language-neutral token (`kndo_toolkit::GENERATED_MARKER`, the LINE it
+matched carried as the argument so `describe` shows what convinced it), a rule
+in its spec says that token means `Generated`, and the engine holds the one
+verdict. `RunContext::judges_declarations(file)` is the seam five analyses read
+— `unused` (its declaration loop only), `duplicate` (both), `crap`,
+`internal-only`, `private-type-leak`. `untested` deliberately does not: coverage
+of a generated file is a fact about the test suite, not an accusation about a
+name.
+
+**The owner's decision: no judgment on the declarations AND no root.** A
+generated file's names are the generator's, so accusing one asks the wrong
+party. Whether the FILE earns its place in the tree is a different question and
+still this project's: nothing imports a stale `.pb` either, and deleting the
+generator's line for it is exactly the fix. So `Generated` withholds judgment
+from what the file declares and roots nothing — the rust/ts/css `Tooling` root
+is retired, and a generated orphan is reported like any other orphan. Both
+halves are pinned in one fixture (`kndo-adapter-ts` `generated-file`) and both
+kmock conformance cases.
+
+**Measured on the corpus: 3 generated files across nine repositories, 2
+findings move, both explained.**
+
+| repo | generated files | findings | delta |
+| --- | --- | --- | --- |
+| gin | 1 | 110 → 109 | `test-only` on `testdata/protoexample/test.pb.go` goes |
+| guava | 2 | 8251 → 8250 | `duplicate` on `PublicSuffixPatterns.java` goes |
+| Alamofire, Exposed, flask, lodash, ripgrep, vapor, vite | 0 | unchanged | — |
+
+gin's is the law working in both directions at once: the file now reports its
+declarations, and one of them is `func init()`, which the go runtime calls on
+package load — so a Production root reaches the file and "only tests reach it"
+was never true. The generated banner withholds judgment from the file's names;
+it never hid the program's shape. guava's is the seam: two byte-identical
+copies of a `PublicSuffixPatterns.java` that a tool wrote from the public
+suffix list, and telling this project that one duplicates the other is telling
+the wrong party. Nothing anywhere became MORE accused: no generated file in
+this corpus is an orphan, so the owner's "no root" half costs nothing here and
+buys the law its consistency.
+
+**Not v1's rule, and not v2's old one.** v1 rooted generated files as tooling
+output, which is where v2's rust/ts/css inherited it; the vice is that a root
+is a claim that something outside the graph USES the file, and a banner makes
+no such claim. It says who WROTE it.
+
+**The pairing is structural, not remembered.** `mark_generated` needs two spec
+declarations to work — `EvidenceStream::Markers` and the rule — and a missing
+one drops the marker with a diagnostic and no verdict. Rather than ask eight
+adapters to remember, `source_adapter_builder` declares both, and
+`ExtensionSpecBuilder::emits`/`dispatch` now UNION and APPEND instead of
+replacing: a shared builder's declaration can no longer be silently clobbered
+by an adapter that lists only what its own grammar adds. css builds its spec
+directly and declares the pair itself; html declares nothing here because it
+declares no symbols at all.
+
+`GRAPH_SEMANTICS_VERSION` moves to 24 — the engine assembles the same evidence
+differently, and an external adapter could trigger it with no built-in changing.
+Every source adapter bumps its own version too, because each genuinely emits
+different evidence now: `kndo:rust` 13, `kndo:go` 11, `kndo:java` 12,
+`kndo:kotlin` 7, `kndo:swift` 4, `kndo:python` 3, `kndo:js-ts` 10, `kndo:css` 2.
+These are two facts, not one fact in two places. The contract fingerprint does
+not move (a dispatch effect is spec data, part of the graph cache key rather
+than the shape hash). The WIT `effect` variant gains `generated` and the four
+pinned reference components are re-pinned in the same commit, as the ABI's own
+pre-release rule requires. Four conformance fixtures move: `generated-file`
+(kndo-adapter-go), `generated-late-marker` (kndo-adapter-go), `generated-file`
+(kndo-adapter-ts), and `generated-sheet-stays-silent` (kndo-adapter-css), which
+is renamed `generated-sheet-is-an-orphan-like-any-other` because its old name
+claimed the verdict the owner just reversed.

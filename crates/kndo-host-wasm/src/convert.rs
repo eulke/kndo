@@ -202,6 +202,7 @@ fn dispatch_rule(rule: awire::DispatchRule) -> DispatchRule {
         then: match rule.then {
             awire::Effect::Root(kind) => Effect::Root(root_kind(kind)),
             awire::Effect::Exempt => Effect::Exempt,
+            awire::Effect::Generated => Effect::Generated,
         },
         confidence: confidence(rule.confidence),
     }

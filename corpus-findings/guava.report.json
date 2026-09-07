@@ -64,7 +64,7 @@
   },
   "health": {
     "implicated": 936,
-    "subjects": 70176,
+    "subjects": 70182,
     "by_category": [
       {
         "category": "unused",
@@ -88,13 +88,13 @@
         "name": "guava",
         "manifest": "android/guava/pom.xml",
         "implicated": 60,
-        "subjects": 15256
+        "subjects": 15259
       },
       {
         "name": "guava",
         "manifest": "guava/pom.xml",
         "implicated": 39,
-        "subjects": 15467
+        "subjects": 15470
       },
       {
         "name": "guava-gwt",
@@ -135538,17 +135538,6 @@
       "message": "byte-identical to android/guava/src/com/google/common/xml/XmlEscapers.java"
     },
     {
-      "id": "kndo-3d1ec235f947",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava/src/com/google/thirdparty/publicsuffix/PublicSuffixPatterns.java"
-      },
-      "message": "byte-identical to android/guava/src/com/google/thirdparty/publicsuffix/PublicSuffixPatterns.java"
-    },
-    {
       "id": "kndo-d67d5ed113cc",
       "category": "duplicate",
       "severity": "info",
@@ -179903,6 +179892,11 @@
       "message": "syntax errors in file — evidence may be partial"
     },
     {
+      "path": "android/guava/src/com/google/thirdparty/publicsuffix/PublicSuffixPatterns.java",
+      "level": "info",
+      "message": "`generated(// GENERATED FILE - DO NOT EDIT)` marks this file a generator's output: what it declares is not judged, what it imports and names still is"
+    },
+    {
       "path": "guava-gwt/src-super/com/google/common/base/super/com/google/common/base/Platform.java",
       "level": "info",
       "message": "syntax errors in file — evidence may be partial"
@@ -179936,6 +179930,11 @@
       "path": "guava/src/com/google/common/base/Verify.java",
       "level": "info",
       "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "guava/src/com/google/thirdparty/publicsuffix/PublicSuffixPatterns.java",
+      "level": "info",
+      "message": "`generated(// GENERATED FILE - DO NOT EDIT)` marks this file a generator's output: what it declares is not judged, what it imports and names still is"
     }
   ]
 }

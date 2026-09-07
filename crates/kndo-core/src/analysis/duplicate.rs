@@ -58,7 +58,7 @@ impl Analysis for Duplicate {
         // in them would duplicate trivially.
         let mut by_hash: BTreeMap<&str, Vec<usize>> = BTreeMap::new();
         for (i, f) in g.files.iter().enumerate() {
-            if cx.measured[i] {
+            if cx.measured[i] && cx.run.judges_declarations(i) {
                 by_hash.entry(f.hash_hex.as_str()).or_default().push(i);
             }
         }
@@ -90,7 +90,7 @@ impl Analysis for Duplicate {
         // Structural function clones: equal fingerprint sets, above the token floor.
         let mut groups: BTreeMap<&[u64], Vec<(usize, DeclarationId)>> = BTreeMap::new();
         for (i, f) in g.files.iter().enumerate() {
-            if !cx.measured[i] || shadowed[i] {
+            if !cx.measured[i] || !cx.run.judges_declarations(i) || shadowed[i] {
                 continue;
             }
             for (decl_id, m) in &f.evidence.metrics {

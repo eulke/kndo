@@ -224,6 +224,16 @@ The language's own rules ride its spec; a framework's ride a rule pack.
 A conduct extension that declares dispatch rules and an activation and nothing else.
 No code, no content access.
 
+**Generated file**:
+A file whose header carries its ecosystem's banner (`@generated`, `// Code generated …
+DO NOT EDIT.`), reported as a marker and named by an `Effect::Generated` rule. What it
+DECLARES is the generator's, so no accusation about those names is this project's to
+answer for. What it IMPORTS and NAMES is evidence like any other — the code it keeps
+alive is really kept alive, and a root it declares really runs. Being generated is not
+a root: a generated file nothing imports is dead weight whoever wrote it, and the
+whole-file verdict stands.
+_Avoid_: origin, tooling root (a generated file is not rooted)
+
 **Keeper**:
 The one piece of evidence that keeps a declaration alive: a root, a reference in its
 pool, a qualified reference, a binding import, a glob importer, an opaque importer,

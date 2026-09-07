@@ -1,6 +1,20 @@
-# generated-file: a `// Code generated … DO NOT EDIT.` file declares nothing accusable — the whole-file `unused` an authored file would earn is exempted.
+# generated-file: `// Code generated … DO NOT EDIT.` is REPORTED, and what it
+# means is the engine's — what the file declares is the generator's, so the two
+# names nothing in this module ever mentions are not accusations against this
+# project. Its package mate `main.go` makes the file itself no orphan; the
+# js-ts `generated-file` fixture pins the other half.
 
 [[alive]]
-subject = "api.pb.go"
+subject = "api.pb.go#deadHelper"
 category = "unused"
-why = "in an authored file this whole file would be flagged; the content-derived Generated origin exempts it"
+why = "a generator wrote it: the name is the generator's, not this project's to answer for"
+
+[[alive]]
+subject = "api.pb.go#wireFormat"
+category = "unused"
+why = "same — a generated file's declarations are outside every judgment"
+
+[[dead]]
+subject = "main.go#authoredHelper"
+category = "unused"
+why = "as unreferenced as the generated names beside it, and accused — a person wrote it"

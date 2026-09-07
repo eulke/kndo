@@ -34,8 +34,8 @@ pub struct KotlinAdapter {
 impl KotlinAdapter {
     pub fn new() -> Self {
         KotlinAdapter {
-            // 4: `internal` is the unit's reach, not a token.
-            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:kotlin", 6, &["kt"])
+            // 7: the generated banner is reported, never concluded.
+            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:kotlin", 7, &["kt"])
                 .ladder(&[
                     Step::for_members(Rung::Owner, "private"),
                     Step::for_free(Rung::File, "private"),

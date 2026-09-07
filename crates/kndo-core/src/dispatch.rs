@@ -21,6 +21,9 @@ pub struct Dispatched {
     /// What the run should say about this file: a blanket exemption is a fact
     /// worth a line in the report, never a silent hole in the findings.
     pub notes: Vec<String>,
+    /// A generator owns this file — see
+    /// [`kndo_contract::extension::Effect::Generated`].
+    pub generated: bool,
 }
 
 pub fn apply(evidence: &FileEvidence, rules: &[DispatchRule]) -> Dispatched {
@@ -45,6 +48,19 @@ pub fn apply(evidence: &FileEvidence, rules: &[DispatchRule]) -> Dispatched {
                         kind,
                         confidence: rule.confidence,
                     });
+                }
+                Effect::Generated => {
+                    if !matches!(marker.on, MarkerTarget::File) {
+                        continue;
+                    }
+                    if !out.generated {
+                        out.generated = true;
+                        out.notes.push(format!(
+                            "`{}` marks this file a generator's output: what it declares is \
+                             not judged, what it imports and names still is",
+                            spell(marker)
+                        ));
+                    }
                 }
                 Effect::Exempt => match &marker.on {
                     MarkerTarget::File => {

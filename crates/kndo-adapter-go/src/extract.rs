@@ -12,7 +12,8 @@
 //! prove.
 
 use kndo_contract::evidence::{
-    EvidenceSink, ImportShape, ImportTarget, Reach, RefKind, RootKind, RootTarget, SymbolKind,
+    EvidenceSink, ImportShape, ImportTarget, MarkerTarget, Reach, RefKind, RootKind, RootTarget,
+    SymbolKind,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use kndo_toolkit as tk;
@@ -51,17 +52,13 @@ pub fn extract(
                 .map(SmolStr::new),
         );
     }
-    // The `// Code generated … DO NOT EDIT.` convention: generated code is the
-    // generator's business — it declares nothing accusable here, while its imports
-    // and references stay real evidence about YOUR code.
-    let generated = is_generated(source);
+    // The `// Code generated … DO NOT EDIT.` convention, REPORTED: what it
+    // means is a rule in the spec and a verdict in the engine.
+    mark_generated(source, out);
 
     let mut cursor = root.walk();
     let children: Vec<Node<'_>> = root.named_children(&mut cursor).collect();
     for item in children {
-        if generated && item.kind() != "import_declaration" {
-            continue;
-        }
         match item.kind() {
             "function_declaration" => {
                 if let Some(n) = item.child_by_field_name("name") {
@@ -204,10 +201,22 @@ fn runner_entry(name: &str) -> bool {
 /// golang.org/s/generatedcode: the toolchain anchors this one at both ends —
 /// a line that IS `// Code generated … DO NOT EDIT.`, not a comment that
 /// merely mentions the words — and places it before the first non-comment,
-/// non-blank text, which is the header the toolkit bounds.
-fn is_generated(source: &[u8]) -> bool {
-    tk::header_lines(source, &["//", "/*", "*"])
-        .any(|l| l.starts_with("// Code generated") && l.ends_with("DO NOT EDIT."))
+/// non-blank text, which is the header the toolkit bounds. The anchoring is
+/// Go's; reporting it under the shared token, and what that token means, are
+/// not.
+fn mark_generated(source: &[u8], out: &mut EvidenceSink) {
+    let Some(line) = tk::header_lines(source, &["//", "/*", "*"])
+        .find(|l| l.starts_with("// Code generated") && l.ends_with("DO NOT EDIT."))
+        .map(str::to_string)
+    else {
+        return;
+    };
+    out.marker(
+        MarkerTarget::File,
+        tk::GENERATED_MARKER,
+        vec![SmolStr::new(line)],
+        kndo_contract::vocab::Span::new(0, 0),
+    );
 }
 
 /// Capitalization IS Go's visibility story: uppercase exports, lowercase

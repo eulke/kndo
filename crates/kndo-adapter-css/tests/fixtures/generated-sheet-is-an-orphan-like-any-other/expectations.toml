@@ -1,0 +1,16 @@
+# generated-sheet-is-an-orphan-like-any-other: a sheet's DO NOT EDIT banner is
+# reported, and it says who WROTE the file — not that the file earns its place.
+# Nothing imports `vendor-generated.css`, so it is dead weight whoever wrote it,
+# and the run says so. (css declares no symbols, so the declaration half of the
+# generated verdict has no subject here; the js-ts `generated-file` fixture
+# pins it.)
+
+[[dead]]
+subject = "vendor-generated.css"
+category = "unused"
+why = "nothing imports it; being a generator's output is not a reason to keep it"
+
+[[alive]]
+subject = "theme.css"
+category = "unused"
+why = "imported by main.ts"

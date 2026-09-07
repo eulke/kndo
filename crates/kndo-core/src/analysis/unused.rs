@@ -57,6 +57,9 @@ impl Analysis for Unused {
                 ));
                 continue;
             }
+            if !cx.run.judges_declarations(i) {
+                continue;
+            }
             for (id, _) in f.evidence.declarations_with_ids() {
                 let d_ix = id.index();
                 if !navigate::keepers(g, index, i, d_ix, 1).is_empty() {

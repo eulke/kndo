@@ -1520,3 +1520,43 @@ the declared namespace decide what the set holds. With the gate removed,
 namespace node reaches it where java's directory-and-mirror `sees` does not.
 Every other repository is byte-identical, which is what a gate removal must
 look like when the languages behind it declare namespaces of one file.
+
+### A generator's output is judged by one law: `Effect::Generated` (2026-09-07)
+
+| repo | before | after | what moved |
+|---|---|---|---|
+| gin | 110 | 109 | −1 `test-only` on `testdata/protoexample/test.pb.go` |
+| guava | 8251 | 8250 | −1 `duplicate` on `guava/src/com/google/thirdparty/publicsuffix/PublicSuffixPatterns.java` |
+| Alamofire, Exposed, flask, lodash, ripgrep, vapor, vite | — | — | byte-identical |
+
+Three generated files across nine repositories: gin has one, guava has two
+(the `PublicSuffixPatterns.java` pair), and nothing else in the corpus stamps a
+banner in its header. A small population is the honest one — this slice's claim
+is a single law where eight adapters had four different answers, not a new
+finding count.
+
+**gin.** The file reports its declarations now instead of hiding them, and one
+of them is `func init()`, which the Go runtime calls on package load; a
+Production root therefore reaches the file, and "only tests reach this file" was
+simply not true of it. Withholding judgment from a generated file's NAMES never
+meant hiding the program's shape from the engine — its imports, its references
+and the roots it declares are evidence like any other file's.
+
+**guava.** `android/guava/.../PublicSuffixPatterns.java` and
+`guava/.../PublicSuffixPatterns.java` are byte-identical output of the tool that
+compiles the public suffix list. `duplicate` asked this project to unify two
+files it did not write; the seam now abstains and the finding is gone.
+
+**Nothing became more accused.** The owner's decision was that being generated
+withholds judgment from the file's declarations and does NOT root the file — so
+a generated file nothing imports is reported `unused` like any other orphan,
+and v2's old rust/ts/css `Tooling` root is retired. No generated file in this
+corpus is an orphan, so that half costs nothing here; it is pinned in fixtures
+instead (`kndo-adapter-ts` `generated-file` holds both halves,
+`kndo-adapter-css` `generated-sheet-is-an-orphan-like-any-other` the orphan
+one).
+
+**Against the oracle.** v1 rooted generated files as tooling output — the rule
+v2's rust, ts and css had inherited. v2 does not, and the reason is not a
+number: a root asserts that something outside the graph USES the file, and a
+`DO NOT EDIT` banner asserts nothing of the kind. It says who WROTE it.

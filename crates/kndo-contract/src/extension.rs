@@ -614,6 +614,14 @@ pub enum Effect {
     /// the declaration and every declaration within its extent; on a file
     /// marker, every declaration in the file — and the run says so.
     Exempt,
+    /// A generator wrote this FILE: what it declares is not this project's to
+    /// judge — no unused declaration, no duplicate, no complexity verdict —
+    /// while its imports and references stay evidence about the code that IS.
+    /// The file itself is judged like any other: a generated file nothing
+    /// imports is dead weight, and the honest finding is to stop generating
+    /// it. Only a file marker carries it — a generator owns files, not
+    /// declarations.
+    Generated,
 }
 
 /// One rule of a language or a framework, as data: when this evidence
@@ -1048,9 +1056,10 @@ impl ExtensionSpecBuilder {
     /// Declare what the language's markers mean (see [`DispatchRule`]), in
     /// the order the engine tries them. Omitted ⇒ none — the
     /// default-compatibility rule: markers are carried as evidence and derive
-    /// nothing.
+    /// nothing. Appends, so rules a shared builder already declared stand
+    /// alongside the language's own.
     pub fn dispatch(mut self, rules: Vec<DispatchRule>) -> Self {
-        self.spec.dispatch = rules;
+        self.spec.dispatch.extend(rules);
         self
     }
 
@@ -1062,8 +1071,10 @@ impl ExtensionSpecBuilder {
     }
 
     /// Omitted ⇒ `EvidenceStreams::none()` — the default-compatibility rule.
+    /// Unions, so a stream a shared builder already declared survives an
+    /// adapter that lists only the ones its own grammar adds.
     pub fn emits(mut self, streams: EvidenceStreams) -> Self {
-        self.spec.emits = streams;
+        self.spec.emits.declare_all(&streams);
         self
     }
 

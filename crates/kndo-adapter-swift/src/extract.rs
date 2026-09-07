@@ -111,7 +111,7 @@ pub fn extract(
         );
     }
 
-    let generated = tk::generated_marked(source, GENERATED_NEEDLES, &["//", "/*", "*"]);
+    tk::mark_generated(source, GENERATED_NEEDLES, &["//", "/*", "*"], out);
     let in_test_target = test_dir;
 
     let root = tree.root_node();
@@ -121,10 +121,7 @@ pub fn extract(
     // attach its members to Foo's id (a cross-file extension's members stay
     // ownerless — the method pool is name-global either way).
     let mut type_ids = TypeIds::new();
-    let cx = FileCx {
-        generated,
-        in_test_target,
-    };
+    let cx = FileCx { in_test_target };
     for item in &children {
         if matches!(item.kind(), "class_declaration" | "protocol_declaration")
             && !is_extension(*item, source)
@@ -154,7 +151,6 @@ fn is_extension(item: Node<'_>, source: &[u8]) -> bool {
 /// Per-file facts every declaration handler needs.
 #[derive(Clone, Copy)]
 struct FileCx {
-    generated: bool,
     /// Under `Tests/`: the toolchain's own runners (XCTest by `test*` name,
     /// swift-testing by `@Test`) dispatch on declarations no source line names.
     in_test_target: bool,
@@ -169,7 +165,6 @@ fn top_level_item(
 ) {
     match item.kind() {
         "import_declaration" => import(item, source, out),
-        _ if cx.generated => {}
         "class_declaration" => class_like(item, source, cx, type_ids, out),
         "protocol_declaration" => protocol(item, source, cx, type_ids, out),
         "function_declaration" => {

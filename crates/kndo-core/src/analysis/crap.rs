@@ -63,7 +63,10 @@ impl Analysis for Crap {
         let mut silent = 0u32;
         for (i, f) in g.files.iter().enumerate() {
             // A test's own coverage is meaningless to its change risk.
-            if !cx.measured[i] || has_root_of(g, i, RootKind::Test) {
+            if !cx.measured[i]
+                || !cx.run.judges_declarations(i)
+                || has_root_of(g, i, RootKind::Test)
+            {
                 continue;
             }
             let Some(file_coverage) = coverage.files.get(&f.path) else {

@@ -72,7 +72,7 @@ pub fn extract(
         );
     }
 
-    let generated = is_generated(source);
+    tk::mark_generated(source, tk::GENERATED_NEEDLES, &["//", "/*", "*"], out);
 
     let root = tree.root_node();
     let mut cursor = root.walk();
@@ -81,8 +81,7 @@ pub fn extract(
     for item in children {
         match item.kind() {
             "import" => import(item, source, out),
-            _ if !generated => declaration(item, source, &top, out),
-            _ => {}
+            _ => declaration(item, source, &top, out),
         }
     }
 
@@ -93,10 +92,6 @@ pub fn extract(
 /// carry the ENCLOSING class's id.
 struct Ctx {
     owner: Option<DeclarationId>,
-}
-
-fn is_generated(source: &[u8]) -> bool {
-    tk::generated_marked(source, tk::GENERATED_NEEDLES, &["//", "/*", "*"])
 }
 
 /// No modifier means public. `internal` is the compiler's module boundary —

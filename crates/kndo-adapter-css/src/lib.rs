@@ -30,10 +30,15 @@ impl CssAdapter {
     pub fn new() -> Self {
         CssAdapter {
             // Comments for suppression pragmas; no metrics, since nothing
-            // declared carries a body. No manifest of its own.
-            spec: ExtensionSpec::builder("kndo:css", 1)
+            // declared carries a body. No manifest of its own. 2: the
+            // generated banner is reported, never concluded.
+            spec: ExtensionSpec::builder("kndo:css", 2)
                 .suffixes(&["css", "scss"])
-                .emits(EvidenceStreams::of(&[EvidenceStream::Comments]))
+                .emits(EvidenceStreams::of(&[
+                    EvidenceStream::Comments,
+                    EvidenceStream::Markers,
+                ]))
+                .dispatch(vec![kndo_toolkit::generated_rule()])
                 // A sheet inside npm's installed dependencies is a dependency's.
                 .ignores(&["**/node_modules/**"])
                 .build(),

@@ -148,6 +148,21 @@ adapter says nothing:
   named `head`. Each is declared, so its absence is typed and an analysis
   abstains or keeps its pre-stream answer instead of guessing.
 
+## Generated files
+
+Every language adapter recognises its ecosystem's generated banner
+(`@generated`, `// Code generated … DO NOT EDIT.`) in a file's header and
+REPORTS it; what it means is one rule for all of them. A generator's output is
+not this project's to answer for, so nothing the file DECLARES is accused —
+`unused`, `duplicate`, `crap`, `internal-only` and `private-type-leak` stand
+down for its declarations, and the report says so in a line naming the banner
+it matched. Coverage is not a judgment about a name, so `untested` still speaks.
+
+Being generated is not a reason to keep the file: what it IMPORTS and NAMES is
+evidence like any other file's, and a generated file nothing imports is
+reported `unused` at file level, exactly like an orphan somebody typed. The fix
+is to stop generating it.
+
 ## Cross-language reach
 
 One graph: an HTML page reached from a manifest reaches the script it loads,

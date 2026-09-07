@@ -5,8 +5,8 @@
 # generator owns. Here it sits at line 26, under a 24-line licence.
 
 [[alive]]
-subject = "pkg/late.pb.go"
-why = "a generated file declares nothing accusable, and its package's exported surface reaches it"
+subject = "pkg/late.pb.go#unusedGenerated"
+why = "the banner was found under a 24-line licence, so the generator owns this name"
 
 [[alive]]
 subject = "pkg/api.go#Api"

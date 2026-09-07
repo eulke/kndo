@@ -41,7 +41,7 @@ impl Analysis for PrivateTypeLeak {
         let g = cx.graph();
         let mut out = Vec::new();
         for (i, f) in g.files.iter().enumerate() {
-            if !cx.measured[i] {
+            if !cx.measured[i] || !cx.run.judges_declarations(i) {
                 continue;
             }
             if has_root_of(g, i, RootKind::Test) {

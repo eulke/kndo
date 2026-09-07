@@ -100,14 +100,13 @@ pub fn extract(
         }
     });
 
-    // A generated module declares nothing accusable; its imports above and
-    // references below still keep the rest of the project alive.
-    if !tk::generated_marked(source, GENERATED_NEEDLES, &["#"]) {
-        let mut c = root.walk();
-        let items: Vec<Node<'_>> = root.named_children(&mut c).collect();
-        for item in items {
-            top_level_item(item, source, test_file, out);
-        }
+    // The generated-module banner, REPORTED: what it means is a rule in the
+    // spec and a verdict in the engine.
+    tk::mark_generated(source, GENERATED_NEEDLES, &["#"], out);
+    let mut c = root.walk();
+    let items: Vec<Node<'_>> = root.named_children(&mut c).collect();
+    for item in items {
+        top_level_item(item, source, test_file, out);
     }
 
     references_and_comments(root, source, out);

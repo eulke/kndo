@@ -4,8 +4,8 @@ package main
 
 type wireFormat struct{}
 
-// deadHelper is unreachable AND its type never used — in an authored file this whole file
-// would be flagged; the content-derived Generated origin exempts it.
+// deadHelper is unreachable AND its type never used — in an authored file both
+// would be accused. Here the banner says a generator owns them.
 func deadHelper(w wireFormat) wireFormat {
 	return w
 }

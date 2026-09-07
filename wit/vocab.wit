@@ -281,10 +281,12 @@ interface types {
         marker(marker-trigger),
     }
 
-    /// Mirrors `Effect` — a root of a color, or an exemption from `unused`.
+    /// Mirrors `Effect` — a root of a color, an exemption from `unused`, or
+    /// a generator's ownership of the whole file.
     variant effect {
         root(root-kind),
         exempt,
+        generated,
     }
 
     /// Mirrors `DispatchRule`.

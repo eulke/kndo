@@ -23,22 +23,13 @@ pub fn extract(
     out: &mut EvidenceSink,
 ) {
     let root = tree.root_node();
-    // The `@generated`/`DO NOT EDIT` convention (prost, bindgen): generated code
-    // declares nothing accusable and the FILE is the generator's output, rooted
-    // Tooling so it is never accused of being unimported; its imports and
-    // references still keep the rest of the project alive. Same needles as the
-    // JVM adapters, whose library-mode roots already cover the file half.
-    let generated = tk::generated_marked(source, tk::GENERATED_NEEDLES, &["//", "/*", "*"]);
-    if generated {
-        out.root(
-            RootTarget::WholeFile,
-            RootKind::Tooling,
-            Confidence::Probable,
-        );
-    }
+    // The `@generated`/`DO NOT EDIT` convention (prost, bindgen). What this
+    // pass does is REPORT the banner; what it means — that the generator owns
+    // what the file declares — is a rule in the spec and a verdict in the
+    // engine.
+    tk::mark_generated(source, tk::GENERATED_NEEDLES, &["//", "/*", "*"], out);
     let mut cx = ItemPass {
         source,
-        generated,
         main_root_kind: main_root_kind(path),
         mod_rs: crate::resolve::is_mod_rs(path),
         types: BTreeMap::new(),
@@ -140,7 +131,6 @@ fn main_root_kind(path: &kndo_contract::vocab::ProjectPath) -> RootKind {
 
 struct ItemPass<'a, 'o> {
     source: &'a [u8],
-    generated: bool,
     main_root_kind: RootKind,
     /// Whether this file's child modules live in its own directory — which is
     /// where a top-level `#[path]` is anchored. See [`redirect_specifier`].
@@ -237,14 +227,6 @@ impl<'a> ItemPass<'a, '_> {
     }
 
     fn item(&mut self, item: Node<'a>) {
-        if self.generated
-            && !matches!(
-                item.kind(),
-                "use_declaration" | "mod_item" | "attribute_item"
-            )
-        {
-            return;
-        }
         let attrs = attribute_items(item);
         let reach = reach_of(item, self.source);
         match item.kind() {
@@ -417,9 +399,6 @@ impl<'a> ItemPass<'a, '_> {
     /// impls (`impl T for X`) declare nothing: their bodies are the trait's shape,
     /// and accusing a required method would accuse the trait bound.
     fn impl_members(&mut self, impl_item: Node<'a>) {
-        if self.generated {
-            return;
-        }
         if impl_item.child_by_field_name("trait").is_some() {
             return;
         }
