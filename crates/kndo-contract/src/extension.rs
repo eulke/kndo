@@ -10,8 +10,8 @@ use crate::adapter::{
     DependencyDeclaration, PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile,
 };
 use crate::evidence::{
-    CoverageRecords, Declaration, DeclarationId, EvidenceSink, EvidenceStreams, Marker, Reach,
-    RootKind, SymbolKind,
+    CoverageRecords, Declaration, DeclarationId, EvidenceSink, EvidenceStreams, ImportShape,
+    Marker, Reach, RelationKind, RootKind, SymbolKind,
 };
 use crate::finding::Severity;
 use crate::manifest::ManifestSink;
@@ -540,10 +540,15 @@ impl Ladder {
 #[serde(rename_all = "kebab-case")]
 pub enum Trigger {
     /// A marker whose path matches `path` and — when `arg` is given — carrying
-    /// at least one argument matching it. Patterns are literal except `*`,
-    /// which matches any run of characters: `*::test` matches `tokio::test`
-    /// and `rstest::test`, never a bare `test`, which is its own pattern.
-    Marker { path: SmolStr, arg: Option<SmolStr> },
+    /// at least one argument matching it, on a declaration of `target` when
+    /// one is named. `@Override` means something only on a method; a rule
+    /// says so instead of trusting every grammar to put the annotation
+    /// nowhere else.
+    Marker {
+        path: SmolStr,
+        arg: Option<SmolStr>,
+        target: Option<SymbolKind>,
+    },
     /// A DECLARATION whose own name matches `pattern` — a runner's convention
     /// (`TestXxx`, `test_*`), a runtime's (`main`, `init`). `kind` narrows it
     /// to one kind of symbol; `in_files` to the files where the convention
@@ -555,17 +560,28 @@ pub enum Trigger {
         kind: Option<SymbolKind>,
         in_files: InFiles,
     },
-    /// A MEMBER of a type that declares a relation to a base matching `base`,
-    /// named by one of `members` — `compareTo` of a `Comparable`, `readObject`
-    /// of a `Serializable`, `body` of a `View`. One rule states a base and
-    /// every requirement it declares, which is what knowledge of a type the
-    /// GRAPH CANNOT SEE looks like as data: where the base is in the project,
-    /// its own members are the requirements and no rule is needed.
+    /// A TYPE that declares a relation of `kind` to a base matching `to` —
+    /// `extends XCTestCase`, `implements Serializable`, `: View`. The relation
+    /// THIS file reported: a rule reads what the source said here, and the
+    /// name is qualified through the file's bindings before it is compared.
+    Relation { kind: RelationKind, to: SmolStr },
+    /// A MEMBER whose own name matches `name` and whose OWNER matches
+    /// `owner` — `test*` of an `XCTestCase`, `compareTo` of a `Comparable`.
+    /// The owner is named by a trigger, which is what lets one rule state a
+    /// base and its requirement together.
+    MemberOf { owner: Box<Trigger>, name: SmolStr },
+    /// A MEMBER of a type that reaches a base matching `base`, named by one of
+    /// `members` — `compareTo` of a `Comparable`, `readObject` of a
+    /// `Serializable`, `body` of a `View`. The shorthand for the requirements
+    /// of a base the GRAPH CANNOT SEE: where the base is in the project, its
+    /// own members are the requirements and no rule is needed.
     ///
-    /// The base is matched through the WHOLE supertype chain the project
-    /// declares: `Absent extends Optional` and `Optional implements
-    /// Serializable` makes `Absent`'s `readResolve` a witness, because the
-    /// runtime does not care which link named the base either.
+    /// What [`Trigger::MemberOf`] over a [`Trigger::Relation`] does not do:
+    /// the base is matched through the WHOLE supertype chain the project
+    /// declares, of either kind. `Absent extends Optional` and `Optional
+    /// implements Serializable` makes `Absent`'s `readResolve` a witness,
+    /// because the serialization runtime does not care which link named the
+    /// base either.
     ExternalWitness {
         base: SmolStr,
         members: Vec<SmolStr>,
@@ -595,6 +611,7 @@ impl Trigger {
         Trigger::Marker {
             path: SmolStr::new_static(path),
             arg: None,
+            target: None,
         }
     }
 
@@ -602,6 +619,31 @@ impl Trigger {
         Trigger::Marker {
             path: SmolStr::new_static(path),
             arg: Some(SmolStr::new_static(arg)),
+            target: None,
+        }
+    }
+
+    /// The same marker, narrowed to declarations of one kind.
+    pub fn marker_on(path: &'static str, target: SymbolKind) -> Trigger {
+        Trigger::Marker {
+            path: SmolStr::new_static(path),
+            arg: None,
+            target: Some(target),
+        }
+    }
+
+    pub fn relation(kind: RelationKind, to: &'static str) -> Trigger {
+        Trigger::Relation {
+            kind,
+            to: SmolStr::new_static(to),
+        }
+    }
+
+    /// A member of a type matching `owner`, by name.
+    pub fn member_of(owner: Trigger, name: &'static str) -> Trigger {
+        Trigger::MemberOf {
+            owner: Box::new(owner),
+            name: SmolStr::new_static(name),
         }
     }
 
@@ -622,16 +664,22 @@ impl Trigger {
         }
     }
 
-    /// Does this trigger fire on `marker`? Dispatch reads each trigger in the
-    /// phase that holds its evidence, so a trigger watching something else
-    /// never fires here.
-    pub fn matches(&self, marker: &Marker) -> bool {
+    /// Does this trigger fire on `marker`, in a file whose bindings are
+    /// `cx`'s? Dispatch reads each trigger in the phase that holds its
+    /// evidence, so a trigger watching something else never fires here.
+    pub fn matches(&self, cx: &DeclarationCx<'_>, marker: &Marker) -> bool {
         match self {
-            Trigger::Marker { path, arg } => {
-                pattern_matches(path, &marker.path)
+            Trigger::Marker { path, arg, target } => {
+                cx.spells(path, &marker.path)
                     && arg
                         .as_ref()
                         .is_none_or(|a| marker.args.iter().any(|x| pattern_matches(a, x)))
+                    && target.as_ref().is_none_or(|k| match &marker.on {
+                        crate::evidence::MarkerTarget::Declaration(id) => {
+                            cx.evidence.declarations[id.index()].kind == *k
+                        }
+                        _ => false,
+                    })
             }
             _ => false,
         }
@@ -659,6 +707,16 @@ impl Trigger {
                         InFiles::NotRooted(c) => !cx.colors.contains(c),
                     }
             }
+            Trigger::Relation { kind, to } => cx
+                .evidence
+                .relations
+                .iter()
+                .any(|r| r.from == id && r.kind == *kind && cx.spells(to, &r.to)),
+            Trigger::MemberOf { owner, name } => {
+                pattern_matches(name, &d.name)
+                    && d.owner
+                        .is_some_and(|o| owner.matches_declaration(cx, o))
+            }
             Trigger::ExternalWitness { base, members } => {
                 members.contains(&d.name)
                     && d.owner.is_some_and(|o| {
@@ -684,6 +742,38 @@ pub struct DeclarationCx<'a> {
 }
 
 impl DeclarationCx<'_> {
+    /// Does `pattern` match `spelled` — the path of a marker, the name of a
+    /// relation — as this file writes it, or as the file's own bindings
+    /// QUALIFY it? A rule written with the full name (`org.junit.jupiter.api.Test`)
+    /// matches an `@Test` the file imported from JUnit and not one from
+    /// another package; a rule written bare (`Override`, `test`) matches the
+    /// spelling, which is what a language's implicit scope leaves behind.
+    fn spells(&self, pattern: &str, spelled: &str) -> bool {
+        if pattern_matches(pattern, spelled) {
+            return true;
+        }
+        let (head, rest) = match spelled.split_once('.') {
+            Some((head, rest)) => (head, Some(rest)),
+            None => (spelled, None),
+        };
+        self.evidence.imports.iter().any(|i| {
+            let ImportShape::Bindings(bindings) = &i.shape else {
+                return false;
+            };
+            let crate::evidence::ImportTarget::Package(path) = &i.target else {
+                return false;
+            };
+            bindings.iter().any(|b| b.local == head)
+                && pattern_matches(
+                    pattern,
+                    &match rest {
+                        Some(rest) => format!("{path}.{rest}"),
+                        None => path.to_string(),
+                    },
+                )
+        })
+    }
+
     /// Does `owner` reach a supertype matching `base`, directly or through
     /// another type the project declares? Cycle-safe: a type graph should be
     /// acyclic, and defective evidence must not hang the run.
@@ -698,7 +788,7 @@ impl DeclarationCx<'_> {
                 continue;
             };
             for s in supers {
-                if pattern_matches(base, s) {
+                if self.spells(base, s) {
                     return true;
                 }
                 queue.push(s);
@@ -1793,19 +1883,58 @@ mod tests {
             args: args.iter().map(SmolStr::new).collect(),
             span: Span::new(0, 1),
         };
-        assert!(Trigger::marker("test").matches(&marker("test", &[])));
-        assert!(!Trigger::marker("test").matches(&marker("tokio::test", &[])));
-        assert!(Trigger::marker("*::test").matches(&marker("tokio::test", &[])));
-        assert!(Trigger::marker("*::test").matches(&marker("a::b::test", &[])));
-        assert!(!Trigger::marker("*::test").matches(&marker("test", &[])));
-        assert!(!Trigger::marker("*::test").matches(&marker("tokio::tests", &[])));
-        assert!(Trigger::marker("*").matches(&marker("anything", &[])));
+        // A file that binds nothing: every path here is compared as written.
+        let evidence = EvidenceSink::new(1000, EvidenceStreams::none()).finish();
+        let supertypes = BTreeMap::new();
+        let cx = DeclarationCx {
+            evidence: &evidence,
+            colors: &[],
+            supertypes: &supertypes,
+        };
+        assert!(Trigger::marker("test").matches(&cx, &marker("test", &[])));
+        assert!(!Trigger::marker("test").matches(&cx, &marker("tokio::test", &[])));
+        assert!(Trigger::marker("*::test").matches(&cx, &marker("tokio::test", &[])));
+        assert!(Trigger::marker("*::test").matches(&cx, &marker("a::b::test", &[])));
+        assert!(!Trigger::marker("*::test").matches(&cx, &marker("test", &[])));
+        assert!(!Trigger::marker("*::test").matches(&cx, &marker("tokio::tests", &[])));
+        assert!(Trigger::marker("*").matches(&cx, &marker("anything", &[])));
         let cfg_test = Trigger::marker_with("cfg", "test");
-        assert!(cfg_test.matches(&marker("cfg", &["test"])));
-        assert!(cfg_test.matches(&marker("cfg", &["unix", "test"])));
-        assert!(!cfg_test.matches(&marker("cfg", &["!test"])));
-        assert!(!cfg_test.matches(&marker("cfg", &["feature = \"test\""])));
-        assert!(!cfg_test.matches(&marker("cfg", &[])));
+        assert!(cfg_test.matches(&cx, &marker("cfg", &["test"])));
+        assert!(cfg_test.matches(&cx, &marker("cfg", &["unix", "test"])));
+        assert!(!cfg_test.matches(&cx, &marker("cfg", &["!test"])));
+        assert!(!cfg_test.matches(&cx, &marker("cfg", &["feature = \"test\""])));
+        assert!(!cfg_test.matches(&cx, &marker("cfg", &[])));
+        // Qualified through the file's own bindings: a rule written with the
+        // full name reaches the imported type and not the same simple name
+        // from another package.
+        let mut sink = EvidenceSink::new(1000, EvidenceStreams::none());
+        sink.import(
+            crate::evidence::ImportTarget::Package(SmolStr::new_static("com.vendor.Closer")),
+            crate::evidence::ImportShape::Bindings(vec![crate::evidence::ImportBinding {
+                imported: SmolStr::new_static("Closer"),
+                local: SmolStr::new_static("Closer"),
+            }]),
+            Span::new(0, 1),
+            crate::vocab::Confidence::Certain,
+        );
+        let evidence = sink.finish();
+        let cx = DeclarationCx {
+            evidence: &evidence,
+            colors: &[],
+            supertypes: &supertypes,
+        };
+        assert!(cx.spells("com.vendor.Closer", "Closer"));
+        assert!(!cx.spells("com.other.Closer", "Closer"));
+        assert!(cx.spells("Closer", "Closer"), "the written name still reaches");
+        assert!(
+            cx.spells("com.vendor.Closer.Inner", "Closer.Inner"),
+            "the path INSIDE the bound name is carried"
+        );
+        assert!(
+            !cx.spells("com.vendor.Closer", "Opener"),
+            "a name the file binds nothing for is compared as written"
+        );
+
         assert!(pattern_matches("a*c", "abbbc"));
         assert!(pattern_matches("a*", "a"));
         assert!(pattern_matches("**", ""));

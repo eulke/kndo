@@ -4952,19 +4952,13 @@ the two halves one keeper, `Keeper::Witness { of }`, which now RENDERS the
 base it names (`witness:Comparable`, `witness:Override`) instead of carrying
 it write-only.
 
-**The deviation, named, and it is one decision and not three.** The plan
-sketches four trigger shapes: `Marker`, `Name`, `Relation`, `MemberOf` and
-`ExternalWitness`. Two of them are the same predicate in another position.
-`MemberOf { owner: Relation { base }, name }` IS `ExternalWitness { base,
-members }` with one name instead of a list, and a standalone `Relation`
-trigger — one that fires ON a type — has no consumer in any language's own
-rules: every case the plan gives for it (`: XCTestCase`, `: View`, `:
-Codable`) is a FRAMEWORK's, which the plan itself assigns to a rule pack
-(M8.e). Shipping all three would hand a rule author two spellings for one
-fact. `ExternalWitness` ships, with the plan's exact name and shape; the
-general `MemberOf` lands in M8.e beside the first rule that needs a member
-NAME PATTERN and a Root rather than a Witness (`test*` of an `XCTestCase`),
-and the type-shaped `Relation` with it.
+**A deviation taken here and reversed the same day — see the entry below.**
+This slice shipped `ExternalWitness` alone, on the argument that `MemberOf {
+owner: Relation { base }, name }` is the same predicate. That argument was
+wrong: the plan's `Relation` carries a `RelationKind`, so the composition
+distinguishes `extends` from `implements` and the shorthand does not. The
+owner's ruling is that the plan stands as written; the next entry lands the
+whole enum.
 
 **A relation is matched through the whole declared chain, and the first
 attempt got that wrong.** Reading only the relation the file itself reports
@@ -5006,3 +5000,89 @@ re-pinned. One conformance fixture is added, `runtime-required-members`
 (kndo-adapter-java), which pins that a `writeObject` on a class implementing
 nothing is judged like any other member — the control that makes it a rule
 about a base and not about a name; no existing fixture's pinned report moves.
+
+## 2026-09-07 — The dispatch vocabulary is the plan's, entire: `Relation`, `MemberOf`, `Marker.target`, and a Pattern its bindings qualify
+
+**The owner's ruling, and the standing rule it sets.** Where the plan replaces
+a mechanism, nothing of the old one stays; and the plan is followed as
+written, because it does not contemplate two shapes of the same fact living
+side by side. Three earlier judgment calls are reversed by it, and one
+correction is mine to own.
+
+**What was missing, and now is not.** The plan's `pub enum Trigger` block
+declares five shapes. The tree carried three:
+
+| plan | before | now |
+| --- | --- | --- |
+| `Marker { path, target: Option<SymbolKind> }` | `Marker { path, arg }` | `Marker { path, arg, target }` |
+| `Relation { kind: RelationKind, to: Pattern }` | absent | landed |
+| `Name { pattern, kind, in_unit }` | `Name { pattern, kind, in_files }` | unchanged — see below |
+| `MemberOf { owner: Box<Trigger>, name }` | absent | landed |
+| `ExternalWitness { base, members }` | landed | unchanged |
+
+**My argument for folding two of them was wrong, and the reason matters.** I
+claimed `MemberOf { owner: Relation { base }, name }` was `ExternalWitness {
+base, [name] }` written twice. It is not: the plan's `Relation` carries the
+KIND of the relation, so the composition can say "a member of a type that
+IMPLEMENTS this" and the shorthand cannot — it reads any relation, of either
+kind, through the whole supertype chain. Two different predicates, both
+useful, both in the plan. And my second claim, that a type-shaped `Relation`
+had no consumer, was circular: I had folded the predicate into
+`ExternalWitness` myself and then observed that nothing used it.
+
+**`Marker.target` earns its place immediately.** `@Override` means something
+only on a method, and java's rule now says so rather than trusting the Java
+grammar to put the annotation nowhere else.
+
+**A Pattern is compared against two spellings, which is what the plan asks
+for.** "El motor califica el path de un marcador o el nombre de una relación a
+través de los bindings del archivo antes de comparar." So a marker path and a
+relation name are matched against the name AS WRITTEN and against the name
+the file's own binding imports qualify. A rule written `com.vendor.Closer`
+reaches an `implements Closer` in a file that imports it and says nothing
+about the identically-named type from another package — measured in the
+`runtime-required-members` fixture, where `Qualified.shut()` is
+`witness:com.vendor.Closer` and `Homonym.shut()`, package-private and
+promised by nobody, is reported. Matching the written spelling too is not a
+loophole: it is how a language's IMPLICIT scope reaches a rule, since
+`java.lang.Comparable` is spelled `Comparable` in every file that uses it and
+no import qualifies it. Java's built-in table keeps the bare names for that
+reason; a rule pack for a framework is where the full names earn their keep,
+which is the plan's own example set (`org.junit.jupiter.api.*`,
+`*.XCTestCase`).
+
+**The one thing still not the plan's literal shape, and why.** `Name` carries
+`in_files: InFiles` where the plan writes `in_unit: Option<UnitKind>`. The
+plan's own go row then asks for rules "en TestOnly" and "fuera de TestOnly" —
+a per-FILE attachment, which a unit kind cannot express because a Go module
+is ONE library unit. The two sentences cannot both be honored by one field,
+and `InFiles` is the reading that satisfies both: a unit's kind and a declared
+file role both land as a root on the file, so `in_unit: Some(Test)` is
+strictly what `InFiles::Rooted(Test)` says. Recorded, unchanged, and
+re-checkable.
+
+**The ABI carries the recursive trigger without an unrepresentable case.** A
+WIT variant cannot name itself, so a rule's trigger crosses as a FLAT LIST of
+nodes with the root last and every `MemberOf` owner pointing at an earlier
+one. The host rebuilds the tree and REFUSES a rule whose owner index is not
+smaller than the node naming it — a rule the host cannot read is one it must
+not guess at — rather than the alternative of an ABI that expresses less than
+the trait.
+
+**Measured: every corpus report byte-identical.** Nine repositories, no
+finding moves: `Marker.target` on `@Override` (a Java compiler already
+rejects the annotation elsewhere), the qualification (java's own rules name
+JDK types the source writes bare), and the two new triggers (their language
+consumers arrive with the rule packs) all land without changing a verdict.
+Two kmock conformance cases carry the vocabulary's proof —
+`a_rule_can_name_a_base_and_its_requirement_separately` shows `implements`
+matching and `extends` NOT matching the same base, and
+`a_marker_rule_can_name_the_kind_it_means` shows one marker on a function and
+a type with only the function rooted.
+
+`GRAPH_SEMANTICS_VERSION` moves to 27 and `kndo:java` to 14. The contract
+fingerprint does not move. The WIT `trigger` becomes `trigger-node` with
+`relation` and `member-of`, `dispatch-rule.when` becomes a list, and the four
+pinned reference components are re-pinned. One conformance fixture moves,
+`runtime-required-members` (kndo-adapter-java), which gains the two
+same-simple-name classes.

@@ -222,10 +222,18 @@ surface. Roots carry a color: production, test or tooling.
 Which roots reach a file: production, test, tooling. Verdicts read colors.
 
 **Dispatch rule**:
-Data: a trigger (a marker path, a name pattern in files of a given role, the members an
-external base requires) and an effect (a root of a color, a witness, an exemption from
-`unused`, a generated file), with a confidence. The language's own rules ride its spec;
-a framework's ride a rule pack.
+Data: a trigger (a marker path, a name pattern in files of a given role, a relation to a
+base, a member of a matching owner, the members an external base requires) and an effect
+(a root of a color, a witness, an exemption from `unused`, a generated file), with a
+confidence. The language's own rules ride its spec; a framework's ride a rule pack.
+
+**Pattern**:
+What a trigger compares with: literal text where `*` matches any run. Compared against
+the name AS THE FILE WRITES IT and against the name its own BINDINGS qualify — so a rule
+written `com.vendor.Closer` reaches an `implements Closer` in a file that imports it and
+says nothing about the same simple name from another package, while a rule written bare
+reaches whatever the language's implicit scope left unqualified.
+_Avoid_: glob (that names a path pattern — an ignore, a file role)
 
 **File role**:
 What the project says a file IS — a test, a tooling artifact — stated by its unit's

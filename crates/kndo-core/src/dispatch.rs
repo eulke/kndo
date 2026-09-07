@@ -32,14 +32,23 @@ pub struct Dispatched {
     pub witnesses: Vec<(u32, SmolStr)>,
 }
 
-pub fn apply(evidence: &FileEvidence, rules: &[DispatchRule]) -> Dispatched {
+pub fn apply(
+    evidence: &FileEvidence,
+    supertypes: &BTreeMap<SmolStr, Vec<SmolStr>>,
+    rules: &[DispatchRule],
+) -> Dispatched {
     let mut out = Dispatched::default();
     if rules.is_empty() || evidence.markers.is_empty() {
         return out;
     }
+    let cx = DeclarationCx {
+        evidence,
+        colors: &[],
+        supertypes,
+    };
     for marker in &evidence.markers {
         for rule in rules {
-            if !rule.when.matches(marker) {
+            if !rule.when.matches(&cx, marker) {
                 continue;
             }
             match rule.then {
@@ -180,7 +189,13 @@ pub fn declaration_effects(
 fn witness_base(trigger: &kndo_contract::extension::Trigger) -> SmolStr {
     use kndo_contract::extension::Trigger;
     match trigger {
-        Trigger::ExternalWitness { base, .. } => base.clone(),
+        Trigger::ExternalWitness { base, .. } | Trigger::Relation { to: base, .. } => base.clone(),
+        // The rule named the base on the OWNER; that is the name a reader
+        // recognizes, not the member's own.
+        Trigger::MemberOf { owner, name } => match owner.as_ref() {
+            Trigger::MemberOf { .. } => name.clone(),
+            other => witness_base(other),
+        },
         Trigger::Marker { path, .. } | Trigger::Name { pattern: path, .. } => path.clone(),
     }
 }
@@ -287,7 +302,7 @@ mod tests {
             Span::new(20, 28),
         );
         s.marker(MarkerTarget::File, "test", vec![], Span::new(0, 0));
-        let d = apply(&s.finish(), &rules());
+        let d = apply(&s.finish(), &BTreeMap::new(), &rules());
         assert_eq!(d.roots.len(), 2, "{:?}", d.roots);
         assert!(matches!(
             &d.roots[0],
@@ -327,7 +342,7 @@ mod tests {
             Span::new(0, 5),
         );
         let ev = s.finish();
-        let d = apply(&ev, &rules());
+        let d = apply(&ev, &BTreeMap::new(), &rules());
         assert_eq!(d.exempt, [outer.index() as u32, inner.index() as u32]);
         assert!(!d.exempt.contains(&(beside.index() as u32)));
         assert!(d.notes.is_empty());
@@ -341,7 +356,7 @@ mod tests {
             args(&["dead_code", "unused_imports"]),
             Span::new(0, 5),
         );
-        let d = apply(&s.finish(), &rules());
+        let d = apply(&s.finish(), &BTreeMap::new(), &rules());
         assert_eq!(d.exempt, [0, 1]);
         assert_eq!(
             d.notes,
@@ -362,10 +377,10 @@ mod tests {
             Span::new(0, 7),
         );
         let ev = s.finish();
-        let d = apply(&ev, &[]);
+        let d = apply(&ev, &BTreeMap::new(), &[]);
         assert!(d.roots.is_empty() && d.exempt.is_empty());
         let bare = sink().finish();
-        let d = apply(&bare, &rules());
+        let d = apply(&bare, &BTreeMap::new(), &rules());
         assert!(d.roots.is_empty() && d.exempt.is_empty() && d.notes.is_empty());
     }
 }

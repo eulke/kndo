@@ -2,12 +2,12 @@
   "run": {
     "schema": "kndo-v2/m6",
     "mode": "full",
-    "files_discovered": 3,
-    "files_claimed": 2,
+    "files_discovered": 7,
+    "files_claimed": 6,
     "extensions": [
       {
         "id": "kndo:java",
-        "files": 2,
+        "files": 6,
         "published_surface": "exports",
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
@@ -36,24 +36,48 @@
     ]
   },
   "health": {
-    "implicated": 2,
-    "subjects": 11,
+    "implicated": 3,
+    "subjects": 21,
     "by_category": [
       {
         "category": "unused",
-        "findings": 2
+        "findings": 3
       }
     ],
     "by_package": [
       {
         "name": "com.foo:runtime-required",
         "manifest": "pom.xml",
-        "implicated": 2,
-        "subjects": 11
+        "implicated": 3,
+        "subjects": 21
       }
     ]
   },
   "findings": [
+    {
+      "id": "kndo-cde40200c1e9",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "src/main/java/com/foo/Homonym.java",
+        "selector": {
+          "owner": "Homonym",
+          "name": "shut",
+          "signature": "()"
+        },
+        "span": {
+          "start": 314,
+          "end": 328
+        }
+      },
+      "lines": {
+        "start": 10,
+        "end": 10
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
     {
       "id": "kndo-480122259f6f",
       "category": "unused",

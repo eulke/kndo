@@ -9,7 +9,7 @@ mod common;
 
 use common::{keeper_kinds, reported};
 use kndo::Category;
-use kndo_contract::evidence::{RootKind, SymbolKind};
+use kndo_contract::evidence::{RelationKind, RootKind, SymbolKind};
 use kndo_contract::extension::{DispatchRule, Effect, InFiles, Trigger};
 use kndo_contract::vocab::Confidence;
 use kndo_testkit::{MockExtension, TempProject};
@@ -265,4 +265,82 @@ fn a_witness_is_kept_by_the_surface_its_owner_promised_and_by_no_color() {
             "app.kmock — Sub",
         ]
     );
+}
+
+#[test]
+fn a_rule_can_name_a_base_and_its_requirement_separately() {
+    let certain = |when: Trigger, then: Effect| DispatchRule {
+        when,
+        then,
+        confidence: Confidence::Certain,
+    };
+    // The general form: a member of a type that IMPLEMENTS something, by name
+    // pattern. `extends` is a different promise and this rule does not read it.
+    let rules = vec![
+        certain(
+            Trigger::member_of(
+                Trigger::relation(RelationKind::Implements, "Closer"),
+                "shut*",
+            ),
+            Effect::Witness,
+        ),
+        // And a type-shaped rule, on the owner itself.
+        certain(
+            Trigger::relation(RelationKind::Extends, "Runner"),
+            Effect::Root(RootKind::Test),
+        ),
+    ];
+    let p = TempProject::new();
+    p.file(
+        "app.kmock",
+        "root-file\n\
+         type Handle\n\
+         implements Handle Closer\n\
+         pub member Handle.shutdown\n\
+         pub member Handle.open\n\
+         type Heir\n\
+         extends Heir Runner\n\
+         type Inherits\n\
+         extends Inherits Closer\n\
+         pub member Inherits.shutdown\n",
+    );
+    let snap = common::analyze(&p, vec![Box::new(MockExtension::dispatching(rules))]);
+
+    assert_eq!(
+        keeper_kinds(&snap, "app.kmock#Handle.shutdown"),
+        ["witness:Closer"]
+    );
+    assert_eq!(keeper_kinds(&snap, "app.kmock#Heir"), ["dispatch:test"]);
+    // `open` is not the name; `Inherits` promised Closer with the OTHER kind
+    // of relation, and a rule that named one kind does not read the other.
+    assert_eq!(
+        reported(&snap, &Category::UNUSED),
+        [
+            "app.kmock — Handle",
+            "app.kmock — Handle.open",
+            "app.kmock — Inherits",
+            "app.kmock — Inherits.shutdown",
+        ]
+    );
+}
+
+#[test]
+fn a_marker_rule_can_name_the_kind_it_means() {
+    let rules = vec![DispatchRule {
+        when: Trigger::marker_on("Entry", SymbolKind::Function),
+        then: Effect::Root(RootKind::Production),
+        confidence: Confidence::Certain,
+    }];
+    let p = TempProject::new();
+    p.file(
+        "app.kmock",
+        "root-file\nfn run\nmark run Entry\ntype Holder\nmark Holder Entry\n",
+    );
+    let snap = common::analyze(&p, vec![Box::new(MockExtension::dispatching(rules))]);
+    assert_eq!(
+        keeper_kinds(&snap, "app.kmock#run"),
+        ["dispatch:production"]
+    );
+    // Same marker, wrong kind: the rule said what it meant.
+    assert_eq!(reported(&snap, &Category::UNUSED), ["app.kmock — Holder"]);
 }

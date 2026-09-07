@@ -1630,3 +1630,24 @@ matcher walks the whole declared supertype chain by name.
 graph resolved but not for one a rule states, so guava's 37 JUnit
 `setUp`/`tearDown` overrides became findings the moment `@Override` stopped
 being a root. Both halves read one seam now, and the 37 are gone again.
+
+### The dispatch vocabulary, entire (2026-09-07)
+
+| repo | before | after | what moved |
+|---|---|---|---|
+| every repository | — | — | byte-identical |
+
+`Trigger::Relation { kind, to }`, `Trigger::MemberOf { owner, name }`,
+`Marker.target` and the Pattern qualification landed together, and no report
+moves. That is the expected shape: `@Override` narrowed to methods changes
+nothing because the Java compiler already rejects it elsewhere; the
+qualification changes nothing because java's own rules name JDK types the
+source writes bare and no import qualifies; and the two new triggers have
+their language consumers in the rule packs still ahead (M8.e).
+
+What the fixture proves instead of a corpus number: in
+`runtime-required-members`, two package-private `shut()` methods sit on two
+classes implementing two different `Closer` interfaces. The rule names
+`com.vendor.Closer`, and the file's own import decides — one is
+`witness:com.vendor.Closer`, the other is reported. Nothing about the two
+files differs except which package their import names.

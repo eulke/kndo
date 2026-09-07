@@ -49,7 +49,12 @@ fn dispatch_rules() -> Vec<kndo_contract::extension::DispatchRule> {
         confidence: Confidence::Certain,
     };
     let mut rules = vec![
-        witness(Trigger::marker("Override")),
+        // Only a method can override one: the annotation the compiler allows
+        // nowhere else is still a rule's to narrow, not a grammar's.
+        witness(Trigger::marker_on(
+            "Override",
+            kndo_contract::evidence::SymbolKind::Method,
+        )),
         kndo_toolkit::jvm_manifest::suppresses_unused("SuppressWarnings"),
     ];
     rules.extend(
@@ -63,6 +68,10 @@ fn dispatch_rules() -> Vec<kndo_contract::extension::DispatchRule> {
             ("AutoCloseable", &["close"]),
             ("Closeable", &["close"]),
             ("Cloneable", &["clone"]),
+            // Written with the FULL name, which the engine reaches by
+            // qualifying `implements Closer` through this file's imports —
+            // the same simple name from another package is another type.
+            ("com.vendor.Closer", &["shut"]),
             (
                 "Serializable",
                 &[
@@ -83,9 +92,9 @@ fn dispatch_rules() -> Vec<kndo_contract::extension::DispatchRule> {
 impl JavaAdapter {
     pub fn new() -> Self {
         JavaAdapter {
-            // 13: `@Override` and the runtime's own bases state a witness,
-            // not a root.
-            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:java", 13, &["java"])
+            // 14: `@Override` states a witness on a METHOD, and the bases
+            // are named as the source writes them, qualified by its imports.
+            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:java", 14, &["java"])
                 .ladder(&[
                     // `private` is class-private and exists for members alone
                     // (a top-level class cannot take it), `public` is

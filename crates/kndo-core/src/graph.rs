@@ -23,7 +23,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Bump when the SAME evidence assembles into a DIFFERENT graph — resolution
 /// candidate changes, reachability semantics, new assembled fields. Folded into the
 /// graph cache key beside the contract fingerprint and the adapter set.
-pub const GRAPH_SEMANTICS_VERSION: u32 = 26;
+pub const GRAPH_SEMANTICS_VERSION: u32 = 27;
 
 #[derive(Serialize, Deserialize)]
 pub struct GraphFile {
@@ -854,7 +854,7 @@ fn dispatch_files(files: &mut [GraphFile], adapters: &[Box<dyn Extension>]) {
     let supertypes = crate::dispatch::supertype_edges(files.iter().map(|f| &f.evidence));
     for f in files.iter_mut() {
         let rules = adapter_by_id(adapters, &f.adapter).spec().dispatch_rules();
-        let mut d = crate::dispatch::apply(&f.evidence, rules);
+        let mut d = crate::dispatch::apply(&f.evidence, &supertypes, rules);
         let mut colors: Vec<RootKind> = f
             .evidence
             .roots

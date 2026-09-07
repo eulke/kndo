@@ -59,7 +59,11 @@ is dead bytes, never dead design).
 Everything your extraction sink writes is replayed host-side through another
 real `EvidenceSink` under your spec's declared streams — clamps,
 undeclared-stream drops and the pairing rule apply to you exactly as to a
-built-in. Markers cross as written and mean what your spec's `dispatch` rules
+built-in. A rule's trigger crosses as a FLAT LIST of nodes with the root last
+(a WIT variant cannot name itself, and `member-of` names its owner by index
+into that list — always an earlier node); the host rebuilds the tree and
+refuses a rule it cannot read rather than guessing at one.
+Markers cross as written and mean what your spec's `dispatch` rules
 say, matched host-side; an import's timing crosses as the field it is.
 Everything your conduct sink writes lands under the engine's own
 containment: findings under `ext:<coordinate>/<rule>` for rules your spec

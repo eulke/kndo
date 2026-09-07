@@ -270,11 +270,12 @@ interface types {
     }
 
     /// Mirrors `Trigger` — what a dispatch rule watches for: a marker whose
-    /// path matches the pattern (`*` matches any run) and, when given, an
-    /// argument matching `arg`.
+    /// path matches the pattern (`*` matches any run), when given an argument
+    /// matching `arg`, and when given on a declaration of `target`.
     record marker-trigger {
         path: string,
         arg: option<string>,
+        target: option<symbol-kind>,
     }
 
     /// Mirrors `InFiles` — which files a name rule reads, by the color the
@@ -294,16 +295,36 @@ interface types {
         in-files: in-files,
     }
 
+    /// Mirrors the `Relation` trigger — a type declaring a relation of this
+    /// kind to a base matching `to`.
+    record relation-trigger {
+        kind: relation-kind,
+        to: string,
+    }
+
+    /// Mirrors the `MemberOf` trigger. A trigger tree is recursive and a WIT
+    /// variant cannot name itself, so a rule carries its trigger as a FLAT
+    /// list of nodes with the root at index 0, and `owner` is the index of
+    /// the node that must match the member's owner. An index that is not a
+    /// smaller one than the node's own is malformed: the host rejects the
+    /// rule rather than following a cycle.
+    record member-of-node {
+        owner: u32,
+        %name: string,
+    }
+
     /// Mirrors the `ExternalWitness` trigger — the members a base outside the
-    /// project requires of whatever declares a relation to it.
+    /// project requires of whatever reaches it.
     record external-witness-trigger {
         base: string,
         members: list<string>,
     }
 
-    variant trigger {
+    variant trigger-node {
         marker(marker-trigger),
         %name(name-trigger),
+        relation(relation-trigger),
+        member-of(member-of-node),
         external-witness(external-witness-trigger),
     }
 
@@ -319,7 +340,9 @@ interface types {
 
     /// Mirrors `DispatchRule`.
     record dispatch-rule {
-        when: trigger,
+        /// The trigger tree, flattened: the root is the LAST node, and every
+        /// `member-of` owner points at an earlier one.
+        when: list<trigger-node>,
         then: effect,
         confidence: confidence,
     }

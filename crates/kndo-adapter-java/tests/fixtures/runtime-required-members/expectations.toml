@@ -3,7 +3,8 @@
 # and the members they require; the engine keeps those as witnesses of the
 # base, alive while their owner is and of no color. A type that promised
 # nothing gets no such keeper, which is what makes the rule a rule and not a
-# name list.
+# name list — and a rule written with the FULL name reaches only the base the
+# file's own imports say it is.
 
 [[alive]]
 subject = "src/main/java/com/foo/Ticket.java#Ticket.compareTo(Ticket)"
@@ -29,3 +30,13 @@ why = "private, unnamed, and required by nothing — the control beside the hook
 subject = "src/main/java/com/foo/Plain.java#Plain.writeObject(java.io.ObjectOutputStream)"
 category = "unused"
 why = "the same NAME on a type that implements nothing: a rule about a base, not about a name"
+
+[[alive]]
+subject = "src/main/java/com/foo/Qualified.java#Qualified.shut()"
+category = "unused"
+why = "the rule names com.vendor.Closer, and this file's import says that is the Closer it implements"
+
+[[dead]]
+subject = "src/main/java/com/foo/Homonym.java#Homonym.shut()"
+category = "unused"
+why = "same simple name, com.other.Closer — a rule about another package's type says nothing here"

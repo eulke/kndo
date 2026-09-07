@@ -170,32 +170,10 @@ fn activation_to_wire(activation: &Activation) -> wire::Activation {
 }
 
 fn dispatch_rule_to_wire(rule: &DispatchRule) -> wire::DispatchRule {
+    let mut when = Vec::new();
+    flatten_trigger(&rule.when, &mut when);
     wire::DispatchRule {
-        when: match &rule.when {
-            Trigger::Marker { path, arg } => wire::Trigger::Marker(wire::MarkerTrigger {
-                path: path.to_string(),
-                arg: arg.as_ref().map(|a| a.to_string()),
-            }),
-            Trigger::ExternalWitness { base, members } => {
-                wire::Trigger::ExternalWitness(wire::ExternalWitnessTrigger {
-                    base: base.to_string(),
-                    members: members.iter().map(|m| m.to_string()).collect(),
-                })
-            }
-            Trigger::Name {
-                pattern,
-                kind,
-                in_files,
-            } => wire::Trigger::Name(wire::NameTrigger {
-                pattern: pattern.to_string(),
-                kind: kind.as_ref().map(symbol_kind_to_wire),
-                in_files: match in_files {
-                    InFiles::Any => wire::InFiles::Any,
-                    InFiles::Rooted(k) => wire::InFiles::Rooted(root_kind_to_wire(*k)),
-                    InFiles::NotRooted(k) => wire::InFiles::NotRooted(root_kind_to_wire(*k)),
-                },
-            }),
-        },
+        when,
         then: match rule.then {
             Effect::Root(kind) => wire::Effect::Root(root_kind_to_wire(kind)),
             Effect::Exempt => wire::Effect::Exempt,
@@ -204,6 +182,60 @@ fn dispatch_rule_to_wire(rule: &DispatchRule) -> wire::DispatchRule {
         },
         confidence: confidence_to_wire(rule.confidence),
     }
+}
+
+/// Extends, and any link this SDK build predates: the weaker promise
+/// crosses, which keeps a witness alive without claiming an interface the
+/// guest never named.
+fn relation_kind_to_wire(kind: ev::RelationKind) -> wire::RelationKind {
+    match kind {
+        ev::RelationKind::Implements => wire::RelationKind::Implements,
+        _ => wire::RelationKind::Extends,
+    }
+}
+
+/// A trigger tree as the wire carries it: a flat list whose ROOT is the last
+/// node, every owner already pushed before the node naming it.
+fn flatten_trigger(trigger: &Trigger, out: &mut Vec<wire::TriggerNode>) -> u32 {
+    let node = match trigger {
+        Trigger::Marker { path, arg, target } => wire::TriggerNode::Marker(wire::MarkerTrigger {
+            path: path.to_string(),
+            arg: arg.as_ref().map(|a| a.to_string()),
+            target: target.as_ref().map(symbol_kind_to_wire),
+        }),
+        Trigger::Name {
+            pattern,
+            kind,
+            in_files,
+        } => wire::TriggerNode::Name(wire::NameTrigger {
+            pattern: pattern.to_string(),
+            kind: kind.as_ref().map(symbol_kind_to_wire),
+            in_files: match in_files {
+                InFiles::Any => wire::InFiles::Any,
+                InFiles::Rooted(k) => wire::InFiles::Rooted(root_kind_to_wire(*k)),
+                InFiles::NotRooted(k) => wire::InFiles::NotRooted(root_kind_to_wire(*k)),
+            },
+        }),
+        Trigger::Relation { kind, to } => wire::TriggerNode::Relation(wire::RelationTrigger {
+            kind: relation_kind_to_wire(*kind),
+            to: to.to_string(),
+        }),
+        Trigger::MemberOf { owner, name } => {
+            let owner = flatten_trigger(owner, out);
+            wire::TriggerNode::MemberOf(wire::MemberOfNode {
+                owner,
+                name: name.to_string(),
+            })
+        }
+        Trigger::ExternalWitness { base, members } => {
+            wire::TriggerNode::ExternalWitness(wire::ExternalWitnessTrigger {
+                base: base.to_string(),
+                members: members.iter().map(|m| m.to_string()).collect(),
+            })
+        }
+    };
+    out.push(node);
+    (out.len() - 1) as u32
 }
 
 fn stream_to_wire(stream: EvidenceStream) -> Option<wire::EvidenceStream> {
@@ -393,13 +425,7 @@ pub fn evidence_to_wire(evidence: &FileEvidence) -> wire::FileEvidence {
             .iter()
             .map(|r| wire::Relation {
                 from: r.from.index() as u32,
-                kind: match r.kind {
-                    ev::RelationKind::Implements => wire::RelationKind::Implements,
-                    // Extends, and any link this SDK build predates: the
-                    // weaker promise crosses, which keeps a witness alive
-                    // without claiming an interface the guest never named.
-                    _ => wire::RelationKind::Extends,
-                },
+                kind: relation_kind_to_wire(r.kind),
                 to: r.to.to_string(),
                 span: span_to_wire(r.span),
             })

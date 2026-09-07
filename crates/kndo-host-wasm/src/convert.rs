@@ -74,7 +74,7 @@ pub(crate) fn extension_spec(spec: awire::ExtensionSpec) -> ExtensionSpec {
             awire::CycleTolerance::Tolerated => CycleTolerance::Tolerated,
             awire::CycleTolerance::Hazard => CycleTolerance::Hazard,
         },
-        dispatch: spec.dispatch.into_iter().map(dispatch_rule).collect(),
+        dispatch: spec.dispatch.into_iter().filter_map(dispatch_rule).collect(),
         namespace_span: Default::default(),
         file_roles: Vec::new(),
         // The wire world speaks no dependency vocabulary yet; absence
@@ -191,27 +191,13 @@ pub(crate) fn reach_from_wire(reach: &awire::Reach) -> ev::Reach {
     }
 }
 
-fn dispatch_rule(rule: awire::DispatchRule) -> DispatchRule {
-    DispatchRule {
-        when: match rule.when {
-            awire::Trigger::Marker(m) => Trigger::Marker {
-                path: SmolStr::new(m.path),
-                arg: m.arg.map(SmolStr::new),
-            },
-            awire::Trigger::ExternalWitness(w) => Trigger::ExternalWitness {
-                base: SmolStr::new(w.base),
-                members: w.members.into_iter().map(SmolStr::new).collect(),
-            },
-            awire::Trigger::Name(n) => Trigger::Name {
-                pattern: SmolStr::new(n.pattern),
-                kind: n.kind.map(symbol_kind_from_wire),
-                in_files: match n.in_files {
-                    awire::InFiles::Any => InFiles::Any,
-                    awire::InFiles::Rooted(k) => InFiles::Rooted(root_kind(k)),
-                    awire::InFiles::NotRooted(k) => InFiles::NotRooted(root_kind(k)),
-                },
-            },
-        },
+/// A rule the guest declared. `None` where its trigger tree is malformed —
+/// an owner index that is not a smaller node than the one naming it, or an
+/// empty list — because a rule the host cannot read is a rule it must not
+/// guess at.
+fn dispatch_rule(rule: awire::DispatchRule) -> Option<DispatchRule> {
+    Some(DispatchRule {
+        when: rebuild_trigger(&rule.when, rule.when.len().checked_sub(1)?)?,
         then: match rule.then {
             awire::Effect::Root(kind) => Effect::Root(root_kind(kind)),
             awire::Effect::Exempt => Effect::Exempt,
@@ -219,7 +205,51 @@ fn dispatch_rule(rule: awire::DispatchRule) -> DispatchRule {
             awire::Effect::Witness => Effect::Witness,
         },
         confidence: confidence(rule.confidence),
+    })
+}
+
+fn relation_kind(kind: awire::RelationKind) -> ev::RelationKind {
+    match kind {
+        awire::RelationKind::Extends => ev::RelationKind::Extends,
+        awire::RelationKind::Implements => ev::RelationKind::Implements,
     }
+}
+
+/// The trigger at `at`, with its owner chain rebuilt. An owner must sit
+/// EARLIER in the list than the node naming it, which is what the SDK's
+/// flattening guarantees and what makes the walk terminate.
+fn rebuild_trigger(nodes: &[awire::TriggerNode], at: usize) -> Option<Trigger> {
+    Some(match nodes.get(at)? {
+        awire::TriggerNode::Marker(m) => Trigger::Marker {
+            path: SmolStr::new(&m.path),
+            arg: m.arg.as_deref().map(SmolStr::new),
+            target: m.target.clone().map(symbol_kind_from_wire),
+        },
+        awire::TriggerNode::Name(n) => Trigger::Name {
+            pattern: SmolStr::new(&n.pattern),
+            kind: n.kind.clone().map(symbol_kind_from_wire),
+            in_files: match n.in_files {
+                awire::InFiles::Any => InFiles::Any,
+                awire::InFiles::Rooted(k) => InFiles::Rooted(root_kind(k)),
+                awire::InFiles::NotRooted(k) => InFiles::NotRooted(root_kind(k)),
+            },
+        },
+        awire::TriggerNode::Relation(r) => Trigger::Relation {
+            kind: relation_kind(r.kind),
+            to: SmolStr::new(&r.to),
+        },
+        awire::TriggerNode::MemberOf(m) => {
+            let owner = ((m.owner as usize) < at).then_some(m.owner as usize)?;
+            Trigger::MemberOf {
+                owner: Box::new(rebuild_trigger(nodes, owner)?),
+                name: SmolStr::new(&m.name),
+            }
+        }
+        awire::TriggerNode::ExternalWitness(w) => Trigger::ExternalWitness {
+            base: SmolStr::new(&w.base),
+            members: w.members.iter().map(SmolStr::new).collect(),
+        },
+    })
 }
 
 pub(crate) fn project_root(root: awire::ProjectRoot) -> ProjectRoot {
@@ -446,10 +476,7 @@ pub(crate) fn replay_evidence(evidence: awire::FileEvidence, sink: &mut Evidence
         match ids.get(r.from as usize) {
             Some(id) => sink.relation(
                 *id,
-                match r.kind {
-                    awire::RelationKind::Extends => ev::RelationKind::Extends,
-                    awire::RelationKind::Implements => ev::RelationKind::Implements,
-                },
+                relation_kind(r.kind),
                 SmolStr::new(r.to),
                 span(r.span),
             ),
