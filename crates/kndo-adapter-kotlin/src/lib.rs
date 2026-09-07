@@ -35,7 +35,12 @@ impl KotlinAdapter {
     pub fn new() -> Self {
         KotlinAdapter {
             // 7: the generated banner is reported, never concluded.
-            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:kotlin", 8, &["kt"])
+            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:kotlin", 9, &["kt"])
+                // A package is one name across the whole compilation, like
+                // Java's: `src/test/kotlin/com/foo` and `src/main/kotlin/com/foo`
+                // are the same namespace, and the test set's build holds the
+                // main set it compiles against.
+                .namespace_span(kndo_contract::extension::NamespaceSpan::Compilation)
                 .ladder(&[
                     Step::for_members(Rung::Owner, "private"),
                     Step::for_free(Rung::File, "private"),
@@ -83,10 +88,6 @@ impl Extension for KotlinAdapter {
         manifest: &SourceFile<'_>,
     ) -> Vec<kndo_contract::adapter::DependencyDeclaration> {
         kndo_toolkit::jvm_manifest::dependencies(manifest)
-    }
-
-    fn sees(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
-        resolve::sees(path, cx)
     }
 
     fn seen_from(

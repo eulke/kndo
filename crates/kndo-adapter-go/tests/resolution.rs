@@ -19,20 +19,22 @@ fn files(paths: &[&str]) -> Resolution {
 
 #[test]
 fn sight_is_declared_not_enumerated() {
-    // What a Go package compiles together used to be a directory this adapter
-    // walked (`Extension::sees`). The adapter says it ONCE now, in the shape
-    // of the namespace it declares — the directory plus the package clause —
-    // and the engine reads the co-visible set off that node, so nothing here
-    // enumerates a directory and no capability restates what the shape
-    // already says. The asymmetry that made the old enumeration subtle (a
-    // test file is compiled into the test binary alone) is the engine's,
-    // pinned by `crates/kndo/tests/mounts.rs`.
-    let adapter = GoAdapter::new();
-    let known = project(&["pkg/a.go", "pkg/b.go"]);
-    let cx = ResolveContext::new(&known);
-    assert!(
-        adapter.sees(&ProjectPath::new("pkg/a.go"), &cx).is_empty(),
-        "the hook is the pre-forest mechanism and this adapter has left it"
+    // What a Go package compiles together is the namespace this adapter
+    // DECLARES — the directory plus the package clause — and the engine reads
+    // the co-visible set off that node. Nothing enumerates a directory, and
+    // the asymmetry that made the old enumeration subtle (a test file is
+    // compiled into the test binary alone) is the engine's, pinned by
+    // `crates/kndo/tests/mounts.rs`.
+    let ev = kndo_testkit::extract_evidence(
+        &GoAdapter::new(),
+        "pkg/a.go",
+        "package pkg\n\nfunc A() {}\n",
+    );
+    assert_eq!(
+        ev.namespace.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+        ["pkg", "pkg"],
+        "the directory and the clause, which is what makes two `pkg` \
+         directories two namespaces"
     );
 }
 

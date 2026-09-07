@@ -783,15 +783,6 @@ impl<E: Extension + Default> bindings::Guest for ExportedExtension<E> {
             .collect()
     }
 
-    fn sees(path: String) -> Vec<String> {
-        let path = ProjectPath::new(path);
-        E::default()
-            .sees(&path, &resolve_context())
-            .iter()
-            .map(|p| p.as_str().to_string())
-            .collect()
-    }
-
     fn seen_from(path: String, reach: wire::Reach) -> Option<Vec<String>> {
         let path = ProjectPath::new(path);
         E::default()

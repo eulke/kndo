@@ -1732,27 +1732,6 @@ pub trait Extension: Send + Sync {
         Vec::new()
     }
 
-    /// The files whose names `path` SEES with no import naming them — the rest
-    /// of its shared name scope, in the languages where that scope is bigger
-    /// than the file (every non-test sibling of a Go file's package; a test
-    /// file sees the whole package). Directional, deliberately: a test sees
-    /// `src/main`, never the reverse. The engine draws one reachability edge
-    /// per seen file and pools references over this sight. Depends only on
-    /// `path` and the file SET, never on content — which is what lets a
-    /// persisted graph trust it while only contents change. The default — sees
-    /// nothing beyond itself — reproduces pre-capability behavior.
-    /// The files this one co-compiles with, enumerated from paths — the
-    /// PRE-FOREST mechanism, retiring. A language that declares its namespaces
-    /// (an `EvidenceSink::namespace` clause) and says how they compile
-    /// ([`ExtensionSpecBuilder::covisibility`]) gets the same answer from the
-    /// engine's scope forest, which knows the node without re-deriving a
-    /// directory layout; this hook exists for the adapters that have not made
-    /// that move, and goes with the last of them.
-    fn sees(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
-        let _ = (path, cx);
-        Vec::new()
-    }
-
     /// The files a declaration of `reach` at `path` can legally be seen FROM,
     /// where the engine's own structure cannot bound it: a `Scoped` token
     /// always (the region behind the adapter's own word), and a `Unit` reach
@@ -1981,7 +1960,6 @@ mod tests {
         );
         let manifest = manifest.finish();
         assert!(manifest.units.is_empty() && manifest.packages.is_empty());
-        assert!(bare.sees(&from, &cx).is_empty());
         assert_eq!(bare.ingest("coverage/lcov.info", b"TN:"), None);
 
         let contents = BTreeMap::new();

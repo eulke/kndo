@@ -67,69 +67,8 @@ fn package_dir_files(dir_suffix: &str, cx: &ResolveContext<'_>) -> Vec<ProjectPa
     out
 }
 
-/// The unit is the directory — `.kt` and `.java` siblings share one namespace
-/// at compile — plus the standard layout's test→main mirror across BOTH
-/// source-set spellings: `src/test/kotlin/<pkg>` sees `src/main/kotlin/<pkg>`
-/// AND `src/main/java/<pkg>`, one direction only.
-pub fn sees(path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
-    let p = path.as_str();
-    let dir = match p.rsplit_once('/') {
-        Some((dir, _)) => dir,
-        None => "",
-    };
-    let main_views: Vec<String> = mirrored_main_dirs(dir);
 
-    let mut mates: Vec<ProjectPath> = cx
-        .known_files()
-        .filter(|f| {
-            let s = f.as_str();
-            if s == p || !(s.ends_with(".kt") || s.ends_with(".java")) {
-                return false;
-            }
-            let fd = match s.rsplit_once('/') {
-                Some((d, _)) => d,
-                None => "",
-            };
-            fd == dir || main_views.iter().any(|m| m == fd)
-        })
-        .cloned()
-        .collect();
-    mates.sort();
-    mates.dedup();
-    mates
-}
 
-/// For a test-set directory (either standard spelling — Kotlin sources live
-/// under `src/test/java` in plenty of mixed projects), the main-set
-/// directories it shares a package with; for a MAIN-set directory, the sibling
-/// main spelling — joint compilation makes `src/main/kotlin/<pkg>` and
-/// `src/main/java/<pkg>` one namespace; empty for anything else.
-fn mirrored_main_dirs(dir: &str) -> Vec<String> {
-    for marker in ["src/test/kotlin", "src/test/java"] {
-        if let Some((head, tail)) = split_on_set(dir, marker) {
-            return vec![
-                format!("{head}src/main/kotlin{tail}"),
-                format!("{head}src/main/java{tail}"),
-            ];
-        }
-    }
-    if let Some((head, tail)) = split_on_set(dir, "src/main/kotlin") {
-        return vec![format!("{head}src/main/java{tail}")];
-    }
-    if let Some((head, tail)) = split_on_set(dir, "src/main/java") {
-        return vec![format!("{head}src/main/kotlin{tail}")];
-    }
-    Vec::new()
-}
-
-/// `head` and `tail` around a `/`-anchored source-set marker, or None.
-fn split_on_set<'a>(dir: &'a str, marker: &str) -> Option<(&'a str, &'a str)> {
-    let ix = dir.find(marker)?;
-    if ix != 0 && dir.as_bytes()[ix - 1] != b'/' {
-        return None;
-    }
-    Some((&dir[..ix], &dir[ix + marker.len()..]))
-}
 
 /// The module region behind `internal`: every `.kt`/`.java` source under the
 /// same module root — the path prefix before the first `/src/` segment (the

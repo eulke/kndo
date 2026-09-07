@@ -122,7 +122,7 @@ The spec is the whole declaration. What a builder chain can state:
 | `launchers` | globs of files it reads for roots alone — a CI workflow, a task runner's file — which declare no package and own no files |
 | `ignores` | globs of the paths the language's own tool never compiles — Go's `_`-prefixed files and `vendor` copies, npm's `node_modules`, the interpreter's `site-packages`; a file under one is discovered, so an import into it is not broken, and never claimed, and a manifest under one declares nothing — the rule is the tool's, never a guess about an output directory a package might be named after |
 | `ladder`, `published_surface`, `import_cycles`, `dependency_scoping`, `dependency_identity`, `dependency_builtins`, `dependency_importers` | the language facts the engine's judgments consume (see [Languages](languages.md)); `ladder` pairs each reach the language can spell with the word it spells it with, narrowest first, and says which declarations can take it; `published_surface` says whether a unit publishes every export or only what its entries export |
-| `dispatch` | what the language's own statements mean: rules pairing a TRIGGER with an EFFECT and a confidence, so an attribute or a convention is a line of data and never a branch in an adapter. A trigger is a marker (path pattern, optionally an argument pattern, optionally the symbol kind it may sit on), a declaration NAME pattern in files of a given role, a RELATION of a given kind to a base, a MEMBER of an owner another trigger matches, or the members an EXTERNAL base requires of whatever reaches it. An effect is a root of a color, a witness (kept while its owner is, of no color), an exemption from `unused`, or a generator's ownership of the file. Every pattern is compared against the name as the file writes it AND against the name the file's own binding imports qualify, so a rule written `org.junit.jupiter.api.Test` reaches an `@Test` imported from JUnit and not a same-named one from another package |
+| `dispatch` | what the language's own statements mean: rules pairing a TRIGGER with an EFFECT and a confidence, so an attribute or a convention is a line of data and never a branch in an adapter. A trigger is a marker (path pattern, optionally an argument pattern, optionally the symbol kind it may sit on), a declaration NAME pattern, optionally narrowed to the kind of compilation the file lands in, a RELATION of a given kind to a base, a MEMBER of an owner another trigger matches, or the members an EXTERNAL base requires of whatever reaches it. An effect is a root of a color, a witness (kept while its owner is, of no color), an exemption from `unused`, or a generator's ownership of the file. Every pattern is compared against the name as the file writes it AND against the name the file's own binding imports qualify, so a rule written `org.junit.jupiter.api.Test` reaches an `@Test` imported from JUnit and not a same-named one from another package |
 | `conduct(activation, mutates_graph)` | the two gates of a plugin: when it runs (`Always`, or any of a set of rules — a manifest dependency by name, a file glob existing), and whether its contributions change reachability (`Yes` turns the persisted graph cache off for projects it activates on; `No` is a promise the engine holds you to) |
 | `rule(name, description)` | a finding category this extension may report, published as `ext:<coordinate>/<name>` |
 | `dependencies` | other extensions whose activation implies this one — the path to a plugin whose framework is an indirect dependency |
@@ -142,6 +142,16 @@ with or without the namespace — `protected`), its owner's exactly
 The engine resolves each to a pool of files from the scope forest and caps a
 member's reach by its owner's; an adapter states the declared reach and
 never computes the effective one.
+
+The same rule holds for what a file can see without importing it: an adapter
+DECLARES its namespace — `sink.namespace(["com", "foo"])` for a package clause,
+an `ImportShape::Mount` for a language whose namespaces nest by declaration —
+and the engine reads the co-visible set off that node. There is no hook for
+handing the engine a list of files you walked, and that is deliberate: the
+vocabulary is finite so that the tenth adapter's author has one way to say
+each thing, not a choice between two. A language whose namespace is its unit
+says so through its manifest instead (`extract_manifest`), and one whose file
+IS its scope says nothing at all.
 
 A file is not always one language. An adapter that finds a span of another
 language in its file — a page's inline `<script>`, its `<style>` — reports it

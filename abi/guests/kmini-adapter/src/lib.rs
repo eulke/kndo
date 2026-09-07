@@ -105,13 +105,13 @@ fn timed_use(line: &str) -> Option<(Timing, &str)> {
     }
 }
 
-/// `x.kmini` ⇄ `x_part.kmini`, when both exist.
-fn mate_of(path: &ProjectPath) -> Option<ProjectPath> {
+/// The namespace a kmini file declares itself into: `x.kmini` and
+/// `x_part.kmini` are two halves of `x`, and a language says that by NAMING
+/// the namespace — never by handing the engine a list of files. The forest
+/// joins the halves from the name alone.
+fn namespace_of(path: &ProjectPath) -> Option<SmolStr> {
     let stem = path.as_str().strip_suffix(".kmini")?;
-    match stem.strip_suffix("_part") {
-        Some(base) => Some(ProjectPath::new(format!("{base}.kmini"))),
-        None => Some(ProjectPath::new(format!("{stem}_part.kmini"))),
-    }
+    Some(SmolStr::new(stem.strip_suffix("_part").unwrap_or(stem)))
 }
 
 impl Extension for KminiAdapter {
@@ -120,6 +120,9 @@ impl Extension for KminiAdapter {
     }
 
     fn extract(&self, file: &SourceFile<'_>, out: &mut EvidenceSink) {
+        if let Some(namespace) = namespace_of(file.path) {
+            out.namespace([namespace]);
+        }
         // `@…` lines mark the declaration that follows them.
         let mut pending: Vec<(String, Vec<SmolStr>, Span)> = Vec::new();
         for (start, line) in line_spans(file.content) {
@@ -128,7 +131,16 @@ impl Extension for KminiAdapter {
             let declared = if let Some(name) = trimmed.strip_prefix("pub fn ") {
                 Some(out.declaration(name.trim(), SymbolKind::Function, span, Reach::Exported))
             } else if let Some(name) = trimmed.strip_prefix("fn ") {
-                Some(out.declaration(name.trim(), SymbolKind::Function, span, Reach::File))
+                // Not the FILE: the two halves of `x` are one namespace, so an
+                // unexported name reaches the namespace and its other half may
+                // call it. A reach is a rung of the ladder the language spells,
+                // never a stand-in for a list of files.
+                Some(out.declaration(
+                    name.trim(),
+                    SymbolKind::Function,
+                    span,
+                    Reach::Namespace { up: 0 },
+                ))
             } else {
                 None
             };
@@ -241,13 +253,6 @@ impl Extension for KminiAdapter {
         manifest_lines(manifest.content)
             .filter(|(k, _)| *k == "dep")
             .map(|(_, v)| kndo_contract::adapter::DependencyDeclaration::name_only(SmolStr::new(v)))
-            .collect()
-    }
-
-    fn sees(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
-        mate_of(path)
-            .filter(|m| cx.contains(m))
-            .into_iter()
             .collect()
     }
 }

@@ -8,7 +8,8 @@
 //!
 //! The index is a pure function of the graph and its reachability, built once
 //! per run: name → reference sites over reachable files, import bindings with
-//! their sites, whole-surface importers, and `seen_by` (the reverse of `sees`).
+//! their sites, whole-surface importers, and `included_by` (the reverse of a
+//! file's `Include` imports).
 //! Site lists stay borrowed and filters stream with early exit, so `limit 1`
 //! costs what the old set-membership checks did.
 
@@ -66,7 +67,7 @@ pub struct Site {
 pub struct Index {
     /// name → its reference sites across REACHABLE files, in file order. Serves
     /// the member dispatch pool (all reachable files) whole, and the lexical
-    /// pools (own file + `seen_by`, or a scoped region) filtered.
+    /// pools (own file + `included_by`, or a scoped region) filtered.
     sites_by_name: BTreeMap<SmolStr, Vec<Site>>,
     /// (target file, imported name) → the importing sites that bind it.
     bound: BTreeMap<(u32, SmolStr), Vec<Site>>,
@@ -74,7 +75,7 @@ pub struct Index {
     /// side-effect / glob — shapes the engine cannot see through).
     surface_importers: Vec<Vec<Site>>,
     /// Reverse of `sees`: reachable viewers only, ascending.
-    seen_by: Vec<Vec<u32>>,
+    included_by: Vec<Vec<u32>>,
     reachable: Vec<bool>,
     /// The type surfaces, by NAME and over EVERY file: what each type declares,
     /// and which types relate to which. A supertype in a file no root reaches
@@ -155,7 +156,7 @@ impl Index {
         let mut sites_by_name: BTreeMap<SmolStr, Vec<Site>> = BTreeMap::new();
         let mut bound: BTreeMap<(u32, SmolStr), Vec<Site>> = BTreeMap::new();
         let mut surface_importers: Vec<Vec<Site>> = vec![Vec::new(); n];
-        let mut seen_by: Vec<Vec<u32>> = vec![Vec::new(); n];
+        let mut included_by: Vec<Vec<u32>> = vec![Vec::new(); n];
         for (i, f) in graph.files.iter().enumerate() {
             if !reachable[i] {
                 continue;
@@ -166,8 +167,8 @@ impl Index {
                     span: r.span,
                 });
             }
-            for &m in &f.sees {
-                seen_by[m as usize].push(i as u32);
+            for &m in &f.includes {
+                included_by[m as usize].push(i as u32);
             }
             for (import, targets) in f.evidence.imports.iter().zip(&f.import_targets) {
                 for &t in targets {
@@ -218,7 +219,7 @@ impl Index {
             sites_by_name,
             bound,
             surface_importers,
-            seen_by,
+            included_by,
             reachable,
             members_of,
             supertypes_of,
@@ -372,8 +373,8 @@ impl Index {
     }
 
     /// Reachable viewers of a file (the reverse of `sees`), ascending.
-    pub fn seen_by(&self, file: usize) -> &[u32] {
-        &self.seen_by[file]
+    pub fn included_by(&self, file: usize) -> &[u32] {
+        &self.included_by[file]
     }
 
     pub fn surface_importers(&self, file: usize) -> &[Site] {
@@ -627,7 +628,7 @@ pub fn keepers(
     } else {
         // The lexical pool: own file plus viewers — or, additionally, the
         // bounded region (qualified in-region uses need no import).
-        let seen = index.seen_by(file);
+        let seen = index.included_by(file);
         for &site in index.reference_sites(d.name.as_str()) {
             let in_pool = site.file as usize == file
                 || seen.binary_search(&site.file).is_ok()

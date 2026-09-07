@@ -1787,3 +1787,81 @@ fn finding_identity_is_unique() {
         "findings sharing one identity — a subject kind without its position: {collisions:#?}"
     );
 }
+
+/// Every language adapter declares its namespace in the SAME vocabulary, or
+/// this gate names what it still owes and when.
+///
+/// The vocabulary is finite on purpose: an adapter states facts — a namespace
+/// clause, a mount, a structured reach, markers, relations — and the engine
+/// derives every set from them. It never hands the engine a list of files it
+/// walked, because a second way to say one thing is a second thing to explain
+/// to whoever writes the tenth adapter. `Extension::sees` was that second way
+/// and it is gone; `seen_from` is the last of them and goes with M8.d.
+///
+/// A row here fails the moment an adapter regresses to silence, and the
+/// exception list is the honest ledger of what M8.d still owes.
+#[test]
+fn every_adapter_declares_its_namespace_in_one_vocabulary() {
+    use kndo_contract::evidence::ImportShape;
+
+    // (coordinate, a file of the language, its content)
+    let sample: &[(&str, &str, &str)] = &[
+        ("kndo:go", "pkg/a.go", "package pkg\n\nfunc A() {}\n"),
+        (
+            "kndo:java",
+            "src/main/java/com/foo/A.java",
+            "package com.foo;\npublic class A {}\n",
+        ),
+        (
+            "kndo:kotlin",
+            "src/main/kotlin/com/foo/A.kt",
+            "package com.foo\nclass A\n",
+        ),
+        ("kndo:rust", "src/lib.rs", "pub mod a;\npub fn f() {}\n"),
+    ];
+    // What the plan owes each of these, and where: a namespace is a fact about
+    // ONE FILE's content, so it is an evidence stream — and these languages
+    // spell theirs in a manifest or a path the file itself never states.
+    let owed: &[(&str, &str)] = &[
+        ("kndo:swift", "M8.d — a module IS a SwiftPM target, so the unit names it"),
+        ("kndo:python", "M8.d — a module is its source root plus its path"),
+        ("kndo:js-ts", "M8.d — an ES module is its own file; units come from package.json"),
+        ("kndo:html", "no namespace: a page is its own scope"),
+        ("kndo:css", "no namespace: a sheet is its own scope"),
+    ];
+
+    let extensions = kndo::default_extensions();
+    let mut silent = Vec::new();
+    for (coordinate, path, content) in sample {
+        let adapter = extensions
+            .iter()
+            .find(|e| e.spec().coordinate() == *coordinate)
+            .unwrap_or_else(|| panic!("{coordinate} is a built-in"));
+        let evidence = kndo_testkit::extract_evidence(adapter.as_ref(), path, content);
+        let declares = !evidence.namespace.is_empty()
+            || evidence
+                .imports
+                .iter()
+                .any(|i| matches!(i.shape, ImportShape::Mount { .. }));
+        if !declares {
+            silent.push(*coordinate);
+        }
+    }
+    assert!(
+        silent.is_empty(),
+        "these adapters state no namespace and no mount, so the scope forest \
+         has nothing to answer with for them: {silent:?}"
+    );
+
+    // The ledger stays honest in both directions: an adapter that has paid up
+    // must leave the list.
+    let paid: Vec<&str> = owed
+        .iter()
+        .filter(|(c, _)| sample.iter().any(|(s, _, _)| s == c))
+        .map(|(c, _)| *c)
+        .collect();
+    assert!(
+        paid.is_empty(),
+        "these adapters declare a namespace and are still listed as owing one: {paid:?}"
+    );
+}

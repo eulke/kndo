@@ -312,14 +312,6 @@ impl Extension for WasmExtension {
         .unwrap_or_default()
     }
 
-    fn sees(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
-        self.call(StoreData::project(cx), |guest, store| {
-            guest.call_sees(store, path.as_str())
-        })
-        .map(|paths| paths.into_iter().map(ProjectPath::new).collect())
-        .unwrap_or_default()
-    }
-
     fn seen_from(
         &self,
         path: &ProjectPath,

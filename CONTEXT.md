@@ -149,7 +149,7 @@ path, per file).
 The engine's structure of project, units, namespaces, files and owners, built from
 evidence and manifest evidence. Pools, effective reach and the narrowest expressible
 rung are read from it.
-_Avoid_: sees, seen_from, region
+_Avoid_: sees (retired), seen_from, region
 
 **Co-visibility**:
 The files a language compiles TOGETHER, read off the scope forest where the language
@@ -161,7 +161,7 @@ unit this one compiles AGAINST — the inverse of the pool's direction, since a 
 build holds the library while the library's build holds no test of it. A file that
 is a test as a whole is the other asymmetry — the production build never compiles
 it, so no production colour crosses through it.
-_Avoid_: sees, unit mates
+_Avoid_: sees (retired), unit mates
 
 **Pool**:
 The files, or the span within a file, from which an unqualified reference to a name

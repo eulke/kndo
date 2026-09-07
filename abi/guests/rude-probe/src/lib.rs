@@ -93,10 +93,6 @@ impl bindings::Guest for RudeProbe {
         Vec::new()
     }
 
-    fn sees(_path: String) -> Vec<String> {
-        Vec::new()
-    }
-
     fn seen_from(_path: String, _reach: wire::Reach) -> Option<Vec<String>> {
         None
     }

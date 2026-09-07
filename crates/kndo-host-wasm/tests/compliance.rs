@@ -136,11 +136,12 @@ fn the_wasm_adapter_world_is_a_first_class_language() {
     );
     assert!(
         finding_on(&snap, "from_part").is_empty(),
-        "a symbol used only by a file that sees it is kept through wasm sees"
+        "a namespace-reaching symbol its other half calls is kept: the guest \
+         DECLARED the namespace, and the engine pooled over it"
     );
     assert!(
         finding_on(&snap, "app_part.kmini").is_empty(),
-        "the mate file itself is reachable through the unit edge"
+        "and the other half is reachable through the namespace it declared"
     );
 
     // The manifest's dependency names feed activation — through the same wasm

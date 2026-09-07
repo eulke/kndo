@@ -5188,3 +5188,52 @@ package-private-across-modules (kndo-adapter-java), which loses an `untested`
 finding on a library file its tests module demonstrably calls — the fixture's
 own `[[alive]]` and `[[dead]]` claims are unchanged. The contract fingerprint
 does not move, and no adapter version does: `sees` was never evidence.
+
+## 2026-09-07 — `sees` is gone from the vocabulary, not just from three adapters
+
+**The owner's rule, and it is the right one.** A capability that one adapter
+keeps and eight do not is a second toolset, and a second toolset is a second
+thing to explain to whoever writes the tenth adapter. `Extension::sees` is
+deleted — from the trait, from the `extension` world in the WIT, from the SDK
+shim, from the host bridge, from the reference guests, from `sees_of`, and from
+`GraphFile.sees`, which had two writers and keeps only the one that is a fact
+the file states: its `Include` imports. The field is now `includes` and
+`Index::seen_by` is `included_by`, because a name that means one thing is worth
+more than a name that used to mean two.
+
+**Kotlin pays with the same coin as everyone else.** It has `package com.foo`,
+exactly as Java does, so it emits a namespace clause and declares
+`NamespaceSpan::Compilation`. That is floor 1 of where language knowledge
+lives: a fact about ONE FILE's content is an evidence stream, never a hook that
+walks directories.
+
+**The reference guest was teaching the old thing.** `kmini` said its two halves
+compile together by handing the engine a mate path; it now DECLARES the
+namespace `x` for both `x.kmini` and `x_part.kmini`, and its unexported
+declarations reach `Namespace { up: 0 }` rather than `File` — which is what the
+language actually means, and what a reader learns to copy.
+
+**Measured: Exposed 971 → 976, every other repository byte-identical.** The
+ablation ledger sized kotlin's `sees` at 15 findings; the namespace clause
+recovers 10 of them. The other 5 are files whose own module's test source set
+exercises them (`exposed-migration-r2dbc`, the springboot sample): main and test
+are different namespace ROOTS there, so only a unit's friendship joins them, and
+kotlin reads no Gradle. They close with M8.d and are listed in EXPERIMENTS.
+
+**What was tried and abandoned, so nobody rebuilds it.** Emitting Gradle units
+from `build.gradle[.kts]` inside this slice — a main unit and a test friend,
+mirroring the Maven half — moved guava 8249 → 8665 and Exposed 976 → 984, worse
+in both directions. Gradle's structural manifest is M8.d's, with its own
+fixtures and its own measurement, and improvising it here was guessing dressed
+as progress.
+
+**The rule is born with its gate.** `every_adapter_declares_its_namespace_in_one_vocabulary`
+extracts one file per language and fails if an adapter states neither a
+namespace clause nor a mount, and fails the other way if an adapter on the
+"still owes one" list has quietly paid up. The exception rows name what each
+remaining adapter owes and where.
+
+`GRAPH_SEMANTICS_VERSION` moves to 30 and `kndo:kotlin` to 9. The contract
+fingerprint does not move — a trait is not a contract type. The `extension`
+world loses an export, so the four pinned reference components are re-pinned.
+No conformance fixture moves.

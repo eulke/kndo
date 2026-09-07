@@ -930,11 +930,11 @@ fn uses(cx: &QueryContext<'_>, selector: Selector, limit: usize) -> Answer {
 }
 
 /// The one declaration a name can mean from `file`'s point of view — its own
-/// file, the files it sees, and its bound import targets; `None` when zero or
+/// file, the files it includes, and its bound import targets; `None` when zero or
 /// several candidates hold the name (ambiguity stays honest by absence).
 fn resolve_name(cx: &QueryContext<'_>, file: usize, name: &SmolStr) -> Option<NodeRef> {
     let mut pool: Vec<u32> = vec![file as u32];
-    pool.extend_from_slice(&cx.graph.files[file].sees);
+    pool.extend_from_slice(&cx.graph.files[file].includes);
     for (import, targets) in cx.graph.files[file]
         .evidence
         .imports
@@ -1089,7 +1089,7 @@ fn reverse_edges(graph: &Graph) -> Vec<Vec<u32>> {
         for &t in &f.imports {
             reverse[t as usize].push(i as u32);
         }
-        for &t in &f.sees {
+        for &t in &f.includes {
             reverse[t as usize].push(i as u32);
         }
     }
@@ -1118,7 +1118,7 @@ fn shortest_path(graph: &Graph, from: &[u32], to: u32) -> Option<Vec<u32>> {
         let mut next = Vec::new();
         for &at in &frontier {
             let f = &graph.files[at as usize];
-            for &t in f.imports.iter().chain(&f.sees) {
+            for &t in f.imports.iter().chain(&f.includes) {
                 if !seen[t as usize] {
                     seen[t as usize] = true;
                     prev[t as usize] = Some(at);
@@ -1361,7 +1361,7 @@ fn simulate_deletion(
                         continue;
                     }
                     let f = &cx.graph.files[at as usize];
-                    for &t in f.imports.iter().chain(&f.sees) {
+                    for &t in f.imports.iter().chain(&f.includes) {
                         if t as usize != file && !alive[t as usize] {
                             alive[t as usize] = true;
                             frontier.push(t);

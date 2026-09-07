@@ -20843,6 +20843,28 @@
       "message": "production-reachable, but no test reaches this file"
     },
     {
+      "id": "kndo-09729db40b80",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "exposed-jdbc-r2dbc-tests/src/main/kotlin/org/jetbrains/exposed/v1/test/mixed/MixedDatabaseTestsBase.kt"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-d5b6f911a461",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "exposed-migration-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/migration/r2dbc/MigrationUtils.kt"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
       "id": "kndo-2ce236a37fb8",
       "category": "untested",
       "severity": "info",
@@ -21184,6 +21206,17 @@
       "message": "production-reachable, but no test reaches this file"
     },
     {
+      "id": "kndo-26f05b9b16d3",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "samples/springboot3-exposed-r2dbc/src/main/kotlin/com/example/Application.kt"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
       "id": "kndo-807d3065260f",
       "category": "untested",
       "severity": "info",
@@ -21235,6 +21268,28 @@
       "subject": {
         "kind": "file",
         "path": "samples/springboot3-exposed-r2dbc/src/main/kotlin/com/example/dao/impl/UserDaoImpl.kt"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-efc0b32eda53",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "samples/springboot3-exposed-r2dbc/src/main/kotlin/com/example/hints/ReflectHints.kt"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-2bb4f8a15566",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "samples/springboot3-exposed-r2dbc/src/main/kotlin/com/example/hints/ResourceHints.kt"
       },
       "message": "production-reachable, but no test reaches this file"
     },

@@ -617,7 +617,7 @@ mod tests {
                 adapter: SmolStr::new_static("test"),
                 hash_hex: String::new(),
                 evidence: sink.finish(),
-                sees: Vec::new(),
+                includes: Vec::new(),
                 regions: Vec::new(),
                 published: false,
                 mounted_by: None,

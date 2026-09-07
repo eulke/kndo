@@ -492,11 +492,15 @@ that follows every restore reproduces the pinned reports exactly.
 
 ### Duplicate: both mechanisms live, and the new one is wired
 
+`Extension::sees` is gone from the vocabulary entirely as of 2026-09-07 — trait,
+WIT, SDK, host, guests and core. Rows 1a–1c are closed; what a language cannot
+yet say through the forest is now an M8.d row, not a second hook.
+
 | # | old | replaced by | ablation | disposition |
 |---|---|---|---|---|
 | 1a | `sees` (kndo:swift) | the scope forest | **0** | ~~retire now~~ **DONE 2026-09-07** |
 | 1b | `sees` (kndo:java) | the scope forest | 2 (guava, `untested`) | ~~retire with the delta explained~~ **DONE 2026-09-07** — `covisible` spans the compilation; guava moved 8250 → 8249, the other direction from the ablation, and for a better reason |
-| 1c | `sees` (kndo:kotlin) | the scope forest | 15 (Exposed, `untested`) | blocked: kotlin declares no namespace clause |
+| 1c | `sees` (kndo:kotlin) | the scope forest | 15 (Exposed, `untested`) | ~~blocked~~ **DONE 2026-09-07** — kotlin declares its `package` clause; 10 of the 15 recovered, the other 5 wait on Gradle units (M8.d) |
 | 2 | member dispatch pool at rung 3, unscoped, every member | the plan's rung 3 (pool-scoped) + rung 9 (Exported only) | **+232** to conform | a judgment call for the owner, below |
 
 ### Blocked: the replacement is not wired for that adapter

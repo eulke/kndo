@@ -1704,3 +1704,21 @@ guessing from directory names — the difference the plan was built to make.
 The union of both span directions was tried first and rejected by measurement:
 it made fifteen guava-gwt GWT super-source files (compiled INSTEAD of the
 library's, never beside them) look exercised.
+
+### `sees` leaves the vocabulary (2026-09-07)
+
+| repo | before | after | what moved |
+|---|---|---|---|
+| Exposed | 971 | 976 | +5 `untested` |
+| every other repository | — | — | byte-identical |
+
+Kotlin now declares its `package` clause and `NamespaceSpan::Compilation`, and
+`Extension::sees` is deleted everywhere — trait, WIT, SDK, host, guests, core.
+
+The ledger sized kotlin's `sees` at 15; the clause recovers 10. The five that
+remain are `exposed-migration-r2dbc/.../MigrationUtils.kt`, the springboot3
+sample's three, and `MixedDatabaseTestsBase.kt` — each has a test in its own
+package, in its own module's `src/test/kotlin`, but main and test are different
+namespace ROOTS there and only a unit's friendship joins them. Kotlin reads no
+Gradle yet, so it has no units: M8.d closes these five, and they are the cost,
+named, of one vocabulary instead of two.

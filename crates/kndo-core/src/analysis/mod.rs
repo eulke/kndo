@@ -122,8 +122,8 @@ fn flood(graph: &Graph, scopes: &crate::scopes::Scopes, kind: RootKind) -> Vec<b
     let through_tests = kind == RootKind::Test;
     while let Some(i) = queue.pop() {
         let f = &graph.files[i];
-        // Sight the adapter stated (an include, and the unit mates of the
-        // adapters still on that hook) is an edge like an import.
+        // An include pastes the target in, so its names are readable here:
+        // an edge like an import, and the file's own statement.
         let mut visit = |t: u32| {
             let t = t as usize;
             if !reached[t] {
@@ -131,7 +131,7 @@ fn flood(graph: &Graph, scopes: &crate::scopes::Scopes, kind: RootKind) -> Vec<b
                 queue.push(t);
             }
         };
-        for &t in f.imports.iter().chain(&f.sees) {
+        for &t in f.imports.iter().chain(&f.includes) {
             visit(t);
         }
         // The namespace's other files. What that set holds is the language's

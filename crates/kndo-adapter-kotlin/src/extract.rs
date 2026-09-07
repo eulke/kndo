@@ -85,6 +85,22 @@ pub fn extract(
     let top = Ctx { owner: None };
     for item in children {
         match item.kind() {
+            // `package com.foo` — the namespace this file declares itself
+            // into, as segments. The file's own statement, exactly as Java
+            // makes it: two files share a package however far apart their
+            // directories sit, and a source set nested under `src/test/kotlin`
+            // is the same name as the one under `src/main/kotlin`.
+            "package_header" => {
+                if let Some(name) = item.named_child(0) {
+                    out.namespace(
+                        tk::text(name, source)
+                            .split('.')
+                            .map(str::trim)
+                            .filter(|seg| !seg.is_empty())
+                            .map(SmolStr::new),
+                    );
+                }
+            }
             "import" => import(item, source, out),
             _ => declaration(item, source, &top, out),
         }

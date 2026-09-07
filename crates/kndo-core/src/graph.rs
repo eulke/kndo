@@ -23,7 +23,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Bump when the SAME evidence assembles into a DIFFERENT graph — resolution
 /// candidate changes, reachability semantics, new assembled fields. Folded into the
 /// graph cache key beside the contract fingerprint and the adapter set.
-pub const GRAPH_SEMANTICS_VERSION: u32 = 29;
+pub const GRAPH_SEMANTICS_VERSION: u32 = 30;
 
 #[derive(Serialize, Deserialize)]
 pub struct GraphFile {
@@ -31,28 +31,26 @@ pub struct GraphFile {
     pub adapter: SmolStr,
     pub hash_hex: String,
     pub evidence: FileEvidence,
-    /// Files whose names this file can see without an import — the rest of its
-    /// compilation unit, per [`kndo_contract::extension::Extension::sees`];
-    /// indices into `Graph::files`, sorted, deduplicated. Reachability walks these
+    /// Files whose names this file can see because it PASTED them in — the
+    /// targets of its `Include` imports; indices into `Graph::files`, sorted,
+    /// deduplicated. Reachability walks these
     /// like import edges, and analyses pool references over the visibility they
     /// declare. A pure function of path and file set, so a content-only patch can
     /// trust the persisted values.
     ///
-    /// Two writers, and only one of them lasts: an `Include` import, which is
-    /// sight the file itself states, and [`Extension::sees`] for the adapters
-    /// that have not yet declared their namespaces — for a language that has,
-    /// the same fact is the scope forest's
-    /// ([`crate::scopes::Scopes::covisible`]) and this list holds only its
-    /// includes.
-    pub sees: Vec<u32>,
+    /// One writer: an `Include` import, sight the file itself states. What a
+    /// language's namespace holds is the scope forest's answer
+    /// ([`crate::scopes::Scopes::covisible`]) and never an enumeration an
+    /// adapter hands over.
+    pub includes: Vec<u32>,
     /// Per adapter-bounded reach this file's evidence uses — a `Scoped` token,
     /// or `Unit` until a manifest names the unit — the files a declaration of
     /// that reach can be seen from, per
     /// [`kndo_contract::extension::Extension::seen_from`]: indices into
     /// `Graph::files`, sorted, deduplicated, self included. Sorted by reach. A
     /// reach the adapter cannot bound has NO entry: its declarations are judged
-    /// as Exported (keep-alive). Same stability class as `sees` — a pure
-    /// function of path, reach and file set.
+    /// as Exported (keep-alive). The same stability class — a pure function of
+    /// path, reach and file set.
     pub regions: Vec<(Reach, Vec<u32>)>,
     /// This file holds an exported declaration of a published library unit, in
     /// a language whose units publish every export: its surface is the outside
@@ -526,7 +524,7 @@ pub fn assemble(
                 adapter: SmolStr::new(spec.coordinate()),
                 hash_hex: f.hash.iter().map(|b| format!("{b:02x}")).collect(),
                 evidence: ev,
-                sees: Vec::new(),
+                includes: Vec::new(),
                 regions: Vec::new(),
                 // Both wait for the mount pass below: a fence is a fact about
                 // the whole file set, and publication reads it.
@@ -555,7 +553,7 @@ pub fn assemble(
     // both are functions of the file set the first phase froze.
     let sorted_paths: Vec<ProjectPath> = graph_files.iter().map(|g| g.path.clone()).collect();
     let mut resolved: Vec<ResolvedEdges> = Vec::with_capacity(graph_files.len());
-    for (ix, gf) in graph_files.iter().enumerate() {
+    for gf in graph_files.iter() {
         let adapter = adapter_by_id(adapters, &gf.adapter);
         let mut edges = resolve_file(
             &gf.path,
@@ -565,7 +563,6 @@ pub fn assemble(
             &cx,
             &sorted_paths,
         );
-        edges.sees = sees_of(ix, &gf.path, adapter, &cx, &sorted_paths);
         edges.regions = regions_of(&gf.path, &gf.evidence, adapter, &cx, &sorted_paths);
         resolved.push(edges);
     }
@@ -573,7 +570,6 @@ pub fn assemble(
         gf.imports = edges.imports;
         gf.import_targets = edges.import_targets;
         gf.unresolved_imports = edges.unresolved_imports;
-        gf.sees = edges.sees;
         gf.regions = edges.regions;
         debug_assert_eq!(
             gf.import_targets.len(),
@@ -718,26 +714,6 @@ fn package_map(reads: &[crate::project::ManifestRead]) -> BTreeMap<SmolStr, Pack
     packages
 }
 
-/// The adapter's unit mates for one file, as graph ids: sorted, deduplicated,
-/// never the file itself, and only files actually in the graph — a mate the claim
-/// set does not contain is silently absent, keep-alive.
-fn sees_of(
-    ix: usize,
-    path: &ProjectPath,
-    adapter: &dyn Extension,
-    cx: &ResolveContext<'_>,
-    sorted_paths: &[ProjectPath],
-) -> Vec<u32> {
-    let mut mates: Vec<u32> = adapter
-        .sees(path, cx)
-        .iter()
-        .filter_map(|p| sorted_paths.binary_search(p).ok().map(|i| i as u32))
-        .filter(|&t| t as usize != ix)
-        .collect();
-    mates.sort_unstable();
-    mates.dedup();
-    mates
-}
 
 /// The pools behind one file's adapter-bounded reaches, as graph ids: a
 /// `Scoped` token (the region behind the adapter's own word) and, until a
@@ -861,9 +837,9 @@ fn mount_and_own(files: &mut [GraphFile], project: &crate::project::Project) {
         if included.is_empty() {
             continue;
         }
-        f.sees.extend(included);
-        f.sees.sort_unstable();
-        f.sees.dedup();
+        f.includes.extend(included);
+        f.includes.sort_unstable();
+        f.includes.dedup();
     }
 }
 
@@ -1017,7 +993,6 @@ struct ResolvedEdges {
     imports: Vec<u32>,
     import_targets: Vec<Vec<u32>>,
     unresolved_imports: u32,
-    sees: Vec<u32>,
     regions: Vec<(Reach, Vec<u32>)>,
 }
 
@@ -1085,7 +1060,6 @@ fn resolve_file(
         imports: targets.into_iter().collect(),
         import_targets: per_import,
         unresolved_imports: unresolved,
-        sees: Vec::new(),
         regions: Vec::new(),
     }
 }
@@ -1159,7 +1133,7 @@ pub fn patch(
         gf.imports = edges.imports;
         gf.import_targets = edges.import_targets;
         gf.unresolved_imports = edges.unresolved_imports;
-        // `sees` and `unit` are untouched on purpose, and so is the graph's
+        // `includes` and `unit` are untouched on purpose, and so is the graph's
         // `project`: each is a pure function of path and (file set,
         // manifests), and this path only runs when all of those are unchanged.
         // The mounts and the publication that reads them are NOT: a changed

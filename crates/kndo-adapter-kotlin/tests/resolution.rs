@@ -78,40 +78,6 @@ fn third_party_packages_stay_unresolved() {
 }
 
 #[test]
-fn the_unit_is_the_directory_plus_both_main_mirrors() {
-    let files = [
-        "src/main/kotlin/com/foo/Widget.kt",
-        "src/main/kotlin/com/foo/Helper.kt",
-        "src/main/java/com/foo/Legacy.java",
-        "src/test/kotlin/com/foo/WidgetTest.kt",
-    ];
-    let known: BTreeSet<ProjectPath> = files.iter().map(|p| ProjectPath::new(*p)).collect();
-    let cx = ResolveContext::new(&known);
-    let a = KotlinAdapter::new();
-
-    let main_mates = a.sees(&path("src/main/kotlin/com/foo/Widget.kt"), &cx);
-    assert_eq!(
-        main_mates,
-        vec![
-            path("src/main/java/com/foo/Legacy.java"),
-            path("src/main/kotlin/com/foo/Helper.kt"),
-        ],
-        "joint compilation: production sees its package across BOTH main spellings"
-    );
-
-    let test_mates = a.sees(&path("src/test/kotlin/com/foo/WidgetTest.kt"), &cx);
-    assert_eq!(
-        test_mates,
-        vec![
-            path("src/main/java/com/foo/Legacy.java"),
-            path("src/main/kotlin/com/foo/Helper.kt"),
-            path("src/main/kotlin/com/foo/Widget.kt"),
-        ],
-        "a test sees the mirrored main package in BOTH source-set spellings"
-    );
-}
-
-#[test]
 fn the_module_region_is_the_source_set_tree() {
     let files = [
         "core/src/main/kotlin/com/a/A.kt",
