@@ -91,7 +91,14 @@ What a file says its namespace is (`package com.a`, `package x`).
 
 **Attachment**:
 Whether a file belongs to its namespace in every build (regular) or only in test
-builds (test-only, as a `_test.go` file does).
+builds (test-only, as a `_test.go` file does). The file's own statement, and the only
+one a language makes where no manifest declares a test unit.
+_Avoid_: file role (that names the entry, not the membership)
+
+**Compilation**:
+The kind of build a file lands in — its unit's kind, or the test build where the
+file's attachment is test-only. Derived once on the graph; what a `Trigger::Name`'s
+`in_unit` narrows to, and what fences the colour flood.
 
 **Embedded region**:
 A span of a file written in another language (`<script>`, `<style>`), with the
@@ -238,9 +245,9 @@ _Avoid_: glob (that names a path pattern — an ignore, a file role)
 **File role**:
 What the project says a file IS — a test, a tooling artifact — stated by its unit's
 kind or, where no unit spoke for it, by a `FileRole` glob the language declares. Both
-land as a whole-file root, so one qualifier reads either: `Trigger::Name` says "where
-the tests are" and never has to know which of the two a project used.
-_Avoid_: attachment, test-only (that names a finding)
+land as a whole-file root: the role answers "is this an ENTRY", never "which build
+carries it" — that is the compilation's question, and a `Trigger::Name` asks it there.
+_Avoid_: attachment, test-only (that names a finding), compilation
 
 **Rule pack**:
 A conduct extension that declares dispatch rules and an activation and nothing else.

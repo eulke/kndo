@@ -5086,3 +5086,59 @@ fingerprint does not move. The WIT `trigger` becomes `trigger-node` with
 pinned reference components are re-pinned. One conformance fixture moves,
 `runtime-required-members` (kndo-adapter-java), which gains the two
 same-simple-name classes.
+
+## 2026-09-07 — Attachment is evidence, and `InFiles` is retired
+
+**A file's membership in its namespace is its own statement, not a root.** The
+plan's `Attachment { Regular | TestOnly }` lands as a spine field of
+`FileEvidence`, written through `EvidenceSink::attachment`, and `InFiles` is
+deleted. `Trigger::Name` carries the plan's literal signature —
+`{ pattern, kind, in_unit: Option<UnitKind> }` — and `in_unit` narrows to the
+KIND OF COMPILATION the file lands in: its unit's kind, or the test build
+where its attachment is `TestOnly`. `GraphFile::compiled_into` derives that
+once, and `is_test_file` reads it.
+
+**The correction this makes.** The 2026-09-06 entry recorded that
+`in_unit: Some(Test)` is "strictly what `InFiles::Rooted(Test)` says". That
+reading was wrong in one direction and it mattered: a whole-file Test root
+answers "is this an ENTRY", which a `LoadTest.java` on the main source path
+carries while being compiled into the library like anything beside it. The
+membership question is a different one, and only the file (or its unit) can
+answer it. Two facts, two carriers.
+
+**The writers, by the same rule everywhere.** A file states `TestOnly` where
+the language's own tooling compiles it into the test build ALONE, never
+because a name merely looks like a test: go's `_test.go`, the JVM's
+`src/test/{java,kotlin}` source sets, SwiftPM's `Tests/`, what pytest
+collects (`test_*.py`, `*_test.py`, `conftest.py`), and the web's
+`*.test.*`/`*.spec.*`/`__tests__/`. `*Test.java`, `*Tests.kt` and
+`LoadTests.swift` outside those trees keep `Regular` and keep their
+importable surface — the adapters' own prose already said so, and now the
+type says it too.
+
+**Measured: every corpus report byte-identical, and the ablation says why.**
+Nine repositories, no finding moves — the carrier changed, the verdicts did
+not. Ablating the seven emissions (attachment written nowhere, `is_test_file`
+still reading it) moves gin 109 → 119 and vite 711 → 704: gin's ten are the
+`Test*`/`Benchmark*` runners in `internal/**_test.go`, accused the moment
+`in_unit: Test` stops matching, and vite's seven are `test-only` dependencies
+of two `__tests__/package.json` files that stop being test files.
+guava, Exposed, vapor, Alamofire and flask do not move under the ablation at
+all: their manifests declare test units, so the unit already answered and the
+attachment only agrees with it. The attachment is load-bearing exactly where
+no manifest declares a test compilation.
+
+**The ABI stops dropping two spine fields in silence.** `record file-evidence`
+gained `namespace` and `attachment` — a WASM adapter could write either
+through the sink and watch it vanish at the boundary, which is the same
+failure the wire's own comment warns about. `unit-kind` joins the vocabulary,
+`in-files` leaves it, and a rule whose `in_unit` this SDK build cannot spell
+is DROPPED WHOLE rather than sent without its narrowing: absent means "every
+compilation", so a silent widening would be worse than the missing rule.
+
+`GRAPH_SEMANTICS_VERSION` moves to 28. The contract fingerprint moves —
+`FileEvidence` gained a field. `kndo:go` moves to 13, `kndo:rust` to 15,
+`kndo:java` to 15, `kndo:kotlin` to 8, `kndo:swift` to 5, `kndo:python` to 4,
+`kndo:js-ts` to 11 and `kndo:html` to 3. No conformance fixture moves. The
+four pinned reference components are re-pinned, and the kmock DSL gains
+`test-only` beside `test-file` so a fixture can state the two facts apart.

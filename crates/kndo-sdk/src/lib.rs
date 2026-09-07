@@ -21,8 +21,9 @@ use kndo_contract::evidence::{
 use kndo_contract::extension::{
     Activation, ActivationRule, Bearer, ConductSeverity, ConductSink, ConductTarget, ContentAccess,
     CycleTolerance, DeclaredSymbol, DispatchRule, Effect, Extension, ExtensionSpec, GraphAccess,
-    InFiles, PublishedSurface, Rung, Step, Trigger,
+    PublishedSurface, Rung, Step, Trigger,
 };
+use kndo_contract::manifest::UnitKind;
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use smol_str::SmolStr;
 use std::collections::{BTreeMap, BTreeSet};
@@ -64,7 +65,7 @@ pub fn spec_to_wire(spec: &ExtensionSpec) -> wire::ExtensionSpec {
         dispatch: spec
             .dispatch_rules()
             .iter()
-            .map(dispatch_rule_to_wire)
+            .filter_map(dispatch_rule_to_wire)
             .collect(),
         claims: spec.claims().iter().map(|s| s.to_string()).collect(),
         // The declared set itself is the wire spelling — no second list to
@@ -169,10 +170,14 @@ fn activation_to_wire(activation: &Activation) -> wire::Activation {
     }
 }
 
-fn dispatch_rule_to_wire(rule: &DispatchRule) -> wire::DispatchRule {
+/// A rule to the wire. `None` where a coordinate of its trigger is one this
+/// SDK build cannot spell: a narrowing that cannot cross would cross as
+/// ABSENT, which widens the rule to every compilation instead of none, so the
+/// rule is dropped whole rather than sent wider than its author wrote it.
+fn dispatch_rule_to_wire(rule: &DispatchRule) -> Option<wire::DispatchRule> {
     let mut when = Vec::new();
-    flatten_trigger(&rule.when, &mut when);
-    wire::DispatchRule {
+    flatten_trigger(&rule.when, &mut when)?;
+    Some(wire::DispatchRule {
         when,
         then: match rule.then {
             Effect::Root(kind) => wire::Effect::Root(root_kind_to_wire(kind)),
@@ -181,7 +186,7 @@ fn dispatch_rule_to_wire(rule: &DispatchRule) -> wire::DispatchRule {
             Effect::Witness => wire::Effect::Witness,
         },
         confidence: confidence_to_wire(rule.confidence),
-    }
+    })
 }
 
 /// Extends, and any link this SDK build predates: the weaker promise
@@ -196,7 +201,7 @@ fn relation_kind_to_wire(kind: ev::RelationKind) -> wire::RelationKind {
 
 /// A trigger tree as the wire carries it: a flat list whose ROOT is the last
 /// node, every owner already pushed before the node naming it.
-fn flatten_trigger(trigger: &Trigger, out: &mut Vec<wire::TriggerNode>) -> u32 {
+fn flatten_trigger(trigger: &Trigger, out: &mut Vec<wire::TriggerNode>) -> Option<u32> {
     let node = match trigger {
         Trigger::Marker { path, arg, target } => wire::TriggerNode::Marker(wire::MarkerTrigger {
             path: path.to_string(),
@@ -206,14 +211,13 @@ fn flatten_trigger(trigger: &Trigger, out: &mut Vec<wire::TriggerNode>) -> u32 {
         Trigger::Name {
             pattern,
             kind,
-            in_files,
+            in_unit,
         } => wire::TriggerNode::Name(wire::NameTrigger {
             pattern: pattern.to_string(),
             kind: kind.as_ref().map(symbol_kind_to_wire),
-            in_files: match in_files {
-                InFiles::Any => wire::InFiles::Any,
-                InFiles::Rooted(k) => wire::InFiles::Rooted(root_kind_to_wire(*k)),
-                InFiles::NotRooted(k) => wire::InFiles::NotRooted(root_kind_to_wire(*k)),
+            in_unit: match in_unit {
+                Some(kind) => Some(unit_kind_to_wire(*kind)?),
+                None => None,
             },
         }),
         Trigger::Relation { kind, to } => wire::TriggerNode::Relation(wire::RelationTrigger {
@@ -221,7 +225,7 @@ fn flatten_trigger(trigger: &Trigger, out: &mut Vec<wire::TriggerNode>) -> u32 {
             to: to.to_string(),
         }),
         Trigger::MemberOf { owner, name } => {
-            let owner = flatten_trigger(owner, out);
+            let owner = flatten_trigger(owner, out)?;
             wire::TriggerNode::MemberOf(wire::MemberOfNode {
                 owner,
                 name: name.to_string(),
@@ -235,7 +239,7 @@ fn flatten_trigger(trigger: &Trigger, out: &mut Vec<wire::TriggerNode>) -> u32 {
         }
     };
     out.push(node);
-    (out.len() - 1) as u32
+    Some((out.len() - 1) as u32)
 }
 
 fn stream_to_wire(stream: EvidenceStream) -> Option<wire::EvidenceStream> {
@@ -361,6 +365,11 @@ fn import_to_wire(import: &ev::Import) -> wire::Import {
 /// author's real `EvidenceSink` pass.
 pub fn evidence_to_wire(evidence: &FileEvidence) -> wire::FileEvidence {
     wire::FileEvidence {
+        namespace: evidence.namespace.iter().map(|s| s.to_string()).collect(),
+        attachment: match evidence.attachment {
+            ev::Attachment::Regular => wire::Attachment::Regular,
+            ev::Attachment::TestOnly => wire::Attachment::TestOnly,
+        },
         declarations: evidence
             .declarations
             .iter()
@@ -466,6 +475,20 @@ pub fn evidence_to_wire(evidence: &FileEvidence) -> wire::FileEvidence {
             })
             .collect(),
     }
+}
+
+/// A unit kind to the wire, or `None` for one this SDK build predates — see
+/// [`dispatch_rule_to_wire`] for why the rule then goes nowhere at all.
+fn unit_kind_to_wire(kind: UnitKind) -> Option<wire::UnitKind> {
+    Some(match kind {
+        UnitKind::Library => wire::UnitKind::Library,
+        UnitKind::Executable => wire::UnitKind::Executable,
+        UnitKind::Test => wire::UnitKind::Test,
+        UnitKind::Bench => wire::UnitKind::Bench,
+        UnitKind::Example => wire::UnitKind::Example,
+        UnitKind::Tooling => wire::UnitKind::Tooling,
+        _ => return None,
+    })
 }
 
 fn root_kind_to_wire(kind: ev::RootKind) -> wire::RootKind {

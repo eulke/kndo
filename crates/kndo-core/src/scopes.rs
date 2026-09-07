@@ -568,6 +568,7 @@ mod tests {
                 generated: false,
                 witnesses: Vec::new(),
                 unit: None,
+                compiled_into: None,
                 imports: Vec::new(),
                 import_targets: Vec::new(),
                 unresolved_imports: 0,

@@ -33,7 +33,7 @@ pub use unused::Unused;
 pub use version_skew::VersionSkew;
 
 use crate::graph::Graph;
-use kndo_contract::evidence::{EvidenceStream, RootKind, RootTarget};
+use kndo_contract::evidence::{Attachment, EvidenceStream, RootKind};
 use kndo_contract::finding::{Finding, sort_findings};
 use kndo_contract::vocab::Category;
 use kndo_contract::vocab::ProjectPath;
@@ -105,9 +105,7 @@ pub fn has_root_of(graph: &Graph, file: usize, kind: RootKind) -> bool {
 /// A production file with an inline test module carries a declaration-targeted
 /// Test root and is NOT one: its imports serve production.
 pub fn is_test_file(graph: &Graph, file: usize) -> bool {
-    graph.files[file]
-        .roots()
-        .any(|r| r.kind == RootKind::Test && matches!(r.target, RootTarget::WholeFile))
+    graph.files[file].attachment() == Attachment::TestOnly
 }
 
 fn flood(graph: &Graph, scopes: &crate::scopes::Scopes, kind: RootKind) -> Vec<bool> {

@@ -8,7 +8,7 @@
 
 use kndo_contract::adapter::SourceFile;
 use kndo_contract::evidence::{
-    EvidenceSink, ImportShape, ImportTarget, RegionMode, RootKind, RootTarget,
+    Attachment, EvidenceSink, ImportShape, ImportTarget, RegionMode, RootKind, RootTarget,
 };
 use kndo_contract::vocab::{Confidence, Span};
 use smol_str::SmolStr;
@@ -23,6 +23,7 @@ pub(crate) fn extract(file: &SourceFile<'_>, out: &mut EvidenceSink) {
     // entry — convention, Probable, the same tier the js-ts adapter gives the
     // path; any other page is production, and that is the plain fact of it.
     if kndo_toolkit::web_test_path(file.path.as_str()) {
+        out.attachment(Attachment::TestOnly);
         out.root(RootTarget::WholeFile, RootKind::Test, Confidence::Probable);
     } else {
         out.root(

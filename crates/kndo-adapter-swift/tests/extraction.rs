@@ -1,5 +1,5 @@
 use kndo_adapter_swift::SwiftAdapter;
-use kndo_contract::evidence::{
+use kndo_contract::evidence::{Attachment, 
     FileEvidence, ImportShape, ImportTarget, MarkerTarget, Reach, RefKind, RootKind, RootTarget,
     SymbolKind,
 };
@@ -241,4 +241,13 @@ fn a_generated_file_reports_its_banner_and_says_everything_else_in_full() {
     assert_eq!(e.markers[0].path, "generated");
     assert_eq!(e.declarations.len(), 1);
     assert_eq!(e.imports.len(), 1, "imports still keep the rest alive");
+}
+
+#[test]
+fn a_test_target_belongs_to_the_package_in_test_builds_alone() {
+    let e = ev("Tests/AppTests/WidgetTests.swift", "class WidgetTests {}\n");
+    assert_eq!(e.attachment, Attachment::TestOnly);
+    // A test-shaped NAME inside a library target is compiled into it.
+    let e = ev("Sources/App/LoadTests.swift", "class LoadTests {}\n");
+    assert_eq!(e.attachment, Attachment::Regular);
 }

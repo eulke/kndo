@@ -35,7 +35,7 @@ impl KotlinAdapter {
     pub fn new() -> Self {
         KotlinAdapter {
             // 7: the generated banner is reported, never concluded.
-            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:kotlin", 7, &["kt"])
+            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:kotlin", 8, &["kt"])
                 .ladder(&[
                     Step::for_members(Rung::Owner, "private"),
                     Step::for_free(Rung::File, "private"),

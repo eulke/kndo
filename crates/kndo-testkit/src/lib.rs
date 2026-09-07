@@ -22,6 +22,9 @@
 //!                      `heirs+ns` (those and its namespace), `inherited` (its
 //!                      owner's), `pub`
 //! package a.b          the namespace this file declares itself into
+//! test-only            this file belongs to the namespace it declared in test
+//!                      builds alone — the file's own statement, where the
+//!                      language has no separate test compilation
 //! include ./a          `./a`'s content becomes part of this file: its names are
 //!                      readable here whatever reach they carry
 //! mount a ./a          `./a` becomes the child namespace `a` of this file's,
@@ -77,9 +80,9 @@ pub mod expectations;
 
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{
-    CoverageRecords, DeclarationId, DiagnosticLevel, EvidenceSink, EvidenceStream, EvidenceStreams,
-    ImportBinding, ImportShape, ImportTarget, MarkerTarget, Reach, RefKind, RegionMode,
-    RelationKind, RootKind, RootTarget, SymbolKind, Timing,
+    Attachment, CoverageRecords, DeclarationId, DiagnosticLevel, EvidenceSink, EvidenceStream,
+    EvidenceStreams, ImportBinding, ImportShape, ImportTarget, MarkerTarget, Reach, RefKind,
+    RegionMode, RelationKind, RootKind, RootTarget, SymbolKind, Timing,
 };
 use kndo_contract::extension::{
     ConductSink, ContentAccess, DispatchRule, Extension, ExtensionSpec, ExtensionSpecBuilder,
@@ -370,6 +373,8 @@ impl Extension for MockExtension {
         for (line, _) in lines_with_spans(&text) {
             if let Some(rest) = line.strip_prefix("package ") {
                 out.namespace(rest.trim().split('.').map(smol_str::SmolStr::new));
+            } else if line == "test-only" {
+                out.attachment(Attachment::TestOnly);
             }
         }
 

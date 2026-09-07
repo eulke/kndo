@@ -10,7 +10,8 @@ mod common;
 use common::{keeper_kinds, reported};
 use kndo::Category;
 use kndo_contract::evidence::{RelationKind, RootKind, SymbolKind};
-use kndo_contract::extension::{DispatchRule, Effect, InFiles, Trigger};
+use kndo_contract::extension::{DispatchRule, Effect, Trigger};
+use kndo_contract::manifest::UnitKind;
 use kndo_contract::vocab::Confidence;
 use kndo_testkit::{MockExtension, TempProject};
 
@@ -137,58 +138,62 @@ fn a_generators_output_nobody_imports_is_still_dead_weight() {
 }
 
 #[test]
-fn a_name_rule_reads_the_role_the_project_gave_the_file() {
+fn a_name_rule_reads_the_kind_of_compilation_the_file_lands_in() {
     let certain = |when: Trigger, then: Effect| DispatchRule {
         when,
         then,
         confidence: Confidence::Certain,
     };
-    // A runner's convention and a runtime's: `Check*` is run by name where the
-    // tests are, and `boot` runs in whichever binary links the file — so its
-    // color is the file's, which takes two rules and not a guess.
+    // A runner's convention and a runtime's: `Check*` is run by name in a test
+    // compilation, and `boot` runs in whichever binary links the file — so its
+    // color is that compilation's, which takes two rules and not a guess.
     let rules = vec![
         certain(
-            Trigger::name(
-                "Check*",
-                SymbolKind::Function,
-                InFiles::Rooted(RootKind::Test),
-            ),
+            Trigger::name("Check*", SymbolKind::Function, UnitKind::Test),
             Effect::Root(RootKind::Test),
         ),
         certain(
-            Trigger::name(
-                "boot",
-                SymbolKind::Function,
-                InFiles::Rooted(RootKind::Test),
-            ),
+            Trigger::name("boot", SymbolKind::Function, UnitKind::Test),
             Effect::Root(RootKind::Test),
         ),
         certain(
-            Trigger::name(
-                "boot",
-                SymbolKind::Function,
-                InFiles::NotRooted(RootKind::Test),
-            ),
+            Trigger::name("boot", SymbolKind::Function, UnitKind::Library),
             Effect::Root(RootKind::Production),
         ),
     ];
     let p = TempProject::new();
+    // Two ways a file lands in a test compilation, and the rule reads both the
+    // same: `suite` is a unit the project declares of that kind, and
+    // `src/inline.kmock` says so itself — the language whose tests live beside
+    // what they test, with no separate unit to name them.
     p.file(
-        "check.kmock",
-        "test-file\nfn CheckOne\nfn boot\nfn helper\ntype Fixture\nmember Fixture.CheckTwo\n",
+        "kmock.pkg",
+        "unit lib library roots=src entries=src/app.kmock\nunit suite test roots=tests entries=tests/check.kmock\n",
     )
-    .file("app.kmock", "root-file\nfn boot\nfn stale\ntype CheckKind\n");
+    .file(
+        "tests/check.kmock",
+        "fn CheckOne\nfn boot\nfn helper\ntype Fixture\nmember Fixture.CheckTwo\n",
+    )
+    .file("src/inline.kmock", "test-only\nfn CheckThree\n")
+    .file("src/app.kmock", "fn boot\nfn stale\ntype CheckKind\n");
     let snap = common::analyze(&p, vec![Box::new(MockExtension::dispatching(rules))]);
 
-    // The rule fires where the file's role says it should, and its color is
-    // the one that role implies.
+    // The rule fires where the compilation says it should, and its color is
+    // the one that compilation implies.
     assert_eq!(
-        keeper_kinds(&snap, "check.kmock#CheckOne"),
+        keeper_kinds(&snap, "tests/check.kmock#CheckOne"),
         ["dispatch:test"]
     );
-    assert_eq!(keeper_kinds(&snap, "check.kmock#boot"), ["dispatch:test"]);
     assert_eq!(
-        keeper_kinds(&snap, "app.kmock#boot"),
+        keeper_kinds(&snap, "tests/check.kmock#boot"),
+        ["dispatch:test"]
+    );
+    assert_eq!(
+        keeper_kinds(&snap, "src/inline.kmock#CheckThree"),
+        ["dispatch:test"]
+    );
+    assert_eq!(
+        keeper_kinds(&snap, "src/app.kmock#boot"),
         ["dispatch:production"]
     );
 
@@ -198,11 +203,11 @@ fn a_name_rule_reads_the_role_the_project_gave_the_file() {
     assert_eq!(
         reported(&snap, &Category::UNUSED),
         [
-            "app.kmock — CheckKind",
-            "app.kmock — stale",
-            "check.kmock — Fixture",
-            "check.kmock — Fixture.CheckTwo",
-            "check.kmock — helper",
+            "src/app.kmock — CheckKind",
+            "src/app.kmock — stale",
+            "tests/check.kmock — Fixture",
+            "tests/check.kmock — Fixture.CheckTwo",
+            "tests/check.kmock — helper",
         ]
     );
 }

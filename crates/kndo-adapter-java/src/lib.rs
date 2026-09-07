@@ -94,7 +94,7 @@ impl JavaAdapter {
         JavaAdapter {
             // 14: `@Override` states a witness on a METHOD, and the bases
             // are named as the source writes them, qualified by its imports.
-            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:java", 14, &["java"])
+            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:java", 15, &["java"])
                 .ladder(&[
                     // `private` is class-private and exists for members alone
                     // (a top-level class cannot take it), `public` is

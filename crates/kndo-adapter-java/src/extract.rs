@@ -26,7 +26,7 @@
 //!   Java has no `internal/` fence at all.
 
 use kndo_contract::evidence::{
-    DeclarationId, EvidenceSink, ImportBinding, ImportShape, ImportTarget, MarkerTarget, Reach,
+    Attachment, DeclarationId, EvidenceSink, ImportBinding, ImportShape, ImportTarget, MarkerTarget, Reach,
     RefKind, RelationKind, RootKind, RootTarget, SymbolKind,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath};
@@ -52,6 +52,14 @@ pub fn extract(
     let test_name = file_name.ends_with("Test.java")
         || file_name.ends_with("Tests.java")
         || file_name.ends_with("TestCase.java");
+
+    // The test source set is its own compilation: what it declares belongs to
+    // the package in test builds alone. The test-shaped NAME is not that — a
+    // `LoadTest.java` on the main source path is compiled into the library
+    // like any other file, and says nothing here.
+    if test_dir {
+        out.attachment(Attachment::TestOnly);
+    }
 
     if is_tooling {
         out.root(

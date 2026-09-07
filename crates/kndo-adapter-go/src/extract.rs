@@ -12,8 +12,8 @@
 //! prove.
 
 use kndo_contract::evidence::{
-    EvidenceSink, ImportShape, ImportTarget, MarkerTarget, Reach, RefKind, RootKind, RootTarget,
-    SymbolKind,
+    Attachment, EvidenceSink, ImportShape, ImportTarget, MarkerTarget, Reach, RefKind, RootKind,
+    RootTarget, SymbolKind,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use kndo_toolkit as tk;
@@ -26,6 +26,14 @@ pub fn extract(
     tree: &tree_sitter::Tree,
     out: &mut EvidenceSink,
 ) {
+    // `go test` compiles a `_test.go` file into the test binary and nothing
+    // else compiles it, yet it writes `package x` and may name what `x` does
+    // not export: it belongs to the package for test builds alone. The one
+    // language fact a unit kind cannot state, because a Go MODULE is the unit.
+    if path.as_str().ends_with("_test.go") {
+        out.attachment(Attachment::TestOnly);
+    }
+
     let root = tree.root_node();
     let package = package_name(root, source);
     let package_main = package.as_deref() == Some("main");

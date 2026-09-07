@@ -14,7 +14,7 @@ use crate::evidence::{
     Marker, Reach, RelationKind, RootKind, SymbolKind,
 };
 use crate::finding::Severity;
-use crate::manifest::ManifestSink;
+use crate::manifest::{ManifestSink, UnitKind};
 use crate::vocab::{Confidence, ProjectPath};
 use serde::Serialize;
 use smol_str::SmolStr;
@@ -552,13 +552,16 @@ pub enum Trigger {
     /// A DECLARATION whose own name matches `pattern` — a runner's convention
     /// (`TestXxx`, `test_*`), a runtime's (`main`, `init`). `kind` narrows it
     /// to one kind of symbol; `in_files` to the files where the convention
-    /// holds. Only a declaration nothing owns matches: a member dispatched by
-    /// name is its owner's business, and [`Trigger::MemberOf`] is how a rule
-    /// says so.
+    /// holds — the KIND of compilation the file lands in, which is its unit's
+    /// kind, or [`crate::manifest::UnitKind::Test`] where the file attached
+    /// itself to its namespace for test builds alone (see
+    /// [`crate::evidence::Attachment`]). Only a declaration nothing owns
+    /// matches: a member dispatched by name is its owner's business, and
+    /// [`Trigger::MemberOf`] is how a rule says so.
     Name {
         pattern: SmolStr,
         kind: Option<SymbolKind>,
-        in_files: InFiles,
+        in_unit: Option<UnitKind>,
     },
     /// A TYPE that declares a relation of `kind` to a base matching `to` —
     /// `extends XCTestCase`, `implements Serializable`, `: View`. The relation
@@ -586,24 +589,6 @@ pub enum Trigger {
         base: SmolStr,
         members: Vec<SmolStr>,
     },
-}
-
-/// Which files a [`Trigger::Name`] reads, by the ROLE the project gave the
-/// file. A unit's kind and a declared [`FileRole`] both land as a whole-file
-/// root, so one qualifier says "where the tests are" for a language that
-/// compiles its tests as their own target and for one that marks them by
-/// filename — and the rule never has to know which of the two its project
-/// used.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum InFiles {
-    /// Every file the extension claims.
-    Any,
-    /// Only files the project roots with this color …
-    Rooted(RootKind),
-    /// … and only files it does not. `init` runs in whichever binary links
-    /// the file, so a language needs both halves to color it.
-    NotRooted(RootKind),
 }
 
 impl Trigger {
@@ -647,11 +632,11 @@ impl Trigger {
         }
     }
 
-    pub fn name(pattern: &'static str, kind: SymbolKind, in_files: InFiles) -> Trigger {
+    pub fn name(pattern: &'static str, kind: SymbolKind, in_unit: UnitKind) -> Trigger {
         Trigger::Name {
             pattern: SmolStr::new_static(pattern),
             kind: Some(kind),
-            in_files,
+            in_unit: Some(in_unit),
         }
     }
 
@@ -694,18 +679,14 @@ impl Trigger {
             Trigger::Name {
                 pattern,
                 kind,
-                in_files,
+                in_unit,
             } => {
                 // A member is its owner's business — `MemberOf` is the trigger
                 // that reaches one.
                 d.owner.is_none()
                     && pattern_matches(pattern, &d.name)
                     && kind.as_ref().is_none_or(|k| *k == d.kind)
-                    && match in_files {
-                        InFiles::Any => true,
-                        InFiles::Rooted(c) => cx.colors.contains(c),
-                        InFiles::NotRooted(c) => !cx.colors.contains(c),
-                    }
+                    && in_unit.is_none_or(|k| Some(k) == cx.compiled_into)
             }
             Trigger::Relation { kind, to } => cx
                 .evidence
@@ -733,7 +714,10 @@ impl Trigger {
 /// project's supertype edges by name.
 pub struct DeclarationCx<'a> {
     pub evidence: &'a crate::evidence::FileEvidence,
-    pub colors: &'a [RootKind],
+    /// The KIND of compilation this file lands in — its unit's kind, or
+    /// `Test` where its attachment says the namespace holds it in test builds
+    /// alone. `None` where no manifest claimed the file.
+    pub compiled_into: Option<UnitKind>,
     /// Direct supertype NAMES by type name, over the whole project. Names,
     /// not declarations, because the base a rule cares about is precisely the
     /// one the project does not declare — `Serializable` appears here as the
@@ -1888,7 +1872,7 @@ mod tests {
         let supertypes = BTreeMap::new();
         let cx = DeclarationCx {
             evidence: &evidence,
-            colors: &[],
+            compiled_into: None,
             supertypes: &supertypes,
         };
         assert!(Trigger::marker("test").matches(&cx, &marker("test", &[])));
@@ -1920,7 +1904,7 @@ mod tests {
         let evidence = sink.finish();
         let cx = DeclarationCx {
             evidence: &evidence,
-            colors: &[],
+            compiled_into: None,
             supertypes: &supertypes,
         };
         assert!(cx.spells("com.vendor.Closer", "Closer"));

@@ -3,7 +3,7 @@
 
 use kndo_contract::extension::Extension;
 use kndo_adapter_java::JavaAdapter;
-use kndo_contract::evidence::{
+use kndo_contract::evidence::{Attachment, 
     ImportShape, ImportTarget, MarkerTarget, Reach, RelationKind, RootKind, RootTarget,
 };
 use kndo_testkit::{declaration_named, extract_evidence, import_named};
@@ -403,4 +403,21 @@ fn supertypes_are_relations_by_bare_name() {
             ),
         ]
     );
+}
+
+#[test]
+fn the_test_source_set_belongs_to_its_package_in_test_builds_alone() {
+    // The build tool compiles `src/test/java` into the test classpath alone. A
+    // test-shaped NAME on the main source path is not that: `LoadTest` is
+    // compiled into the library like anything beside it.
+    let e = ev(
+        "src/test/java/com/foo/WidgetTest.java",
+        "package com.foo;\npublic class WidgetTest {}\n",
+    );
+    assert_eq!(e.attachment, Attachment::TestOnly);
+    let e = ev(
+        "src/main/java/com/foo/LoadTest.java",
+        "package com.foo;\npublic class LoadTest {}\n",
+    );
+    assert_eq!(e.attachment, Attachment::Regular);
 }

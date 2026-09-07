@@ -21,7 +21,7 @@ mod resolve;
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{EvidenceSink, EvidenceStream, EvidenceStreams, RootKind};
 use kndo_contract::extension::{
-    DispatchRule, Effect, Extension, ExtensionSpec, InFiles, Rung, Step, Trigger,
+    DispatchRule, Effect, Extension, ExtensionSpec, Rung, Step, Trigger,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath};
 
@@ -75,19 +75,25 @@ fn dispatch_rules() -> Vec<DispatchRule> {
         }
     }
     // A top-level `fn main` is the language's entry convention: whatever target
-    // links the file, the runtime calls it. Its COLOR is the target's, and
-    // cargo already said which target the file belongs to — a build script and
-    // an example are tooling, everything else is the program. `Probable`: the
-    // convention, not this file's own statement.
-    for (in_files, kind) in [
-        (InFiles::Rooted(RootKind::Tooling), RootKind::Tooling),
-        (InFiles::NotRooted(RootKind::Tooling), RootKind::Production),
+    // links the file, the runtime calls it — and its COLOR is that target's,
+    // which cargo already stated. One rule per kind of target a `main` can sit
+    // in, because a rule that named none would color a build script's entry
+    // like a binary's. `Probable`: the convention, not this file's own
+    // statement.
+    use kndo_contract::manifest::UnitKind;
+    for (unit, kind) in [
+        (UnitKind::Executable, RootKind::Production),
+        (UnitKind::Library, RootKind::Production),
+        (UnitKind::Tooling, RootKind::Tooling),
+        (UnitKind::Example, RootKind::Tooling),
+        (UnitKind::Test, RootKind::Test),
+        (UnitKind::Bench, RootKind::Test),
     ] {
         rules.push(DispatchRule {
             when: Trigger::name(
                 "main",
                 kndo_contract::evidence::SymbolKind::Function,
-                in_files,
+                unit,
             ),
             then: Effect::Root(kind),
             confidence: Confidence::Probable,
@@ -99,11 +105,11 @@ fn dispatch_rules() -> Vec<DispatchRule> {
 impl RustAdapter {
     pub fn new() -> Self {
         RustAdapter {
-            // 14: `fn main`'s color is the cargo target's, read from the
-            // manifest, not guessed from the path.
+            // 15: `fn main`'s color is the kind of the cargo target the
+            // manifest says holds it.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:rust",
-                14,
+                15,
                 &["rs"],
                 &["**/Cargo.toml"],
                 // Modules within a crate reference each other freely — legal,

@@ -1651,3 +1651,30 @@ classes implementing two different `Closer` interfaces. The rule names
 `com.vendor.Closer`, and the file's own import decides — one is
 `witness:com.vendor.Closer`, the other is reported. Nothing about the two
 files differs except which package their import names.
+
+### Attachment: the carrier moves, the verdicts do not (2026-09-07)
+
+| repo | before | after | what moved |
+|---|---|---|---|
+| every repository | — | — | byte-identical |
+
+`Attachment { Regular \| TestOnly }` became the file's own statement of which
+build carries it, `InFiles` was deleted, and `Trigger::Name.in_unit` began
+reading the compilation instead of a whole-file root. Seven adapters state
+the attachment where their tooling compiles a file into the test build alone.
+No report moves — a carrier change, not a judgment change.
+
+**What the ablation sizes.** With the seven emissions removed and
+`is_test_file` still reading the attachment:
+
+| repo | with | ablated | what the attachment carries |
+|---|---|---|---|
+| gin | 109 | 119 | 10 `Test*`/`Benchmark*` runners in `internal/**_test.go` |
+| vite | 711 | 704 | 7 `test-only` dependencies of two `__tests__/package.json` |
+| guava, Exposed, vapor, Alamofire, flask | — | — | unchanged: the manifest declares test units |
+
+The split is the point. Where a build system names a test unit (Maven source
+sets, SwiftPM test targets), the unit already answered and the attachment
+only agrees with it. Where none does — go's `_test.go`, the web's
+`__tests__/` — the file is the only witness, and without it the runners are
+accused and the test dependencies lose their colour.

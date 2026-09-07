@@ -50,7 +50,7 @@ impl SwiftAdapter {
             // 4: the generated banner is reported, never concluded.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:swift",
-                4,
+                5,
                 &["swift"],
                 &["**/Package.swift"],
                 // Files in a module compile as one unit; cross-references are

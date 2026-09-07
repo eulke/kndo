@@ -4,7 +4,7 @@
 //! not. `__all__`'s string elements land as Read references — the module
 //! naming its own published names keeps them and records the intent.
 
-use kndo_contract::evidence::{EvidenceSink, Reach, RefKind, RootKind, RootTarget, SymbolKind};
+use kndo_contract::evidence::{Attachment, EvidenceSink, Reach, RefKind, RootKind, RootTarget, SymbolKind};
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use kndo_toolkit as tk;
 use smol_str::SmolStr;
@@ -68,7 +68,10 @@ pub fn extract(
     let test_file = file_name.starts_with("test_") && file_name.ends_with(".py")
         || file_name.ends_with("_test.py")
         || file_name == "conftest.py";
+    // Nothing imports what the runner collects: these modules join the
+    // package in a test run and in no other.
     if test_file {
+        out.attachment(Attachment::TestOnly);
         out.root(RootTarget::WholeFile, RootKind::Test, Confidence::Certain);
     } else {
         // Library mode, the shared stance: any non-test module is importable

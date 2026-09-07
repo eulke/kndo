@@ -38,7 +38,7 @@ impl HtmlAdapter {
         HtmlAdapter {
             // No manifest of its own: a document declares no package. No
             // evidence streams: nothing here carries a pragma or a metric.
-            spec: ExtensionSpec::builder("kndo:html", 2)
+            spec: ExtensionSpec::builder("kndo:html", 3)
                 .suffixes(&["html", "htm"])
                 // A page inside npm's installed dependencies is a dependency's.
                 .ignores(&["**/node_modules/**"])

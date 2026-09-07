@@ -11,7 +11,7 @@ use crate::discover::DiscoveredFile;
 use crate::extract::ClaimedFile;
 use kndo_contract::adapter::{PackageEntry, Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{
-    FileEvidence, ImportShape, ImportTarget, Reach, Root, RootKind, RootTarget,
+    Attachment, FileEvidence, ImportShape, ImportTarget, Reach, Root, RootKind, RootTarget,
 };
 use kndo_contract::extension::{Extension, PublishedSurface};
 use kndo_contract::manifest::UnitKind;
@@ -23,7 +23,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Bump when the SAME evidence assembles into a DIFFERENT graph — resolution
 /// candidate changes, reachability semantics, new assembled fields. Folded into the
 /// graph cache key beside the contract fingerprint and the adapter set.
-pub const GRAPH_SEMANTICS_VERSION: u32 = 27;
+pub const GRAPH_SEMANTICS_VERSION: u32 = 28;
 
 #[derive(Serialize, Deserialize)]
 pub struct GraphFile {
@@ -102,6 +102,13 @@ pub struct GraphFile {
     /// adapter reports its manifest's units, which is what every consumer
     /// degrades toward.
     pub unit: Option<u32>,
+    /// The KIND of compilation this file lands in, derived once at assembly:
+    /// its unit's kind, except that a file the LANGUAGE attached to its
+    /// namespace for test builds alone lands in the test compilation whatever
+    /// unit owns it — the case a unit kind cannot state, and the reason go's
+    /// `_test.go` inside one library module is a test at all. `None` until a
+    /// manifest claims the file.
+    pub compiled_into: Option<UnitKind>,
     /// Resolved import targets, as indices into `Graph::files`; sorted, deduplicated.
     pub imports: Vec<u32>,
     /// Parallel to `evidence.imports`: the file(s) each import resolved to, so
@@ -141,6 +148,17 @@ impl GraphFile {
             .binary_search_by_key(&(decl as u32), |(ix, _)| *ix)
             .ok()
             .map(|i| &self.witnesses[i].1)
+    }
+
+    /// How this file belongs to the namespace it declared — see
+    /// [`kndo_contract::evidence::Attachment`]. One answer, read from the
+    /// compilation the file lands in: nothing else in the engine asks "is
+    /// this a test file" any other way.
+    pub fn attachment(&self) -> Attachment {
+        match self.compiled_into {
+            Some(UnitKind::Test | UnitKind::Bench) => Attachment::TestOnly,
+            _ => Attachment::Regular,
+        }
     }
 
     /// The one spelling of "something anchors this file": a root, or the
@@ -524,6 +542,7 @@ pub fn assemble(
                 generated: false,
                 witnesses: Vec::new(),
                 unit,
+                compiled_into: None,
                 imports: Vec::new(),
                 import_targets: Vec::new(),
                 unresolved_imports: 0,
@@ -761,6 +780,15 @@ fn regions_of(
 /// once the edges are resolved — and again on the surgical patch path, where
 /// one file's `mod` line can move another file's fence.
 fn mount_and_own(files: &mut [GraphFile], project: &crate::project::Project) {
+    // The compilation each file lands in, derived once so no reader repeats
+    // it: the unit's kind, or the test compilation where the LANGUAGE said
+    // the file belongs to its namespace in test builds alone.
+    for f in files.iter_mut() {
+        f.compiled_into = match f.evidence.attachment {
+            Attachment::TestOnly => Some(UnitKind::Test),
+            Attachment::Regular => f.unit.map(|u| project.units[u as usize].kind),
+        };
+    }
     let mut edges: Vec<(u32, MountEdge)> = Vec::new();
     for (i, f) in files.iter().enumerate() {
         for (import, targets) in f.evidence.imports.iter().zip(&f.import_targets) {
@@ -843,30 +871,20 @@ fn mount_and_own(files: &mut [GraphFile], project: &crate::project::Project) {
 /// on the file — the anchors included — because a file that is a test as a
 /// whole is on no surface: `go build` never compiles a `_test.go`, and no
 /// importer can name what it exports, whatever the module publishes.
-/// Dispatch, for every file, once the project has said what each file IS. A
-/// marker's meaning is a pure function of the file's evidence, but a NAME
-/// rule's qualifier is the file's ROLE — which the manifest states through its
-/// units and a `FileRole` glob states for the files no unit spoke for. Both
-/// land as a root on the file, so this pass runs after anchoring, and no
-/// adapter has to read a path and conclude a role. It recomputes from
-/// evidence alone, so a patched graph and a full build agree to the byte.
+/// Dispatch, for every file, once the project has said which COMPILATION each
+/// file lands in. A marker's meaning is a pure function of the file's
+/// evidence, but a NAME rule's qualifier is the unit kind the file compiles
+/// into — which the manifest states, and which a `TestOnly` attachment
+/// overrides for the file that belongs to its namespace in test builds alone.
+/// It recomputes from evidence alone, so a patched graph and a full build
+/// agree to the byte.
 fn dispatch_files(files: &mut [GraphFile], adapters: &[Box<dyn Extension>]) {
     let supertypes = crate::dispatch::supertype_edges(files.iter().map(|f| &f.evidence));
     for f in files.iter_mut() {
         let rules = adapter_by_id(adapters, &f.adapter).spec().dispatch_rules();
         let mut d = crate::dispatch::apply(&f.evidence, &supertypes, rules);
-        let mut colors: Vec<RootKind> = f
-            .evidence
-            .roots
-            .iter()
-            .chain(&d.roots)
-            .chain(&f.anchored)
-            .map(|r| r.kind)
-            .collect();
-        colors.sort_by_key(|k| *k as u8);
-        colors.dedup();
         let (roots, witnesses) =
-            crate::dispatch::declaration_effects(&f.evidence, &colors, &supertypes, rules);
+            crate::dispatch::declaration_effects(&f.evidence, f.compiled_into, &supertypes, rules);
         d.roots.extend(roots);
         crate::dispatch::sort_roots(&mut d.roots);
         d.witnesses.extend(witnesses);

@@ -23,7 +23,7 @@ use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::EvidenceSink;
 use kndo_contract::evidence::RootKind;
 use kndo_contract::extension::{
-    DispatchRule, Effect, Extension, ExtensionSpec, FileRole, InFiles, Rung, Step, Trigger,
+    DispatchRule, Effect, Extension, ExtensionSpec, FileRole, Rung, Step, Trigger,
 };
 use kndo_contract::manifest::ManifestSink;
 use kndo_contract::vocab::ProjectPath;
@@ -35,58 +35,50 @@ pub struct GoAdapter {
 /// What Go's own toolchain does with a name, as data. `go test` compiles a
 /// package's `_test.go` files into a test binary and runs every top-level
 /// `TestXxx`, `BenchmarkXxx`, `ExampleXxx` and `FuzzXxx` in it by name; the
-/// runtime calls every `init` when the package loads, and which BINARY that
-/// load belongs to is the file's role — the test binary for a test file, the
-/// program for every other. `Certain` throughout: this is the toolchain's
+/// runtime calls every `init` when the package loads. Both read the
+/// COMPILATION the file lands in, which for a `_test.go` file is the test
+/// binary — the file said so with its attachment — and for every other file
+/// is the module's own library. `Certain` throughout: this is the toolchain's
 /// behavior, not a habit its users keep.
 fn dispatch_rules() -> Vec<DispatchRule> {
+    use kndo_contract::evidence::SymbolKind::Function;
+    use kndo_contract::manifest::UnitKind;
     let rule = |when: Trigger, then: Effect| DispatchRule {
         when,
         then,
         confidence: kndo_contract::vocab::Confidence::Certain,
     };
-    let runner = |pattern| {
-        rule(
-            Trigger::name(
-                pattern,
-                kndo_contract::evidence::SymbolKind::Function,
-                InFiles::Rooted(RootKind::Test),
-            ),
-            Effect::Root(RootKind::Test),
-        )
-    };
-    vec![
-        runner("Test*"),
-        runner("Benchmark*"),
-        runner("Example*"),
-        runner("Fuzz*"),
-        rule(
-            Trigger::name(
-                "init",
-                kndo_contract::evidence::SymbolKind::Function,
-                InFiles::Rooted(RootKind::Test),
-            ),
-            Effect::Root(RootKind::Test),
-        ),
-        rule(
-            Trigger::name(
-                "init",
-                kndo_contract::evidence::SymbolKind::Function,
-                InFiles::NotRooted(RootKind::Test),
-            ),
-            Effect::Root(RootKind::Production),
-        ),
-    ]
+    let mut rules: Vec<DispatchRule> = ["Test*", "Benchmark*", "Example*", "Fuzz*"]
+        .into_iter()
+        .map(|pattern| {
+            rule(
+                Trigger::name(pattern, Function, UnitKind::Test),
+                Effect::Root(RootKind::Test),
+            )
+        })
+        .collect();
+    // The runtime calls every `init` when the package loads — the load of the
+    // binary this file is compiled into, which for a `_test.go` file is the
+    // test binary and for every other file is the module's own.
+    rules.push(rule(
+        Trigger::name("init", Function, UnitKind::Test),
+        Effect::Root(RootKind::Test),
+    ));
+    rules.push(rule(
+        Trigger::name("init", Function, UnitKind::Library),
+        Effect::Root(RootKind::Production),
+    ));
+    rules
 }
 
 impl GoAdapter {
     pub fn new() -> Self {
         GoAdapter {
-            // 12: `go test`'s discovery and the runtime's `init` are
-            // declared rules, not roots this pass concludes from a path.
+            // 13: a `_test.go` file states its own attachment, and the
+            // rules read the compilation it lands in.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:go",
-                12,
+                13,
                 &["go"],
                 &["**/go.mod"],
                 // The compiler forbids import cycles: one could only be a

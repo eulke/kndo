@@ -1,5 +1,5 @@
 use kndo_adapter_python::PythonAdapter;
-use kndo_contract::evidence::{
+use kndo_contract::evidence::{Attachment, 
     FileEvidence, ImportShape, ImportTarget, MarkerTarget, Reach, RefKind, RootKind, RootTarget,
     SymbolKind, Timing,
 };
@@ -337,4 +337,12 @@ fn a_generated_module_reports_its_banner_and_says_everything_else_in_full() {
     assert_eq!(e.markers[0].path, "generated");
     assert_eq!(e.declarations.len(), 1);
     assert_eq!(e.imports.len(), 1);
+}
+
+#[test]
+fn what_the_runner_collects_joins_the_package_in_a_test_run_alone() {
+    for path in ["tests/test_widget.py", "src/app/widget_test.py", "tests/conftest.py"] {
+        assert_eq!(ev(path, "x = 1\n").attachment, Attachment::TestOnly, "{path}");
+    }
+    assert_eq!(ev("src/app/widget.py", "x = 1\n").attachment, Attachment::Regular);
 }

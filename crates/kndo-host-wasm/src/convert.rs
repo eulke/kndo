@@ -16,8 +16,9 @@ use kndo_contract::evidence::{
 use kndo_contract::extension::{
     Activation, ActivationRule, Bearer, ConductSeverity, ConductTarget, CycleTolerance,
     DeclaredSymbol, DispatchRule, Effect, ExtensionSpec, ExtensionSpecParts, Ladder,
-    InFiles, PublishedSurface, RuleDescriptor, Rung, Step, Trigger,
+    PublishedSurface, RuleDescriptor, Rung, Step, Trigger,
 };
+use kndo_contract::manifest::UnitKind;
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use smol_str::SmolStr;
 
@@ -208,6 +209,17 @@ fn dispatch_rule(rule: awire::DispatchRule) -> Option<DispatchRule> {
     })
 }
 
+fn unit_kind(kind: awire::UnitKind) -> UnitKind {
+    match kind {
+        awire::UnitKind::Library => UnitKind::Library,
+        awire::UnitKind::Executable => UnitKind::Executable,
+        awire::UnitKind::Test => UnitKind::Test,
+        awire::UnitKind::Bench => UnitKind::Bench,
+        awire::UnitKind::Example => UnitKind::Example,
+        awire::UnitKind::Tooling => UnitKind::Tooling,
+    }
+}
+
 fn relation_kind(kind: awire::RelationKind) -> ev::RelationKind {
     match kind {
         awire::RelationKind::Extends => ev::RelationKind::Extends,
@@ -228,11 +240,7 @@ fn rebuild_trigger(nodes: &[awire::TriggerNode], at: usize) -> Option<Trigger> {
         awire::TriggerNode::Name(n) => Trigger::Name {
             pattern: SmolStr::new(&n.pattern),
             kind: n.kind.clone().map(symbol_kind_from_wire),
-            in_files: match n.in_files {
-                awire::InFiles::Any => InFiles::Any,
-                awire::InFiles::Rooted(k) => InFiles::Rooted(root_kind(k)),
-                awire::InFiles::NotRooted(k) => InFiles::NotRooted(root_kind(k)),
-            },
+            in_unit: n.in_unit.map(unit_kind),
         },
         awire::TriggerNode::Relation(r) => Trigger::Relation {
             kind: relation_kind(r.kind),
@@ -362,6 +370,11 @@ fn bindings(b: Vec<awire::ImportBinding>) -> Vec<ev::ImportBinding> {
 /// enumerates fields by hand, and the first field it forgot (an import's
 /// timing) was dropped in silence.
 pub(crate) fn replay_evidence(evidence: awire::FileEvidence, sink: &mut EvidenceSink) {
+    sink.namespace(evidence.namespace.iter().map(SmolStr::new));
+    sink.attachment(match evidence.attachment {
+        awire::Attachment::Regular => ev::Attachment::Regular,
+        awire::Attachment::TestOnly => ev::Attachment::TestOnly,
+    });
     let ids: Vec<_> = evidence
         .declarations
         .iter()

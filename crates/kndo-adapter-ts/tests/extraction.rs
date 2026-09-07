@@ -2,7 +2,7 @@
 //! members, reference exclusions, comments, and degradation on broken input.
 
 use kndo_adapter_ts::TypeScriptAdapter;
-use kndo_contract::evidence::{
+use kndo_contract::evidence::{Attachment, 
     FileEvidence, ImportShape, ImportTarget, Reach, RefKind, SymbolKind, Timing,
 };
 use kndo_contract::vocab::Confidence;
@@ -444,4 +444,16 @@ try {
             "{conditional}"
         );
     }
+}
+
+#[test]
+fn a_spec_file_joins_the_project_in_a_test_run_alone() {
+    // Whether the runner treats one as an ENTRY is convention; that the
+    // published package does not carry it is not.
+    let src = "export const a = 1;\n";
+    let attachment = |path: &str| extract(path, src).attachment;
+    assert_eq!(attachment("src/widget.test.ts"), Attachment::TestOnly);
+    assert_eq!(attachment("src/widget.spec.js"), Attachment::TestOnly);
+    assert_eq!(attachment("src/__tests__/widget.ts"), Attachment::TestOnly);
+    assert_eq!(attachment("src/widget.ts"), Attachment::Regular);
 }

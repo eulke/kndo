@@ -7,7 +7,7 @@
 //! shared constructor posture, and `.case` dot-shorthand resolves by type, not
 //! name); their bodies still contribute references.
 
-use kndo_contract::evidence::{EvidenceSink, Reach, RefKind, RootKind, RootTarget, SymbolKind};
+use kndo_contract::evidence::{Attachment, EvidenceSink, Reach, RefKind, RootKind, RootTarget, SymbolKind};
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use kndo_toolkit as tk;
 use smol_str::SmolStr;
@@ -88,7 +88,12 @@ pub fn extract(
     // its library-mode Production root.
     let test_dir = p.starts_with("Tests/") || p.contains("/Tests/");
     let test_name = file_name.ends_with("Tests.swift") || file_name.ends_with("Test.swift");
+    // A test target is its own module: what it declares belongs to the
+    // package in test builds alone. The test-shaped NAME is not that — a
+    // `LoadTests.swift` in a library target is compiled into it like any
+    // other file, and says nothing here.
     if test_dir {
+        out.attachment(Attachment::TestOnly);
         out.root(RootTarget::WholeFile, RootKind::Test, Confidence::Certain);
     } else if file_name == "main.swift" {
         // The whole file's top-level code runs at process start — SwiftPM's

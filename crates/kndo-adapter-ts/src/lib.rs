@@ -14,7 +14,7 @@ mod resolve;
 use kndo_contract::adapter::{
     DependencyDeclaration, PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile,
 };
-use kndo_contract::evidence::{EvidenceSink, RootKind, RootTarget};
+use kndo_contract::evidence::{Attachment, EvidenceSink, RootKind, RootTarget};
 use kndo_contract::extension::{Extension, ExtensionSpec, PublishedSurface, Rung, Step};
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use tree_sitter::Language;
@@ -93,8 +93,8 @@ impl TypeScriptAdapter {
     pub fn new() -> Self {
         let spec = kndo_toolkit::source_adapter_builder(
             "kndo:js-ts",
-            // 10: the generated banner is reported, never concluded.
-            10,
+            // 11: a test-runner path states its attachment.
+            11,
             &["ts", "tsx", "js", "jsx", "mjs", "cjs", "mts", "cts"],
             &["**/package.json"],
             // ESM/CJS initialization order makes cycles bite: TDZ errors and
@@ -234,6 +234,10 @@ fn convention_roots(file: &SourceFile<'_>, out: &mut EvidenceSink) {
     let path = file.path.as_str();
     let name = path.rsplit('/').next().unwrap_or(path);
     if kndo_toolkit::web_test_path(path) {
+        // Whether the runner treats it as an ENTRY is convention; that the
+        // published package does not carry it is not — a spec file joins the
+        // project in a test run alone.
+        out.attachment(Attachment::TestOnly);
         out.root(RootTarget::WholeFile, RootKind::Test, Confidence::Probable);
     } else if name.contains(".config.") || (name.starts_with('.') && name.contains("rc.")) {
         out.root(

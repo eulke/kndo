@@ -2,7 +2,7 @@
 //! and attributes are references, which values leave the project.
 
 use kndo_adapter_html::HtmlAdapter;
-use kndo_contract::evidence::{
+use kndo_contract::evidence::{Attachment, 
     FileEvidence, ImportShape, ImportTarget, RegionMode, RootKind, RootTarget,
 };
 use kndo_contract::vocab::Confidence;
@@ -211,5 +211,17 @@ fn a_scripts_body_is_text_and_a_page_may_not_be_ascii() {
         regions[2].contains("import \"./réel.js\""),
         "a region's span is the body's bytes, after non-ASCII text: {:?}",
         regions[2]
+    );
+}
+
+#[test]
+fn a_page_under_a_test_path_joins_the_project_in_a_test_run_alone() {
+    assert_eq!(
+        extract("src/__tests__/harness.html", "<p>x</p>\n").attachment,
+        Attachment::TestOnly
+    );
+    assert_eq!(
+        extract("src/index.html", "<p>x</p>\n").attachment,
+        Attachment::Regular
     );
 }

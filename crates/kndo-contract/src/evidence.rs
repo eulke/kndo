@@ -653,6 +653,22 @@ pub enum RelationKind {
     Implements,
 }
 
+/// How a file belongs to the namespace it declared. A Go `_test.go` writing
+/// `package x` is IN `x` — it may name what `x` does not export — but only
+/// when the test binary is built: the production build never compiles it, so
+/// the production color must not travel through it into the package it
+/// shares. That asymmetry is the whole of this type, and it is the file's own
+/// statement where the language has one; where a language compiles its tests
+/// as their own unit, the project says so through that unit's kind and the
+/// file states nothing.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ContractFingerprint)]
+#[serde(rename_all = "kebab-case")]
+pub enum Attachment {
+    #[default]
+    Regular,
+    TestOnly,
+}
+
 /// A typed link from a declaration to a NAMED type, as the file writes it:
 /// `class A extends B implements C`. The name is unresolved on purpose — the
 /// engine resolves it the way it resolves a reference, and an adapter that
@@ -692,6 +708,9 @@ pub struct FileEvidence {
     /// namespace is the adapter's to say: Java's clause, a Go package's
     /// directory-qualified name, a Rust module's mount chain.
     pub namespace: Vec<SmolStr>,
+    /// Whether this file belongs to the namespace it declared in every build,
+    /// or in test builds alone — see [`Attachment`].
+    pub attachment: Attachment,
     pub declarations: Vec<Declaration>,
     pub references: Vec<Reference>,
     pub imports: Vec<Import>,
@@ -830,6 +849,7 @@ impl EvidenceSink {
                 declared: declares,
                 len: file_len,
                 namespace: Vec::new(),
+                attachment: Attachment::Regular,
                 declarations: Vec::new(),
                 references: Vec::new(),
                 imports: Vec::new(),
@@ -1068,6 +1088,17 @@ impl EvidenceSink {
             return;
         }
         self.out.namespace = segments.into_iter().collect();
+    }
+
+    /// How this file belongs to the namespace it declared — see
+    /// [`Attachment`]. Unstated is [`Attachment::Regular`], which is what a
+    /// language whose tests are their own compilation unit needs: the project
+    /// says so through the unit, and the file states nothing.
+    pub fn attachment(&mut self, attachment: Attachment) {
+        if self.within.is_some() {
+            return;
+        }
+        self.out.attachment = attachment;
     }
 
     pub fn reference(&mut self, name: impl Into<SmolStr>, kind: RefKind, span: Span) {

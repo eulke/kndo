@@ -2,7 +2,7 @@
 //! properties, dispatch roots, import shapes, and the never-declare postures.
 
 use kndo_adapter_kotlin::KotlinAdapter;
-use kndo_contract::evidence::{ImportShape, ImportTarget, Reach, RefKind, RootKind, RootTarget};
+use kndo_contract::evidence::{Attachment, ImportShape, ImportTarget, Reach, RefKind, RootKind, RootTarget};
 use kndo_testkit::{declaration_named, extract_evidence, import_named};
 
 fn ev(path: &str, source: &str) -> kndo_contract::evidence::FileEvidence {
@@ -318,4 +318,20 @@ class Q(private val charset: String, private val other: Q) {
         !refs.contains(&"literal"),
         "an escaped sigil is text, not a use: {refs:?}"
     );
+}
+
+#[test]
+fn the_test_source_set_belongs_to_its_package_in_test_builds_alone() {
+    let e = ev(
+        "src/test/kotlin/com/foo/WidgetTest.kt",
+        "package com.foo\nclass WidgetTest\n",
+    );
+    assert_eq!(e.attachment, Attachment::TestOnly);
+    // A test-shaped NAME on the main source path is compiled into the library
+    // like anything beside it.
+    let e = ev(
+        "src/main/kotlin/com/foo/LoadTest.kt",
+        "package com.foo\nclass LoadTest\n",
+    );
+    assert_eq!(e.attachment, Attachment::Regular);
 }

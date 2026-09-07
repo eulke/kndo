@@ -150,6 +150,17 @@ interface types {
         tooling,
     }
 
+    /// Mirrors `UnitKind` — the kind of compilation a manifest declares, and
+    /// what a `name` trigger narrows itself to.
+    enum unit-kind {
+        library,
+        executable,
+        test,
+        bench,
+        example,
+        tooling,
+    }
+
     /// Mirrors `RootTarget`; `declaration` is the same index spelling as `owner`.
     variant root-target {
         whole-file,
@@ -249,7 +260,17 @@ interface types {
     /// Mirrors `FileEvidence`, minus `declared` — the declared streams come from the
     /// spec, and the host replays every wire write through a real `EvidenceSink`, so
     /// the pairing rule and every clamp apply to a WASM adapter identically.
+    /// Mirrors `Attachment` — whether a file belongs to the namespace it
+    /// declared in every build, or in test builds alone.
+    enum attachment {
+        regular,
+        test-only,
+    }
+
     record file-evidence {
+        /// The namespace this file declares itself into, as SEGMENTS.
+        namespace: list<string>,
+        attachment: attachment,
         declarations: list<declaration>,
         references: list<reference>,
         imports: list<%import>,
@@ -278,21 +299,13 @@ interface types {
         target: option<symbol-kind>,
     }
 
-    /// Mirrors `InFiles` — which files a name rule reads, by the color the
-    /// project rooted the file with.
-    variant in-files {
-        any,
-        rooted(root-kind),
-        not-rooted(root-kind),
-    }
-
     /// Mirrors the `Name` trigger — a declaration whose own name matches the
-    /// pattern, optionally narrowed to one symbol kind and to the files a
-    /// role qualifies.
+    /// pattern, optionally narrowed to one symbol kind and to the kind of
+    /// compilation the file lands in.
     record name-trigger {
         pattern: string,
         kind: option<symbol-kind>,
-        in-files: in-files,
+        in-unit: option<unit-kind>,
     }
 
     /// Mirrors the `Relation` trigger — a type declaring a relation of this

@@ -5,7 +5,7 @@
 //! reference exclusions, and comment spans.
 
 use kndo_adapter_go::GoAdapter;
-use kndo_contract::evidence::{
+use kndo_contract::evidence::{Attachment, 
     FileEvidence, ImportShape, ImportTarget, MarkerTarget, Reach, RootKind, RootTarget, SymbolKind,
 };
 use kndo_contract::extension::Extension;
@@ -96,26 +96,26 @@ fn the_only_root_extraction_still_concludes_is_the_package_clause() {
         .iter()
         .map(|r| format!("{:?} => {:?}", r.when, r.then))
         .collect();
-    // `go test` runs them by name where the tests are; an `init` runs when
-    // the binary it is compiled into loads, so its color is the file's — and
-    // that takes both halves, not a default.
+    // `go test` runs them by name in the test compilation; an `init` runs when
+    // the binary it is compiled into loads, so its color is that
+    // compilation's — and that takes both halves, not a default.
     for pattern in ["Test*", "Benchmark*", "Example*", "Fuzz*"] {
         assert!(
             rules.iter().any(|r| r.contains(pattern)
-                && r.contains("Rooted(Test)")
+                && r.contains("in_unit: Some(Test)")
                 && r.ends_with("Root(Test)")),
             "{rules:#?}"
         );
     }
     assert!(
-        rules
-            .iter()
-            .any(|r| r.contains("\"init\"") && r.contains("Rooted(Test)") && r.ends_with("Root(Test)")),
+        rules.iter().any(|r| r.contains("\"init\"")
+            && r.contains("in_unit: Some(Test)")
+            && r.ends_with("Root(Test)")),
         "{rules:#?}"
     );
     assert!(
         rules.iter().any(|r| r.contains("\"init\"")
-            && r.contains("NotRooted(Test)")
+            && r.contains("in_unit: Some(Library)")
             && r.ends_with("Root(Production)")),
         "{rules:#?}"
     );
@@ -382,4 +382,15 @@ func use() {
             "a range clause binds {bound} rather than naming it: {refs:?}"
         );
     }
+}
+
+#[test]
+fn a_test_file_belongs_to_its_package_in_test_builds_alone() {
+    // `go test` compiles `_test.go` into the package; nothing else ever does.
+    // The membership is the file's own statement, separate from the ENTRY its
+    // declared file role anchors.
+    let e = extract("pkg/server_test.go", "package pkg\n\nfunc TestRun(t *testing.T) {}\n");
+    assert_eq!(e.attachment, Attachment::TestOnly);
+    let e = extract("pkg/server.go", "package pkg\n\nfunc Run() {}\n");
+    assert_eq!(e.attachment, Attachment::Regular);
 }

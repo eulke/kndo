@@ -11,7 +11,7 @@ consumer in the engine.
 |---|---|---|---|
 | `kndo:js-ts` | `ts` `tsx` `js` `jsx` `mjs` `cjs` `mts` `cts` | `package.json`; `.github/workflows/*.yml`, `action.yml` | manifest entries (`main`, `module`, `browser`, `bin`, `exports`, `imports`), files handed to a runtime by npm scripts and by workflow or action steps (`node`, `tsx`, `ts-node`, `bun`, `deno`), test files, config files, shebangs |
 | `kndo:rust` | `rs` | `Cargo.toml` | every cargo target as a unit entered through its own file (lib, bins, tests, benches, examples, build script), with `publish = false` read as "no consumer outside"; by dispatch rule: `#[test]`, `#[bench]`, `#[cfg(test)]`, `#[no_mangle]` and the other linkage attributes, `#[tokio::main]`-style entries, a top-level `fn main` in the color of the cargo target holding it; `#[allow(dead_code)]` and kin exempt |
-| `kndo:go` | `go` | `go.mod` | `package main` + `func main`; by dispatch rule: every `init` (in the color of the binary its file compiles into) and, where the tests are, the runner's `TestXxx`/`BenchmarkXxx`/`ExampleXxx`/`FuzzXxx`; `_test.go` is a declared file role. The module `go.mod` names is one published library unit, and a package — the directory plus its package clause — is a namespace inside it, so nothing keeps a package's files alive but its exported surface and its importers |
+| `kndo:go` | `go` | `go.mod` | `package main` + `func main`; by dispatch rule: every `init` (in the color of the binary its file compiles into) and, in the test compilation, the runner's `TestXxx`/`BenchmarkXxx`/`ExampleXxx`/`FuzzXxx`; `_test.go` is a declared file role AND states its own attachment. The module `go.mod` names is one published library unit, and a package — the directory plus its package clause — is a namespace inside it, so nothing keeps a package's files alive but its exported surface and its importers |
 | `kndo:java` | `java` | `pom.xml`, `build.gradle`, `build.gradle.kts`, `settings.gradle`, `settings.gradle.kts` | `main` methods, test sources, framework annotations through extensions; by dispatch rule: `@Override` and the members the JDK's own bases require (`Comparable.compareTo`, `Iterable.iterator`, `AutoCloseable.close`, the four `Serializable` hooks) are WITNESSES — kept while their owner is, of no color; a `pom.xml` module is two units, its main set and its test set, the test set compiling against main and a friend of it; the test set is what the pom states (its own `<testSourceDirectory>`, else the nearest parent's along `<parent>`, plus the build helper's added test sources), and every file in it is a test root by the unit's kind |
 | `kndo:kotlin` | `kt` | the same JVM manifests | `main` functions, test sources; `internal` reaches the unit and its friends |
 | `kndo:python` | `py` | `pyproject.toml`, `requirements.txt`, `requirements-*.txt` | scripts, `__main__`, test files, entry points |
@@ -128,6 +128,17 @@ adapter says nothing:
   `#![allow(dead_code)]` is reported as a diagnostic so the silence is visible.
   `used-by` shows a dispatched root as `dispatch:<color>` and an exemption as
   `exempt`.
+- **Attachment**: whether a file belongs to the namespace it declared in every
+  build, or in test builds alone. A file states it where the language's own
+  tooling compiles it into the test build and nothing else — go's `_test.go`,
+  the JVM's `src/test/{java,kotlin}` source sets, SwiftPM's `Tests/`, what
+  pytest collects, the web's `*.test.*`, `*.spec.*` and `__tests__/`. It is
+  what stops production colour from flowing through a test file, what makes a
+  dependency only tests import `test-only`, and what a dispatch rule's
+  `in_unit` reads where no manifest declares a test unit. A test-shaped NAME
+  outside those trees is not it: a `LoadTest.java` on the main source path is
+  compiled into the library like anything beside it, and stays importable
+  surface.
 - **Relations**: the types a declaration promises to be (`extends`,
   `implements`, a protocol conformance). The engine reads one stream both ways:
   a member whose owner promised a type declaring the same name is a WITNESS and

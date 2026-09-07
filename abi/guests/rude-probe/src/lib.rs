@@ -56,6 +56,8 @@ impl bindings::Guest for RudeProbe {
             let _ = bindings::graph_paths();
         }
         wire::FileEvidence {
+            namespace: Vec::new(),
+            attachment: wire::Attachment::Regular,
             declarations: Vec::new(),
             references: Vec::new(),
             imports: Vec::new(),

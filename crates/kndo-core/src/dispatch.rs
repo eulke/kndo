@@ -7,8 +7,9 @@
 //! evidence moves, stored on the graph beside the manifest anchors and never
 //! in the evidence cache, so a rule change never has to re-extract anything.
 
-use kndo_contract::evidence::{FileEvidence, Marker, MarkerTarget, Root, RootKind, RootTarget};
+use kndo_contract::evidence::{FileEvidence, Marker, MarkerTarget, Root, RootTarget};
 use kndo_contract::extension::{DeclarationCx, DispatchRule, Effect};
+use kndo_contract::manifest::UnitKind;
 use smol_str::SmolStr;
 use std::collections::BTreeMap;
 
@@ -43,7 +44,7 @@ pub fn apply(
     }
     let cx = DeclarationCx {
         evidence,
-        colors: &[],
+        compiled_into: None,
         supertypes,
     };
     for marker in &evidence.markers {
@@ -147,7 +148,7 @@ pub fn supertype_edges<'a>(
 /// what those roots carry (sorted and deduplicated).
 pub fn declaration_effects(
     evidence: &FileEvidence,
-    colors: &[RootKind],
+    compiled_into: Option<UnitKind>,
     supertypes: &BTreeMap<SmolStr, Vec<SmolStr>>,
     rules: &[DispatchRule],
 ) -> (Vec<Root>, Vec<(u32, SmolStr)>) {
@@ -158,7 +159,7 @@ pub fn declaration_effects(
     }
     let cx = DeclarationCx {
         evidence,
-        colors,
+        compiled_into,
         supertypes,
     };
     for (id, _) in evidence.declarations_with_ids() {

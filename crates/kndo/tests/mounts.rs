@@ -170,10 +170,12 @@ fn a_covisible_namespace_reaches_its_own_files_but_never_through_a_test() {
     .file("src/lib.kmock", "package pkg\nexport fn Api\n")
     .file("src/helpers.kmock", "package pkg\nns fn helper\n")
     // A test file of the same namespace: it may name what the namespace holds,
-    // and the production colour neither enters nor leaves through it.
+    // and the production colour neither enters nor leaves through it. Two
+    // statements, not one: `test-file` is the runner's entry, `test-only` the
+    // membership that fences the colour.
     .file(
         "src/lib_test.kmock",
-        "package pkg\ntest-file\nexport fn TestApi\ncall helper\n",
+        "package pkg\ntest-file\ntest-only\nexport fn TestApi\ncall helper\n",
     )
     // Another namespace entirely, exporting nothing and imported by nobody.
     .file("src/other/dead.kmock", "package other\nns fn alone\n");

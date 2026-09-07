@@ -21,7 +21,7 @@
 //!   `Widget.factory()` is how real code addresses them.
 
 use kndo_contract::evidence::{
-    DeclarationId, EvidenceSink, ImportBinding, ImportShape, ImportTarget, Reach, RefKind,
+    Attachment, DeclarationId, EvidenceSink, ImportBinding, ImportShape, ImportTarget, Reach, RefKind,
     RootKind, RootTarget, SymbolKind,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
@@ -57,7 +57,12 @@ pub fn extract(
         || file_name.ends_with("Tests.kt")
         || file_name.ends_with("TestCase.kt");
 
+    // The test source set is its own compilation: what it declares belongs to
+    // the package in test builds alone. The test-shaped NAME is not that — a
+    // `LoadTest.kt` on the main source path is compiled into the library like
+    // any other file, and says nothing here.
     if test_dir {
+        out.attachment(Attachment::TestOnly);
         out.root(RootTarget::WholeFile, RootKind::Test, Confidence::Certain);
     } else {
         if test_name {
