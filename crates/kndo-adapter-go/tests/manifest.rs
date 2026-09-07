@@ -5,27 +5,10 @@
 //! answers all of them the same way.
 
 use kndo_adapter_go::GoAdapter;
-use kndo_contract::adapter::{ResolveContext, SourceFile};
-use kndo_contract::extension::Extension;
-use kndo_contract::manifest::{ManifestEvidence, ManifestSink, Publication, UnitKind};
-use kndo_contract::vocab::ProjectPath;
-use std::collections::BTreeSet;
+use kndo_contract::manifest::{ManifestEvidence, Publication, UnitKind};
 
 fn read(manifest_path: &str, content: &str) -> ManifestEvidence {
-    let known: BTreeSet<ProjectPath> = BTreeSet::new();
-    let cx = ResolveContext::new(&known);
-    let path = ProjectPath::new(manifest_path);
-    let mut sink = ManifestSink::new();
-    GoAdapter::new().extract_manifest(
-        &SourceFile {
-            path: &path,
-            content: content.as_bytes(),
-            region: None,
-        },
-        &cx,
-        &mut sink,
-    );
-    sink.finish()
+    kndo_testkit::manifest_evidence(&GoAdapter::new(), manifest_path, content, &[])
 }
 
 fn packages_of(manifest_path: &str, content: &str) -> Vec<(String, Option<String>, String)> {

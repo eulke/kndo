@@ -30,7 +30,7 @@
 //!   not project surface; their bodies still contribute references).
 
 mod extract;
-mod manifest;
+pub mod manifest;
 mod resolve;
 
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
@@ -49,10 +49,11 @@ impl PythonAdapter {
             // 3: the generated banner is reported, never concluded.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:python",
-                5,
+                6,
                 &["py"],
                 &[
                     "**/pyproject.toml",
+                    "**/setup.cfg",
                     "**/requirements.txt",
                     "**/requirements-*.txt",
                 ],
@@ -73,6 +74,10 @@ impl PythonAdapter {
                 FileRole::certain("**/test_*.py", RootKind::Test),
                 FileRole::certain("**/*_test.py", RootKind::Test),
                 FileRole::certain("**/conftest.py", RootKind::Test),
+                // `python -m pkg` runs `pkg/__main__.py`: the interpreter's
+                // own rule for the filename, and the one entry a manifest
+                // never has to declare.
+                FileRole::certain("**/__main__.py", RootKind::Production),
             ])
             .build(),
         }
@@ -101,13 +106,12 @@ impl Extension for PythonAdapter {
         resolve::resolve(from, specifier, cx)
     }
 
-    fn manifest_dependencies(
+    fn extract_manifest(
         &self,
         manifest: &SourceFile<'_>,
-    ) -> Vec<kndo_contract::adapter::DependencyDeclaration> {
-        manifest::dependencies(manifest.path.as_str(), manifest.content)
-            .into_iter()
-            .map(kndo_contract::adapter::DependencyDeclaration::name_only)
-            .collect()
+        cx: &ResolveContext<'_>,
+        out: &mut kndo_contract::manifest::ManifestSink,
+    ) {
+        manifest::structure(manifest.path, manifest.content, cx, out);
     }
 }

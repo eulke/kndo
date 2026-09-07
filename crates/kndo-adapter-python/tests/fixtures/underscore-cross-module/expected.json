@@ -2,7 +2,7 @@
   "run": {
     "schema": "kndo-v2/m6",
     "mode": "full",
-    "files_discovered": 3,
+    "files_discovered": 4,
     "files_claimed": 3,
     "extensions": [
       {
@@ -26,8 +26,8 @@
     ],
     "by_package": [
       {
-        "name": "",
-        "manifest": "",
+        "name": "demo",
+        "manifest": "pyproject.toml",
         "implicated": 1,
         "subjects": 6
       }
@@ -61,6 +61,15 @@
   "baselined": 0,
   "abstained": [
     {
+      "category": "unused",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 1
+        }
+      }
+    },
+    {
       "category": "test-only",
       "reason": "no-test-roots-anywhere",
       "scope": "whole-run"
@@ -69,6 +78,15 @@
       "category": "untested",
       "reason": "no-test-roots-anywhere",
       "scope": "whole-run"
+    },
+    {
+      "category": "undeclared",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 1
+        }
+      }
     },
     {
       "category": "crap",

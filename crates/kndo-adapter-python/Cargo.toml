@@ -12,6 +12,8 @@ kndo-toolkit = { path = "../kndo-toolkit" }
 smol_str = { version = "0.3", features = ["serde"] }
 tree-sitter = "0.25"
 tree-sitter-python = "0.25"
+toml = "0.8"
 
 [dev-dependencies]
 kndo-testkit = { path = "../kndo-testkit" }
+serde_json = "1"

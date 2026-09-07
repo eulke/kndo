@@ -3,31 +3,10 @@
 //! tables, and degradation on dangling or broken manifests.
 
 use kndo_adapter_rust::RustAdapter;
-use kndo_contract::adapter::{ResolveContext, SourceFile};
-use kndo_contract::extension::Extension;
-use kndo_contract::manifest::{ManifestEvidence, ManifestSink, Publication, UnitKind};
-use kndo_contract::vocab::ProjectPath;
-use std::collections::BTreeSet;
-
-fn cx_files(paths: &[&str]) -> BTreeSet<ProjectPath> {
-    paths.iter().map(|p| ProjectPath::new(*p)).collect()
-}
+use kndo_contract::manifest::{ManifestEvidence, Publication, UnitKind};
 
 fn read(manifest_path: &str, manifest: &str, files: &[&str]) -> ManifestEvidence {
-    let known = cx_files(files);
-    let cx = ResolveContext::new(&known);
-    let path = ProjectPath::new(manifest_path);
-    let mut sink = ManifestSink::new();
-    RustAdapter::new().extract_manifest(
-        &SourceFile {
-            path: &path,
-            content: manifest.as_bytes(),
-            region: None,
-        },
-        &cx,
-        &mut sink,
-    );
-    sink.finish()
+    kndo_testkit::manifest_evidence(&RustAdapter::new(), manifest_path, manifest, files)
 }
 
 /// Every unit as (name, kind, its one entry, its source root), name-sorted.

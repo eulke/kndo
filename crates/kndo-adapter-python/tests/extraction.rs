@@ -144,12 +144,26 @@ def helper():
     let conftest = ev("tests/conftest.py", "def client():\n    pass\n");
     assert_eq!(conftest.attachment, Attachment::TestOnly);
 
-    // A library module keeps the one whole-file root still concluded here,
-    // and it is on the ledger: python reads no pyproject yet, so nothing else
-    // would root a package at all.
+    // A library module concludes NOTHING about itself: which files a
+    // distribution publishes is `pyproject.toml`'s to say and the engine's
+    // `publishes()` to read, so extraction states only what this file's own
+    // bytes carry.
     let lib = ev("src/flask/app.py", "def create_app():\n    pass\n");
     assert_eq!(lib.attachment, Attachment::Regular);
-    assert!(lib.roots.iter().any(|r| r.kind == RootKind::Production));
+    assert!(lib.roots.is_empty(), "{:?}", lib.roots);
+
+    // …and the language's own entry idiom still is that: `if __name__ ==
+    // \"__main__\"` is a statement the file makes, not a path convention.
+    let script = ev(
+        "src/flask/cli.py",
+        "def main():\n    pass\n\nif __name__ == \"__main__\":\n    main()\n",
+    );
+    assert!(
+        script
+            .roots
+            .iter()
+            .any(|r| r.kind == RootKind::Production && matches!(r.target, RootTarget::WholeFile))
+    );
 }
 
 #[test]

@@ -32,7 +32,7 @@
     ]
   },
   "health": {
-    "implicated": 8,
+    "implicated": 9,
     "subjects": 1219,
     "by_category": [
       {
@@ -41,15 +41,33 @@
       },
       {
         "category": "unused",
-        "findings": 5
+        "findings": 6
       }
     ],
     "by_package": [
       {
-        "name": "",
-        "manifest": "",
-        "implicated": 8,
-        "subjects": 1219
+        "name": "Flask",
+        "manifest": "pyproject.toml",
+        "implicated": 6,
+        "subjects": 1119
+      },
+      {
+        "name": "flask-example-celery",
+        "manifest": "examples/celery/pyproject.toml",
+        "implicated": 1,
+        "subjects": 18
+      },
+      {
+        "name": "flaskr",
+        "manifest": "examples/tutorial/pyproject.toml",
+        "implicated": 1,
+        "subjects": 58
+      },
+      {
+        "name": "js_example",
+        "manifest": "examples/javascript/pyproject.toml",
+        "implicated": 1,
+        "subjects": 24
       }
     ]
   },
@@ -86,6 +104,28 @@
         "path": "src/flask/json/__init__.py"
       },
       "message": "2 files form an import cycle: src/flask/json/__init__.py → src/flask/json/provider.py → src/flask/json/__init__.py"
+    },
+    {
+      "id": "kndo-dbe4c933098d",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "docs/conf.py"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-42b0827e9950",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "examples/celery/make_celery.py"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
     },
     {
       "id": "kndo-b48bc44863cd",
@@ -141,17 +181,6 @@
         "end": 695
       },
       "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-d1c2f7dc0d2f",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "tests/test_apps/blueprintapp/apps/admin/static/css/test.css"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
     },
     {
       "id": "kndo-9ecdece7f844",
@@ -384,28 +413,6 @@
       "message": "structural clone of tests/test_templating.py:test_escaping"
     },
     {
-      "id": "kndo-fafb1d5a0d15",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "docs/conf.py"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-98f9bc486370",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "examples/celery/src/task_app/__init__.py"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
       "id": "kndo-ac26eed80e7a",
       "category": "untested",
       "severity": "info",
@@ -424,61 +431,6 @@
       "subject": {
         "kind": "file",
         "path": "examples/celery/src/task_app/views.py"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-c5389f54a4e6",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "tests/test_apps/cliapp/factory.py"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-1566ee892155",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "tests/test_apps/helloworld/hello.py"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-2ac535238367",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "tests/type_check/typing_app_decorators.py"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-318578a93c74",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "tests/type_check/typing_error_handler.py"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-e8edb01f140e",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "tests/type_check/typing_route.py"
       },
       "message": "production-reachable, but no test reaches this file"
     }

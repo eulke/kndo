@@ -1,52 +1,15 @@
-//! `Package.swift` dependency names, parsed with the same grammar extraction
-//! uses — SwiftPM requires every argument labeled, so reading `.package(url:)`
-//! and `.package(path:)` by label is exact, never a heuristic. The NAME a rule
-//! activates on is the identity the ecosystem imports the package by: the last
-//! path segment of the url (with any `.git` suffix dropped) or of the local
-//! path.
+//! `Package.swift` read ONCE, with the grammar, into everything the project
+//! model needs from it: a unit per target, and the packages the build resolves
+//! from outside. SwiftPM requires every argument labeled, so a label is exact
+//! where a scan would guess — a `path:` inside a `.when(...)` condition or a
+//! comment never reads as a target's.
 
+use kndo_contract::adapter::DependencyDeclaration;
 use kndo_contract::manifest::{ManifestSink, Publication, Unit, UnitKind};
 use kndo_contract::vocab::ProjectPath;
 use kndo_toolkit as tk;
 use smol_str::SmolStr;
 use tree_sitter::Node;
-
-pub fn dependencies(content: &[u8]) -> Vec<SmolStr> {
-    let language = tree_sitter_swift::LANGUAGE.into();
-    let Some(tree) = tk::parse(&language, content) else {
-        return Vec::new();
-    };
-    let mut out: Vec<SmolStr> = Vec::new();
-    collect(tree.root_node(), content, &mut out);
-    out.sort();
-    out.dedup();
-    out
-}
-
-fn collect(node: Node<'_>, src: &[u8], out: &mut Vec<SmolStr>) {
-    if node.kind() == "call_expression" && callee_is_dot_package(node, src) {
-        for label in ["url", "path"] {
-            if let Some(value) = labeled_argument(node, label, src)
-                && let Some(text) = string_text(value, src)
-                && let Some(name) = package_name(&text)
-            {
-                out.push(SmolStr::new(name));
-            }
-        }
-    }
-    let mut c = node.walk();
-    for child in node.children(&mut c) {
-        collect(child, src, out);
-    }
-}
-
-/// `.package(...)` — a prefix-dot implicit-member call, SwiftPM's factory style.
-fn callee_is_dot_package(call: Node<'_>, src: &[u8]) -> bool {
-    let Some(callee) = call.child(0) else {
-        return false;
-    };
-    callee.kind() == "prefix_expression" && tk::text(callee, src) == ".package"
-}
 
 fn labeled_argument<'t>(call: Node<'t>, label: &str, src: &[u8]) -> Option<Node<'t>> {
     let suffix = tk::child_of_kind(call, "call_suffix")?;
@@ -116,6 +79,30 @@ pub fn structure(manifest: &ProjectPath, content: &[u8], out: &mut ManifestSink)
     else {
         return;
     };
+
+    // What the package RESOLVES from outside, named as the ecosystem imports
+    // it: the last path segment of the url (any `.git` dropped) or of the
+    // local path. Read from the `Package(...)` call's own `dependencies:`, so
+    // a `.package(url:)` a target's list mentions is not counted twice and a
+    // nested package's is not counted here at all.
+    if let Some(list) = labeled_argument(package, "dependencies", content) {
+        let mut names: Vec<SmolStr> = Vec::new();
+        for call in elements_named(list, content, &[".package"]) {
+            for label in ["url", "path"] {
+                if let Some(value) = labeled_argument(call, label, content)
+                    && let Some(text) = string_text(value, content)
+                    && let Some(name) = package_name(&text)
+                {
+                    names.push(SmolStr::new(name));
+                }
+            }
+        }
+        names.sort_unstable();
+        names.dedup();
+        for name in names {
+            out.dependency(DependencyDeclaration::name_only(name));
+        }
+    }
 
     // A product publishes the targets it names, so those targets' exported
     // API is consumed outside the project and the rest is the package's own.

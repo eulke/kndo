@@ -21,8 +21,8 @@
     "by_category": [],
     "by_package": [
       {
-        "name": "",
-        "manifest": "",
+        "name": "demo",
+        "manifest": "pyproject.toml",
         "implicated": 0,
         "subjects": 2
       }

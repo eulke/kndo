@@ -606,15 +606,28 @@ promise.
 
 | mechanism | how much | replaced by | lands in |
 |---|---|---|---|
-| the four manifest hooks — `roots` ×4, `packages` ×7, `manifest_dependencies` ×7, `manifest_mentions` ×1 | see `grep -rn "fn roots(\|fn packages(\|fn manifest_dependencies(\|fn manifest_mentions(" crates/kndo-adapter-*/src` | `extract_manifest` + the structural parsers | M8.d, parser by parser |
-| line scanners for pom / Gradle / pyproject | 4 in `kndo-toolkit::jvm_manifest`, 2 in `kndo-adapter-python::manifest` | the same structural parsers (`roxmltree`, block scanner + TOML catalog, `toml`) | M8.d |
-| the library-mode Production root | 2 sites: `kndo-adapter-kotlin::extract`, `kndo-adapter-python::extract`, each with its measurement in a comment | the engine's `publishes()`, which reads the unit | M8.d, with the Gradle and pyproject parsers |
+| the four manifest hooks | `grep -c "fn roots(\|fn packages(\|fn manifest_dependencies(\|fn manifest_mentions(" crates/kndo-adapter-*/src/lib.rs` — 8 trait impls left: java 2, kotlin 2, ts 4 | `extract_manifest` + the structural parsers | M8.d, parser by parser |
+| line scanners for pom / Gradle | 4 in `kndo-toolkit::jvm_manifest` | the same structural parsers (`roxmltree`, block scanner + TOML catalog) | M8.d |
+| the library-mode Production root | 1 site: `kndo-adapter-kotlin::extract`, with its measurement in a comment | the engine's `publishes()`, which reads the unit | M8.d, with the Gradle parser |
 
 Deleting any of these before its parser exists leaves the engine with NO
 mechanism, not a cleaner one: js-ts's `roots` hook alone carries 332 corpus
-findings (`EXPERIMENTS`, the legacy ledger, row 5), and deleting the library
-roots costs Exposed +125 and flask +15. They die parser by parser, which is
-what M8.d is.
+findings (`EXPERIMENTS`, the legacy ledger, row 5), and deleting kotlin's
+library root costs Exposed +125. They die parser by parser, which is what M8.d
+is.
+
+### Captures owed
+
+A parser is graded against the ecosystem's own tool where that tool runs here.
+Three do not, and the rows say so rather than letting an ungraded reader pass
+for a graded one.
+
+| parser | graded against | owed |
+|---|---|---|
+| python PEP 508/503 | `packaging` 24.0, 14 specifiers — `tests/captured/tooling.json` | — |
+| python setuptools + setup.cfg | `setuptools` 68.1.2, 3 pyproject layouts + 1 setup.cfg — same capture | — |
+| python flit / poetry / hatch roots | their documented keys, fixture-exercised | none of the three is installed here; capture when one is |
+| swift `Package.swift` | fixtures + vapor/Alamofire | `swift package dump-package` — no swift toolchain here |
 
 ### Closed since
 
@@ -622,6 +635,8 @@ what M8.d is.
 |---|---|
 | whole-file roots per adapter (20 sites) | `FileRole` declarations + the unit's kind. `grep -rn "RootTarget::WholeFile" crates/kndo-adapter-*/src` — 4 hits: the two library roots above, plus python's `if __name__ == "__main__"` and js-ts's shebang |
 | swift's library-mode root and its silent namespace | swift declares its namespace (the SwiftPM target, path-only), so `publishes()` and the scope forest answer instead |
+| python's library-mode root, and its line-scanned manifests | `pyproject.toml` / `setup.cfg` / `requirements*.txt` parsed into units, entries, packages and dependencies; `publishes()` reads the unit. Ablations: without the parser the deletion cost flask +15, with it nothing |
+| swift's `manifest_dependencies` | `Package.swift` read once, dependencies from the `Package(...)` call's own list |
 
 Two roots stayed for reasons that are NOT a missing parser, and they are not
 debt: js-ts's shebang and python's `if __name__ == "__main__"` are the FILE's

@@ -53,7 +53,7 @@ impl SwiftAdapter {
             // 4: the generated banner is reported, never concluded.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:swift",
-                8,
+                9,
                 &["swift"],
                 &["**/Package.swift"],
                 // Files in a module compile as one unit; cross-references are
@@ -121,15 +121,5 @@ impl Extension for SwiftAdapter {
         out: &mut kndo_contract::manifest::ManifestSink,
     ) {
         manifest::structure(manifest.path, manifest.content, out);
-    }
-
-    fn manifest_dependencies(
-        &self,
-        manifest: &SourceFile<'_>,
-    ) -> Vec<kndo_contract::adapter::DependencyDeclaration> {
-        manifest::dependencies(manifest.content)
-            .into_iter()
-            .map(kndo_contract::adapter::DependencyDeclaration::name_only)
-            .collect()
     }
 }

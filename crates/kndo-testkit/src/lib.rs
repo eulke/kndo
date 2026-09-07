@@ -821,6 +821,35 @@ pub fn extract_evidence(
     sink.finish()
 }
 
+/// One manifest read, harness-style: hand `content` to `adapter` as `path`
+/// through a fresh sink and return the finished evidence. `tree` is the file
+/// set the reader may ask about — a source root is a question about what
+/// exists, so a manifest test that pretends the tree is empty tests a
+/// different manifest. The shared front half of every adapter's manifest
+/// tests.
+pub fn manifest_evidence(
+    adapter: &dyn Extension,
+    path: &str,
+    content: &str,
+    tree: &[&str],
+) -> kndo_contract::manifest::ManifestEvidence {
+    let known: std::collections::BTreeSet<ProjectPath> =
+        tree.iter().map(|p| ProjectPath::new(*p)).collect();
+    let cx = ResolveContext::new(&known);
+    let path = ProjectPath::new(path);
+    let mut sink = kndo_contract::manifest::ManifestSink::new();
+    adapter.extract_manifest(
+        &SourceFile {
+            path: &path,
+            content: content.as_bytes(),
+            region: None,
+        },
+        &cx,
+        &mut sink,
+    );
+    sink.finish()
+}
+
 /// The declaration named `name`, or a panic that prints every declaration — the
 /// assertion failure an extraction test wants to read.
 pub fn declaration_named<'e>(

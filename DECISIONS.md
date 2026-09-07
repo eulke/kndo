@@ -5386,3 +5386,66 @@ logic to test. lodash's +2 are the laundered-colour fix above.
 `kndo:python` to 5, `kndo:js-ts` to 12, `kndo:html` to 4. The contract
 fingerprint does not move — `ExtensionSpec` is a declaration, not a contract
 type. One conformance fixture moves: document-entries.
+
+## 2026-09-07 — M8.d: Python's manifests are parsed, and swift stops reading its own twice
+
+`pyproject.toml`, `setup.cfg` and `requirements*.txt` are read as TOML and INI
+instead of scanned by line, into the units, entries, packages and dependencies
+the project model needs. The line scanner they replace could only find
+dependency NAMES, which is why python had no units at all — and no units is why
+its adapter still concluded a whole-file Production root on every non-test
+module. That root is now deleted: `publishes()` reads the unit, and the unit
+exists.
+
+**Two facts decide everything, and Python states neither in one place.** The
+first is the source root: PEP 621 names the distribution and says nothing about
+where its code lives, so each backend is asked in turn — setuptools'
+`package-dir` and `packages.find.where`, poetry's `packages = [{from = …}]`,
+hatch's wheel target — and where none speaks, setuptools' own auto-discovery
+rule answers: a `src` directory beside the manifest MEANS a src-layout. Its
+existence is the rule, not a name matching the distribution's, which is how
+`type-checking-cycle` ships `pkg`. The second is publication: a `[project]`
+table is a distribution, and the one thing that says otherwise is `Private ::
+Do Not Upload`, the classifier the index itself refuses an upload for.
+
+**The reader is graded against Python's own tools, not against our reading of a
+PEP.** `crates/kndo-adapter-python/tests/captured/tooling.json` holds what
+`packaging` 24.0 answered for fourteen PEP 508 specifiers and their PEP 503
+canonical forms, and what `setuptools` 68.1.2 answered for three pyproject
+layouts and a setup.cfg; `tests/tooling.rs` replays those answers through the
+adapter. The capture also settled a question the docs do not: setuptools'
+`read_configuration` does NOT run discovery, so `packages.find.where` stays in
+the file and the file is where it is read from.
+
+**Two entries, because Python has two.** A `[project.scripts]` value
+`pkg.mod:func` names a file, and `import pkg` executes `pkg/__init__.py`
+whatever that file declares — so a re-export-only `__init__.py` under a source
+root is the door the name opens and cannot be dead while the distribution
+ships. A plain module is NOT that: `import dark` reaches `dark.py`'s own
+exports, which the published surface already answers, and calling it an entry
+tells `untested` it is wiring. Measured: the broad reading silenced the
+coverage ingester's own proof, which is the gate that caught it.
+
+**Measured: flask 26 → 20, every other repository byte-identical.** Five
+`untested` and one `unused` under `tests/` go, because
+`[tool.pytest.ini_options] testpaths` is now a Test unit rather than a
+directory the library root had painted production. Ablating that unit alone
+costs flask +16, and ablating the library root with the units in place costs
+nothing — which is the whole measurement this slice was for.
+
+Six python fixtures gained the `pyproject.toml` a real src-layout project has;
+without one, a source tree no manifest describes proves nothing. All eight
+python conformance fixtures move, and their FINDINGS are identical — only the
+health block's unit and package fields differ.
+
+Swift's `manifest_dependencies` is gone: `Package.swift` is read once, and the
+package's `dependencies:` list is read from the `Package(...)` call's own
+argument rather than from anywhere in the tree, so a `.package(url:)` a target
+mentions is not counted twice. And `kndo-testkit` gains `manifest_evidence` —
+kndo's dogfood reported the fourth verbatim copy of that harness as a
+`duplicate`, which is the rule working.
+
+`kndo:swift` moves to 9 and `kndo:python` to 6. Neither the contract
+fingerprint nor `GRAPH_SEMANTICS_VERSION` moves — an adapter emitting
+different evidence is the adapter's knob. Eight conformance fixtures move, all
+in kndo-adapter-python fixtures.

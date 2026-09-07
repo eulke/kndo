@@ -73,19 +73,6 @@ pub fn extract(
         || file_name == "conftest.py";
     if test_file {
         out.attachment(Attachment::TestOnly);
-    } else {
-        // Library mode: any non-test module is importable published surface.
-        // That sentence is the engine's `publishes()` to say — but it reads
-        // the unit, and python reads no pyproject yet (M8.d), so nothing in a
-        // library would root at all. Measured: deleting it now costs flask +15
-        // findings, `src/flask/app.py` and `cli.py` among them — the package's
-        // own modules, unreached because no root was left to reach them from.
-        // It goes with the pyproject/setup.cfg parser, not before it.
-        out.root(
-            RootTarget::WholeFile,
-            RootKind::Production,
-            Confidence::Probable,
-        );
     }
 
     let root = tree.root_node();

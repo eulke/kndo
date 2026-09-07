@@ -1034,7 +1034,9 @@ dependencies = [
  "kndo-contract",
  "kndo-testkit",
  "kndo-toolkit",
+ "serde_json",
  "smol_str",
+ "toml",
  "tree-sitter",
  "tree-sitter-python",
 ]

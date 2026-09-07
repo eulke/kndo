@@ -1812,3 +1812,30 @@ namespace, and a unit-wide reach whose unit no manifest named falls back to it.
 Two `unused` on `ContentViewPreviews` and its `previews`: a SwiftUI
 `PreviewProvider`, which only Xcode's canvas instantiates. That is the swiftui
 rule pack's to witness (M8.e), and it is on the ledger rather than papered over.
+
+### Python's manifests are parsed (2026-09-07)
+
+| repo | before | after | what moved |
+|---|---|---|---|
+| flask | 26 | 20 | −5 `untested`, −1 `unused`, all under `tests/` |
+| every other repository | — | — | byte-identical |
+
+`pyproject.toml` now states what it always said and kndo could not read: the
+distribution, its source root, its console scripts, and — through
+`[tool.pytest.ini_options] testpaths` — that `tests/` is a Test unit. The six
+findings that leave were the library-mode root's: with no units at all, every
+non-test module was production, so `tests/test_apps/cliapp/factory.py` and
+`tests/type_check/typing_route.py` were "production-reachable, but no test
+reaches this file" — a question asked of files that are themselves the test
+material.
+
+Two ablations bound the change from both sides. Deleting the library-mode root
+BEFORE the parser existed cost flask +15 (`src/flask/app.py` and `cli.py` among
+them, unreached because nothing was left to reach them from); deleting it after
+costs nothing, which is what makes it a deletion rather than a trade. Dropping
+the pytest Test unit while keeping everything else costs +16, all `unused`
+under `tests/` — the unit is what tells the engine those files are the runner's.
+
+v1 is not the comparison here. It read `pyproject.toml` for dependency names
+alone and had no notion of a Python unit, so every one of these six is a
+question v1 never asked rather than one it answered differently.
