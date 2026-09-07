@@ -50,7 +50,7 @@ impl SwiftAdapter {
             // 4: the generated banner is reported, never concluded.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:swift",
-                5,
+                6,
                 &["swift"],
                 &["**/Package.swift"],
                 // Files in a module compile as one unit; cross-references are
@@ -90,6 +90,19 @@ impl Extension for SwiftAdapter {
         resolve::resolve(from, specifier, cx)
     }
 
+    fn extract_manifest(
+        &self,
+        manifest: &SourceFile<'_>,
+        _cx: &ResolveContext<'_>,
+        out: &mut kndo_contract::manifest::ManifestSink,
+    ) {
+        manifest::structure(manifest.path, manifest.content, out);
+    }
+
+    // Still here, and nearly dead: with the targets declared, this answers for
+    // the 4 findings in Alamofire's Xcode-project directories, which no
+    // SwiftPM target covers. Its retirement waits on the plan's fallback for
+    // a file no manifest compiles ("sin manifest: unidad por primer segmento").
     fn seen_from(
         &self,
         path: &ProjectPath,

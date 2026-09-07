@@ -1722,3 +1722,20 @@ package, in its own module's `src/test/kotlin`, but main and test are different
 namespace ROOTS there and only a unit's friendship joins them. Kotlin reads no
 Gradle yet, so it has no units: M8.d closes these five, and they are the cost,
 named, of one vocabulary instead of two.
+
+### Package.swift becomes a structural manifest (2026-09-07)
+
+| repo | before | after | what moved |
+|---|---|---|---|
+| vapor | 199 | 218 | +19 `internal-only` |
+| every other repository | — | — | byte-identical |
+
+SwiftPM's targets are now units, with their `path`/`exclude`/`sources` roots
+and their test targets as friends of what they test. The 19 are declarations
+the old `module_region` could not narrow, because it bounded `internal` by the
+target's files PLUS every file under any `Tests/` tree — a superset chosen when
+friendship could not be read. `TestError` and `Payload` are each declared and
+used in a single file, and `Performance/` is its own package.
+
+`seen_from` for swift drops from 486 findings to 4, all in Alamofire's
+`Example/` and `watchOS Example/` — Xcode projects no SwiftPM target covers.

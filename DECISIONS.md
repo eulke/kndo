@@ -5237,3 +5237,47 @@ remaining adapter owes and where.
 fingerprint does not move — a trait is not a contract type. The `extension`
 world loses an export, so the four pinned reference components are re-pinned.
 No conformance fixture moves.
+
+## 2026-09-07 — M8.d begins: `Package.swift` is a structural manifest
+
+**The first of the milestone's seven parsers.** `Package.swift` is read with
+tree-sitter-swift, as the plan's swift row states: targets with `path`,
+`exclude` and `sources`, products, and TEST TARGETS AS FRIENDS OF THEIR
+DEPENDENCIES — `@testable import App` reaches App's `internal`, and SwiftPM is
+the only thing that knows which targets a test target may do that to.
+
+**The bug the real manifests found.** A first cut walked the whole tree for
+`.target(...)` calls and read vapor's `Vapor` five times: a `.target(name:)`
+inside another target's `dependencies:` NAMES a target, it does not declare
+one. SwiftPM labels both `targets:` and `products:`, so the labels are the
+reading — the same reason the plan says to use the grammar and not a scan.
+Against the real files: Alamofire yields exactly its two units with `Source`,
+`Source/Info.plist` excluded, and the test target friends of the library;
+vapor yields its eight.
+
+**Measured: vapor 199 → 218, every other repository byte-identical.** All 19
+are `internal-only`, and all 19 are true: the old `module_region` bounded
+`internal` by "the target's files plus EVERY file under any `Tests/` tree", a
+deliberately generous superset that hid narrowable declarations. With the real
+units, `TestError` and `Payload` are each declared and used in one file — and
+`Performance/` turns out to be its own package with its own `Package.swift`.
+
+**`seen_from` measured 486 → 4, and stays for those 4.** Deleting it now turns
+three gates red for one reason: Alamofire's `Example/` and `watchOS Example/`
+are XCODE PROJECTS (`.xcodeproj`), covered by no SwiftPM target, so their
+`Unit{0}` has no bound and every declaration there becomes keep-alive. Two
+`apple-bundles` known gaps close on their own (the gate correctly demands they
+be promoted) and the `InterfaceBuilder` conduct proof loses what it was
+proving. The plan's sentence for this is "sin manifest: unidad por primer
+segmento + `*Tests` como Test", and its SCOPE is the owner's to settle —
+per-project (no `Package.swift` anywhere) or per-file (outside every declared
+target). Improvising the seam is what this entry refuses to do.
+
+**A debt this environment cannot pay.** The plan requires each parser validated
+against the real tool in captured fixtures. `mvn`, `gradle`, `go`, `npm` and
+`cargo` are installed here; `swift` is not, so `swift package dump-package` is
+owed for this parser. It is validated against the two real corpus manifests and
+four unit tests instead, and the capture stays on the ledger.
+
+`GRAPH_SEMANTICS_VERSION` moves to 31 and `kndo:swift` to 6. The contract
+fingerprint does not move. No conformance fixture moves.

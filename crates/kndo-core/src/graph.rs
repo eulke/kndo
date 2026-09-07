@@ -23,7 +23,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Bump when the SAME evidence assembles into a DIFFERENT graph — resolution
 /// candidate changes, reachability semantics, new assembled fields. Folded into the
 /// graph cache key beside the contract fingerprint and the adapter set.
-pub const GRAPH_SEMANTICS_VERSION: u32 = 30;
+pub const GRAPH_SEMANTICS_VERSION: u32 = 31;
 
 #[derive(Serialize, Deserialize)]
 pub struct GraphFile {
