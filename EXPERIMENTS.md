@@ -549,7 +549,28 @@ measurement (guava 27,405 vs 27,398) was measuring a ladder with no rung 3 at
 all and is superseded.
 
 The 232 are members whose only use is a same-named reference from OUTSIDE the
-pool their reach names. Deciding whether they are dead members the unscoped
-keeper hides, or dynamic dispatch v2 cannot see, needs a sample read before
-anything is changed — the owner's call, and the reason nothing here is shipped
-by this ledger.
+pool their reach names. Read, they are three families, and none of them is a
+reason to leave the ladder as it is:
+
+1. **84 (36%) sit in a test or benchmark file** — Caliper's `setUp` across
+   eight guava benchmarks, JUnit inner classes, EventBus `Callback.call`,
+   `DummySubscriber.handle`. Framework dispatch, which the plan already sends
+   to rule packs (M8.e). Land those and this family goes to zero without the
+   ladder being involved.
+2. **vite's 66** are public members of exported types in a package that
+   publishes through ENTRIES — `ModuleRunner.close`,
+   `EvaluatedModules.getModuleByUrl`, `DevEnvironment.warmupRequest`. Under
+   `PublishedSurface::Entries` the member branch has no rung that hands a
+   member out when the entry surface reaches its OWNER: `Published` is gated
+   on the owner's pool being `Pool::Published`, which `Entries` never is.
+   That is a gap in the plan's ladder, not in this implementation of it, and
+   it needs a rung before the ladder tightens.
+3. **guava's 69 non-test** are the `android/` twin tree (the same package
+   names as `guava/`, so today's unscoped match keeps each from the other's
+   call sites), plus classic deliberate padding (`Striped64.Cell.p1`..`p4`)
+   and backported public API (`LongAdder.decrement`). The only family that
+   needs its own verdict.
+
+**Order, therefore**: M8.e first, then the entry-surface member rung, then
+re-measure and decide family 3. Tightening the ladder before those two would
+ship 150 findings whose cause is known and addressable elsewhere.
