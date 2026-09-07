@@ -79,10 +79,6 @@ world extension {
     /// `manifest-dependency` rules evaluate against.
     export manifest-dependencies: func(manifest-path: string, content: list<u8>) -> list<string>;
 
-    /// The files a declaration of `reach` at `path` can be seen from — a
-    /// scoped token's region, a unit's files — none when the adapter cannot
-    /// bound it (those declarations judge as exported, keep-alive).
-    export seen-from: func(path: string, reach: reach) -> option<list<string>>;
 
     /// Liveness the language cannot know. Invoked only when the spec declares
     /// `mutates-graph` (and any active mutating extension bypasses the persisted

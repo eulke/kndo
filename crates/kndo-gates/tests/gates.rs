@@ -1795,8 +1795,9 @@ fn finding_identity_is_unique() {
 /// clause, a mount, a structured reach, markers, relations — and the engine
 /// derives every set from them. It never hands the engine a list of files it
 /// walked, because a second way to say one thing is a second thing to explain
-/// to whoever writes the tenth adapter. `Extension::sees` was that second way
-/// and it is gone; `seen_from` is the last of them and goes with M8.d.
+/// to whoever writes the tenth adapter. `Extension::sees` and
+/// `Extension::seen_from` were those second ways, and both are gone: no
+/// adapter hands the engine a list of files it walked.
 ///
 /// A row here fails the moment an adapter regresses to silence, and the
 /// exception list is the honest ledger of what M8.d still owes.

@@ -149,7 +149,7 @@ path, per file).
 The engine's structure of project, units, namespaces, files and owners, built from
 evidence and manifest evidence. Pools, effective reach and the narrowest expressible
 rung are read from it.
-_Avoid_: sees (retired), seen_from, region
+_Avoid_: sees, seen_from, region (all three retired)
 
 **Co-visibility**:
 The files a language compiles TOGETHER, read off the scope forest where the language

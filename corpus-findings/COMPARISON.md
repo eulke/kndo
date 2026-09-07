@@ -1739,3 +1739,22 @@ used in a single file, and `Performance/` is its own package.
 
 `seen_from` for swift drops from 486 findings to 4, all in Alamofire's
 `Example/` and `watchOS Example/` — Xcode projects no SwiftPM target covers.
+
+### `seen_from` leaves the vocabulary (2026-09-07)
+
+| repo | before | after | what moved |
+|---|---|---|---|
+| Alamofire | 538 | 534 | −2 `internal-only`, −2 `unused` |
+| Exposed | 976 | 934 | −23 `internal-only`, −19 `unused` |
+| every other repository | — | — | byte-identical |
+
+No adapter hands the engine a list of files any more. Where a manifest names
+the unit, its pool answers; where the language mounts its namespaces, the tree
+answers; where neither does, the reach is unbounded and v2 abstains — the
+contract's own law, and the reason both numbers go DOWN.
+
+Alamofire's 4 are in `Example/` and `watchOS Example/`, Xcode projects no
+SwiftPM target covers. Exposed's 42 are kotlin `internal` declarations that a
+`/src/`-shaped path convention used to bound; kotlin reads no Gradle yet, so
+nothing names its units. Both close when their parser lands — swift's already
+closed 482 of its own 486.

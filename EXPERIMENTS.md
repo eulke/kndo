@@ -492,9 +492,13 @@ that follows every restore reproduces the pinned reports exactly.
 
 ### Duplicate: both mechanisms live, and the new one is wired
 
-`Extension::sees` is gone from the vocabulary entirely as of 2026-09-07 — trait,
-WIT, SDK, host, guests and core. Rows 1a–1c are closed; what a language cannot
-yet say through the forest is now an M8.d row, not a second hook.
+`Extension::sees` AND `Extension::seen_from` are gone from the vocabulary
+entirely as of 2026-09-07 — trait, WIT, SDK, host, guests and core, along with
+`sees_of`, `regions_of`, `GraphFile.regions` and `region_of`. Rows 1a–1c and
+3a–3b are closed. No adapter hands the engine a list of files any more: it
+declares a namespace, and a manifest declares its units. What a language cannot
+yet say that way ABSTAINS — keep-alive, the typed absence — and the abstention
+is recorded as a fixture `known_gap` naming the milestone that closes it.
 
 | # | old | replaced by | ablation | disposition |
 |---|---|---|---|---|
@@ -507,8 +511,8 @@ yet say through the forest is now an M8.d row, not a second hook.
 
 | # | old | replaced by | ablation | blocked on |
 |---|---|---|---|---|
-| 3a | `seen_from` (kndo:kotlin) | units from `extract_manifest` | 42 (Exposed) | M8.d — kotlin has no `extract_manifest` |
-| 3b | `seen_from` (kndo:swift) | units from `extract_manifest` | **486** (Alamofire 346, vapor 140) | M8.d — swift has no `extract_manifest` |
+| 3a | `seen_from` (kndo:kotlin) | units from `extract_manifest` | 42 (Exposed) | **DONE 2026-09-07** — the hook is deleted; kotlin's 42 abstain (keep-alive) until the Gradle parser names its units, recorded as a `known_gap` in `internal-scope` |
+| 3b | `seen_from` (kndo:swift) | units from `extract_manifest` | **486** (Alamofire 346, vapor 140) | **DONE 2026-09-07** — `Package.swift` names the targets, so 482 of the 486 became real units; the last 4 abstain |
 | 4a | library-mode whole-file Production root (java) | `publishes()` in core | 18 findings move (net −2) | the residual is real; needs its own slice |
 | 4b | the same (kotlin) | `publishes()` | 84 move (net +50) | M8.d — no units, so nothing publishes |
 | 4c | the same (swift) | `publishes()` | 39 (Alamofire; vapor 0) | M8.d |

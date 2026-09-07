@@ -11,7 +11,7 @@ use crate::adapter::{
 };
 use crate::evidence::{
     CoverageRecords, Declaration, DeclarationId, EvidenceSink, EvidenceStreams, ImportShape,
-    Marker, Reach, RelationKind, RootKind, SymbolKind,
+    Marker, RelationKind, RootKind, SymbolKind,
 };
 use crate::finding::Severity;
 use crate::manifest::{ManifestSink, UnitKind};
@@ -1730,26 +1730,6 @@ pub trait Extension: Send + Sync {
     fn manifest_mentions(&self, manifest: &SourceFile<'_>) -> Vec<SmolStr> {
         let _ = manifest;
         Vec::new()
-    }
-
-    /// The files a declaration of `reach` at `path` can legally be seen FROM,
-    /// where the engine's own structure cannot bound it: a `Scoped` token
-    /// always (the region behind the adapter's own word), and a `Unit` reach
-    /// until this adapter reports its units through [`Extension::extract_manifest`].
-    /// Enumerated from paths and manifests only, never contents (the `sees`
-    /// stability class: a persisted graph trusts it while contents change).
-    /// `None` = this adapter cannot bound it — the declaration is treated
-    /// exactly as Exported, keep-alive. The default answers nothing; `unused`
-    /// and `internal-only` are the consumers, and the Kotlin `internal`
-    /// fixtures the conformance case.
-    fn seen_from(
-        &self,
-        path: &ProjectPath,
-        reach: &Reach,
-        cx: &ResolveContext<'_>,
-    ) -> Option<Vec<ProjectPath>> {
-        let _ = (path, reach, cx);
-        None
     }
 
     // ---- conduct: post-graph, once; gated by activation ----

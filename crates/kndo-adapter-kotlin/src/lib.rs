@@ -23,7 +23,6 @@ mod resolve;
 
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::EvidenceSink;
-use kndo_contract::evidence::Reach;
 use kndo_contract::extension::{Extension, ExtensionSpec, Rung, Step};
 use kndo_contract::vocab::ProjectPath;
 
@@ -35,7 +34,7 @@ impl KotlinAdapter {
     pub fn new() -> Self {
         KotlinAdapter {
             // 7: the generated banner is reported, never concluded.
-            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:kotlin", 9, &["kt"])
+            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:kotlin", 10, &["kt"])
                 // A package is one name across the whole compilation, like
                 // Java's: `src/test/kotlin/com/foo` and `src/main/kotlin/com/foo`
                 // are the same namespace, and the test set's build holds the
@@ -90,12 +89,4 @@ impl Extension for KotlinAdapter {
         kndo_toolkit::jvm_manifest::dependencies(manifest)
     }
 
-    fn seen_from(
-        &self,
-        path: &ProjectPath,
-        reach: &Reach,
-        cx: &ResolveContext<'_>,
-    ) -> Option<Vec<ProjectPath>> {
-        matches!(reach, Reach::Unit { up: 0 }).then(|| resolve::module_region(path, cx))
-    }
 }

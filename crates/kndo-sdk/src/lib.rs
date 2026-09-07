@@ -135,21 +135,6 @@ fn reach_to_wire(reach: &ev::Reach) -> wire::Reach {
     }
 }
 
-fn reach_from_wire(reach: wire::Reach) -> ev::Reach {
-    match reach {
-        wire::Reach::Owner => ev::Reach::Owner,
-        wire::Reach::File => ev::Reach::File,
-        wire::Reach::Namespace(up) => ev::Reach::Namespace { up },
-        wire::Reach::Unit(up) => ev::Reach::Unit { up },
-        wire::Reach::Directory(up) => ev::Reach::Directory { up },
-        wire::Reach::Heirs(and_namespace) => ev::Reach::Heirs { and_namespace },
-        wire::Reach::Named(namespace) => ev::Reach::Named {
-            namespace: namespace.into_iter().map(SmolStr::new).collect(),
-        },
-        wire::Reach::Inherited => ev::Reach::Inherited,
-        wire::Reach::Exported => ev::Reach::Exported,
-    }
-}
 
 fn activation_to_wire(activation: &Activation) -> wire::Activation {
     match activation {
@@ -781,13 +766,6 @@ impl<E: Extension + Default> bindings::Guest for ExportedExtension<E> {
             .iter()
             .map(|d| d.name.to_string())
             .collect()
-    }
-
-    fn seen_from(path: String, reach: wire::Reach) -> Option<Vec<String>> {
-        let path = ProjectPath::new(path);
-        E::default()
-            .seen_from(&path, &reach_from_wire(reach), &resolve_context())
-            .map(|files| files.iter().map(|p| p.as_str().to_string()).collect())
     }
 
     fn contribute_roots() -> Vec<wire::ContributedRoot> {

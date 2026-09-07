@@ -4,10 +4,12 @@
 subject = "src/main/kotlin/com/pkga/Util.kt#helper"
 why = "used from pkgb by fully-qualified name with no import — only the module region's reference pool can keep it"
 
-[[dead]]
+[[known_gap]]
 subject = "src/main/kotlin/com/pkga/Util.kt#lonely"
+expect = "dead"
 category = "unused"
-why = "nothing in the module names it; the region is bounded, so it is judgeable"
+why = "nothing in the module names it, so it SHOULD be reported — but kotlin reads no Gradle yet, so no manifest names the unit, `internal` has no bound, and an unbounded reach is keep-alive by the contract's own law"
+fix = "M8.d kotlin (Gradle units: main/test per module, test a friend of main)"
 
 [[dead]]
 subject = "src/main/kotlin/com/pkga/Util.kt#fileGhost"

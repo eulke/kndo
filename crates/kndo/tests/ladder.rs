@@ -35,11 +35,14 @@ fn advice(snap: &kndo::Snapshot) -> Vec<String> {
 #[test]
 fn a_unit_wide_name_used_only_in_its_file_falls_to_the_file_step() {
     let p = TempProject::new();
-    p.file(
-        "src/lib.kmock",
-        "root-file\nunit fn helper\ncall helper\nunit fn shared\ncall shared\n",
-    )
-    .file("src/other.kmock", "root-file\ncall shared\n");
+    // The manifest NAMES the unit: without one the reach has no bound, and an
+    // unbounded reach is keep-alive with no advice to give.
+    p.file("kmock.pkg", "unit core library roots=src\n")
+        .file(
+            "src/lib.kmock",
+            "root-file\nunit fn helper\ncall helper\nunit fn shared\ncall shared\n",
+        )
+        .file("src/other.kmock", "root-file\ncall shared\n");
     let snap = common::analyze(&p, vec![Box::new(four_rungs())]);
     assert_eq!(
         advice(&snap),

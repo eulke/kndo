@@ -1,6 +1,5 @@
 use kndo_adapter_python::PythonAdapter;
 use kndo_contract::adapter::{Resolution, ResolveContext};
-use kndo_contract::evidence::Reach;
 use kndo_contract::extension::Extension;
 use kndo_contract::vocab::ProjectPath;
 use std::collections::BTreeSet;
@@ -70,16 +69,3 @@ fn relative_imports_climb_by_dots() {
     );
 }
 
-#[test]
-fn a_python_file_sees_nothing_without_an_import() {
-    let files: BTreeSet<ProjectPath> = ["src/pkg/a.py", "src/pkg/b.py"]
-        .iter()
-        .map(|p| ProjectPath::new(*p))
-        .collect();
-    let cx = ResolveContext::new(&files);
-    let a = PythonAdapter::new();
-    assert!(
-        a.seen_from(&path("src/pkg/a.py"), &Reach::Unit { up: 0 }, &cx)
-            .is_none()
-    );
-}

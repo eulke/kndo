@@ -312,22 +312,6 @@ impl Extension for WasmExtension {
         .unwrap_or_default()
     }
 
-    fn seen_from(
-        &self,
-        path: &ProjectPath,
-        reach: &kndo_contract::evidence::Reach,
-        cx: &ResolveContext<'_>,
-    ) -> Option<Vec<ProjectPath>> {
-        let reach = crate::convert::reach_to_wire(reach);
-        // A trap or violation degrades to None — Exported treatment, keep-alive.
-        self.call(StoreData::project(cx), |guest, store| {
-            guest.call_seen_from(store, path.as_str(), &reach)
-        })
-        .ok()
-        .flatten()
-        .map(|paths| paths.into_iter().map(ProjectPath::new).collect())
-    }
-
     fn contribute_roots(
         &self,
         graph: &dyn GraphAccess,

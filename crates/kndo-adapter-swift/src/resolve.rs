@@ -58,34 +58,3 @@ pub fn resolve(_from: &ProjectPath, specifier: &str, cx: &ResolveContext<'_>) ->
 }
 
 
-/// The region behind `internal`: the module's own files, plus every file under
-/// a `Tests/` tree — any test target may hold an `@testable import` of this
-/// module, and the region must be a content-free superset of who can legally
-/// name the declaration.
-pub fn module_region(path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
-    let mut out: Vec<ProjectPath> = match target_of(path.as_str()) {
-        Some((target, _)) => cx
-            .known_files()
-            .filter(|p| {
-                let s = p.as_str();
-                if !s.ends_with(".swift") {
-                    return false;
-                }
-                target_of(s).is_some_and(|(t, _)| t == target)
-                    || s.starts_with("Tests/")
-                    || s.contains("/Tests/")
-            })
-            .cloned()
-            .collect(),
-        // No unit: the file's names bound to the whole project's sources —
-        // single-module reality, still a bounded region.
-        None => cx
-            .known_files()
-            .filter(|p| p.as_str().ends_with(".swift"))
-            .cloned()
-            .collect(),
-    };
-    out.sort();
-    out.dedup();
-    out
-}

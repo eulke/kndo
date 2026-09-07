@@ -155,24 +155,6 @@ fn step(s: awire::Step) -> Step {
     }
 }
 
-/// The reach the host asks a guest's `seen-from` about. A rung the wire has
-/// no word for crosses as the widest one: the guest then bounds nothing, and
-/// the host judges the declaration as exported, keep-alive.
-pub(crate) fn reach_to_wire(reach: &ev::Reach) -> awire::Reach {
-    match reach {
-        ev::Reach::Owner => awire::Reach::Owner,
-        ev::Reach::File => awire::Reach::File,
-        ev::Reach::Namespace { up } => awire::Reach::Namespace(*up),
-        ev::Reach::Unit { up } => awire::Reach::Unit(*up),
-        ev::Reach::Directory { up } => awire::Reach::Directory(*up),
-        ev::Reach::Heirs { and_namespace } => awire::Reach::Heirs(*and_namespace),
-        ev::Reach::Named { namespace } => {
-            awire::Reach::Named(namespace.iter().map(|s| s.to_string()).collect())
-        }
-        ev::Reach::Inherited => awire::Reach::Inherited,
-        _ => awire::Reach::Exported,
-    }
-}
 
 pub(crate) fn reach_from_wire(reach: &awire::Reach) -> ev::Reach {
     match reach {

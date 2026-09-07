@@ -563,25 +563,6 @@ impl Extension for MockExtension {
         }
     }
 
-    fn seen_from(
-        &self,
-        _path: &ProjectPath,
-        reach: &Reach,
-        cx: &ResolveContext<'_>,
-    ) -> Option<Vec<ProjectPath>> {
-        // The mock language is one unit: a unit-reaching name is nameable
-        // from every kmock file.
-        matches!(reach, Reach::Unit { up: 0 }).then(|| {
-            let mut files: Vec<ProjectPath> = cx
-                .known_files()
-                .filter(|p| p.as_str().ends_with(".kmock"))
-                .cloned()
-                .collect();
-            files.sort();
-            files
-        })
-    }
-
     fn resolve(&self, from: &ProjectPath, specifier: &str, cx: &ResolveContext<'_>) -> Resolution {
         if self.speaks != Speaks::Kmock {
             return Resolution::Unresolved;

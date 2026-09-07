@@ -69,19 +69,19 @@
     ]
   },
   "health": {
-    "implicated": 141,
+    "implicated": 139,
     "subjects": 3716,
     "by_category": [
       {
         "category": "unused",
-        "findings": 141
+        "findings": 139
       }
     ],
     "by_package": [
       {
         "name": "",
         "manifest": "",
-        "implicated": 141,
+        "implicated": 139,
         "subjects": 3716
       }
     ]
@@ -3156,51 +3156,6 @@
       "lines": {
         "start": 642,
         "end": 689
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-abd2948907a5",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "watchOS Example/watchOS Example WatchKit Extension/ContentView.swift",
-        "selector": {
-          "name": "ContentViewPreviews"
-        },
-        "span": {
-          "start": 1521,
-          "end": 1697
-        }
-      },
-      "lines": {
-        "start": 40,
-        "end": 46
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-badafbe8e1bf",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "watchOS Example/watchOS Example WatchKit Extension/ContentView.swift",
-        "selector": {
-          "owner": "ContentViewPreviews",
-          "name": "previews"
-        },
-        "span": {
-          "start": 1613,
-          "end": 1695
-        }
-      },
-      "lines": {
-        "start": 43,
-        "end": 45
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -6482,28 +6437,6 @@
         "path": "docs/js/typeahead.jquery.js"
       },
       "message": "byte-identical to docs/docsets/Alamofire.docset/Contents/Resources/Documents/js/typeahead.jquery.js"
-    },
-    {
-      "id": "kndo-4111a2e0fe1c",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "Example/Source/DetailViewController.swift",
-        "selector": {
-          "name": "Sections"
-        },
-        "span": {
-          "start": 1300,
-          "end": 1353
-        }
-      },
-      "lines": {
-        "start": 29,
-        "end": 31
-      },
-      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-01f76b9ffc9a",
@@ -11233,28 +11166,6 @@
         "end": 700
       },
       "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this method"
-    },
-    {
-      "id": "kndo-b6dcd66a0e47",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "watchOS Example/watchOS Example WatchKit Extension/Networking.swift",
-        "selector": {
-          "name": "HTTPBinResponse"
-        },
-        "span": {
-          "start": 1950,
-          "end": 2007
-        }
-      },
-      "lines": {
-        "start": 55,
-        "end": 57
-      },
-      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
       "id": "kndo-366289230288",

@@ -618,7 +618,6 @@ mod tests {
                 hash_hex: String::new(),
                 evidence: sink.finish(),
                 includes: Vec::new(),
-                regions: Vec::new(),
                 published: false,
                 mounted_by: None,
                 mount_cap: None,

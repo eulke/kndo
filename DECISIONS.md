@@ -5281,3 +5281,44 @@ four unit tests instead, and the capture stays on the ledger.
 
 `GRAPH_SEMANTICS_VERSION` moves to 31 and `kndo:swift` to 6. The contract
 fingerprint does not move. No conformance fixture moves.
+
+## 2026-09-07 — `seen_from` is gone, and no adapter enumerates files any more
+
+**The owner's question was the right one: why was it still there.** `sees` had
+been deleted; `seen_from` had not, and I had been treating its last four
+findings as a plan-scope question when they were fixture maintenance. Both
+hooks are now gone from the vocabulary — trait, WIT, SDK, host, both reference
+guests — and with them `sees_of`, `regions_of`, `GraphFile.regions` and
+`region_of`, the whole apparatus for holding a list of files an adapter walked.
+
+**What answers instead.** An adapter DECLARES: a namespace clause, a mount, a
+structured reach, and its manifest's units. `Reach::Unit { up: 0 }` reads the
+unit pool where a manifest named the unit and the mount tree where the language
+mounts its namespaces. Where neither speaks, the reach is UNBOUNDED and the
+contract's own law applies: keep-alive, the typed absence. v2 abstains rather
+than guessing from a directory layout.
+
+**Measured: Alamofire 538 → 534, Exposed 976 → 934, seven repositories
+byte-identical.** Alamofire's 4 are in `Example/` and `watchOS Example/`, Xcode
+projects no SwiftPM target covers. Exposed's 42 are kotlin `internal`
+declarations that had been bounded by a `/src/`-shaped path convention;
+kotlin reads no Gradle, so no manifest names its units and every one of them
+now abstains. Both are v2 declining to accuse on a guess, and both close when
+their parser lands — swift's already did for 482 of its 486.
+
+**Three fixtures the deletion moved, each recorded rather than papered over.**
+`apple-bundles` now declares its two app targets in its own `Package.swift`,
+because a source tree no target declares is keep-alive and would prove nothing
+— the `InterfaceBuilder` conduct proof needs its subjects judgeable, which is
+what a real SwiftPM package shipping a storyboard looks like. The `ladder`
+kmock fixture gained the `kmock.pkg` that names its unit, for the same reason.
+And `internal-scope` (kotlin, `build.gradle.kts`) turns its `lonely` claim into
+a `known_gap` with `fix = "M8.d kotlin (Gradle units)"`: the declaration IS
+dead and SHOULD be reported, and saying so in the ledger is more honest than
+swapping the fixture's build system to make the number come out.
+
+`GRAPH_SEMANTICS_VERSION` moves to 32, `kndo:kotlin` to 10 and `kndo:swift` to
+7. The contract fingerprint does not move. Two conformance fixtures move,
+internal-scope and ctor-arg-and-default-value (both kndo-adapter-kotlin), plus
+apple-bundles (kndo-apple). The `extension` world loses an export, so the four
+pinned reference components are re-pinned.

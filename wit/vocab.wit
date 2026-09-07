@@ -50,7 +50,7 @@ interface types {
     /// Mirrors `Reach`: `namespace`, `unit` and `directory` carry their `up`,
     /// `named` the segments of the namespace it spells. `unit` is the unit's
     /// own reach (Kotlin's `internal`, Rust's `pub(crate)`), and the host asks
-    /// `seen-from` for its files where no manifest has named the unit.
+    /// unbounded — keep-alive — where no manifest has named the unit.
     variant reach {
         owner,
         file,

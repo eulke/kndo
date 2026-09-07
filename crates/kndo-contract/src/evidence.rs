@@ -264,7 +264,7 @@ pub enum Reach {
     /// its friend; or within the group of units one manifest aggregates
     /// (`up: 1` — Swift's `package`). The pool is the unit's files, or the
     /// group's; until the claiming adapter reports its units,
-    /// [`crate::extension::Extension::seen_from`] bounds the unit from paths
+    /// the scope forest bounds the unit from the manifest's own units
     /// and the group stays unbounded.
     Unit {
         up: u32,

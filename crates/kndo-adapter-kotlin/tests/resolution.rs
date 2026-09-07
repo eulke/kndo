@@ -2,12 +2,9 @@
 //! the directory-plus-mirrors unit.
 
 use kndo_adapter_kotlin::KotlinAdapter;
-use kndo_contract::adapter::{Resolution, ResolveContext};
-use kndo_contract::evidence::Reach;
-use kndo_contract::extension::Extension;
+use kndo_contract::adapter::Resolution;
 use kndo_contract::vocab::ProjectPath;
 use kndo_testkit::resolve_in;
-use std::collections::BTreeSet;
 
 fn path(p: &str) -> ProjectPath {
     ProjectPath::new(p)
@@ -77,44 +74,3 @@ fn third_party_packages_stay_unresolved() {
     assert_eq!(r, Resolution::Unresolved);
 }
 
-#[test]
-fn the_module_region_is_the_source_set_tree() {
-    let files = [
-        "core/src/main/kotlin/com/a/A.kt",
-        "core/src/main/kotlin/com/b/B.kt",
-        "core/src/test/kotlin/com/a/ATest.kt",
-        "core/src/main/java/com/a/Legacy.java",
-        "dao/src/main/kotlin/com/c/C.kt",
-        "core/build.gradle.kts",
-    ];
-    let known: BTreeSet<ProjectPath> = files.iter().map(|p| ProjectPath::new(*p)).collect();
-    let cx = ResolveContext::new(&known);
-    let a = KotlinAdapter::new();
-
-    let region = a
-        .seen_from(
-            &path("core/src/main/kotlin/com/a/A.kt"),
-            &Reach::Unit { up: 0 },
-            &cx,
-        )
-        .expect("the unit is bounded from the source-set layout");
-    assert_eq!(
-        region,
-        vec![
-            path("core/src/main/java/com/a/Legacy.java"),
-            path("core/src/main/kotlin/com/a/A.kt"),
-            path("core/src/main/kotlin/com/b/B.kt"),
-            path("core/src/test/kotlin/com/a/ATest.kt"),
-        ],
-        "every source under core's src trees, no dao, no manifests"
-    );
-    assert!(
-        a.seen_from(
-            &path("core/src/main/kotlin/com/a/A.kt"),
-            &Reach::Namespace { up: 0 },
-            &cx
-        )
-        .is_none(),
-        "an unknown token is unanswerable, never guessed"
-    );
-}

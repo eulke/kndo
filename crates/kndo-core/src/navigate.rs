@@ -411,9 +411,10 @@ impl Index {
             Reach::Unit { up: 0 } => match f.unit {
                 Some(u) => Pool::Files(self.scopes.unit_pool(u)),
                 // No manifest named the unit: the tree the mounts spell is
-                // the compilation, and the adapter's own region answers only
-                // where the language mounts nothing.
-                None => bounded(self.scopes.tree_pool(file).or_else(|| region_of(f, reach))),
+                // the compilation. Where the language mounts nothing either,
+                // the reach is UNBOUNDED and says so — keep-alive, the typed
+                // absence, never a directory an adapter walked.
+                None => bounded(self.scopes.tree_pool(file)),
             },
             Reach::Unit { up: 1 } => bounded(f.unit.and_then(|u| self.scopes.group_pool(u))),
             Reach::Directory { up } => bounded(self.scopes.directory_pool(file, *up)),
@@ -449,14 +450,6 @@ impl Capped {
     }
 }
 
-/// The files the claiming adapter enumerated for `reach` at this file, if it
-/// could bound it — see [`crate::graph::GraphFile::regions`].
-fn region_of<'a>(f: &'a crate::graph::GraphFile, reach: &Reach) -> Option<&'a [u32]> {
-    f.regions
-        .binary_search_by(|(r, _)| r.cmp(reach))
-        .ok()
-        .map(|ix| f.regions[ix].1.as_slice())
-}
 
 /// The unit whose published surface this file is on, by name — see
 /// [`crate::graph::GraphFile::published`].

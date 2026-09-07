@@ -23,7 +23,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Bump when the SAME evidence assembles into a DIFFERENT graph — resolution
 /// candidate changes, reachability semantics, new assembled fields. Folded into the
 /// graph cache key beside the contract fingerprint and the adapter set.
-pub const GRAPH_SEMANTICS_VERSION: u32 = 31;
+pub const GRAPH_SEMANTICS_VERSION: u32 = 32;
 
 #[derive(Serialize, Deserialize)]
 pub struct GraphFile {
@@ -43,15 +43,6 @@ pub struct GraphFile {
     /// ([`crate::scopes::Scopes::covisible`]) and never an enumeration an
     /// adapter hands over.
     pub includes: Vec<u32>,
-    /// Per adapter-bounded reach this file's evidence uses — a `Scoped` token,
-    /// or `Unit` until a manifest names the unit — the files a declaration of
-    /// that reach can be seen from, per
-    /// [`kndo_contract::extension::Extension::seen_from`]: indices into
-    /// `Graph::files`, sorted, deduplicated, self included. Sorted by reach. A
-    /// reach the adapter cannot bound has NO entry: its declarations are judged
-    /// as Exported (keep-alive). The same stability class — a pure function of
-    /// path, reach and file set.
-    pub regions: Vec<(Reach, Vec<u32>)>,
     /// This file holds an exported declaration of a published library unit, in
     /// a language whose units publish every export: its surface is the outside
     /// world's, which reaches the file as production and keeps each exported
@@ -525,7 +516,6 @@ pub fn assemble(
                 hash_hex: f.hash.iter().map(|b| format!("{b:02x}")).collect(),
                 evidence: ev,
                 includes: Vec::new(),
-                regions: Vec::new(),
                 // Both wait for the mount pass below: a fence is a fact about
                 // the whole file set, and publication reads it.
                 published: false,
@@ -555,7 +545,7 @@ pub fn assemble(
     let mut resolved: Vec<ResolvedEdges> = Vec::with_capacity(graph_files.len());
     for gf in graph_files.iter() {
         let adapter = adapter_by_id(adapters, &gf.adapter);
-        let mut edges = resolve_file(
+        let edges = resolve_file(
             &gf.path,
             &gf.evidence,
             adapter,
@@ -563,14 +553,12 @@ pub fn assemble(
             &cx,
             &sorted_paths,
         );
-        edges.regions = regions_of(&gf.path, &gf.evidence, adapter, &cx, &sorted_paths);
         resolved.push(edges);
     }
     for (gf, edges) in graph_files.iter_mut().zip(resolved) {
         gf.imports = edges.imports;
         gf.import_targets = edges.import_targets;
         gf.unresolved_imports = edges.unresolved_imports;
-        gf.regions = edges.regions;
         debug_assert_eq!(
             gf.import_targets.len(),
             gf.evidence.imports.len(),
@@ -715,41 +703,6 @@ fn package_map(reads: &[crate::project::ManifestRead]) -> BTreeMap<SmolStr, Pack
 }
 
 
-/// The pools behind one file's adapter-bounded reaches, as graph ids: a
-/// `Scoped` token (the region behind the adapter's own word) and, until a
-/// manifest names the unit, `Unit`. Each distinct reach the evidence uses is
-/// answered once per file. An unanswerable one is ABSENT, and judgment treats
-/// its declarations as Exported.
-fn regions_of(
-    path: &ProjectPath,
-    evidence: &kndo_contract::evidence::FileEvidence,
-    adapter: &dyn Extension,
-    cx: &ResolveContext<'_>,
-    sorted_paths: &[ProjectPath],
-) -> Vec<(Reach, Vec<u32>)> {
-    let mut reaches: Vec<&Reach> = evidence
-        .declarations
-        .iter()
-        .map(|d| &d.reach)
-        .filter(|r| matches!(r, Reach::Unit { up: 0 }))
-        .collect();
-    reaches.sort();
-    reaches.dedup();
-    let mut out = Vec::new();
-    for reach in reaches {
-        let Some(region) = adapter.seen_from(path, reach, cx) else {
-            continue;
-        };
-        let mut ids: Vec<u32> = region
-            .iter()
-            .filter_map(|p| sorted_paths.binary_search(p).ok().map(|i| i as u32))
-            .collect();
-        ids.sort_unstable();
-        ids.dedup();
-        out.push((reach.clone(), ids));
-    }
-    out
-}
 
 /// The mount forest over the whole file set, and the unit and sight that read
 /// it. All three are functions of every file's imports together, so they run
@@ -993,7 +946,6 @@ struct ResolvedEdges {
     imports: Vec<u32>,
     import_targets: Vec<Vec<u32>>,
     unresolved_imports: u32,
-    regions: Vec<(Reach, Vec<u32>)>,
 }
 
 /// The file's imports resolved by the extension that read each: the claiming
@@ -1060,7 +1012,6 @@ fn resolve_file(
         imports: targets.into_iter().collect(),
         import_targets: per_import,
         unresolved_imports: unresolved,
-        regions: Vec::new(),
     }
 }
 
@@ -1128,7 +1079,6 @@ pub fn patch(
         let evidence = crate::extract::extract_one(file, adapter, adapters, cache);
         let edges = resolve_file(&file.path, &evidence, adapter, adapters, &cx, &sorted_paths);
         let gf = &mut prev.files[ix];
-        gf.regions = regions_of(&file.path, &evidence, adapter, &cx, &sorted_paths);
         gf.evidence = evidence;
         gf.imports = edges.imports;
         gf.import_targets = edges.import_targets;

@@ -41,19 +41,19 @@
     ]
   },
   "health": {
-    "implicated": 2,
+    "implicated": 1,
     "subjects": 6,
     "by_category": [
       {
         "category": "unused",
-        "findings": 2
+        "findings": 1
       }
     ],
     "by_package": [
       {
         "name": "",
         "manifest": "",
-        "implicated": 2,
+        "implicated": 1,
         "subjects": 6
       }
     ]
@@ -78,28 +78,6 @@
       "lines": {
         "start": 11,
         "end": 11
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-ce13fb204517",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "src/main/kotlin/com/pkga/Util.kt",
-        "selector": {
-          "name": "lonely"
-        },
-        "span": {
-          "start": 309,
-          "end": 333
-        }
-      },
-      "lines": {
-        "start": 9,
-        "end": 9
       },
       "message": "nothing references, roots, or imports this declaration"
     }
