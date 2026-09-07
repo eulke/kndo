@@ -179632,17 +179632,6 @@
       "message": "declared `package-private`, but every use is within `PublicSuffixType` — `private` would suffice for this method"
     },
     {
-      "id": "kndo-dab434022017",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "android/guava/src/com/google/common/xml/XmlEscapers.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
       "id": "kndo-5e3ea9698bfe",
       "category": "untested",
       "severity": "info",
@@ -179793,28 +179782,6 @@
       "subject": {
         "kind": "file",
         "path": "guava-gwt/test-super/com/google/common/testing/super/com/google/common/testing/Platform.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-23524f014d1d",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/test-super/com/google/common/util/concurrent/super/com/google/common/util/concurrent/TestPlatform.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-ad59f942cd43",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava/src/com/google/common/xml/XmlEscapers.java"
       },
       "message": "production-reachable, but no test reaches this file"
     }

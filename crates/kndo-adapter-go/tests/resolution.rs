@@ -4,7 +4,7 @@
 
 use kndo_adapter_go::GoAdapter;
 use kndo_contract::adapter::{PackageEntry, Resolution, ResolveContext};
-use kndo_contract::extension::{Covisibility, Extension};
+use kndo_contract::extension::Extension;
 use kndo_contract::vocab::ProjectPath;
 use smol_str::SmolStr;
 use std::collections::{BTreeMap, BTreeSet};
@@ -20,13 +20,14 @@ fn files(paths: &[&str]) -> Resolution {
 #[test]
 fn sight_is_declared_not_enumerated() {
     // What a Go package compiles together used to be a directory this adapter
-    // walked (`Extension::sees`). It is a property of the LANGUAGE, and the
-    // engine reads it off the namespace node extraction declares — so the
-    // adapter's whole statement is one capability, and the asymmetry that made
-    // the old enumeration subtle (a test file is compiled into the test binary
-    // alone) is the engine's, pinned by `crates/kndo/tests/mounts.rs`.
+    // walked (`Extension::sees`). The adapter says it ONCE now, in the shape
+    // of the namespace it declares — the directory plus the package clause —
+    // and the engine reads the co-visible set off that node, so nothing here
+    // enumerates a directory and no capability restates what the shape
+    // already says. The asymmetry that made the old enumeration subtle (a
+    // test file is compiled into the test binary alone) is the engine's,
+    // pinned by `crates/kndo/tests/mounts.rs`.
     let adapter = GoAdapter::new();
-    assert_eq!(adapter.spec().covisibility(), Covisibility::Namespace);
     let known = project(&["pkg/a.go", "pkg/b.go"]);
     let cx = ResolveContext::new(&known);
     assert!(

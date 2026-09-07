@@ -76,7 +76,6 @@ pub(crate) fn extension_spec(spec: awire::ExtensionSpec) -> ExtensionSpec {
         },
         dispatch: spec.dispatch.into_iter().map(dispatch_rule).collect(),
         namespace_span: Default::default(),
-        covisibility: Default::default(),
         // The wire world speaks no dependency vocabulary yet; absence
         // defaults to silence, like every other undeclared capability.
         dependency_scoping: Default::default(),

@@ -575,7 +575,7 @@ impl Snapshot {
     pub fn query(&self, request: &Request) -> Response {
         let (reach, index) = self.navigation.get_or_init(|| {
             let scopes = crate::scopes::Scopes::build(&self.graph, &self.capabilities);
-            let reach = Reachability::compute(&self.graph, &scopes, &self.capabilities);
+            let reach = Reachability::compute(&self.graph, &scopes);
             let index = Index::build(&self.graph, &reach, scopes);
             (reach, index)
         });

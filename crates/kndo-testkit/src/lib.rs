@@ -192,17 +192,6 @@ impl MockExtension {
         )
     }
 
-    /// The kmock language whose namespace compiles as one — what a test of
-    /// co-visible reachability speaks, since the plain mock says the module
-    /// graph is the whole story.
-    pub fn covisible() -> Self {
-        MockExtension::speaking(
-            kmock_spec()
-                .covisibility(kndo_contract::extension::Covisibility::Namespace)
-                .build(),
-        )
-    }
-
     /// The kmock language under dispatch rules — what a test of the engine's
     /// dispatch speaks: `mark` lines become markers, and these rules say what
     /// they mean.

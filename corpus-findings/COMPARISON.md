@@ -1504,3 +1504,19 @@ surface, so the surface import is never its only keeper: Go is the language
 that always spells `pkg.Name`, and the language where nothing is accusable
 behind it. The keeper and the first qualifier emission belong to swift and
 kotlin, where the prize is.
+
+### The co-visibility gate comes off: guava's cross-tree tests (2026-09-06)
+
+| repo | before | after | what moved |
+|---|---|---|---|
+| guava | 8254 | 8251 | −3 `untested` on files whose test lives in a sibling source tree under the same declared package |
+
+The go slice gated the co-visibility flood behind a capability the design never
+had; the design reads `Scopes::covisible` unconditionally and lets the shape of
+the declared namespace decide what the set holds. With the gate removed,
+`guava/src/com/google/common/xml/XmlEscapers.java`, its android twin and a
+`test-super` GWT mirror stop being reported untested —
+`guava-tests/test/com/google/common/xml/XmlEscapersTest.java` exists, and the
+namespace node reaches it where java's directory-and-mirror `sees` does not.
+Every other repository is byte-identical, which is what a gate removal must
+look like when the languages behind it declare namespaces of one file.

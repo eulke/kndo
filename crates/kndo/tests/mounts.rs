@@ -177,7 +177,7 @@ fn a_covisible_namespace_reaches_its_own_files_but_never_through_a_test() {
     )
     // Another namespace entirely, exporting nothing and imported by nobody.
     .file("src/other/dead.kmock", "package other\nns fn alone\n");
-    let snap = common::analyze(&p, vec![Box::new(MockExtension::covisible())]);
+    let snap = common::analyze(&p, vec![Box::new(MockExtension::new())]);
 
     // The exported file roots on the unit's published surface, and the
     // namespace carries that colour to the file that exports nothing.

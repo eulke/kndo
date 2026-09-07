@@ -34,7 +34,6 @@ pub use version_skew::VersionSkew;
 
 use crate::graph::Graph;
 use kndo_contract::evidence::{EvidenceStream, RootKind, RootTarget};
-use kndo_contract::extension::Covisibility;
 use kndo_contract::finding::{Finding, sort_findings};
 use kndo_contract::vocab::Category;
 use kndo_contract::vocab::ProjectPath;
@@ -53,28 +52,11 @@ pub struct Reachability {
 }
 
 impl Reachability {
-    pub fn compute(
-        graph: &Graph,
-        scopes: &crate::scopes::Scopes,
-        capabilities: &[(smol_str::SmolStr, DeclaredCapabilities)],
-    ) -> Self {
-        // Which files a language compiles together, resolved once per file:
-        // an adapter that has not spoken says the module graph is the whole
-        // story, which is what every language did before the capability.
-        let covisible: Vec<bool> = graph
-            .files
-            .iter()
-            .map(|f| {
-                capabilities
-                    .iter()
-                    .find(|(c, _)| *c == f.adapter)
-                    .is_some_and(|(_, caps)| caps.covisibility == Covisibility::Namespace)
-            })
-            .collect();
+    pub fn compute(graph: &Graph, scopes: &crate::scopes::Scopes) -> Self {
         Reachability {
-            production: flood(graph, scopes, &covisible, RootKind::Production),
-            test: flood(graph, scopes, &covisible, RootKind::Test),
-            tooling: flood(graph, scopes, &covisible, RootKind::Tooling),
+            production: flood(graph, scopes, RootKind::Production),
+            test: flood(graph, scopes, RootKind::Test),
+            tooling: flood(graph, scopes, RootKind::Tooling),
         }
     }
 
@@ -118,12 +100,7 @@ pub fn is_test_file(graph: &Graph, file: usize) -> bool {
         .any(|r| r.kind == RootKind::Test && matches!(r.target, RootTarget::WholeFile))
 }
 
-fn flood(
-    graph: &Graph,
-    scopes: &crate::scopes::Scopes,
-    covisible: &[bool],
-    kind: RootKind,
-) -> Vec<bool> {
+fn flood(graph: &Graph, scopes: &crate::scopes::Scopes, kind: RootKind) -> Vec<bool> {
     let n = graph.files.len();
     let mut reached = vec![false; n];
     let mut queue: Vec<usize> = (0..n).filter(|&i| has_root_of(graph, i, kind)).collect();
@@ -149,11 +126,15 @@ fn flood(
         for &t in f.imports.iter().chain(&f.sees) {
             visit(t);
         }
-        // The namespace's other files, where the language compiles it as one.
-        // The asymmetry is the whole of the rule: a file the production build
-        // never compiles neither carries the production colour into its
-        // namespace nor takes it from one.
-        if covisible[i] && (through_tests || !is_test_file(graph, i)) {
+        // The namespace's other files. What that set holds is the language's
+        // own statement, made in the shape of the namespace it declared — a
+        // package's directory, a module's mount chain, a file that declared
+        // none — so a language whose namespace is one file floods nothing
+        // here and needs no capability to say so. The asymmetry is the whole
+        // of the rule: a file the production build never compiles neither
+        // carries the production colour into its namespace nor takes it from
+        // one.
+        if through_tests || !is_test_file(graph, i) {
             for &t in scopes.covisible(i) {
                 if t as usize != i && (through_tests || !is_test_file(graph, t as usize)) {
                     visit(t);
@@ -362,9 +343,6 @@ pub struct DeclaredCapabilities {
     /// How far one of this language's namespaces reaches across the project's
     /// units — see [`kndo_contract::extension::NamespaceSpan`].
     pub namespace_span: kndo_contract::extension::NamespaceSpan,
-    /// What this language compiles together — see
-    /// [`kndo_contract::extension::Covisibility`].
-    pub covisibility: kndo_contract::extension::Covisibility,
 }
 
 pub fn run_all(
@@ -376,7 +354,7 @@ pub fn run_all(
     // One forest, read twice: reachability walks its co-visible sets, the
     // index pools over its nodes.
     let scopes = crate::scopes::Scopes::build(graph, capabilities);
-    let reach = Reachability::compute(graph, &scopes, capabilities);
+    let reach = Reachability::compute(graph, &scopes);
     let index = crate::navigate::Index::build(graph, &reach, scopes);
     let manifests = dependency::eligibility(graph, &reach);
     let run = RunContext {

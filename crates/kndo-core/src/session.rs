@@ -688,7 +688,6 @@ impl Session {
                         dependency_identity: s.dependency_identity(),
                         ladder: s.ladder().clone(),
                         namespace_span: s.namespace_span(),
-                        covisibility: s.covisibility(),
                     },
                 )
             })

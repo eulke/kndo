@@ -4691,3 +4691,49 @@ no corpus population and the probes are the measurement: a file with the
 marker at line 26 reported its declaration `unused certain` before and is
 silent now, and the `generated-late-marker` fixture pins it. Every existing
 fixture is byte-identical. `kndo:go` bumps to 9; no engine knob moves.
+
+## 2026-09-06 — `Covisibility` retires: a capability the shape already said
+
+**It was not in the plan.** The design names eight new spec capabilities —
+`ladder`, `nesting`, `dispatch_rules`, `file_roles`, `ignores`, `ecosystem`,
+`dependency_importers`, `hidden_opt_in` — and `Covisibility` is none of them.
+What the design does name, verbatim, is `Scopes::covisible(file)` and a flood
+that reads it WITHOUT a condition ("colores = flood por imports Load/Lazy y
+co-visibilidad, sin entrar a adjuntos TestOnly"). The go slice built the method
+and the flood, then gated the flood behind a capability of its own invention.
+
+**The gate was not decoration: it suppressed three true fixes.** Removing it
+leaves every corpus report byte-identical except guava, 8254 → 8251, and all
+three are `untested` on files that HAVE a test:
+`guava/src/com/google/common/xml/XmlEscapers.java` and its android twin are
+tested by `guava-tests/test/com/google/common/xml/XmlEscapersTest.java`, a
+sibling source tree under the same declared package, and the third is a
+`test-super` GWT mirror of the same shape. Java's `sees` walks a directory and
+its main/test mirror, so it never bridges `guava/src` to `guava-tests/test`;
+the namespace NODE is by declared package name across the compilation, which is
+exactly what `NamespaceSpan::Compilation` exists to say, and it bridges them.
+Gating the flood by a capability only go declared took from java an edge it had
+already earned.
+
+**Why no capability is needed.** What a namespace node holds is the language's
+own statement, made in the shape of the namespace it declared: a package's
+directory plus clause (go), a package name across a compilation (java), a
+module's mount chain (rust — one file per node), a file that declared none
+(everything not yet migrated — one file per node). A language whose namespace
+is one file floods nothing, and says so by its evidence rather than by a knob.
+The ablation is the proof: with the gate gone, only guava moves.
+
+**A divergence recorded rather than assumed.** The plan's `nesting` capability
+(`Flat`, `ByDirectory`, `Mounted`, `ByPath`, `PerFile`) has not landed either,
+and this entry is where that stops being tacit. The engine derives the node's
+shape from the evidence itself — segments declared, mount edges drawn, or
+neither — which is the same distinction `nesting` was to carry and is closer to
+"evidence in, exhaustive types out" than a second declaration of it. The claim
+is re-checkable and will be re-checked when java, kotlin and swift declare
+their namespaces: if any of them needs a shape the evidence cannot express,
+`nesting` lands then, with that need as its named consumer.
+
+`GRAPH_SEMANTICS_VERSION` moves to 23. The contract fingerprint does not (a
+spec field is part of the graph cache key, not of the shape hash), no
+conformance fixture moves, and `kndo:go` does not bump: its evidence is
+unchanged.

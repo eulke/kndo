@@ -3,10 +3,9 @@
 //! and this adapter states it ONCE, as the namespace extraction declares from
 //! the package clause and the directory. Everything else follows from that
 //! node: a lower-case name reaches it and nothing wider, and `go build`
-//! compiles the whole of it, which the adapter declares as
-//! [`Covisibility::Namespace`] and the engine reads off the scope forest — so
-//! reaching one file of a package reaches its siblings without this adapter
-//! enumerating a directory. Imports resolve to [`Resolution::Files`], every
+//! compiles the whole of it — the engine reads the co-visible set off the node
+//! itself, so reaching one file of a package reaches its siblings without this
+//! adapter enumerating a directory. Imports resolve to [`Resolution::Files`], every
 //! non-test `.go` in the package dir. Capitalization IS the visibility: an
 //! upper-case initial is exported, anything else package-private.
 //!
@@ -22,7 +21,7 @@ mod resolve;
 
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::EvidenceSink;
-use kndo_contract::extension::{Covisibility, Extension, ExtensionSpec, Rung, Step};
+use kndo_contract::extension::{Extension, ExtensionSpec, Rung, Step};
 use kndo_contract::manifest::ManifestSink;
 use kndo_contract::vocab::ProjectPath;
 
@@ -55,10 +54,6 @@ impl GoAdapter {
             // Capitalization is the whole ladder: nothing sits below the
             // package, so a package-private name used only in its file has
             // nowhere narrower to go and `internal-only` stays silent for it.
-            // `go build` compiles every file of a package: reaching one of
-            // them reaches the rest, which is why a file exporting nothing is
-            // alive while its package is.
-            .covisibility(Covisibility::Namespace)
             .ladder(&[
                 Step::new(Rung::Namespace, "unexported"),
                 // An exported name in an `internal` package is spelled the
