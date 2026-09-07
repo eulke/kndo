@@ -7,9 +7,7 @@
 //! cannot enter either.
 
 use kndo_contract::adapter::SourceFile;
-use kndo_contract::evidence::{
-    Attachment, EvidenceSink, ImportShape, ImportTarget, RegionMode, RootKind, RootTarget,
-};
+use kndo_contract::evidence::{Attachment, EvidenceSink, ImportShape, ImportTarget, RegionMode};
 use kndo_contract::vocab::{Confidence, Span};
 use smol_str::SmolStr;
 
@@ -19,18 +17,13 @@ pub(crate) fn extract(file: &SourceFile<'_>, out: &mut EvidenceSink) {
     let Ok(text) = std::str::from_utf8(file.content) else {
         return;
     };
-    // The document roots itself. A page under a test directory is a test's
-    // entry — convention, Probable, the same tier the js-ts adapter gives the
-    // path; any other page is production, and that is the plain fact of it.
+    // That a document roots itself is a fact about every `.html` path, and a
+    // page under a test directory is a test's entry — both are the spec's
+    // `file_roles`, applied before any of this is decoded. What stays here is
+    // the file's own statement: a test page joins the project in a test run
+    // alone, which no path convention says on its behalf.
     if kndo_toolkit::web_test_path(file.path.as_str()) {
         out.attachment(Attachment::TestOnly);
-        out.root(RootTarget::WholeFile, RootKind::Test, Confidence::Probable);
-    } else {
-        out.root(
-            RootTarget::WholeFile,
-            RootKind::Production,
-            Confidence::Certain,
-        );
     }
     // A commented-out tag references nothing; blanking keeps every offset.
     let blanked = blank_comments(text);

@@ -1,10 +1,10 @@
-//! Extraction against inline documents: the self-root and its kind, which tags
-//! and attributes are references, which values leave the project.
+//! Extraction against inline documents: what a page STATES — its membership,
+//! which tags and attributes are references, which values leave the project.
+//! What a page IS by its path is the spec's `file_roles`, gated in
+//! `kndo-gates`.
 
 use kndo_adapter_html::HtmlAdapter;
-use kndo_contract::evidence::{Attachment, 
-    FileEvidence, ImportShape, ImportTarget, RegionMode, RootKind, RootTarget,
-};
+use kndo_contract::evidence::{Attachment, FileEvidence, ImportShape, ImportTarget, RegionMode};
 use kndo_contract::vocab::Confidence;
 
 fn extract(path: &str, source: &str) -> FileEvidence {
@@ -22,17 +22,20 @@ fn specifiers(ev: &FileEvidence) -> Vec<String> {
 }
 
 #[test]
-fn the_document_roots_itself_by_where_it_lives() {
+fn a_page_declares_its_membership_and_concludes_no_root() {
+    // That a document roots itself, and that a page under a test directory is
+    // a test's entry, are facts about `.html` PATHS: the spec declares them
+    // (`kndo-gates` proves the globs name what the ecosystem names) and the
+    // engine anchors them. Extraction states the one thing a path cannot —
+    // that the test page joins the project in a test run alone.
     let page = extract("app/index.html", "<!doctype html><html></html>");
-    assert_eq!(page.roots.len(), 1);
-    assert!(matches!(page.roots[0].target, RootTarget::WholeFile));
-    assert_eq!(page.roots[0].kind, RootKind::Production);
-    assert_eq!(page.roots[0].confidence, Confidence::Certain);
+    assert!(page.roots.is_empty());
+    assert_eq!(page.attachment, Attachment::Regular);
     assert!(page.declarations.is_empty() && page.imports.is_empty());
 
     let test = extract("test/index.html", "<html></html>");
-    assert_eq!(test.roots[0].kind, RootKind::Test);
-    assert_eq!(test.roots[0].confidence, Confidence::Probable);
+    assert!(test.roots.is_empty());
+    assert_eq!(test.attachment, Attachment::TestOnly);
 }
 
 #[test]
@@ -107,8 +110,6 @@ fn references_that_leave_the_project_are_not_imports() {
 
 #[test]
 fn a_binary_file_yields_nothing_and_says_nothing() {
-    let ev = kndo_testkit::extract_evidence(&HtmlAdapter::new(), "x.html", "\u{fffd}");
-    assert_eq!(ev.roots.len(), 1, "utf-8 text of any content still roots");
     let mut sink =
         kndo_contract::evidence::EvidenceSink::new(3, HtmlAdapter::new().spec().emits().clone());
     use kndo_contract::extension::Extension;

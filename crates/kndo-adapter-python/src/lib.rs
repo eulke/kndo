@@ -35,7 +35,8 @@ mod resolve;
 
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::EvidenceSink;
-use kndo_contract::extension::{Extension, ExtensionSpec};
+use kndo_contract::evidence::RootKind;
+use kndo_contract::extension::{Extension, ExtensionSpec, FileRole};
 use kndo_contract::vocab::ProjectPath;
 
 pub struct PythonAdapter {
@@ -48,7 +49,7 @@ impl PythonAdapter {
             // 3: the generated banner is reported, never concluded.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:python",
-                4,
+                5,
                 &["py"],
                 &[
                     "**/pyproject.toml",
@@ -64,6 +65,15 @@ impl PythonAdapter {
             // source; an environment is found by it, whatever the environment
             // is called, and a hidden `.venv` never enters discovery at all.
             .ignores(&["**/site-packages/**"])
+            // The runners' own discovery, where no manifest said what a file
+            // is: pytest and unittest COLLECT `test_*.py` and `*_test.py` by
+            // name and auto-load `conftest.py` — the names themselves are the
+            // dispatch, which is what makes these Certain rather than a habit.
+            .file_roles(&[
+                FileRole::certain("**/test_*.py", RootKind::Test),
+                FileRole::certain("**/*_test.py", RootKind::Test),
+                FileRole::certain("**/conftest.py", RootKind::Test),
+            ])
             .build(),
         }
     }

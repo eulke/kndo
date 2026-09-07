@@ -11167,26 +11167,15 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
-      "id": "kndo-cd460384da57",
+      "id": "kndo-daa261733ec4",
       "category": "unused",
       "severity": "warning",
       "confidence": "certain",
       "subject": {
-        "kind": "symbol",
-        "path": "guava-gwt/src-super/com/google/common/escape/super/com/google/common/escape/Platform.java",
-        "selector": {
-          "name": "Platform"
-        },
-        "span": {
-          "start": 669,
-          "end": 1105
-        }
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/escape/super/com/google/common/escape/Platform.java"
       },
-      "lines": {
-        "start": 22,
-        "end": 35
-      },
-      "message": "nothing references, roots, or imports this declaration"
+      "message": "no root anchors this file and no reachable file imports it"
     },
     {
       "id": "kndo-69628c9709ae",
@@ -11321,70 +11310,37 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
-      "id": "kndo-c5c929e10f94",
+      "id": "kndo-fedb2bfed98b",
       "category": "unused",
       "severity": "warning",
       "confidence": "certain",
       "subject": {
-        "kind": "symbol",
-        "path": "guava-gwt/test-super/com/google/common/collect/testing/super/com/google/common/collect/testing/Platform.java",
-        "selector": {
-          "name": "Platform"
-        },
-        "span": {
-          "start": 864,
-          "end": 2129
-        }
+        "kind": "file",
+        "path": "guava-gwt/test-super/com/google/common/collect/testing/super/com/google/common/collect/testing/Platform.java"
       },
-      "lines": {
-        "start": 28,
-        "end": 68
-      },
-      "message": "nothing references, roots, or imports this declaration"
+      "message": "no root anchors this file and no reachable file imports it"
     },
     {
-      "id": "kndo-5af1047123d5",
+      "id": "kndo-d6f2d03d18d6",
       "category": "unused",
       "severity": "warning",
       "confidence": "certain",
       "subject": {
-        "kind": "symbol",
-        "path": "guava-gwt/test-super/com/google/common/collect/testing/super/com/google/common/collect/testing/testers/Platform.java",
-        "selector": {
-          "name": "Platform"
-        },
-        "span": {
-          "start": 779,
-          "end": 2317
-        }
+        "kind": "file",
+        "path": "guava-gwt/test-super/com/google/common/collect/testing/super/com/google/common/collect/testing/testers/Platform.java"
       },
-      "lines": {
-        "start": 26,
-        "end": 74
-      },
-      "message": "nothing references, roots, or imports this declaration"
+      "message": "no root anchors this file and no reachable file imports it"
     },
     {
-      "id": "kndo-a5783fbeef2c",
+      "id": "kndo-93e03f2e3678",
       "category": "unused",
       "severity": "warning",
       "confidence": "certain",
       "subject": {
-        "kind": "symbol",
-        "path": "guava-gwt/test-super/com/google/common/math/super/com/google/common/math/TestPlatform.java",
-        "selector": {
-          "name": "TestPlatform"
-        },
-        "span": {
-          "start": 720,
-          "end": 908
-        }
+        "kind": "file",
+        "path": "guava-gwt/test-super/com/google/common/math/super/com/google/common/math/TestPlatform.java"
       },
-      "lines": {
-        "start": 24,
-        "end": 35
-      },
-      "message": "nothing references, roots, or imports this declaration"
+      "message": "no root anchors this file and no reachable file imports it"
     },
     {
       "id": "kndo-b93fddf7bc04",
@@ -11409,26 +11365,15 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
-      "id": "kndo-fe30c36ee860",
+      "id": "kndo-1f537fdb3afe",
       "category": "unused",
       "severity": "warning",
       "confidence": "certain",
       "subject": {
-        "kind": "symbol",
-        "path": "guava-gwt/test-super/com/google/common/testing/super/com/google/common/testing/Platform.java",
-        "selector": {
-          "name": "Platform"
-        },
-        "span": {
-          "start": 812,
-          "end": 1049
-        }
+        "kind": "file",
+        "path": "guava-gwt/test-super/com/google/common/testing/super/com/google/common/testing/Platform.java"
       },
-      "lines": {
-        "start": 26,
-        "end": 34
-      },
-      "message": "nothing references, roots, or imports this declaration"
+      "message": "no root anchors this file and no reachable file imports it"
     },
     {
       "id": "kndo-462f6626bd71",
@@ -179621,6 +179566,39 @@
       "message": "declared `package-private`, but every use is within `PublicSuffixType` — `private` would suffice for this method"
     },
     {
+      "id": "kndo-eb0ccdc3a5df",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/cache/super/com/google/common/cache/CapacityEnforcingMap.java"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-7f8a8c7e00a9",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/cache/super/com/google/common/cache/LocalCache.java"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-dfdc171ea5e9",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/cache/super/com/google/common/cache/LongAddables.java"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
       "id": "kndo-5e3ea9698bfe",
       "category": "untested",
       "severity": "info",
@@ -179650,17 +179628,6 @@
       "subject": {
         "kind": "file",
         "path": "guava-gwt/src-super/com/google/common/base/super/com/google/common/base/Platform.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-c73e7a62ebd3",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/escape/super/com/google/common/escape/Platform.java"
       },
       "message": "production-reachable, but no test reaches this file"
     },
@@ -179709,39 +179676,6 @@
       "message": "production-reachable, but no test reaches this file"
     },
     {
-      "id": "kndo-09cecdbd785e",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/test-super/com/google/common/collect/testing/super/com/google/common/collect/testing/Platform.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-7255ccef70d9",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/test-super/com/google/common/collect/testing/super/com/google/common/collect/testing/testers/Platform.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-0a08022812e9",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/test-super/com/google/common/math/super/com/google/common/math/TestPlatform.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
       "id": "kndo-229fd55c1821",
       "category": "untested",
       "severity": "info",
@@ -179749,17 +179683,6 @@
       "subject": {
         "kind": "file",
         "path": "guava-gwt/test-super/com/google/common/primitives/super/com/google/common/primitives/TestPlatform.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-f71016db74ac",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/test-super/com/google/common/testing/super/com/google/common/testing/Platform.java"
       },
       "message": "production-reachable, but no test reaches this file"
     }

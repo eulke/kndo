@@ -26,7 +26,8 @@ mod resolve;
 
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::EvidenceSink;
-use kndo_contract::extension::{Extension, ExtensionSpec};
+use kndo_contract::evidence::RootKind;
+use kndo_contract::extension::{Extension, ExtensionSpec, FileRole};
 use kndo_contract::vocab::ProjectPath;
 
 pub struct HtmlAdapter {
@@ -38,10 +39,29 @@ impl HtmlAdapter {
         HtmlAdapter {
             // No manifest of its own: a document declares no package. No
             // evidence streams: nothing here carries a pragma or a metric.
-            spec: ExtensionSpec::builder("kndo:html", 3)
+            spec: ExtensionSpec::builder("kndo:html", 4)
                 .suffixes(&["html", "htm"])
                 // A page inside npm's installed dependencies is a dependency's.
                 .ignores(&["**/node_modules/**"])
+                // A document is an entry point — that is what a page IS, true
+                // of every one of them, so it is `Certain` and it is a path
+                // fact, not a claim over a manifest that named the file. The
+                // test globs are the js-ts adapter's, at the same tier: a
+                // test page is BOTH, and taking both is right, because a
+                // file the test run alone compiles seeds no production
+                // flood whatever colour its root claims.
+                .file_roles(&[
+                    FileRole::certain("**/*.html", RootKind::Production),
+                    FileRole::certain("**/*.htm", RootKind::Production),
+                    FileRole::probable("__tests__/**", RootKind::Test),
+                    FileRole::probable("**/__tests__/**", RootKind::Test),
+                    FileRole::probable("test/**", RootKind::Test),
+                    FileRole::probable("**/test/**", RootKind::Test),
+                    FileRole::probable("tests/**", RootKind::Test),
+                    FileRole::probable("**/tests/**", RootKind::Test),
+                    FileRole::probable("**/*.test.*", RootKind::Test),
+                    FileRole::probable("**/*.spec.*", RootKind::Test),
+                ])
                 .build(),
         }
     }

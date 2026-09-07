@@ -349,6 +349,31 @@ pub enum NamespaceSpan {
     Compilation,
 }
 
+/// What a unit-wide reach is bounded by where NO manifest named the unit —
+/// the answer core cannot derive, because it turns on whether the language
+/// spells anything between a namespace and a build unit.
+///
+/// Swift spells nothing: a module IS a namespace IS a SwiftPM target, so a
+/// source tree outside SwiftPM's reach still bounds its `internal` names —
+/// the namespace clause each file declares says which module it is. Kotlin
+/// spells both: a package sits inside a Gradle module and many packages share
+/// one, so a package can never bound an `internal` name, and one whose unit no
+/// manifest named has no bound this project can enumerate.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub enum UnnamedUnit {
+    /// The default and the wider answer: a manifest is the only thing that
+    /// names a unit, so a unit-wide reach with none is unbounded — published
+    /// surface, keep-alive, never a narrower guess that would accuse.
+    #[default]
+    Unbounded,
+    /// The namespace the file declared IS its unit where no manifest named
+    /// one.
+    Namespace,
+}
+
 /// What a file IS by the convention of its language's own tooling, where no
 /// manifest says otherwise: the go runner's `*_test.go`, pytest's `test_*.py`,
 /// a page that is its own entry. A glob over the project path, the colour a
@@ -695,8 +720,7 @@ impl Trigger {
                 .any(|r| r.from == id && r.kind == *kind && cx.spells(to, &r.to)),
             Trigger::MemberOf { owner, name } => {
                 pattern_matches(name, &d.name)
-                    && d.owner
-                        .is_some_and(|o| owner.matches_declaration(cx, o))
+                    && d.owner.is_some_and(|o| owner.matches_declaration(cx, o))
             }
             Trigger::ExternalWitness { base, members } => {
                 members.contains(&d.name)
@@ -870,6 +894,7 @@ pub struct ExtensionSpec {
     import_cycles: CycleTolerance,
     ladder: Ladder,
     namespace_span: NamespaceSpan,
+    unnamed_unit: UnnamedUnit,
     file_roles: Vec<FileRole>,
     dispatch: Vec<DispatchRule>,
     claims: Vec<SmolStr>,
@@ -912,6 +937,7 @@ impl ExtensionSpec {
                 import_cycles: CycleTolerance::Tolerated,
                 ladder: Ladder::default(),
                 namespace_span: NamespaceSpan::Unit,
+                unnamed_unit: UnnamedUnit::Unbounded,
                 file_roles: Vec::new(),
                 dispatch: Vec::new(),
                 claims: Vec::new(),
@@ -1007,6 +1033,13 @@ impl ExtensionSpec {
     /// keeps every namespace inside the unit that compiles it.
     pub fn namespace_span(&self) -> NamespaceSpan {
         self.namespace_span
+    }
+
+    /// What bounds a unit-wide reach where no manifest named the unit — see
+    /// [`UnnamedUnit`]; `Scopes` is the consumer. `Unbounded` (the default)
+    /// keeps such a declaration on the published surface.
+    pub fn unnamed_unit(&self) -> UnnamedUnit {
+        self.unnamed_unit
     }
 
     pub fn file_roles(&self) -> &[FileRole] {
@@ -1105,6 +1138,7 @@ pub struct ExtensionSpecParts {
     /// Wire components cannot declare a span yet; defaults to `Unit`, the
     /// narrower answer.
     pub namespace_span: NamespaceSpan,
+    pub unnamed_unit: UnnamedUnit,
     pub file_roles: Vec<FileRole>,
     pub dispatch: Vec<DispatchRule>,
     pub claims: Vec<SmolStr>,
@@ -1149,6 +1183,7 @@ impl From<ExtensionSpecParts> for ExtensionSpec {
             import_cycles: parts.import_cycles,
             ladder: parts.ladder,
             namespace_span: parts.namespace_span,
+            unnamed_unit: parts.unnamed_unit,
             file_roles: parts.file_roles,
             dispatch: parts.dispatch,
             claims: parts.claims,
@@ -1265,6 +1300,15 @@ impl ExtensionSpecBuilder {
 
     pub fn namespace_span(mut self, span: NamespaceSpan) -> Self {
         self.spec.namespace_span = span;
+        self
+    }
+
+    /// Declare what bounds a unit-wide reach where no manifest named the unit
+    /// (see [`UnnamedUnit`]). Omitted ⇒ `Unbounded`: such a declaration is
+    /// judged as published surface, which is keep-alive for every language
+    /// whose namespaces are smaller than its units.
+    pub fn unnamed_unit(mut self, unit: UnnamedUnit) -> Self {
+        self.spec.unnamed_unit = unit;
         self
     }
 
@@ -1868,7 +1912,10 @@ mod tests {
         };
         assert!(cx.spells("com.vendor.Closer", "Closer"));
         assert!(!cx.spells("com.other.Closer", "Closer"));
-        assert!(cx.spells("Closer", "Closer"), "the written name still reaches");
+        assert!(
+            cx.spells("Closer", "Closer"),
+            "the written name still reaches"
+        );
         assert!(
             cx.spells("com.vendor.Closer.Inner", "Closer.Inner"),
             "the path INSIDE the bound name is carried"

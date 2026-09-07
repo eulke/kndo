@@ -1795,9 +1795,7 @@ fn finding_identity_is_unique() {
 /// clause, a mount, a structured reach, markers, relations — and the engine
 /// derives every set from them. It never hands the engine a list of files it
 /// walked, because a second way to say one thing is a second thing to explain
-/// to whoever writes the tenth adapter. `Extension::sees` and
-/// `Extension::seen_from` were those second ways, and both are gone: no
-/// adapter hands the engine a list of files it walked.
+/// to whoever writes the tenth adapter.
 ///
 /// A row here fails the moment an adapter regresses to silence, and the
 /// exception list is the honest ledger of what M8.d still owes.
@@ -1819,14 +1817,20 @@ fn every_adapter_declares_its_namespace_in_one_vocabulary() {
             "package com.foo\nclass A\n",
         ),
         ("kndo:rust", "src/lib.rs", "pub mod a;\npub fn f() {}\n"),
+        ("kndo:swift", "Sources/Widget/A.swift", "struct A {}\n"),
     ];
     // What the plan owes each of these, and where: a namespace is a fact about
     // ONE FILE's content, so it is an evidence stream — and these languages
     // spell theirs in a manifest or a path the file itself never states.
     let owed: &[(&str, &str)] = &[
-        ("kndo:swift", "M8.d — a module IS a SwiftPM target, so the unit names it"),
-        ("kndo:python", "M8.d — a module is its source root plus its path"),
-        ("kndo:js-ts", "M8.d — an ES module is its own file; units come from package.json"),
+        (
+            "kndo:python",
+            "M8.d — a module is its source root plus its path",
+        ),
+        (
+            "kndo:js-ts",
+            "M8.d — an ES module is its own file; units come from package.json",
+        ),
         ("kndo:html", "no namespace: a page is its own scope"),
         ("kndo:css", "no namespace: a sheet is its own scope"),
     ];
@@ -1864,5 +1868,121 @@ fn every_adapter_declares_its_namespace_in_one_vocabulary() {
     assert!(
         paid.is_empty(),
         "these adapters declare a namespace and are still listed as owing one: {paid:?}"
+    );
+}
+
+/// A file-role glob means what the language means. The declaration is data
+/// ([`kndo_contract::extension::FileRole`]) and the engine applies it, so the
+/// one thing that can still be wrong is the SPELLING — a glob whose `**` sits
+/// where the convention does not. Each row is a path the language's own tool
+/// treats that way, asked through the engine's own matcher.
+#[test]
+fn every_declared_file_role_names_the_paths_its_language_means() {
+    use kndo_contract::evidence::RootKind;
+
+    // (coordinate, path, the roles the language's tool gives it)
+    let sample: &[(&str, &str, &[RootKind])] = &[
+        // Maven and Gradle's layout, and the habit for a name outside it.
+        (
+            "kndo:java",
+            "src/test/java/com/foo/AT.java",
+            &[RootKind::Test],
+        ),
+        (
+            "kndo:java",
+            "guava-tests/src/test/java/com/foo/AT.java",
+            &[RootKind::Test],
+        ),
+        ("kndo:java", "src/main/java/com/foo/A.java", &[]),
+        (
+            "kndo:java",
+            "src/main/java/com/foo/package-info.java",
+            &[RootKind::Tooling],
+        ),
+        (
+            "kndo:java",
+            "src/main/java/com/foo/WidgetTest.java",
+            &[RootKind::Test],
+        ),
+        (
+            "kndo:kotlin",
+            "src/test/kotlin/com/foo/AT.kt",
+            &[RootKind::Test],
+        ),
+        (
+            "kndo:kotlin",
+            "exposed-core/src/test/kotlin/com/foo/AT.kt",
+            &[RootKind::Test],
+        ),
+        ("kndo:kotlin", "src/main/kotlin/com/foo/A.kt", &[]),
+        // SwiftPM's own layout, its own filenames, and a nested package.
+        ("kndo:swift", "Package.swift", &[RootKind::Tooling]),
+        (
+            "kndo:swift",
+            "Performance/Package.swift",
+            &[RootKind::Tooling],
+        ),
+        (
+            "kndo:swift",
+            "Package@swift-5.9.swift",
+            &[RootKind::Tooling],
+        ),
+        ("kndo:swift", "Tests/WidgetTests/A.swift", &[RootKind::Test]),
+        (
+            "kndo:swift",
+            "Sources/Widget/main.swift",
+            &[RootKind::Production],
+        ),
+        ("kndo:swift", "Sources/Widget/A.swift", &[]),
+        (
+            "kndo:swift",
+            "Sources/Widget/LoadTests.swift",
+            &[RootKind::Test],
+        ),
+        // pytest and unittest COLLECT by name.
+        ("kndo:python", "tests/test_app.py", &[RootKind::Test]),
+        ("kndo:python", "src/app_test.py", &[RootKind::Test]),
+        ("kndo:python", "conftest.py", &[RootKind::Test]),
+        ("kndo:python", "src/flask/app.py", &[]),
+        // The web habits, which overlap on purpose.
+        ("kndo:js-ts", "src/a.test.ts", &[RootKind::Test]),
+        ("kndo:js-ts", "src/__tests__/a.ts", &[RootKind::Test]),
+        ("kndo:js-ts", "vite.config.ts", &[RootKind::Tooling]),
+        ("kndo:js-ts", ".eslintrc.js", &[RootKind::Tooling]),
+        ("kndo:js-ts", "src/a.ts", &[]),
+        // A document is an entry point, and a test page is both.
+        ("kndo:html", "index.html", &[RootKind::Production]),
+        ("kndo:html", "docs/page.htm", &[RootKind::Production]),
+        (
+            "kndo:html",
+            "test/fp.html",
+            &[RootKind::Production, RootKind::Test],
+        ),
+    ];
+
+    let extensions = kndo::default_extensions();
+    let mut wrong = Vec::new();
+    for (coordinate, path, expected) in sample {
+        let spec = extensions
+            .iter()
+            .find(|e| e.spec().coordinate() == *coordinate)
+            .unwrap_or_else(|| panic!("{coordinate} is a built-in"))
+            .spec();
+        let mut got: Vec<RootKind> = kndo_core::declared_roles(spec, path)
+            .into_iter()
+            .map(|(kind, _)| kind)
+            .collect();
+        got.sort_by_key(|k| format!("{k:?}"));
+        got.dedup();
+        let mut want: Vec<RootKind> = expected.to_vec();
+        want.sort_by_key(|k| format!("{k:?}"));
+        if got != want {
+            wrong.push(format!("{coordinate} {path}: want {want:?}, got {got:?}"));
+        }
+    }
+    assert!(
+        wrong.is_empty(),
+        "a declared glob does not name what its language names:\n{}",
+        wrong.join("\n")
     );
 }

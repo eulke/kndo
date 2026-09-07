@@ -250,6 +250,28 @@
       "message": "only tests reach this file — no production or tooling root does"
     },
     {
+      "id": "kndo-52c77982755b",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "fp/_baseConvert.js"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-05c2d3c918a4",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "fp/placeholder.js"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
       "id": "kndo-73e8c16febaf",
       "category": "test-only",
       "severity": "info",

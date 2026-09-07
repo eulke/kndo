@@ -13,7 +13,7 @@ use kndo_contract::adapter::{PackageEntry, Resolution, ResolveContext, SourceFil
 use kndo_contract::evidence::{
     Attachment, FileEvidence, ImportShape, ImportTarget, Reach, Root, RootKind, RootTarget,
 };
-use kndo_contract::extension::{Extension, PublishedSurface};
+use kndo_contract::extension::{Extension, ExtensionSpec, PublishedSurface};
 use kndo_contract::manifest::UnitKind;
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use serde::{Deserialize, Serialize};
@@ -23,7 +23,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Bump when the SAME evidence assembles into a DIFFERENT graph — resolution
 /// candidate changes, reachability semantics, new assembled fields. Folded into the
 /// graph cache key beside the contract fingerprint and the adapter set.
-pub const GRAPH_SEMANTICS_VERSION: u32 = 32;
+pub const GRAPH_SEMANTICS_VERSION: u32 = 33;
 
 #[derive(Serialize, Deserialize)]
 pub struct GraphFile {
@@ -702,8 +702,6 @@ fn package_map(reads: &[crate::project::ManifestRead]) -> BTreeMap<SmolStr, Pack
     packages
 }
 
-
-
 /// The mount forest over the whole file set, and the unit and sight that read
 /// it. All three are functions of every file's imports together, so they run
 /// once the edges are resolved — and again on the surgical patch path, where
@@ -892,13 +890,31 @@ struct DeclaredRoles {
     verdicts: Vec<(RootKind, Confidence)>,
 }
 
+/// The roles `spec` declares for `path` — the file-role globs applied exactly
+/// as anchoring applies them, so a caller outside the engine (a gate proving
+/// nine adapters spelled their conventions right) asks the engine's own
+/// question instead of re-deriving how a path-shaped glob matches.
+pub fn declared_roles(spec: &ExtensionSpec, path: &str) -> Vec<(RootKind, Confidence)> {
+    let declared = spec.file_roles();
+    role_globs(spec)
+        .matches(path)
+        .into_iter()
+        .map(|i| (declared[i].kind, declared[i].confidence))
+        .collect()
+}
+
+/// One spec's file-role globs, compiled — index-parallel to `file_roles()`.
+fn role_globs(spec: &ExtensionSpec) -> globset::GlobSet {
+    crate::extract::path_glob_set(spec.file_roles().iter().map(|r| r.glob.as_str()))
+}
+
 impl DeclaredRoles {
     fn of(adapter: &dyn Extension) -> DeclaredRoles {
         let spec = adapter.spec();
         let declared = spec.file_roles();
         DeclaredRoles {
             adapter: SmolStr::new(spec.coordinate()),
-            globs: crate::extract::path_glob_set(declared.iter().map(|r| r.glob.as_str())),
+            globs: role_globs(spec),
             verdicts: declared.iter().map(|r| (r.kind, r.confidence)).collect(),
         }
     }

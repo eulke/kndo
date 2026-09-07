@@ -4,7 +4,9 @@
 //! not. `__all__`'s string elements land as Read references — the module
 //! naming its own published names keeps them and records the intent.
 
-use kndo_contract::evidence::{Attachment, EvidenceSink, Reach, RefKind, RootKind, RootTarget, SymbolKind};
+use kndo_contract::evidence::{
+    Attachment, EvidenceSink, Reach, RefKind, RootKind, RootTarget, SymbolKind,
+};
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use kndo_toolkit as tk;
 use smol_str::SmolStr;
@@ -62,20 +64,23 @@ pub fn extract(
     let p = path.as_str();
     let file_name = p.rsplit('/').next().unwrap_or(p);
 
-    // The ecosystem's discovery convention: the runners find `test_*.py` /
-    // `*_test.py` by name, and auto-load `conftest.py` — the names themselves
-    // are the dispatch, so the roots are Certain.
+    // Nothing imports what the runner collects: these modules join the
+    // package in a test run and in no other. WHICH files those are is the
+    // spec's `file_roles` to say — the discovery convention is a path fact,
+    // and only the membership is this file's.
     let test_file = file_name.starts_with("test_") && file_name.ends_with(".py")
         || file_name.ends_with("_test.py")
         || file_name == "conftest.py";
-    // Nothing imports what the runner collects: these modules join the
-    // package in a test run and in no other.
     if test_file {
         out.attachment(Attachment::TestOnly);
-        out.root(RootTarget::WholeFile, RootKind::Test, Confidence::Certain);
     } else {
-        // Library mode, the shared stance: any non-test module is importable
-        // published surface. Probable — convention, not this file's statement.
+        // Library mode: any non-test module is importable published surface.
+        // That sentence is the engine's `publishes()` to say — but it reads
+        // the unit, and python reads no pyproject yet (M8.d), so nothing in a
+        // library would root at all. Measured: deleting it now costs flask +15
+        // findings, `src/flask/app.py` and `cli.py` among them — the package's
+        // own modules, unreached because no root was left to reach them from.
+        // It goes with the pyproject/setup.cfg parser, not before it.
         out.root(
             RootTarget::WholeFile,
             RootKind::Production,

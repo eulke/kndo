@@ -9522,28 +9522,6 @@
       "message": "production-reachable, but no test reaches this file"
     },
     {
-      "id": "kndo-c21077447913",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "playground/alias/index.html"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-d295a9356227",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "playground/assets-sanitize/index.html"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
       "id": "kndo-9ac4cdacbb74",
       "category": "untested",
       "severity": "info",
@@ -9577,28 +9555,6 @@
       "message": "production-reachable, but no test reaches this file"
     },
     {
-      "id": "kndo-f3db4359d10a",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "playground/assets/index.html"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-9237e1dbaaed",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "playground/backend-integration/frontend/entrypoints/index.html"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
       "id": "kndo-62685915db69",
       "category": "untested",
       "severity": "info",
@@ -9606,17 +9562,6 @@
       "subject": {
         "kind": "file",
         "path": "playground/backend-integration/frontend/entrypoints/main.ts"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-418eba7cf482",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "playground/build-old/index.html"
       },
       "message": "production-reachable, but no test reaches this file"
     },
@@ -9786,28 +9731,6 @@
       "message": "production-reachable, but no test reaches this file"
     },
     {
-      "id": "kndo-35b34b3144cf",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "playground/data-uri/index.html"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-b95b0aff89bd",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "playground/define/index.html"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
       "id": "kndo-a87dd8c7b8ba",
       "category": "untested",
       "severity": "info",
@@ -9841,28 +9764,6 @@
       "message": "production-reachable, but no test reaches this file"
     },
     {
-      "id": "kndo-9ee165a2d76b",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "playground/env-nested/index.html"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-87a0f0d1a8e7",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "playground/env/index.html"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
       "id": "kndo-8a3f36e81fe4",
       "category": "untested",
       "severity": "info",
@@ -9881,28 +9782,6 @@
       "subject": {
         "kind": "file",
         "path": "playground/forward-console/src/main.ts"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-f246bf380414",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "playground/fs-serve/root/src/index.html"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-ca79d515546d",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "playground/glob-import/root/index.html"
       },
       "message": "production-reachable, but no test reaches this file"
     },
@@ -10006,17 +9885,6 @@
       "message": "production-reachable, but no test reaches this file"
     },
     {
-      "id": "kndo-5efda1b43a6d",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "playground/import-attribute/index.html"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
       "id": "kndo-80f6752f917a",
       "category": "untested",
       "severity": "info",
@@ -10024,17 +9892,6 @@
       "subject": {
         "kind": "file",
         "path": "playground/js-sourcemap/with-define-object.ts"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-095108e2cd14",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "playground/json/index.html"
       },
       "message": "production-reachable, but no test reaches this file"
     },
@@ -10068,39 +9925,6 @@
       "subject": {
         "kind": "file",
         "path": "playground/legacy/main.js"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-b44e1300d1b8",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "playground/module-graph/index.html"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-773d76183195",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "playground/nested-deps/index.html"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-2afefd3339de",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "playground/optimize-deps-no-discovery/index.html"
       },
       "message": "production-reachable, but no test reaches this file"
     },
@@ -10193,39 +10017,6 @@
       "message": "production-reachable, but no test reaches this file"
     },
     {
-      "id": "kndo-535e76a0b056",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "playground/optimize-deps/index.html"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-d3d1721c97df",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "playground/resolve-tsconfig-paths/index.html"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-5bef4a185e73",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "playground/resolve/index.html"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
       "id": "kndo-5bc16ccaffe3",
       "category": "untested",
       "severity": "info",
@@ -10299,17 +10090,6 @@
       "subject": {
         "kind": "file",
         "path": "playground/wasm/imports.js"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-71006106789d",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "playground/wasm/index.html"
       },
       "message": "production-reachable, but no test reaches this file"
     },

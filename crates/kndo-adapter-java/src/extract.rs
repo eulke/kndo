@@ -26,8 +26,8 @@
 //!   Java has no `internal/` fence at all.
 
 use kndo_contract::evidence::{
-    Attachment, DeclarationId, EvidenceSink, ImportBinding, ImportShape, ImportTarget, MarkerTarget, Reach,
-    RefKind, RelationKind, RootKind, RootTarget, SymbolKind,
+    Attachment, DeclarationId, EvidenceSink, ImportBinding, ImportShape, ImportTarget,
+    MarkerTarget, Reach, RefKind, RelationKind, RootKind, RootTarget, SymbolKind,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use kndo_toolkit as tk;
@@ -41,17 +41,10 @@ pub fn extract(
     out: &mut EvidenceSink,
 ) {
     let p = path.as_str();
-    let file_name = p.rsplit('/').next().unwrap_or(p);
-    let is_tooling = matches!(file_name, "package-info.java" | "module-info.java");
-    // The standard layout's test directory is the build tool's own boundary —
-    // Certain, and not published surface. A test-shaped NAME outside it is
-    // convention only: Probable, and the file keeps its library-mode Production
-    // root — a `LoadTest.java` on the main source path is still importable
-    // surface.
+    // The standard layout's test directory, which the spec also declares as a
+    // FILE ROLE: here it is read for the attachment alone, the one fact only
+    // the file's own membership can state.
     let test_dir = p.starts_with("src/test/java/") || p.contains("/src/test/java/");
-    let test_name = file_name.ends_with("Test.java")
-        || file_name.ends_with("Tests.java")
-        || file_name.ends_with("TestCase.java");
 
     // The test source set is its own compilation: what it declares belongs to
     // the package in test builds alone. The test-shaped NAME is not that — a
@@ -59,28 +52,6 @@ pub fn extract(
     // like any other file, and says nothing here.
     if test_dir {
         out.attachment(Attachment::TestOnly);
-    }
-
-    if is_tooling {
-        out.root(
-            RootTarget::WholeFile,
-            RootKind::Tooling,
-            Confidence::Certain,
-        );
-    } else if test_dir {
-        out.root(RootTarget::WholeFile, RootKind::Test, Confidence::Certain);
-    } else {
-        if test_name {
-            out.root(RootTarget::WholeFile, RootKind::Test, Confidence::Probable);
-        }
-        // Library mode: any non-test class on the source path is importable
-        // published surface, whether or not this repository imports it.
-        // Probable — convention, not this file's statement.
-        out.root(
-            RootTarget::WholeFile,
-            RootKind::Production,
-            Confidence::Probable,
-        );
     }
 
     // The `@generated` / `DO NOT EDIT` convention: generated code is the
@@ -365,16 +336,30 @@ fn handle_method(item: Node<'_>, source: &[u8], ctx: &Ctx, out: &mut EvidenceSin
     }
 
     // The JVM entry point, any class. The one root left in this pass, and it
-    // is a MODIFIER fact as much as a name one — `static` and `public` are
-    // half the rule, and a member-shaped name trigger spells neither yet.
-    if name == "main" && has_modifier(item, "static") && reach_of(item, ctx) == Reach::Exported {
+    // is a MODIFIER and SIGNATURE fact as much as a name one — a member-shaped
+    // name trigger spells none of the three yet. Matched whole, it is the
+    // JLS's own rule and nothing less, so it is Certain: the launcher names
+    // this method, and through it the class that holds it.
+    if name == "main"
+        && has_modifier(item, "static")
+        && reach_of(item, ctx) == Reach::Exported
+        && returns_void(item, source)
+        && signature_of(item, source) == "(String[])"
+    {
         out.root(
             RootTarget::Declaration(id),
             RootKind::Production,
-            Confidence::Probable,
+            Confidence::Certain,
         );
     }
     markers_of(item, source, id, out);
+}
+
+/// `void`, as the JLS spells the launcher's entry — the half of `main`'s rule
+/// its name and modifiers do not carry.
+fn returns_void(item: Node<'_>, source: &[u8]) -> bool {
+    item.child_by_field_name("type")
+        .is_some_and(|t| tk::text(t, source).trim() == "void")
 }
 
 /// Java's own spelling of what tells two methods of one name apart — the

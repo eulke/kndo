@@ -428,39 +428,6 @@
       "message": "production-reachable, but no test reaches this file"
     },
     {
-      "id": "kndo-2448bf9f67b0",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "examples/javascript/js_example/templates/fetch.html"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-b7f2c3cc6d1a",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "examples/javascript/js_example/templates/jquery.html"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-7893c138cfad",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "examples/javascript/js_example/templates/xhr.html"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
       "id": "kndo-c5389f54a4e6",
       "category": "untested",
       "severity": "info",

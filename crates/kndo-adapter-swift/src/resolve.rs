@@ -12,8 +12,10 @@ use kndo_contract::vocab::ProjectPath;
 
 /// The SwiftPM target a path belongs to: the segment after `Sources/` or
 /// `Tests/`, or the first path segment outside that layout; `None` for a file
-/// at the repository root (no unit, names scoped to the file).
-fn target_of(path: &str) -> Option<(&str, bool)> {
+/// at the repository root (no unit, names scoped to the file). Path-only by
+/// construction — extraction emits it as the file's namespace clause, and a
+/// namespace an adapter can only state by walking the tree is not one.
+pub(crate) fn target_of(path: &str) -> Option<(&str, bool)> {
     let segments: Vec<&str> = path.split('/').collect();
     if let Some(ix) = segments
         .iter()
@@ -56,5 +58,3 @@ pub fn resolve(_from: &ProjectPath, specifier: &str, cx: &ResolveContext<'_>) ->
         Resolution::Files(files)
     }
 }
-
-

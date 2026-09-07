@@ -90,11 +90,7 @@ fn dispatch_rules() -> Vec<DispatchRule> {
         (UnitKind::Bench, RootKind::Test),
     ] {
         rules.push(DispatchRule {
-            when: Trigger::name(
-                "main",
-                kndo_contract::evidence::SymbolKind::Function,
-                unit,
-            ),
+            when: Trigger::name("main", kndo_contract::evidence::SymbolKind::Function, unit),
             then: Effect::Root(kind),
             confidence: Confidence::Probable,
         });

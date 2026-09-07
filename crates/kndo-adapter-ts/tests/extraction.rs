@@ -2,8 +2,8 @@
 //! members, reference exclusions, comments, and degradation on broken input.
 
 use kndo_adapter_ts::TypeScriptAdapter;
-use kndo_contract::evidence::{Attachment, 
-    FileEvidence, ImportShape, ImportTarget, Reach, RefKind, SymbolKind, Timing,
+use kndo_contract::evidence::{
+    Attachment, FileEvidence, ImportShape, ImportTarget, Reach, RefKind, SymbolKind, Timing,
 };
 use kndo_contract::vocab::Confidence;
 

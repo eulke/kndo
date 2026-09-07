@@ -73,4 +73,3 @@ fn third_party_packages_stay_unresolved() {
     );
     assert_eq!(r, Resolution::Unresolved);
 }
-

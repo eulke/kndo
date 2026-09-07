@@ -7,7 +7,9 @@
 //! shared constructor posture, and `.case` dot-shorthand resolves by type, not
 //! name); their bodies still contribute references.
 
-use kndo_contract::evidence::{Attachment, EvidenceSink, Reach, RefKind, RootKind, RootTarget, SymbolKind};
+use kndo_contract::evidence::{
+    Attachment, EvidenceSink, Reach, RefKind, RootKind, RootTarget, SymbolKind,
+};
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use kndo_toolkit as tk;
 use smol_str::SmolStr;
@@ -69,55 +71,35 @@ pub fn extract(
     let p = path.as_str();
     let file_name = p.rsplit('/').next().unwrap_or(p);
 
-    // `Package.swift` IS the manifest — Swift source by format, tooling by
-    // role: it roots as Tooling and declares nothing accusable (its
-    // dependency names flow through the manifests capability instead).
+    // `Package.swift` IS the manifest — Swift source by format: it declares
+    // nothing accusable, and its structure is read by `extract_manifest`. What
+    // role it plays is the spec's `file_roles` to say, like every other
+    // path convention this language keeps.
     let is_manifest = file_name == "Package.swift"
         || (file_name.starts_with("Package@swift-") && file_name.ends_with(".swift"));
     if is_manifest {
-        out.root(
-            RootTarget::WholeFile,
-            RootKind::Tooling,
-            Confidence::Certain,
-        );
         return;
     }
 
-    // SwiftPM's own layout is the build tool's boundary — Certain; a
-    // test-shaped NAME outside it is convention: Probable, and the file keeps
-    // its library-mode Production root.
-    let test_dir = p.starts_with("Tests/") || p.contains("/Tests/");
-    let test_name = file_name.ends_with("Tests.swift") || file_name.ends_with("Test.swift");
+    // The namespace IS the SwiftPM target: `internal` — the language's default
+    // — reaches every file the module compiles and stops there, so one clause
+    // per file is the whole of Swift's scope shape. The target is spelled by
+    // the layout, never by the bytes, which is why `resolve` and this agree by
+    // sharing one function.
+    let target = crate::resolve::target_of(p);
+    if let Some((name, _)) = target {
+        out.namespace([SmolStr::new(name)]);
+    }
     // A test target is its own module: what it declares belongs to the
     // package in test builds alone. The test-shaped NAME is not that — a
     // `LoadTests.swift` in a library target is compiled into it like any
     // other file, and says nothing here.
-    if test_dir {
+    let in_test_target = target.is_some_and(|(_, test)| test);
+    if in_test_target {
         out.attachment(Attachment::TestOnly);
-        out.root(RootTarget::WholeFile, RootKind::Test, Confidence::Certain);
-    } else if file_name == "main.swift" {
-        // The whole file's top-level code runs at process start — SwiftPM's
-        // own rule for the filename, not a heuristic.
-        out.root(
-            RootTarget::WholeFile,
-            RootKind::Production,
-            Confidence::Certain,
-        );
-    } else {
-        if test_name {
-            out.root(RootTarget::WholeFile, RootKind::Test, Confidence::Probable);
-        }
-        // Library mode, the shared stance: any non-test file is importable
-        // published surface. Probable — convention, not this file's statement.
-        out.root(
-            RootTarget::WholeFile,
-            RootKind::Production,
-            Confidence::Probable,
-        );
     }
 
     tk::mark_generated(source, GENERATED_NEEDLES, &["//", "/*", "*"], out);
-    let in_test_target = test_dir;
 
     let root = tree.root_node();
     let mut cursor = root.walk();
@@ -481,8 +463,9 @@ fn property(
 /// is the file's on a top-level declaration and the owner's on a member
 /// (extensions in the same file included, which the file pool holds); NO
 /// modifier and `internal` are the module boundary → the unit's reach (the
-/// default rung); `package` is the group of targets one package aggregates;
-/// `public`/`open` → Exported.
+/// default rung), which a `@testable import` widens to the test target the
+/// manifest made its friend; `package` is the group of targets one package
+/// aggregates; `public`/`open` → Exported.
 fn reach_of(item: Node<'_>, source: &[u8]) -> Reach {
     let Some(modifiers) = tk::child_of_kind(item, "modifiers") else {
         return Reach::Unit { up: 0 };

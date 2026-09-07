@@ -1,11 +1,12 @@
-//! The root story: what package.json declares, what conventions declare, and the
-//! degradations (built entries that don't exist, unparseable manifests) that must
-//! anchor nothing.
+//! The root story: what package.json declares, what the FILE declares (a
+//! shebang, a test runner's membership), and the degradations (built entries
+//! that don't exist, unparseable manifests) that must anchor nothing. What a
+//! path declares is the spec's `file_roles`, gated in `kndo-gates`.
 
 use kndo_adapter_ts::TypeScriptAdapter;
 use kndo_contract::adapter::DependencyScope;
 use kndo_contract::adapter::{ResolveContext, SourceFile};
-use kndo_contract::evidence::{EvidenceSink, RootKind, RootTarget};
+use kndo_contract::evidence::{Attachment, EvidenceSink, RootKind, RootTarget};
 use kndo_contract::extension::Extension;
 use kndo_contract::vocab::ProjectPath;
 use std::collections::BTreeSet;
@@ -159,7 +160,11 @@ fn extracted_roots(path: &str, source: &str) -> Vec<(RootKind, bool)> {
 }
 
 #[test]
-fn convention_roots_from_path_and_shebang() {
+fn a_shebang_is_the_one_root_the_file_itself_states() {
+    // The path habits — `*.test.*`, `__tests__/`, `*.config.*`, rc-dotfiles —
+    // are the spec's `file_roles`, gated in `kndo-gates`. A `#!` line is not a
+    // habit and not a path: it is the file saying the loader runs it, so it is
+    // the one root extraction still concludes.
     assert_eq!(
         extracted_roots(
             "scripts/run.mjs",
@@ -167,25 +172,39 @@ fn convention_roots_from_path_and_shebang() {
         ),
         vec![(RootKind::Production, true)]
     );
+    for (path, source) in [
+        ("src/thing.test.ts", "it('works', () => {});\n"),
+        ("src/__tests__/helper.ts", "export const h = 1;\n"),
+        ("vite.config.ts", "export default {};\n"),
+        (".eslintrc.cjs", "module.exports = {};\n"),
+        ("src/plain.ts", "export const x = 1;\n"),
+    ] {
+        assert_eq!(extracted_roots(path, source), vec![], "{path}");
+    }
+}
+
+#[test]
+fn a_test_runners_path_states_the_files_membership() {
+    // What no path convention can say on the file's behalf: a spec file joins
+    // the project in a test run alone, whatever colour a root gives it.
+    let attachment = |path: &str, source: &str| {
+        kndo_testkit::extract_evidence(&TypeScriptAdapter::new(), path, source).attachment
+    };
     assert_eq!(
-        extracted_roots("src/thing.test.ts", "it('works', () => {});\n"),
-        vec![(RootKind::Test, true)]
+        attachment("src/thing.test.ts", "it('works', () => {});\n"),
+        Attachment::TestOnly
     );
     assert_eq!(
-        extracted_roots("src/__tests__/helper.ts", "export const h = 1;\n"),
-        vec![(RootKind::Test, true)]
+        attachment("src/__tests__/helper.ts", "export const h = 1;\n"),
+        Attachment::TestOnly
     );
     assert_eq!(
-        extracted_roots("vite.config.ts", "export default {};\n"),
-        vec![(RootKind::Tooling, true)]
+        attachment("vite.config.ts", "export default {};\n"),
+        Attachment::Regular
     );
     assert_eq!(
-        extracted_roots(".eslintrc.cjs", "module.exports = {};\n"),
-        vec![(RootKind::Tooling, true)]
-    );
-    assert_eq!(
-        extracted_roots("src/plain.ts", "export const x = 1;\n"),
-        vec![]
+        attachment("src/plain.ts", "export const x = 1;\n"),
+        Attachment::Regular
     );
 }
 

@@ -68,4 +68,3 @@ fn relative_imports_climb_by_dots() {
         Resolution::File(path("src/pkg/sub/__init__.py")),
     );
 }
-

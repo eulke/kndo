@@ -75,8 +75,13 @@ pub(crate) fn extension_spec(spec: awire::ExtensionSpec) -> ExtensionSpec {
             awire::CycleTolerance::Tolerated => CycleTolerance::Tolerated,
             awire::CycleTolerance::Hazard => CycleTolerance::Hazard,
         },
-        dispatch: spec.dispatch.into_iter().filter_map(dispatch_rule).collect(),
+        dispatch: spec
+            .dispatch
+            .into_iter()
+            .filter_map(dispatch_rule)
+            .collect(),
         namespace_span: Default::default(),
+        unnamed_unit: Default::default(),
         file_roles: Vec::new(),
         // The wire world speaks no dependency vocabulary yet; absence
         // defaults to silence, like every other undeclared capability.
@@ -154,7 +159,6 @@ fn step(s: awire::Step) -> Step {
         },
     }
 }
-
 
 pub(crate) fn reach_from_wire(reach: &awire::Reach) -> ev::Reach {
     match reach {
@@ -469,12 +473,7 @@ pub(crate) fn replay_evidence(evidence: awire::FileEvidence, sink: &mut Evidence
     }
     for r in evidence.relations {
         match ids.get(r.from as usize) {
-            Some(id) => sink.relation(
-                *id,
-                relation_kind(r.kind),
-                SmolStr::new(r.to),
-                span(r.span),
-            ),
+            Some(id) => sink.relation(*id, relation_kind(r.kind), SmolStr::new(r.to), span(r.span)),
             None => sink.diagnostic(
                 DiagnosticLevel::Warn,
                 format!(

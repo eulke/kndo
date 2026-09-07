@@ -16,7 +16,7 @@
 use crate::analysis::Reachability;
 use crate::graph::Graph;
 use kndo_contract::evidence::{ImportShape, Reach, RootKind, RootTarget, SymbolKind};
-use kndo_contract::vocab::Span;
+use kndo_contract::vocab::{Confidence, Span};
 use smol_str::SmolStr;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -391,6 +391,11 @@ impl Index {
 
     /// The files a namespace-reaching declaration in `file` pools over — see
     /// [`crate::scopes::Scopes::namespace_pool`].
+    /// The files this one COMPILES WITH — see [`crate::scopes::Scopes::covisible`].
+    pub fn covisible(&self, file: usize) -> &[u32] {
+        self.scopes.covisible(file)
+    }
+
     pub fn namespace_pool(&self, file: usize, up: u32) -> Option<&[u32]> {
         self.scopes.namespace_pool(file, up)
     }
@@ -410,11 +415,12 @@ impl Index {
             Reach::Namespace { up } => bounded(self.scopes.namespace_pool(file, *up)),
             Reach::Unit { up: 0 } => match f.unit {
                 Some(u) => Pool::Files(self.scopes.unit_pool(u)),
-                // No manifest named the unit: the tree the mounts spell is
-                // the compilation. Where the language mounts nothing either,
-                // the reach is UNBOUNDED and says so — keep-alive, the typed
-                // absence, never a directory an adapter walked.
-                None => bounded(self.scopes.tree_pool(file)),
+                // No manifest named the unit: what still bounds the reach is
+                // the language's to say — the tree its mounts spell, or the
+                // namespace it declared where the two are one thing. Neither,
+                // and the reach is UNBOUNDED and says so: keep-alive, the
+                // typed absence, never a directory an adapter walked.
+                None => bounded(self.scopes.unnamed_unit_pool(file)),
             },
             Reach::Unit { up: 1 } => bounded(f.unit.and_then(|u| self.scopes.group_pool(u))),
             Reach::Directory { up } => bounded(self.scopes.directory_pool(file, *up)),
@@ -449,7 +455,6 @@ impl Capped {
         self.out.len() >= self.limit
     }
 }
-
 
 /// The unit whose published surface this file is on, by name — see
 /// [`crate::graph::GraphFile::published`].
@@ -507,10 +512,20 @@ pub fn keepers(
     }
     let entry_surface = f.roots().any(|r| matches!(r.target, RootTarget::WholeFile));
 
-    // Roots anchoring the declaration itself, or its owner.
+    // Roots anchoring the declaration itself, its owner, or a member it owns.
+    // The last direction is the launcher's: a class whose `main` the runtime
+    // names is named through it, and the member cannot outlive its type. Only
+    // a CERTAIN root travels that way — `Probable`/`Possible` say the member
+    // MIGHT be dispatched, and inheriting a maybe is how silence spreads from
+    // one method to everything around it.
     let anchors = |r: &kndo_contract::evidence::Root| match &r.target {
         RootTarget::Declaration(id) => {
-            id.index() == decl || d.owner.is_some_and(|o| o.index() == id.index())
+            id.index() == decl
+                || d.owner.is_some_and(|o| o.index() == id.index())
+                || (r.confidence == Confidence::Certain
+                    && f.evidence.declarations[id.index()]
+                        .owner
+                        .is_some_and(|o| o.index() == decl))
         }
         _ => false,
     };
@@ -619,12 +634,18 @@ pub fn keepers(
             }
         }
     } else {
-        // The lexical pool: own file plus viewers — or, additionally, the
-        // bounded region (qualified in-region uses need no import).
+        // The lexical pool: own file plus viewers, the bounded region
+        // (qualified in-region uses need no import), and — for a name the
+        // file HANDS OUT — the files it compiles with. An export is nameable
+        // inside its own namespace with no import at all, so a sibling's bare
+        // use is a use; a file-private name is not, which is why the
+        // compilation is read only where the reach is Exported.
         let seen = index.included_by(file);
+        let compiled_with = exported.then(|| index.covisible(file));
         for &site in index.reference_sites(d.name.as_str()) {
             let in_pool = site.file as usize == file
                 || seen.binary_search(&site.file).is_ok()
+                || compiled_with.is_some_and(|c| c.binary_search(&site.file).is_ok())
                 || region.is_some_and(|r| {
                     r.binary_search(&site.file).is_ok() && index.reachable(site.file)
                 });

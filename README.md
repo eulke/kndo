@@ -214,9 +214,10 @@ Complete (CI verification pending only the credits reset, like M0–M2):
   silent (v1 parity; manifest-anchored entries are wiring), coverage per-function
   `Certain` unchanged; three js fixtures regenerated under the documented change.
 - **M4.c — the Go adapter, done**: `kndo-adapter-go` (id `go`, tree-sitter-go) —
-  the package as the unit (what is now `Extension::sees` declares what a file
-  sees without an import — the engine draws the edges and pools references;
-  module-path-prefix resolution to `Resolution::Files`), capitalization as
+  the package as the unit (the package clause names the namespace and the
+  engine draws the co-visibility from it, so a file needs no import to see its
+  package mates; module-path-prefix resolution to `Resolution::Files`),
+  capitalization as
   reach, library-mode roots with the `internal/` fence, generated-file and
   structural-interface never-accuse rules. Eight v1 fixtures replay byte-pinned;
   the conformance gate now walks three corpora (22 js + 25 rust + 8 go).
@@ -330,26 +331,24 @@ Complete (CI verification pending only the credits reset, like M0–M2):
   findings — including the REAL method-level clone families between its parallel
   JDBC/R2DBC test suites — with every delta explained in COMPARISON.
 - **M6.b.3 — swift, done.** The sixth built-in closes the census's language
-  set, and it is the region mechanism's home case: Swift's DEFAULT is
-  `internal` → `Scoped("module")`. Flat SwiftPM targets (path-override layouts
+  set, and it is the bounded-reach mechanism's home case: Swift's DEFAULT is
+  `internal`, the unit's reach. Flat SwiftPM targets (path-override layouts
   take the directory as the target), no test mirror (`@testable import` IS the
   edge), toolchain test-runner dispatch roots (XCTest `test*`, swift-testing
   `@Test`), manifests as Tooling with labeled-argument dependency reads. Four
   v1 fixtures replay; vapor measures 216 findings and Alamofire 609 — including
   ~130 genuinely dead test-case helpers v1's fuzzy pooling kept alive — every
   delta decomposed in COMPARISON under the quarry-not-target law.
-- **M6.c — done: internal-only over enumerated regions.** `Reach` grew its
-  middle rung — `Scoped { scope }`, the adapter's own word for a bounded
-  region — and `Extension::seen_from` answers which files sit inside a
-  declaration's scope from paths and manifests alone (content-free; `None`
-  means Exported treatment, so go and java were proven byte-identical no-ops
-  before any language moved). The graph carries the regions, `unused` judges
-  Scoped declarations against their region instead of the entry surface, and
-  the `internal-only` analysis reports Exported/Scoped declarations whose
-  every confident use sits inside their own file — gated by
-  `narrowable_scopes`, the spec's list of rungs the language actually
-  enforces. The first fix it demanded was kndo's own: `StoreData` in the
-  dogfood went private.
+- **M6.c — done: internal-only over bounded reach.** `Reach` grew its middle
+  rung — a declaration reaching further than its own file but short of the
+  world — and the engine answers which files sit inside that bound. `unused`
+  judges such a declaration against its bound instead of the entry surface,
+  and the `internal-only` analysis reports a declaration whose every confident
+  use sits inside its own file, naming the narrowest keyword the language
+  spells. The first fix it demanded was kndo's own: `StoreData` in the dogfood
+  went private. (M8 replaced the milestone's `Scoped { scope }` token with
+  structured reach and the scope forest — the judgment is the same, the
+  vocabulary finite.)
 - **M6.d — done: measured parity closed as a measurement.** The full
   v2-vs-oracle table (nine repos × every category) tabulated and every cell
   decomposed — COMPARISON's close-out section carries the table, the cells no
@@ -464,10 +463,10 @@ conservatism).
 
 **`private-type-leak`** closes the visibility pair: an exported callable whose
 signature — the promise region the adapter now marks
-(`Declaration.signature_span`) — names a private type. Exported-vs-Private
-only (`Scoped` on either side is silence, which retires v1's `pub(crate)` and
-package-private vices by construction); corpus vite 30 real, zero elsewhere,
-zero noise.
+(`Declaration.signature_span`) — names a type nothing outside the file can
+name. Exported-vs-owner/file only (every rung between them is silence, which
+retires v1's `pub(crate)` and package-private vices by construction); corpus
+vite 30 real, zero elsewhere, zero noise.
 
 **`cyclic`** completes the risk family's first member: SCCs over import edges,
 one warning per cycle with the shortest loop as its evidence chain, and hazard

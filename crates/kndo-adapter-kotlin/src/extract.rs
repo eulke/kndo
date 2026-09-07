@@ -21,8 +21,8 @@
 //!   `Widget.factory()` is how real code addresses them.
 
 use kndo_contract::evidence::{
-    Attachment, DeclarationId, EvidenceSink, ImportBinding, ImportShape, ImportTarget, Reach, RefKind,
-    RootKind, RootTarget, SymbolKind,
+    Attachment, DeclarationId, EvidenceSink, ImportBinding, ImportShape, ImportTarget, Reach,
+    RefKind, RootKind, RootTarget, SymbolKind,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use kndo_toolkit as tk;
@@ -45,17 +45,11 @@ pub fn extract(
     out: &mut EvidenceSink,
 ) {
     let p = path.as_str();
-    let file_name = p.rsplit('/').next().unwrap_or(p);
-    // The standard layout's test directory is the build tool's own boundary —
-    // Certain, and not published surface. A test-shaped NAME outside it is
-    // convention only: Probable, and the file keeps its library-mode Production
-    // root — a `LoadTest.kt` on the main source path is still importable surface.
+    // The standard layout's test directory, which the spec also declares as a
+    // FILE ROLE: here it is read for the attachment alone.
     let test_dir = ["src/test/kotlin", "src/test/java"]
         .iter()
         .any(|m| p.starts_with(&format!("{m}/")) || p.contains(&format!("/{m}/")));
-    let test_name = file_name.ends_with("Test.kt")
-        || file_name.ends_with("Tests.kt")
-        || file_name.ends_with("TestCase.kt");
 
     // The test source set is its own compilation: what it declares belongs to
     // the package in test builds alone. The test-shaped NAME is not that — a
@@ -63,13 +57,13 @@ pub fn extract(
     // any other file, and says nothing here.
     if test_dir {
         out.attachment(Attachment::TestOnly);
-        out.root(RootTarget::WholeFile, RootKind::Test, Confidence::Certain);
     } else {
-        if test_name {
-            out.root(RootTarget::WholeFile, RootKind::Test, Confidence::Probable);
-        }
-        // Library mode, Go's and Java's stance: any non-test file is importable
-        // published surface. Probable — convention, not this file's statement.
+        // The one whole-file root still concluded here, and it is on the
+        // ledger: "any non-test file is importable published surface" is the
+        // engine's `publishes()` to say, but that reads the unit — and kotlin
+        // reads no Gradle yet, so nothing names its units. Measured: deleting
+        // it now costs Exposed +125 findings. It goes with the Gradle parser
+        // (M8.d), not before it.
         out.root(
             RootTarget::WholeFile,
             RootKind::Production,

@@ -1758,3 +1758,57 @@ SwiftPM target covers. Exposed's 42 are kotlin `internal` declarations that a
 `/src/`-shaped path convention used to bound; kotlin reads no Gradle yet, so
 nothing names its units. Both close when their parser lands — swift's already
 closed 482 of its own 486.
+
+### Twenty whole-file roots leave the adapters (2026-09-07)
+
+| repo | before | after | what moved |
+|---|---|---|---|
+| Alamofire | 534 | 426 | −113 `unused` XCTest case classes, +3 `internal-only`, +2 `unused` |
+| vapor | 218 | 176 | −42 `unused` XCTest case classes |
+| vite | 711 | 691 | −20 `untested` HTML pages |
+| flask | 29 | 26 | −3 `untested` HTML templates |
+| guava | 8249 | 8247 | −2 `unused` |
+| lodash | 18 | 20 | +2 `test-only` |
+| Exposed, gin, ripgrep | — | — | byte-identical |
+
+Nine adapters stopped reading a path to conclude a root; the spec declares the
+convention and the engine applies it. Four judgments the old roots had been
+masking come out of that, and every number above is one of them.
+
+**The 155 XCTest classes.** `ApplicationTests`, `CacheTestCase`,
+`DataRequestCombineTests` — classes holding nothing but rooted `test*` methods,
+reported as dead by v2 because a root on a member did not keep its owner. XCTest
+instantiates the class by reflection and runs the methods off it, so the class
+cannot be dead while a method of it is an entry. Only a CERTAIN root travels
+that way: swift roots a conforming type's non-private methods at `Possible`, and
+letting THAT travel keeps every conforming class alive — measured at another 115
+findings of silence on Alamofire, which is why the tier decides.
+
+v1 reported none of these either, and for the opposite reason: its name-fuzzy
+pooling kept nearly everything in a test target alive. v2 now agrees with v1's
+answer here by knowing why, not by inheriting the vice — the ~130 genuinely dead
+test-case HELPERS v2 reports and v1 missed are untouched by this change.
+
+**The 23 HTML pages.** A page's Production root moved from adapter evidence to
+an engine anchor, and `untested` has always exempted an engine-anchored
+production entry: it is wiring, an entry nothing can import, so the question of
+whether a test reaches it is asked of what it leads to instead. vite's
+`playground/*/index.html` and flask's Jinja templates are exactly that. The
+pages' inline `<script>` regions are why they carried functions to be asked
+about at all.
+
+**lodash's +2.** `fp/_baseConvert.js` and `fp/placeholder.js` are reached only
+from `test/test-fp.js`. That file had been a TOOLING entry — lodash's
+`package.json` names `"test:fp": "node test/test-fp"`, and an npm script's file
+roots as tooling whatever the script is called — so the tooling colour flooded
+from a test file onto everything it reaches. A file the test build alone
+compiles now seeds no other colour, and both files are correctly `test-only`.
+
+**Alamofire's +5.** Three `internal-only` advisories in `Example/` and `watchOS
+Example/` (`Sections`, `HTTPBinResponse`, `Networking.result`), each an
+`internal` name used only within its own file — reachable as advice for the
+first time because those Xcode trees now have a bound at all: swift declares its
+namespace, and a unit-wide reach whose unit no manifest named falls back to it.
+Two `unused` on `ContentViewPreviews` and its `previews`: a SwiftUI
+`PreviewProvider`, which only Xcode's canvas instantiates. That is the swiftui
+rule pack's to witness (M8.e), and it is on the ledger rather than papered over.

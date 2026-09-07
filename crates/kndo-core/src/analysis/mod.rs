@@ -111,15 +111,22 @@ pub fn is_test_file(graph: &Graph, file: usize) -> bool {
 fn flood(graph: &Graph, scopes: &crate::scopes::Scopes, kind: RootKind) -> Vec<bool> {
     let n = graph.files.len();
     let mut reached = vec![false; n];
-    let mut queue: Vec<usize> = (0..n).filter(|&i| has_root_of(graph, i, kind)).collect();
+    // A file that is a test AS A WHOLE is compiled into the test binary alone,
+    // so it neither carries nor receives the other two colours — not through
+    // the namespace it shares with production files, and not as a seed: a
+    // module the production build never compiles is not an entry to it,
+    // whatever colour a root on it claims. That is what lets a language
+    // declare its conventions as overlapping globs
+    // ([`kndo_contract::extension::FileRole`]) — `**/*.html` is a page and
+    // `**/__tests__/**` is a test page, both true of one file — without the
+    // narrower one having to subtract the wider.
+    let through_tests = kind == RootKind::Test;
+    let mut queue: Vec<usize> = (0..n)
+        .filter(|&i| has_root_of(graph, i, kind) && (through_tests || !is_test_file(graph, i)))
+        .collect();
     for &i in &queue {
         reached[i] = true;
     }
-    // A file that is a test AS A WHOLE is compiled into the test binary alone,
-    // so it neither carries nor receives the other two colours through the
-    // namespace it shares with production files — the one asymmetry a
-    // co-compiled namespace has.
-    let through_tests = kind == RootKind::Test;
     while let Some(i) = queue.pop() {
         let f = &graph.files[i];
         // An include pastes the target in, so its names are readable here:
@@ -351,6 +358,9 @@ pub struct DeclaredCapabilities {
     /// How far one of this language's namespaces reaches across the project's
     /// units — see [`kndo_contract::extension::NamespaceSpan`].
     pub namespace_span: kndo_contract::extension::NamespaceSpan,
+    /// What bounds a unit-wide reach where no manifest named the unit — see
+    /// [`kndo_contract::extension::UnnamedUnit`].
+    pub unnamed_unit: kndo_contract::extension::UnnamedUnit,
 }
 
 pub fn run_all(

@@ -15,7 +15,7 @@ use kndo_contract::adapter::{
     DependencyDeclaration, PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile,
 };
 use kndo_contract::evidence::{Attachment, EvidenceSink, RootKind, RootTarget};
-use kndo_contract::extension::{Extension, ExtensionSpec, PublishedSurface, Rung, Step};
+use kndo_contract::extension::{Extension, ExtensionSpec, FileRole, PublishedSurface, Rung, Step};
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use tree_sitter::Language;
 
@@ -93,8 +93,9 @@ impl TypeScriptAdapter {
     pub fn new() -> Self {
         let spec = kndo_toolkit::source_adapter_builder(
             "kndo:js-ts",
-            // 11: a test-runner path states its attachment.
-            11,
+            // 12: a path convention is the spec's to declare, and extraction
+            // states the file's own facts alone.
+            12,
             &["ts", "tsx", "js", "jsx", "mjs", "cjs", "mts", "cts"],
             &["**/package.json"],
             // ESM/CJS initialization order makes cycles bite: TDZ errors and
@@ -118,6 +119,24 @@ impl TypeScriptAdapter {
         .ladder(&[
             Step::for_free(Rung::File, "unexported"),
             Step::new(Rung::Exported, "export"),
+        ])
+        // The ecosystem's habits, where no manifest said what a file is: the
+        // runners collect `*.test.*`/`*.spec.*` and everything under a test
+        // directory, and each tool reads its own `*.config.*` or rc-dotfile.
+        // Habit, never rule — nothing in npm enforces either name — so both
+        // are `Probable`, and they overlap freely: a `vitest.config.ts` under
+        // `test/` is a tool's file AND a test's, and the engine takes both.
+        .file_roles(&[
+            FileRole::probable("__tests__/**", RootKind::Test),
+            FileRole::probable("**/__tests__/**", RootKind::Test),
+            FileRole::probable("test/**", RootKind::Test),
+            FileRole::probable("**/test/**", RootKind::Test),
+            FileRole::probable("tests/**", RootKind::Test),
+            FileRole::probable("**/tests/**", RootKind::Test),
+            FileRole::probable("**/*.test.*", RootKind::Test),
+            FileRole::probable("**/*.spec.*", RootKind::Test),
+            FileRole::probable("**/*.config.*", RootKind::Tooling),
+            FileRole::probable("**/.*rc.*", RootKind::Tooling),
         ])
         // An npm package resolves through `main`/`exports`: what an entry
         // exports is published, and an export no entry reaches is internal
@@ -219,10 +238,12 @@ impl Extension for TypeScriptAdapter {
     }
 }
 
-/// Roots the ecosystem's conventions declare without a manifest: a shebang is an
-/// executable entry, `*.test.*`/`*.spec.*`/`__tests__/` files are run by the test
-/// runner, `*.config.*` and rc-dotfiles are read by their tools. Convention is
-/// `Probable`, never `Certain` — only the shebang is the file's own statement.
+/// What the FILE ITSELF says about its role — the one fact here no path
+/// convention can state: a `#!` line makes the file an executable entry
+/// whatever it is called and wherever it sits. The path conventions
+/// (`*.test.*`/`*.spec.*`/`__tests__/`, `*.config.*`, rc-dotfiles) are the
+/// spec's `file_roles`; what stays is the membership those paths imply, which
+/// is evidence: a spec file joins the project in a test run alone.
 fn convention_roots(file: &SourceFile<'_>, out: &mut EvidenceSink) {
     if file.content.starts_with(b"#!") {
         out.root(
@@ -231,19 +252,7 @@ fn convention_roots(file: &SourceFile<'_>, out: &mut EvidenceSink) {
             Confidence::Certain,
         );
     }
-    let path = file.path.as_str();
-    let name = path.rsplit('/').next().unwrap_or(path);
-    if kndo_toolkit::web_test_path(path) {
-        // Whether the runner treats it as an ENTRY is convention; that the
-        // published package does not carry it is not — a spec file joins the
-        // project in a test run alone.
+    if kndo_toolkit::web_test_path(file.path.as_str()) {
         out.attachment(Attachment::TestOnly);
-        out.root(RootTarget::WholeFile, RootKind::Test, Confidence::Probable);
-    } else if name.contains(".config.") || (name.starts_with('.') && name.contains("rc.")) {
-        out.root(
-            RootTarget::WholeFile,
-            RootKind::Tooling,
-            Confidence::Probable,
-        );
     }
 }

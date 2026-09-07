@@ -16,7 +16,7 @@
 
 use crate::analysis::DeclaredCapabilities;
 use crate::graph::Graph;
-use kndo_contract::extension::NamespaceSpan;
+use kndo_contract::extension::{NamespaceSpan, UnnamedUnit};
 use smol_str::SmolStr;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -39,6 +39,10 @@ pub struct Scopes {
     /// compilation. Per file, because the DECLARATION's language decides who
     /// may name it, and one namespace can hold two languages' files.
     spans: Vec<bool>,
+    /// file → whether the language that claims it says the namespace a file
+    /// declares IS its unit where no manifest named one — see
+    /// [`kndo_contract::extension::UnnamedUnit`].
+    namespace_is_unit: Vec<bool>,
     /// unit → the files a unit-reaching declaration in it pools over: the
     /// unit's own files plus every friend's, ascending. The unit layer of the
     /// forest, read where a manifest named the unit; until one does, the
@@ -149,15 +153,21 @@ impl Scopes {
         let forest: Vec<bool> = chains.iter().map(Option::is_some).collect();
         let spanned = span_nodes(graph, &files, &unit_of_node, &segments_of_node);
         let cobuilt = cobuilt_nodes(graph, &files, &unit_of_node, &segments_of_node);
+        let declared = |f: &crate::graph::GraphFile| {
+            capabilities
+                .iter()
+                .find(|(c, _)| *c == f.adapter)
+                .map(|(_, caps)| caps)
+        };
         let spans = graph
             .files
             .iter()
-            .map(|f| {
-                capabilities
-                    .iter()
-                    .find(|(c, _)| *c == f.adapter)
-                    .is_some_and(|(_, caps)| caps.namespace_span == NamespaceSpan::Compilation)
-            })
+            .map(|f| declared(f).is_some_and(|c| c.namespace_span == NamespaceSpan::Compilation))
+            .collect();
+        let namespace_is_unit = graph
+            .files
+            .iter()
+            .map(|f| declared(f).is_some_and(|c| c.unnamed_unit == UnnamedUnit::Namespace))
             .collect();
         Scopes {
             of_file,
@@ -165,6 +175,7 @@ impl Scopes {
             spanned,
             cobuilt,
             spans,
+            namespace_is_unit,
             unit_pool: unit_pools(graph),
             group_pool: group_pools(graph),
             directories: directories(graph),
@@ -239,6 +250,20 @@ impl Scopes {
     /// answers.
     pub fn tree_pool(&self, file: usize) -> Option<&[u32]> {
         self.forest[file].then(|| self.subtree[self.root_node[file] as usize].as_slice())
+    }
+
+    /// The files a `Reach::Unit { up: 0 }` declaration pools over where NO
+    /// manifest named the unit: the tree the mounts spell, or — for a language
+    /// that spells nothing between a namespace and a build unit
+    /// ([`kndo_contract::extension::UnnamedUnit::Namespace`], Swift's module) —
+    /// the namespace the file itself declared. `None` where neither answers:
+    /// the reach is unbounded and says so, never a directory an adapter walked.
+    pub fn unnamed_unit_pool(&self, file: usize) -> Option<&[u32]> {
+        self.tree_pool(file).or_else(|| {
+            self.namespace_is_unit[file]
+                .then(|| self.namespace_pool(file, 0))
+                .flatten()
+        })
     }
 
     /// One node's pool as `file` reads it: the subtree where namespaces nest,

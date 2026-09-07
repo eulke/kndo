@@ -135,7 +135,6 @@ fn reach_to_wire(reach: &ev::Reach) -> wire::Reach {
     }
 }
 
-
 fn activation_to_wire(activation: &Activation) -> wire::Activation {
     match activation {
         Activation::Always => wire::Activation::Always,
@@ -587,8 +586,8 @@ fn project_snapshot() -> &'static ProjectSnapshot {
 /// EXTRACTION-PHASE CODE MUST NOT CALL THIS: the file listing is project data,
 /// gated off during `extract` (evidence is cached by file content alone, so an
 /// extraction that read the file SET would go stale invisibly) — the host traps
-/// the call as a phase violation. Use it from `resolve`, `roots`, `packages`
-/// and `sees`, where the project enumerations are the contract.
+/// the call as a phase violation. Use it from `resolve` and `extract_manifest`,
+/// where the project enumerations are the contract.
 /// The real `ResolveContext`, rebuilt from the host's enumerations.
 pub fn resolve_context() -> ResolveContext<'static> {
     let snap = project_snapshot();

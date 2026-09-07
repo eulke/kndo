@@ -1,7 +1,7 @@
 use kndo_adapter_swift::SwiftAdapter;
 use kndo_contract::adapter::{Resolution, ResolveContext};
-use kndo_contract::manifest::UnitKind;
 use kndo_contract::extension::Extension;
+use kndo_contract::manifest::UnitKind;
 use kndo_contract::vocab::ProjectPath;
 use std::collections::BTreeSet;
 
@@ -159,8 +159,10 @@ fn unit_named<'a>(
     units: &'a [kndo_contract::manifest::Unit],
     name: &str,
 ) -> &'a kndo_contract::manifest::Unit {
-    units
-        .iter()
-        .find(|u| u.name == name)
-        .unwrap_or_else(|| panic!("no unit {name} among {:?}", units.iter().map(|u| &u.name).collect::<Vec<_>>()))
+    units.iter().find(|u| u.name == name).unwrap_or_else(|| {
+        panic!(
+            "no unit {name} among {:?}",
+            units.iter().map(|u| &u.name).collect::<Vec<_>>()
+        )
+    })
 }

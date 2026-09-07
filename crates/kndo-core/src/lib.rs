@@ -28,7 +28,7 @@ pub use conduct::{
     Extension, GraphAccess, GraphView, RuleDescriptor, WellKnown, activate, is_reserved_coordinate,
     run_round,
 };
-pub use graph::{Graph, GraphFile};
+pub use graph::{Graph, GraphFile, declared_roles};
 pub use health::{CategoryCount, Health, Universe};
 pub use kndo_contract::extension::{
     ConductBuilder, ExtensionSpec, ExtensionSpecBuilder, ExtensionSpecParts, MutatesGraph,

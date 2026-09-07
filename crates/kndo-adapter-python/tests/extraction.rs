@@ -1,7 +1,7 @@
 use kndo_adapter_python::PythonAdapter;
-use kndo_contract::evidence::{Attachment, 
-    FileEvidence, ImportShape, ImportTarget, MarkerTarget, Reach, RefKind, RootKind, RootTarget,
-    SymbolKind, Timing,
+use kndo_contract::evidence::{
+    Attachment, FileEvidence, ImportShape, ImportTarget, MarkerTarget, Reach, RefKind, RootKind,
+    RootTarget, SymbolKind, Timing,
 };
 use kndo_contract::vocab::Confidence;
 use kndo_testkit::{declaration_named, extract_evidence};
@@ -123,11 +123,18 @@ def helper():
     pass
 "#,
     );
-    assert!(e.roots.iter().any(|r| {
-        matches!(r.target, RootTarget::WholeFile)
-            && r.kind == RootKind::Test
-            && r.confidence == Confidence::Certain
-    }));
+    // WHICH files the runner collects is the spec's `file_roles` (gated in
+    // `kndo-gates`); what extraction states is the membership — the collected
+    // module joins the package in a test run and in no other — and the
+    // per-function dispatch, which is a fact about this file's names.
+    assert_eq!(e.attachment, Attachment::TestOnly);
+    assert!(
+        !e.roots
+            .iter()
+            .any(|r| matches!(r.target, RootTarget::WholeFile)),
+        "{:?}",
+        e.roots
+    );
     let test_fn_rooted = e.roots.iter().any(|r| {
         matches!(&r.target, RootTarget::Declaration(id)
             if e.declarations[id.index()].name == "test_render")
@@ -135,7 +142,14 @@ def helper():
     });
     assert!(test_fn_rooted, "the runner dispatches test_* by name");
     let conftest = ev("tests/conftest.py", "def client():\n    pass\n");
-    assert!(conftest.roots.iter().any(|r| r.kind == RootKind::Test));
+    assert_eq!(conftest.attachment, Attachment::TestOnly);
+
+    // A library module keeps the one whole-file root still concluded here,
+    // and it is on the ledger: python reads no pyproject yet, so nothing else
+    // would root a package at all.
+    let lib = ev("src/flask/app.py", "def create_app():\n    pass\n");
+    assert_eq!(lib.attachment, Attachment::Regular);
+    assert!(lib.roots.iter().any(|r| r.kind == RootKind::Production));
 }
 
 #[test]
@@ -341,8 +355,19 @@ fn a_generated_module_reports_its_banner_and_says_everything_else_in_full() {
 
 #[test]
 fn what_the_runner_collects_joins_the_package_in_a_test_run_alone() {
-    for path in ["tests/test_widget.py", "src/app/widget_test.py", "tests/conftest.py"] {
-        assert_eq!(ev(path, "x = 1\n").attachment, Attachment::TestOnly, "{path}");
+    for path in [
+        "tests/test_widget.py",
+        "src/app/widget_test.py",
+        "tests/conftest.py",
+    ] {
+        assert_eq!(
+            ev(path, "x = 1\n").attachment,
+            Attachment::TestOnly,
+            "{path}"
+        );
     }
-    assert_eq!(ev("src/app/widget.py", "x = 1\n").attachment, Attachment::Regular);
+    assert_eq!(
+        ev("src/app/widget.py", "x = 1\n").attachment,
+        Attachment::Regular
+    );
 }

@@ -2,7 +2,9 @@
 //! properties, dispatch roots, import shapes, and the never-declare postures.
 
 use kndo_adapter_kotlin::KotlinAdapter;
-use kndo_contract::evidence::{Attachment, ImportShape, ImportTarget, Reach, RefKind, RootKind, RootTarget};
+use kndo_contract::evidence::{
+    Attachment, ImportShape, ImportTarget, Reach, RefKind, RootKind, RootTarget,
+};
 use kndo_testkit::{declaration_named, extract_evidence, import_named};
 
 fn ev(path: &str, source: &str) -> kndo_contract::evidence::FileEvidence {
@@ -216,17 +218,21 @@ fn imports_take_their_shapes_and_the_platform_produces_none() {
 }
 
 #[test]
-fn layout_roles_root_the_file() {
+fn the_test_source_set_states_its_membership_and_the_main_one_still_roots() {
+    // Which paths Gradle compiles as tests is the spec's `file_roles` (gated
+    // in `kndo-gates`); extraction states the membership, which no path
+    // convention says on the file's behalf.
     let test = ev(
         "src/test/kotlin/com/foo/WidgetTest.kt",
         "class WidgetTest\n",
     );
-    assert!(
-        test.roots
-            .iter()
-            .any(|r| r.kind == RootKind::Test && matches!(r.target, RootTarget::WholeFile))
-    );
+    assert_eq!(test.attachment, Attachment::TestOnly);
+    assert!(test.roots.is_empty(), "{:?}", test.roots);
+
+    // The one whole-file root still concluded here, and it is on the ledger:
+    // kotlin reads no Gradle yet, so nothing else would root a library at all.
     let prod = ev("src/main/kotlin/com/foo/Widget.kt", "class Widget\n");
+    assert_eq!(prod.attachment, Attachment::Regular);
     assert!(prod.roots.iter().any(|r| r.kind == RootKind::Production));
 }
 

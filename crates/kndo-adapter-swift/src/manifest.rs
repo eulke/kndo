@@ -199,11 +199,7 @@ pub fn structure(manifest: &ProjectPath, content: &[u8], out: &mut ManifestSink)
                 // A test target's dependencies are its FRIENDS: `@testable
                 // import Vapor` reaches Vapor's `internal`, which is exactly
                 // what friendship means and what no path convention can know.
-                friend_of: if test {
-                    depends_on.clone()
-                } else {
-                    Vec::new()
-                },
+                friend_of: if test { depends_on.clone() } else { Vec::new() },
                 depends_on,
                 // A library product NAMES the targets it publishes, so a
                 // target no product names is the package's own — the one

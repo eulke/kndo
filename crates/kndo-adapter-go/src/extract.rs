@@ -2,10 +2,10 @@
 //! full-tree walk for references and comments. Go-specific facts spelled here:
 //! the package clause NAMES the namespace, capitalization is reach,
 //! `package main` + `func main` is the binary entry, and `_test.go` is the test
-//! runner's file. Which files co-compile stays in [`crate::resolve::sees`] —
-//! that depends on the file set, never on this file's bytes — while the
-//! namespace the file declares itself into is its own statement and belongs
-//! here. Deliberately undeclared: struct fields, interface methods, and ALL
+//! runner's file. Which files co-compile is the engine's answer, read off the
+//! scope forest — that depends on the file set, never on this file's bytes —
+//! while the namespace the file declares itself into is its own statement and
+//! belongs here. Deliberately undeclared: struct fields, interface methods, and ALL
 //! methods — Go's interfaces are structural, so any method may satisfy one and
 //! be dispatched without its name ever appearing (`MarshalYAML`, `IsEmpty`);
 //! the grammar cannot prove a method dead, and never accuses what it cannot

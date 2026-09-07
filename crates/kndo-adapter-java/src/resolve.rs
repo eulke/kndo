@@ -64,5 +64,3 @@ fn package_dir_files(dir_suffix: &str, cx: &ResolveContext<'_>) -> Vec<ProjectPa
     out.sort();
     out
 }
-
-

@@ -5,8 +5,9 @@
 //! reference exclusions, and comment spans.
 
 use kndo_adapter_go::GoAdapter;
-use kndo_contract::evidence::{Attachment, 
-    FileEvidence, ImportShape, ImportTarget, MarkerTarget, Reach, RootKind, RootTarget, SymbolKind,
+use kndo_contract::evidence::{
+    Attachment, FileEvidence, ImportShape, ImportTarget, MarkerTarget, Reach, RootKind, RootTarget,
+    SymbolKind,
 };
 use kndo_contract::extension::Extension;
 
@@ -150,7 +151,7 @@ import (
 "#,
     );
     // Evidence is faithful to the source: exactly the written imports, nothing
-    // synthetic — which files co-compile lives in `sees`.
+    // synthetic — which files co-compile is the scope forest's answer.
     assert_eq!(ev.imports.len(), 4);
     assert!(matches!(
         &import(&ev, "fmt").shape,
@@ -389,7 +390,10 @@ fn a_test_file_belongs_to_its_package_in_test_builds_alone() {
     // `go test` compiles `_test.go` into the package; nothing else ever does.
     // The membership is the file's own statement, separate from the ENTRY its
     // declared file role anchors.
-    let e = extract("pkg/server_test.go", "package pkg\n\nfunc TestRun(t *testing.T) {}\n");
+    let e = extract(
+        "pkg/server_test.go",
+        "package pkg\n\nfunc TestRun(t *testing.T) {}\n",
+    );
     assert_eq!(e.attachment, Attachment::TestOnly);
     let e = extract("pkg/server.go", "package pkg\n\nfunc Run() {}\n");
     assert_eq!(e.attachment, Attachment::Regular);

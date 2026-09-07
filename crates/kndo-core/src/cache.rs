@@ -46,8 +46,9 @@ impl EvidenceCache {
         h.update(&self.fingerprint);
         h.update(serde_json::to_string(spec.emits()).ok()?.as_bytes());
         // The path participates: extraction sees it, and adapters emit
-        // path-conditional evidence (a test-glob root), so identical content at two
-        // paths is not interchangeable.
+        // path-conditional evidence (Swift's namespace clause IS its SwiftPM
+        // target, spelled by the layout), so identical content at two paths is
+        // not interchangeable.
         h.update(path.as_str().as_bytes());
         h.update(content_hash);
         let hex: String = h

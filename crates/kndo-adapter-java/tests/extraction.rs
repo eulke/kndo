@@ -1,11 +1,11 @@
 //! Extraction facts: reach mapping, nominal members, dispatch roots, imports,
 //! and the file-role roots the standard layout dictates.
 
-use kndo_contract::extension::Extension;
 use kndo_adapter_java::JavaAdapter;
-use kndo_contract::evidence::{Attachment, 
-    ImportShape, ImportTarget, MarkerTarget, Reach, RelationKind, RootKind, RootTarget,
+use kndo_contract::evidence::{
+    Attachment, ImportShape, ImportTarget, MarkerTarget, Reach, RelationKind, RootTarget,
 };
+use kndo_contract::extension::Extension;
 use kndo_testkit::{declaration_named, extract_evidence, import_named};
 
 fn ev(path: &str, source: &str) -> kndo_contract::evidence::FileEvidence {
@@ -88,7 +88,11 @@ fn the_only_root_left_is_the_jvm_entry() {
         .collect();
     // The JVM entry is a modifier fact as much as a name one, and this pass
     // is where `static` and `public` are visible.
-    let main = ev.declarations.iter().position(|d| d.name == "main").unwrap();
+    let main = ev
+        .declarations
+        .iter()
+        .position(|d| d.name == "main")
+        .unwrap();
     assert!(rooted.contains(&main), "{:#?}", ev.roots);
 
     // Everything else a Java name means is the spec's data. `@Override` is
@@ -121,11 +125,9 @@ fn the_only_root_left_is_the_jvm_entry() {
         "{rules:#?}"
     );
     assert!(
-        rules
-            .iter()
-            .any(|r| r.contains("\"Serializable\"")
-                && r.contains("\"readObject\"")
-                && r.ends_with("Witness")),
+        rules.iter().any(|r| r.contains("\"Serializable\"")
+            && r.contains("\"readObject\"")
+            && r.ends_with("Witness")),
         "{rules:#?}"
     );
 }
@@ -232,23 +234,26 @@ fn imports_take_their_shapes_and_the_platform_produces_none() {
 }
 
 #[test]
-fn layout_roles_root_the_file() {
+fn the_test_source_set_states_its_membership_and_concludes_no_root() {
+    // Which paths the build tool compiles as tests is the spec's `file_roles`
+    // (gated in `kndo-gates`); extraction states only what the FILE says —
+    // that the test source set is its own compilation, so what it declares
+    // belongs to the package in test builds alone.
     let test = ev(
         "src/test/java/com/foo/WidgetTest.java",
         "class WidgetTest {}\n",
     );
-    assert!(
-        test.roots
-            .iter()
-            .any(|r| r.kind == RootKind::Test && matches!(r.target, RootTarget::WholeFile))
+    assert_eq!(test.attachment, Attachment::TestOnly);
+    assert!(test.roots.is_empty(), "{:?}", test.roots);
+
+    // A test-SHAPED name on the main source path is compiled into the library
+    // like any other file: the name is a role, never a membership.
+    let named = ev(
+        "src/main/java/com/foo/WidgetTest.java",
+        "class WidgetTest {}\n",
     );
-    let tooling = ev(
-        "src/main/java/com/foo/package-info.java",
-        "package com.foo;\n",
-    );
-    assert!(tooling.roots.iter().any(|r| r.kind == RootKind::Tooling));
-    let prod = ev("src/main/java/com/foo/Widget.java", "class Widget {}\n");
-    assert!(prod.roots.iter().any(|r| r.kind == RootKind::Production));
+    assert_eq!(named.attachment, Attachment::Regular);
+    assert!(named.roots.is_empty(), "{:?}", named.roots);
 }
 
 #[test]

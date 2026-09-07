@@ -137,17 +137,6 @@
       "message": "only tests reach this file — no production or tooling root does"
     },
     {
-      "id": "kndo-a4794e201151",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "index.html"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
       "id": "kndo-21fc1433cc85",
       "category": "untested",
       "severity": "info",

@@ -5322,3 +5322,67 @@ swapping the fixture's build system to make the number come out.
 internal-scope and ctor-arg-and-default-value (both kndo-adapter-kotlin), plus
 apple-bundles (kndo-apple). The `extension` world loses an export, so the four
 pinned reference components are re-pinned.
+
+## 2026-09-07 — Twenty whole-file roots become nine declarations, and four rules the deletion exposed
+
+Nine adapters read a path and concluded a root. Twenty of those conclusions
+were the same sentence in nine dialects — "this directory is the test source
+set", "this filename is the entry", "this page is a document" — and every one
+is now a `FileRole` the spec DECLARES and the engine applies, once, with the
+precedence a manifest deserves: a unit that named its files' role outranks
+every convention. The globs are ADDITIVE where the code was exclusive, because
+an `if test { … } else { … }` is not a fact about a path, it is a fact about
+one adapter's control flow.
+
+**Six roots did not become declarations, and each says why in its own place.**
+A shebang (js-ts) and `if __name__ == "__main__"` (python) are the FILE's own
+statements, not its path's: they stay evidence. Two library-mode Production
+roots — kotlin's and python's — stay with their measurement in a comment, and
+they are the same debt: "any non-test file is importable published surface" is
+the engine's `publishes()` to say, and `publishes()` reads a unit neither
+language's manifest parser exists to name yet. **Measured: deleting kotlin's
+costs Exposed +125, deleting python's costs flask +15** — `src/flask/app.py`
+and `cli.py` among them, unreached because no root was left to reach them from.
+They go with the Gradle and pyproject parsers (M8.d), not before.
+
+Swift's library-mode root DID go, because its replacement is now live: swift
+declares its namespace. Swift spells nothing between a module and a name, so
+the SwiftPM target IS the namespace, and `resolve`'s own `target_of` — path
+only, by construction — became the namespace clause each file emits. The
+adapter that owed the scope forest a namespace has paid; the gate that names
+the debtors lost a row.
+
+**Four rules the deletion exposed, each a false positive the old root was
+hiding.** (1) A file the test build alone compiles seeds no production or
+tooling flood, whatever colour a root on it claims — lodash's `npm run test:fp`
+script had been making `test/test-fp.js` a TOOLING entry, laundering that
+colour onto everything a test reaches (**lodash +2 test-only, both true**).
+(2) A unit-wide reach whose unit no manifest named falls back to the namespace
+the file declared, for a language that says the two are one thing
+(`UnnamedUnit::Namespace`, a new capability with a default that abstains):
+swift's Xcode example apps are bounded again, kotlin's `internal` still
+abstains — **without the capability the same fallback costs Exposed +54.**
+(3) An export is nameable inside its own namespace with no import at all, so a
+sibling's bare use is a use — corpus byte-identical, and it is what the swift
+conformance fixture caught. (4) A CERTAIN root on a member keeps its owner: a
+class whose `main` the launcher names is named through it. `Probable`/`Possible`
+do NOT travel that way — inheriting a maybe is how silence spreads, and letting
+them travel costs another 115 findings of it on Alamofire alone.
+
+Java's `main` root became `Certain` by matching the JLS rule whole — `public
+static void main(String[])`, return type and signature included — instead of
+the name and two modifiers.
+
+**Measured across the corpus: Alamofire 534 → 426, vapor 218 → 176, vite 711 →
+691, flask 29 → 26, guava 8249 → 8247, lodash 18 → 20, three repositories
+byte-identical.** The 155 that leave Alamofire and vapor are XCTest case
+CLASSES — `ApplicationTests`, `CacheTestCase` — which the runner instantiates
+by reflection and v2 had been calling dead. The 23 that leave vite and flask
+are HTML pages: their Production root is now an ENGINE anchor, and `untested`
+has always held that an engine-anchored production entry is wiring rather than
+logic to test. lodash's +2 are the laundered-colour fix above.
+
+`GRAPH_SEMANTICS_VERSION` moves to 33; `kndo:swift` to 8, `kndo:java` to 17,
+`kndo:python` to 5, `kndo:js-ts` to 12, `kndo:html` to 4. The contract
+fingerprint does not move — `ExtensionSpec` is a declaration, not a contract
+type. One conformance fixture moves: document-entries.

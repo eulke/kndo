@@ -16,8 +16,8 @@ mod extract;
 mod resolve;
 
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
-use kndo_contract::evidence::EvidenceSink;
-use kndo_contract::extension::{Extension, ExtensionSpec, Rung, Step};
+use kndo_contract::evidence::{EvidenceSink, RootKind};
+use kndo_contract::extension::{Extension, ExtensionSpec, FileRole, Rung, Step};
 use kndo_contract::vocab::ProjectPath;
 
 pub struct JavaAdapter {
@@ -94,7 +94,21 @@ impl JavaAdapter {
         JavaAdapter {
             // 14: `@Override` states a witness on a METHOD, and the bases
             // are named as the source writes them, qualified by its imports.
-            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:java", 15, &["java"])
+            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:java", 17, &["java"])
+                // The conventions, as DATA the engine applies where no unit
+                // spoke for the file — never a root an adapter concluded. The
+                // library-mode "every non-test class is importable surface"
+                // root is NOT here: its replacement is the engine's own
+                // published surface, read from the unit.
+                .file_roles(&[
+                    FileRole::certain("**/package-info.java", RootKind::Tooling),
+                    FileRole::certain("**/module-info.java", RootKind::Tooling),
+                    FileRole::certain("src/test/java/**", RootKind::Test),
+                    FileRole::certain("**/src/test/java/**", RootKind::Test),
+                    FileRole::probable("**/*Test.java", RootKind::Test),
+                    FileRole::probable("**/*Tests.java", RootKind::Test),
+                    FileRole::probable("**/*TestCase.java", RootKind::Test),
+                ])
                 .ladder(&[
                     // `private` is class-private and exists for members alone
                     // (a top-level class cannot take it), `public` is

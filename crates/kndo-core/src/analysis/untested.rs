@@ -70,10 +70,12 @@ impl Analysis for Untested {
                 ));
             }
             // Where coverage said nothing about this file, the graph decides, at the
-            // file's own granularity. A file the manifest itself anchors as
-            // Production is declared wiring — an entry point or a binary main, which
-            // nothing can import — so the heuristic asks the question of what it
-            // leads to instead; measured coverage above still judges it.
+            // file's own granularity. A file the ENGINE anchors as Production — a
+            // manifest's entry, or a role its language declares for every file of
+            // that shape ([`kndo_contract::extension::FileRole`], an HTML page) — is
+            // wiring: an entry point nothing can import, so the heuristic asks the
+            // question of what it leads to instead. What the file itself claimed is
+            // not that, and is judged here; measured coverage above judges either.
             if !coverage_spoke
                 && !reach.by(RootKind::Test)[i]
                 && !f.anchored.iter().any(|r| r.kind == RootKind::Production)

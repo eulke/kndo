@@ -1,17 +1,19 @@
 //! `kndo:swift` — the sixth built-in, on the shared playbook with Swift's own
 //! rules:
 //!
-//! - The DEFAULT visibility is `internal` — the unit's reach, bounded from
-//!   the target layout until the manifest names the target (`private` and
-//!   `fileprivate` fold to Private, both file-bounded facts; `public`/`open`
-//!   are Exported). The ladder spells all four rungs, so an `internal` name
-//!   used only in its file is advised `fileprivate`, and one used only in its
-//!   type `private`.
+//! - The DEFAULT visibility is `internal` — the MODULE's reach, which a
+//!   `@testable import` widens to the test target the manifest made the
+//!   module's friend, and which falls back to the namespace each file declares
+//!   where no manifest named the target at all (`fileprivate` is the file's
+//!   and `private` the owner's on a member; `package` is the group of targets
+//!   one package aggregates; `public`/`open` are Exported). The ladder spells
+//!   every rung, so an `internal` name used only in its file is advised
+//!   `fileprivate`, and one used only in its type `private`.
 //! - The unit is the SwiftPM TARGET, and it is flat: subdirectories inside a
 //!   target are organizational, every file of the target shares one namespace,
 //!   and TESTS ARE A DIFFERENT MODULE — they reach the code under test through
-//!   an explicit `@testable import`, so [`Extension::sees`] needs no test
-//!   mirror at all (the import is the edge). Files outside the
+//!   an explicit `@testable import` — the import is the edge, and no test
+//!   mirror of the namespace exists at all. Files outside the
 //!   `Sources|Tests/<Target>` layout take their first path segment as the
 //!   target (a repository like Alamofire compiles `Source/**` as one module
 //!   via a `path:` override; the segment is the content-free spelling of that
@@ -37,7 +39,8 @@ mod resolve;
 
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::EvidenceSink;
-use kndo_contract::extension::{Extension, ExtensionSpec, Rung, Step};
+use kndo_contract::evidence::RootKind;
+use kndo_contract::extension::{Extension, ExtensionSpec, FileRole, Rung, Step, UnnamedUnit};
 use kndo_contract::vocab::ProjectPath;
 
 pub struct SwiftAdapter {
@@ -50,7 +53,7 @@ impl SwiftAdapter {
             // 4: the generated banner is reported, never concluded.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:swift",
-                7,
+                8,
                 &["swift"],
                 &["**/Package.swift"],
                 // Files in a module compile as one unit; cross-references are
@@ -62,6 +65,27 @@ impl SwiftAdapter {
                 Step::new(Rung::File, "fileprivate"),
                 Step::new(Rung::Unit, "internal"),
                 Step::new(Rung::Exported, "public"),
+            ])
+            // Swift spells nothing between a module and a name: the namespace
+            // each file declares IS the module, so an `internal` name in a
+            // tree SwiftPM never described — an Xcode example app beside the
+            // package — is still bounded by it.
+            .unnamed_unit(UnnamedUnit::Namespace)
+            // SwiftPM's own layout and its own filenames, where no target
+            // declared the file's role: the `Tests/` tree is what `swift test`
+            // builds and `main.swift` is the one filename whose top-level code
+            // SwiftPM runs at process start, both toolchain rules; a
+            // test-shaped NAME outside that tree is only the community's
+            // habit. `Package.swift` (and its version-pinned twins) is the
+            // manifest: Swift by format, tooling by role.
+            .file_roles(&[
+                FileRole::certain("**/Package.swift", RootKind::Tooling),
+                FileRole::certain("**/Package@swift-*.swift", RootKind::Tooling),
+                FileRole::certain("Tests/**", RootKind::Test),
+                FileRole::certain("**/Tests/**", RootKind::Test),
+                FileRole::certain("**/main.swift", RootKind::Production),
+                FileRole::probable("**/*Test.swift", RootKind::Test),
+                FileRole::probable("**/*Tests.swift", RootKind::Test),
             ])
             .build(),
         }

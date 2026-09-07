@@ -608,15 +608,24 @@ promise.
 |---|---|---|---|
 | the four manifest hooks — `roots` ×4, `packages` ×7, `manifest_dependencies` ×7, `manifest_mentions` ×1 | see `grep -rn "fn roots(\|fn packages(\|fn manifest_dependencies(\|fn manifest_mentions(" crates/kndo-adapter-*/src` | `extract_manifest` + the structural parsers | M8.d, parser by parser |
 | line scanners for pom / Gradle / pyproject | 4 in `kndo-toolkit::jvm_manifest`, 2 in `kndo-adapter-python::manifest` | the same structural parsers (`roxmltree`, block scanner + TOML catalog, `toml`) | M8.d |
-| whole-file roots per adapter | 20 sites: java 4, kotlin 3, swift 5, python 3, ts 3, html 2 | `FileRole` (declared data, engine-applied) + the unit's kind | next, measured |
+| the library-mode Production root | 2 sites: `kndo-adapter-kotlin::extract`, `kndo-adapter-python::extract`, each with its measurement in a comment | the engine's `publishes()`, which reads the unit | M8.d, with the Gradle and pyproject parsers |
 
-Deleting the first two rows before their parser exists leaves the engine with
-NO mechanism, not a cleaner one: js-ts's `roots` hook alone carries 332 corpus
-findings (`EXPERIMENTS`, the legacy ledger, row 5). They die parser by parser,
-which is what M8.d is.
+Deleting any of these before its parser exists leaves the engine with NO
+mechanism, not a cleaner one: js-ts's `roots` hook alone carries 332 corpus
+findings (`EXPERIMENTS`, the legacy ledger, row 5), and deleting the library
+roots costs Exposed +125 and flask +15. They die parser by parser, which is
+what M8.d is.
 
-The third row is different and is the next thing to go. Its replacement is
-already wired; the care it needs is that `FileRole` globs are ADDITIVE where
-the current code is exclusive (`if test { … } else { … }`), so a test file
-would take the library-mode Production role too unless the globs are written to
-exclude it. That is a measurement, not a design question.
+### Closed since
+
+| mechanism | closed |
+|---|---|
+| whole-file roots per adapter (20 sites) | `FileRole` declarations + the unit's kind. `grep -rn "RootTarget::WholeFile" crates/kndo-adapter-*/src` — 4 hits: the two library roots above, plus python's `if __name__ == "__main__"` and js-ts's shebang |
+| swift's library-mode root and its silent namespace | swift declares its namespace (the SwiftPM target, path-only), so `publishes()` and the scope forest answer instead |
+
+Two roots stayed for reasons that are NOT a missing parser, and they are not
+debt: js-ts's shebang and python's `if __name__ == "__main__"` are the FILE's
+own statements, which is exactly what extraction is for. The additive-glob
+worry the previous note raised dissolved with the library roots: what remains
+overlaps on purpose, and a file the test build alone compiles seeds no
+production flood whatever colour a root on it claims.

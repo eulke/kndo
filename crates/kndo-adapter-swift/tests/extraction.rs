@@ -1,6 +1,6 @@
 use kndo_adapter_swift::SwiftAdapter;
-use kndo_contract::evidence::{Attachment, 
-    FileEvidence, ImportShape, ImportTarget, MarkerTarget, Reach, RefKind, RootKind, RootTarget,
+use kndo_contract::evidence::{
+    Attachment, FileEvidence, ImportShape, ImportTarget, MarkerTarget, Reach, RefKind, RootTarget,
     SymbolKind,
 };
 use kndo_contract::vocab::Confidence;
@@ -142,37 +142,41 @@ fn dispatch_the_source_never_names_roots_probable_and_possible() {
 }
 
 #[test]
-fn roots_follow_the_layout_and_main_swift() {
+fn the_layout_names_the_module_and_states_the_test_membership() {
+    // What SwiftPM's layout means for a file's ROLE is the spec's `file_roles`
+    // (gated in `kndo-gates`). What extraction states from the layout is the
+    // module: Swift spells nothing between a module and a name, so the target
+    // IS the namespace — and a test target is its own, joined in a test build
+    // alone.
     let test = ev("Tests/AppTests/XTests.swift", "final class XTests {}\n");
-    assert!(test.roots.iter().any(|r| {
-        matches!(r.target, RootTarget::WholeFile)
-            && r.kind == RootKind::Test
-            && r.confidence == Confidence::Certain
-    }));
+    assert_eq!(test.namespace, ["AppTests"]);
+    assert_eq!(test.attachment, Attachment::TestOnly);
+    assert!(test.roots.is_empty(), "{:?}", test.roots);
 
     let main = ev("Sources/App/main.swift", "run()\n");
-    assert!(main.roots.iter().any(|r| {
-        matches!(r.target, RootTarget::WholeFile)
-            && r.kind == RootKind::Production
-            && r.confidence == Confidence::Certain
-    }));
+    assert_eq!(main.namespace, ["App"]);
+    assert_eq!(main.attachment, Attachment::Regular);
+    assert!(main.roots.is_empty(), "{:?}", main.roots);
     assert!(
         main.references.iter().any(|r| r.name == "run"),
         "top-level code walks"
     );
 
-    let named = ev("Sources/App/LoadTest.swift", "func f() {}\n");
-    let kinds: Vec<(RootKind, Confidence)> =
-        named.roots.iter().map(|r| (r.kind, r.confidence)).collect();
-    assert!(kinds.contains(&(RootKind::Test, Confidence::Probable)));
-    assert!(
-        kinds.contains(&(RootKind::Production, Confidence::Probable)),
-        "a test-shaped NAME keeps the library root"
-    );
+    // A `path:` override outside the layout: the first segment is the module,
+    // the content-free spelling of what the manifest said (Alamofire's
+    // `Source/**`).
+    let flat = ev("Source/Core/Request.swift", "struct Request {}\n");
+    assert_eq!(flat.namespace, ["Source"]);
+
+    // A file at the repository root belongs to no target: its own scope, and
+    // the engine is told so by the absence.
+    let loose = ev("Scratch.swift", "struct Scratch {}\n");
+    assert!(loose.namespace.is_empty());
 
     let manifest = ev("Package.swift", "let package = Package(name: \"x\")\n");
     assert!(manifest.declarations.is_empty());
-    assert!(manifest.roots.iter().any(|r| r.kind == RootKind::Tooling));
+    assert!(manifest.roots.is_empty());
+    assert!(manifest.namespace.is_empty());
 }
 
 #[test]

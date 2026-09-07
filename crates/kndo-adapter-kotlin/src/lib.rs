@@ -22,8 +22,8 @@ mod extract;
 mod resolve;
 
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
-use kndo_contract::evidence::EvidenceSink;
-use kndo_contract::extension::{Extension, ExtensionSpec, Rung, Step};
+use kndo_contract::evidence::{EvidenceSink, RootKind};
+use kndo_contract::extension::{Extension, ExtensionSpec, FileRole, Rung, Step};
 use kndo_contract::vocab::ProjectPath;
 
 pub struct KotlinAdapter {
@@ -34,7 +34,18 @@ impl KotlinAdapter {
     pub fn new() -> Self {
         KotlinAdapter {
             // 7: the generated banner is reported, never concluded.
-            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:kotlin", 10, &["kt"])
+            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:kotlin", 11, &["kt"])
+                // The conventions as data; the library-mode root's replacement
+                // is the engine's published surface, read from the unit.
+                .file_roles(&[
+                    FileRole::certain("src/test/kotlin/**", RootKind::Test),
+                    FileRole::certain("**/src/test/kotlin/**", RootKind::Test),
+                    FileRole::certain("src/test/java/**", RootKind::Test),
+                    FileRole::certain("**/src/test/java/**", RootKind::Test),
+                    FileRole::probable("**/*Test.kt", RootKind::Test),
+                    FileRole::probable("**/*Tests.kt", RootKind::Test),
+                    FileRole::probable("**/*TestCase.kt", RootKind::Test),
+                ])
                 // A package is one name across the whole compilation, like
                 // Java's: `src/test/kotlin/com/foo` and `src/main/kotlin/com/foo`
                 // are the same namespace, and the test set's build holds the
@@ -88,5 +99,4 @@ impl Extension for KotlinAdapter {
     ) -> Vec<kndo_contract::adapter::DependencyDeclaration> {
         kndo_toolkit::jvm_manifest::dependencies(manifest)
     }
-
 }

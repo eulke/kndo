@@ -661,7 +661,9 @@ pub enum RelationKind {
 /// statement where the language has one; where a language compiles its tests
 /// as their own unit, the project says so through that unit's kind and the
 /// file states nothing.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ContractFingerprint)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ContractFingerprint,
+)]
 #[serde(rename_all = "kebab-case")]
 pub enum Attachment {
     #[default]
