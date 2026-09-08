@@ -331,7 +331,12 @@ extension Point: CustomStringConvertible {
     let relations: Vec<(&str, &str)> = e
         .relations
         .iter()
-        .map(|r| (e.declarations[r.from.index()].name.as_str(), r.to.as_str()))
+        .map(|r| {
+            (
+                e.declarations[r.from.index()].name.as_str(),
+                r.to.name.as_str(),
+            )
+        })
         .collect();
     // Swift writes superclass and protocols in ONE list its grammar does not
     // separate, so every name is the same promise; nothing in the engine reads

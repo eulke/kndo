@@ -35,3 +35,27 @@ pub fn contract_fingerprint_hex() -> String {
         .map(|b| format!("{b:02x}"))
         .collect()
 }
+
+/// A one-to-one mapping between two spellings of the same enum — the contract's
+/// vocabulary and the wire's, in either direction.
+///
+/// Every such function is the same code with two type names swapped, which is
+/// what `duplicate` says about them when there are more than a couple. The
+/// variants are the only fact; the macro writes the rest. `else` supplies the
+/// arm a non-exhaustive source needs, so a variant this build cannot spell
+/// degrades toward a named neighbour instead of failing to compile.
+#[macro_export]
+macro_rules! variant_map {
+    ($(#[$m:meta])* $vis:vis fn $name:ident($from:ty => $to:ty) { $($v:ident),+ $(,)? }) => {
+        $(#[$m])*
+        $vis fn $name(value: $from) -> $to {
+            match value { $(<$from>::$v => <$to>::$v,)+ }
+        }
+    };
+    ($(#[$m:meta])* $vis:vis fn $name:ident($from:ty => $to:ty) { $($v:ident),+ $(,)? } else $fallback:expr) => {
+        $(#[$m])*
+        $vis fn $name(value: $from) -> $to {
+            match value { $(<$from>::$v => <$to>::$v,)+ _ => $fallback }
+        }
+    };
+}

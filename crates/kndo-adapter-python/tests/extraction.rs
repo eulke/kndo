@@ -441,7 +441,12 @@ class Widget(Model, metaclass=Meta):
     let relations: Vec<(&str, &str)> = e
         .relations
         .iter()
-        .map(|r| (e.declarations[r.from.index()].name.as_str(), r.to.as_str()))
+        .map(|r| {
+            (
+                e.declarations[r.from.index()].name.as_str(),
+                r.to.name.as_str(),
+            )
+        })
         .collect();
     // One base. `metaclass=Meta` configures the class; it is not a supertype.
     assert_eq!(relations, [("Widget", "Model")], "{relations:?}");

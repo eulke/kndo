@@ -98,6 +98,9 @@ interface types {
 
     /// Mirrors `ImportTarget` — the specifier as written, tagged by form.
     variant import-target {
+        /// Mirrors `ImportTarget::Pattern`: many files at once, by glob over
+        /// the project's paths. The host resolves it against what it found.
+        pattern(string),
         relative(string),
         %package(string),
     }
@@ -191,9 +194,28 @@ interface types {
     }
 
     /// Mirrors `RelationKind`.
+    /// Mirrors `RelationKind`, all four. An adapter states the narrowest its
+    /// grammar can PROVE: `implements` is the word for "promises another
+    /// type's surface" where the syntax separates nothing.
     enum relation-kind {
         extends,
+        conforms,
         implements,
+        overrides,
+    }
+
+    /// Mirrors `Qualifier`: how a name was qualified at the use site — a local
+    /// an import bound, or a namespace route the language spells structurally.
+    variant qualifier {
+        binding(string),
+        path(list<string>),
+    }
+
+    /// Mirrors `TypeRef`: a type named at a use site, and how it was
+    /// qualified where it was.
+    record type-ref {
+        name: string,
+        via: option<qualifier>,
     }
 
     /// Mirrors `Relation`: a typed link from a declaration (by the same index
@@ -203,7 +225,7 @@ interface types {
     record relation {
         %from: u32,
         kind: relation-kind,
-        to: string,
+        to: type-ref,
         span: span,
     }
 

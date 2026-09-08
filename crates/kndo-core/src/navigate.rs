@@ -238,8 +238,11 @@ impl Index {
                 supertypes_of
                     .entry(from.clone())
                     .or_default()
-                    .insert(r.to.clone());
-                subtypes_of.entry(r.to.clone()).or_default().insert(from);
+                    .insert(r.to.name.clone());
+                subtypes_of
+                    .entry(r.to.name.clone())
+                    .or_default()
+                    .insert(from);
             }
         }
         let mut index = Index {

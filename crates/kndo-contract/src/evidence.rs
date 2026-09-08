@@ -414,6 +414,64 @@ pub enum RefKind {
     TypeUse,
 }
 
+/// HOW a name was qualified at the use site — what the writer put before it.
+///
+/// `Binding` is a local the file bound with an import (`pkg.Name`,
+/// `ns.member`, `mod.attr`): the engine resolves it to that import's targets
+/// and pools the name only there. `Path` is a namespace ROUTE the language
+/// spells structurally (`super::x::f`, `crate::a::B`): the engine walks it in
+/// the scope forest. Both name a place; they differ in what answers.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ContractFingerprint)]
+pub enum Qualifier {
+    Binding(SmolStr),
+    Path(Vec<SmolStr>),
+}
+
+impl Qualifier {
+    /// The local a `Binding` carries, or the last segment of a `Path` — what a
+    /// consumer comparing receivers by NAME reads.
+    pub fn local(&self) -> Option<&SmolStr> {
+        match self {
+            Qualifier::Binding(local) => Some(local),
+            Qualifier::Path(segments) => segments.last(),
+        }
+    }
+}
+
+/// A type NAMED at a use site: the bare name as the language spells it, and
+/// how it was qualified when it was. A relation carries one because the base a
+/// rule matches may be written `XCTest.XCTestCase` in one file and
+/// `XCTestCase` in another.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ContractFingerprint)]
+pub struct TypeRef {
+    pub name: SmolStr,
+    pub via: Option<Qualifier>,
+}
+
+impl<T: Into<SmolStr>> From<T> for TypeRef {
+    fn from(name: T) -> TypeRef {
+        TypeRef::bare(name)
+    }
+}
+
+impl TypeRef {
+    pub fn bare(name: impl Into<SmolStr>) -> TypeRef {
+        TypeRef {
+            name: name.into(),
+            via: None,
+        }
+    }
+}
+
+impl std::fmt::Display for TypeRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.via.as_ref().and_then(Qualifier::local) {
+            Some(q) => write!(f, "{q}.{}", self.name),
+            None => write!(f, "{}", self.name),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, ContractFingerprint)]
 pub struct Reference {
     pub name: SmolStr,
@@ -438,6 +496,11 @@ pub struct Reference {
 #[derive(Debug, Clone, Serialize, Deserialize, ContractFingerprint)]
 #[serde(rename_all = "lowercase")]
 pub enum ImportTarget {
+    /// MANY files at once, by glob over the project's paths:
+    /// `import.meta.glob('./routes/*.ts')`, a template with a literal prefix,
+    /// `new URL(lit, import.meta.url)`. The engine resolves it against what it
+    /// discovered rather than asking the adapter to enumerate.
+    Pattern(SmolStr),
     /// A relative specifier (`./util`, `../lib/x`), as written.
     Relative(SmolStr),
     /// A package/bare specifier (`react`, `lodash/fp`), as written.
@@ -449,7 +512,9 @@ impl ImportTarget {
     /// spelling a subject carries and a position is counted over.
     pub fn as_written(&self) -> &str {
         match self {
-            ImportTarget::Relative(s) | ImportTarget::Package(s) => s.as_str(),
+            ImportTarget::Pattern(s) | ImportTarget::Relative(s) | ImportTarget::Package(s) => {
+                s.as_str()
+            }
         }
     }
 }
@@ -646,11 +711,20 @@ pub struct AdapterDiagnostic {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ContractFingerprint)]
 #[serde(rename_all = "lowercase")]
 pub enum RelationKind {
-    /// A class extends a base class; an interface extends another.
+    /// A class extends a base CLASS; an interface extends another interface —
+    /// the language wrote a word that can only mean inheritance.
     Extends,
-    /// A type implements an interface, conforms to a protocol, satisfies a
-    /// trait bound — one word for "promises another type's surface".
+    /// A type CONFORMS to a protocol, where the grammar says so apart from
+    /// inheritance (`impl Trait for T`, a protocol list a language separates).
+    Conforms,
+    /// A type promises another's surface where the grammar does NOT separate
+    /// the three — Swift's one inheritance list, Java's `implements`. The word
+    /// for "promises another type's surface" when nothing narrower is provable
+    /// from the syntax alone.
     Implements,
+    /// A MEMBER overrides one of its supertype's: the promise is the member's
+    /// rather than the type's, and every caller holds the supertype.
+    Overrides,
 }
 
 /// How a file belongs to the namespace it declared. A Go `_test.go` writing
@@ -684,10 +758,11 @@ pub enum Attachment {
 pub struct Relation {
     pub from: DeclarationId,
     pub kind: RelationKind,
-    /// The supertype's name as the language spells it at the use site, with
-    /// generics and qualification stripped — the same spelling a reference to
-    /// that type carries, so the two resolve alike.
-    pub to: SmolStr,
+    /// The supertype as the language spells it at the use site: the bare name
+    /// with generics stripped — the same spelling a reference to that type
+    /// carries, so the two resolve alike — plus how it was qualified where it
+    /// was.
+    pub to: TypeRef,
     pub span: Span,
 }
 
@@ -1212,7 +1287,7 @@ impl EvidenceSink {
         &mut self,
         from: DeclarationId,
         kind: RelationKind,
-        to: impl Into<SmolStr>,
+        to: impl Into<TypeRef>,
         span: Span,
     ) {
         if !self.valid_id(from, "relation") {

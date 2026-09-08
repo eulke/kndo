@@ -5986,3 +5986,38 @@ loud. A bounded reach bounds who may name a declaration WITHOUT a qualifier.
 The `underscore-namespace-access` fixture found the gap — it was written to pin
 the decision and instead reported the used function dead — and now pins both
 directions. flask 18 → 20; everything else byte-identical.
+
+## 2026-09-08 — the contract's shapes, all of them, consumer or not
+
+The owner's instruction, and a correction to how this repository has been
+reading its own law: a mechanism the design details EXISTS, whether or not a
+consumer for it exists yet. "A capability whose consumer you cannot name does
+not land" is a wrong-floor test for a capability someone INVENTED; it is not a
+licence to ship less than the approved design. Absent consumers are transitory.
+
+Audited the whole of contract v3 against the tree and closed the evidence half:
+
+- **`RelationKind` gains `Conforms` and `Overrides`** — the plan's four. An
+  adapter states the narrowest its grammar can PROVE; `Implements` stays the
+  word for "promises another type's surface" where the syntax separates
+  nothing, which is what Swift, Java and Python can say today.
+- **`Qualifier`** (`Binding(local) | Path(segments)`) and **`TypeRef`**
+  (`{ name, via }`) land as the plan writes them, and `Relation::to` becomes a
+  `TypeRef`. A `Trigger::Relation` now matches both spellings — the bare name
+  the language wrote and the qualified one its own bindings make of it — the
+  same two a marker path already got.
+- **`ImportTarget::Pattern(glob)`** lands: many files at once, resolved by the
+  engine against what it discovered rather than enumerated by the adapter.
+
+`GRAPH_SEMANTICS_VERSION` did not move (the same evidence assembles the same
+way); the contract fingerprint did, once, and `abi/compat/*.wasm` are re-pinned
+against `kndo:vocab` with the four relation kinds, `qualifier`, `type-ref` and
+`import-target::pattern`.
+
+**And the dogfood found a real clone the change created.** With `relation_kind`
+grown to four arms, `ref_kind` beside it is a structural clone of it — the same
+code with two type names swapped, once per enum, on both sides of the ABI.
+`kndo_contract::variant_map!` is the promotion: the variants are the only fact,
+the macro writes the rest, and both the SDK and the host use it. The previous
+commit (78ea211) moved `GRAPH_SEMANTICS_VERSION` without naming the knob in
+this file; naming it here is that entry's completion.

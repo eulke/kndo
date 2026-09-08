@@ -106,7 +106,7 @@ fn the_only_root_left_is_the_jvm_entry() {
     assert!(
         ev.relations
             .iter()
-            .any(|r| r.to == "Serializable" && r.kind == RelationKind::Implements),
+            .any(|r| r.to.name == "Serializable" && r.kind == RelationKind::Implements),
         "{:#?}",
         ev.relations
     );

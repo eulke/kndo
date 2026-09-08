@@ -130,7 +130,7 @@ pub fn supertype_edges<'a>(
     for ev in files {
         for r in &ev.relations {
             let from = ev.declarations[r.from.index()].name.clone();
-            out.entry(from).or_default().push(r.to.clone());
+            out.entry(from).or_default().push(r.to.name.clone());
         }
     }
     for supers in out.values_mut() {

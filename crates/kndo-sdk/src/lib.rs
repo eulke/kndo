@@ -179,11 +179,29 @@ fn dispatch_rule_to_wire(rule: &DispatchRule) -> Option<wire::DispatchRule> {
 /// Extends, and any link this SDK build predates: the weaker promise
 /// crosses, which keeps a witness alive without claiming an interface the
 /// guest never named.
-fn relation_kind_to_wire(kind: ev::RelationKind) -> wire::RelationKind {
-    match kind {
-        ev::RelationKind::Implements => wire::RelationKind::Implements,
-        _ => wire::RelationKind::Extends,
+fn qualifier_to_wire(q: &kndo_contract::evidence::Qualifier) -> wire::Qualifier {
+    use kndo_contract::evidence::Qualifier;
+    match q {
+        Qualifier::Binding(local) => wire::Qualifier::Binding(local.to_string()),
+        Qualifier::Path(segments) => {
+            wire::Qualifier::Path(segments.iter().map(|s| s.to_string()).collect())
+        }
     }
+}
+
+fn type_ref_to_wire(t: &kndo_contract::evidence::TypeRef) -> wire::TypeRef {
+    wire::TypeRef {
+        name: t.name.to_string(),
+        via: t.via.as_ref().map(qualifier_to_wire),
+    }
+}
+
+kndo_contract::variant_map! {
+    /// A kind this SDK build cannot spell degrades toward the widest true
+    /// sentence: the type promises the other's surface.
+    fn relation_kind_to_wire(ev::RelationKind => wire::RelationKind) {
+        Extends, Conforms, Implements, Overrides,
+    } else wire::RelationKind::Implements
 }
 
 /// A trigger tree as the wire carries it: a flat list whose ROOT is the last
@@ -286,18 +304,12 @@ fn confidence_to_wire(c: Confidence) -> wire::Confidence {
 use wire::SymbolKind as WireSymbolKind;
 kndo_contract::symbol_kind_conversions!(WireSymbolKind);
 
-fn ref_kind_to_wire(kind: ev::RefKind) -> wire::RefKind {
-    match kind {
-        ev::RefKind::Call => wire::RefKind::Call,
-        ev::RefKind::Read => wire::RefKind::Read,
-        ev::RefKind::Write => wire::RefKind::Write,
-        ev::RefKind::Extend => wire::RefKind::Extend,
-        ev::RefKind::Implement => wire::RefKind::Implement,
-        ev::RefKind::TypeUse => wire::RefKind::TypeUse,
-        // An unknown kind counts as a use, never an accusation — Read is the
-        // weakest keep-alive spelling the wire has.
-        _ => wire::RefKind::Read,
-    }
+kndo_contract::variant_map! {
+    /// An unknown kind counts as a use, never an accusation — `Read` is the
+    /// weakest keep-alive spelling the wire has.
+    fn ref_kind_to_wire(ev::RefKind => wire::RefKind) {
+        Call, Read, Write, Extend, Implement, TypeUse,
+    } else wire::RefKind::Read
 }
 
 fn bindings_to_wire(bindings: &[ev::ImportBinding]) -> Vec<wire::ImportBinding> {
@@ -313,6 +325,7 @@ fn bindings_to_wire(bindings: &[ev::ImportBinding]) -> Vec<wire::ImportBinding> 
 fn import_to_wire(import: &ev::Import) -> wire::Import {
     wire::Import {
         target: match &import.target {
+            ev::ImportTarget::Pattern(s) => wire::ImportTarget::Pattern(s.to_string()),
             ev::ImportTarget::Relative(s) => wire::ImportTarget::Relative(s.to_string()),
             ev::ImportTarget::Package(s) => wire::ImportTarget::Package(s.to_string()),
             // An unknown target keeps its import alive unresolved; Package of the
@@ -422,7 +435,7 @@ pub fn evidence_to_wire(evidence: &FileEvidence) -> wire::FileEvidence {
             .map(|r| wire::Relation {
                 from: r.from.index() as u32,
                 kind: relation_kind_to_wire(r.kind),
-                to: r.to.to_string(),
+                to: type_ref_to_wire(&r.to),
                 span: span_to_wire(r.span),
             })
             .collect(),

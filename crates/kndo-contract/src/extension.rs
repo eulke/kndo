@@ -763,11 +763,14 @@ impl Trigger {
                     && kind.as_ref().is_none_or(|k| *k == d.kind)
                     && in_unit.is_none_or(|k| Some(k) == cx.compiled_into)
             }
-            Trigger::Relation { kind, to } => cx
-                .evidence
-                .relations
-                .iter()
-                .any(|r| r.from == id && r.kind == *kind && cx.spells(to, &r.to)),
+            Trigger::Relation { kind, to } => cx.evidence.relations.iter().any(|r| {
+                r.from == id
+                        && r.kind == *kind
+                        // Both spellings answer: the bare name the language
+                        // wrote, and the qualified one its own bindings make
+                        // of it — the same two the marker path gets.
+                        && (cx.spells(to, &r.to.name) || cx.spells(to, &r.to.to_string()))
+            }),
             Trigger::MemberOf { owner, name } => {
                 pattern_matches(name, &d.name)
                     && d.owner.is_some_and(|o| owner.matches_declaration(cx, o))

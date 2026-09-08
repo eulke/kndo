@@ -209,10 +209,25 @@ fn unit_kind(kind: awire::UnitKind) -> UnitKind {
     }
 }
 
-fn relation_kind(kind: awire::RelationKind) -> ev::RelationKind {
-    match kind {
-        awire::RelationKind::Extends => ev::RelationKind::Extends,
-        awire::RelationKind::Implements => ev::RelationKind::Implements,
+fn qualifier(q: awire::Qualifier) -> ev::Qualifier {
+    match q {
+        awire::Qualifier::Binding(local) => ev::Qualifier::Binding(SmolStr::new(local)),
+        awire::Qualifier::Path(segments) => {
+            ev::Qualifier::Path(segments.into_iter().map(SmolStr::new).collect())
+        }
+    }
+}
+
+fn type_ref(t: awire::TypeRef) -> ev::TypeRef {
+    ev::TypeRef {
+        name: SmolStr::new(t.name),
+        via: t.via.map(qualifier),
+    }
+}
+
+kndo_contract::variant_map! {
+    fn relation_kind(awire::RelationKind => ev::RelationKind) {
+        Extends, Conforms, Implements, Overrides,
     }
 }
 
@@ -396,14 +411,9 @@ pub(crate) fn declared_symbol_to_wire(d: DeclaredSymbol<'_>) -> awire::DeclaredS
 use awire::SymbolKind as WireSymbolKind;
 kndo_contract::symbol_kind_conversions!(WireSymbolKind);
 
-fn ref_kind(kind: awire::RefKind) -> ev::RefKind {
-    match kind {
-        awire::RefKind::Call => ev::RefKind::Call,
-        awire::RefKind::Read => ev::RefKind::Read,
-        awire::RefKind::Write => ev::RefKind::Write,
-        awire::RefKind::Extend => ev::RefKind::Extend,
-        awire::RefKind::Implement => ev::RefKind::Implement,
-        awire::RefKind::TypeUse => ev::RefKind::TypeUse,
+kndo_contract::variant_map! {
+    fn ref_kind(awire::RefKind => ev::RefKind) {
+        Call, Read, Write, Extend, Implement, TypeUse,
     }
 }
 
@@ -478,6 +488,7 @@ pub(crate) fn replay_evidence(evidence: awire::FileEvidence, sink: &mut Evidence
                 awire::Timing::Erased => ev::Timing::Erased,
             },
             match i.target {
+                awire::ImportTarget::Pattern(s) => ev::ImportTarget::Pattern(SmolStr::new(s)),
                 awire::ImportTarget::Relative(s) => ev::ImportTarget::Relative(SmolStr::new(s)),
                 awire::ImportTarget::Package(s) => ev::ImportTarget::Package(SmolStr::new(s)),
             },
@@ -541,7 +552,7 @@ pub(crate) fn replay_evidence(evidence: awire::FileEvidence, sink: &mut Evidence
     }
     for r in evidence.relations {
         match ids.get(r.from as usize) {
-            Some(id) => sink.relation(*id, relation_kind(r.kind), SmolStr::new(r.to), span(r.span)),
+            Some(id) => sink.relation(*id, relation_kind(r.kind), type_ref(r.to), span(r.span)),
             None => sink.diagnostic(
                 DiagnosticLevel::Warn,
                 format!(
