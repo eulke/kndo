@@ -7,7 +7,7 @@ mod common;
 
 use common::{keeper_kinds, reported};
 use kndo::Category;
-use kndo_testkit::{MockExtension, TempProject};
+use kndo_testkit::{MockPlugin, TempProject};
 
 #[test]
 fn a_private_member_rides_no_surface() {
@@ -20,7 +20,7 @@ fn a_private_member_rides_no_surface() {
         "root-file\npub type Widget\npub member Widget.shown\nmember Widget.hidden\n",
     )
     .file("app.kmock", "root-file\nimport ./lib\n");
-    let snap = common::analyze(&p, vec![Box::new(MockExtension::new())]);
+    let snap = common::analyze(&p, vec![Box::new(MockPlugin::new())]);
 
     assert_eq!(
         reported(&snap, &Category::UNUSED),
@@ -45,7 +45,7 @@ fn a_reference_anywhere_still_keeps_a_private_member() {
         "root-file\npub type Widget\nmember Widget.hidden\n",
     )
     .file("app.kmock", "root-file\nimport ./lib\ncall hidden\n");
-    let snap = common::analyze(&p, vec![Box::new(MockExtension::new())]);
+    let snap = common::analyze(&p, vec![Box::new(MockPlugin::new())]);
     assert!(reported(&snap, &Category::UNUSED).is_empty());
     assert_eq!(
         keeper_kinds(&snap, "lib.kmock#Widget.hidden"),
@@ -67,7 +67,7 @@ fn a_member_on_a_promised_surface_is_kept_by_the_promise() {
         "impl.kmock",
         "root-file\npub type Impl\nextends Impl Base\nmember Impl.handle\nmember Impl.helper\n",
     );
-    let snap = common::analyze(&p, vec![Box::new(MockExtension::new())]);
+    let snap = common::analyze(&p, vec![Box::new(MockPlugin::new())]);
 
     // The witness is kept; its sibling, promising nothing, is not.
     assert_eq!(
@@ -99,7 +99,7 @@ fn a_namespace_pools_over_the_unit_that_compiles_it() {
         "bench/com/foo/other.kmock",
         "package com.foo\ncall internals\n",
     );
-    let snap = common::analyze(&p, vec![Box::new(MockExtension::new())]);
+    let snap = common::analyze(&p, vec![Box::new(MockPlugin::new())]);
     assert!(
         reported(&snap, &Category::UNUSED).is_empty(),
         "one unit is one compilation, however many roots it names: {:?}",
@@ -122,7 +122,7 @@ fn a_namespace_pools_over_the_unit_that_compiles_it() {
         "mirror/com/foo/other.kmock",
         "package com.foo\ncall internals\n",
     );
-    let snap = common::analyze(&p, vec![Box::new(MockExtension::new())]);
+    let snap = common::analyze(&p, vec![Box::new(MockPlugin::new())]);
     assert!(
         reported(&snap, &Category::UNUSED)
             .contains(&"src/com/foo/lib.kmock — internals".to_string()),
@@ -155,7 +155,7 @@ fn a_namespace_spans_the_unit_compiled_against_it_when_the_language_says_so() {
         p
     };
 
-    let snap = common::analyze(&project(), vec![Box::new(MockExtension::spanning())]);
+    let snap = common::analyze(&project(), vec![Box::new(MockPlugin::spanning())]);
     assert!(
         reported(&snap, &Category::UNUSED).is_empty(),
         "the suite compiles against the library, so its call is a use: {:?}",
@@ -164,7 +164,7 @@ fn a_namespace_spans_the_unit_compiled_against_it_when_the_language_says_so() {
 
     // The default span keeps every namespace inside its own unit, so the same
     // project accuses — the capability, not the manifest, is what decides.
-    let snap = common::analyze(&project(), vec![Box::new(MockExtension::new())]);
+    let snap = common::analyze(&project(), vec![Box::new(MockPlugin::new())]);
     assert!(
         reported(&snap, &Category::UNUSED)
             .contains(&"src/com/foo/lib.kmock — internals".to_string()),

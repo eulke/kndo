@@ -20,17 +20,17 @@
 
 use crate::names::TypeIndex;
 use kndo_contract::evidence::RootKind;
-use kndo_contract::extension::{
-    Activation, ActivationRule, ConductSink, ConductTarget, ContentAccess, Extension,
-    ExtensionSpec, GraphAccess, MutatesGraph,
+use kndo_contract::plugin::{
+    Activation, ActivationRule, ContentAccess, GraphAccess, MutatesGraph, Plugin, PluginSink,
+    PluginSpec, PluginTarget,
 };
 use kndo_contract::vocab::Confidence;
 use smol_str::SmolStr;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
-static SPEC: LazyLock<ExtensionSpec> = LazyLock::new(|| {
-    ExtensionSpec::builder("kndo:interface-builder", 1)
+static SPEC: LazyLock<PluginSpec> = LazyLock::new(|| {
+    PluginSpec::builder("kndo:interface-builder", 1)
         // On the documents, never on a manifest dependency: the frameworks that
         // run them ship with the platform, so no manifest ever declares them —
         // the documents are the only signal a project has any.
@@ -47,8 +47,8 @@ static SPEC: LazyLock<ExtensionSpec> = LazyLock::new(|| {
 
 pub struct InterfaceBuilderPlugin;
 
-impl Extension for InterfaceBuilderPlugin {
-    fn spec(&self) -> &ExtensionSpec {
+impl Plugin for InterfaceBuilderPlugin {
+    fn spec(&self) -> &PluginSpec {
         &SPEC
     }
 
@@ -61,7 +61,7 @@ impl Extension for InterfaceBuilderPlugin {
         &self,
         graph: &dyn GraphAccess,
         content: &dyn ContentAccess,
-        out: &mut ConductSink,
+        out: &mut PluginSink,
     ) {
         let types = TypeIndex::build(graph);
         for path in content.readable_paths() {
@@ -75,7 +75,7 @@ impl Extension for InterfaceBuilderPlugin {
             for class in &document.classes {
                 for file in types.nearest(class, path) {
                     out.root(
-                        ConductTarget::Symbol {
+                        PluginTarget::Symbol {
                             path: file.clone(),
                             name: SmolStr::new(class),
                         },
@@ -88,7 +88,7 @@ impl Extension for InterfaceBuilderPlugin {
                 for file in types.nearest(&connection.owner, path) {
                     if types.declares_member(file, &connection.owner, &connection.member) {
                         out.root(
-                            ConductTarget::Symbol {
+                            PluginTarget::Symbol {
                                 path: file.clone(),
                                 name: SmolStr::new(&connection.member),
                             },

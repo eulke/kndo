@@ -433,8 +433,8 @@ fn level_word(level: DiagnosticLevel) -> &'static str {
 #[cfg(test)]
 mod tests {
     use crate::analysis::{Abstention, AbstentionReason, AbstentionScope};
-    use crate::conduct::Contribution;
-    use crate::report::{ExtensionRun, REPORT_SCHEMA, Report, ReportDiagnostic, RunInfo};
+    use crate::plugin::Contribution;
+    use crate::report::{PluginRun, REPORT_SCHEMA, Report, ReportDiagnostic, RunInfo};
     use crate::suppress::SuppressedSummary;
     use kndo_contract::evidence::DiagnosticLevel;
     use kndo_contract::finding::{Finding, Severity};
@@ -503,7 +503,7 @@ mod tests {
             }],
             by_package: Vec::new(),
         });
-        report.run.extensions.push(ExtensionRun {
+        report.run.extensions.push(PluginRun {
             id: SmolStr::new("kndo:python"),
             files: 5,
             published_surface: Default::default(),

@@ -208,7 +208,7 @@ fn every_published_url_names_the_repository_that_exists() {
         "docs/src/install.md",
         "docs/src/ci.md",
         "docs/src/agents.md",
-        "docs/src/extensions.md",
+        "docs/src/plugins.md",
     ] {
         let text = read(rel);
         for (i, line) in text.lines().enumerate() {

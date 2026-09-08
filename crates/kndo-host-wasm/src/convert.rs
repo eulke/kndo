@@ -13,13 +13,13 @@ use kndo_contract::evidence::{
     self as ev, DiagnosticLevel, EmbeddedRegion, EvidenceSink, EvidenceStream, EvidenceStreams,
     RegionMode, RootKind,
 };
-use kndo_contract::extension::{
-    Activation, ActivationRule, Bearer, ConductSeverity, ConductTarget, CycleTolerance,
-    DeclaredSymbol, DependencyBuiltins, DependencyIdentity, DependencyScoping, DispatchRule,
-    Effect, ExtensionSpec, ExtensionSpecParts, FileRole, Ladder, NamespaceSpan, Nesting,
-    PublishedSurface, RuleDescriptor, Rung, Step, Trigger, UnnamedUnit,
-};
 use kndo_contract::manifest::UnitKind;
+use kndo_contract::plugin::{
+    Activation, ActivationRule, Bearer, CycleTolerance, DeclaredSymbol, DependencyBuiltins,
+    DependencyIdentity, DependencyScoping, DispatchRule, Effect, FileRole, Ladder, NamespaceSpan,
+    Nesting, PluginSeverity, PluginSpec, PluginSpecParts, PluginTarget, PublishedSurface,
+    RuleDescriptor, Rung, Step, Trigger, UnnamedUnit,
+};
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use smol_str::SmolStr;
 
@@ -61,8 +61,8 @@ pub(crate) fn root_kind(k: awire::RootKind) -> RootKind {
 
 /// The one spec record, assembled as owned parts. `conducts` comes from the
 /// record itself: a hand-rolled guest is forced by the shape to state it.
-pub(crate) fn extension_spec(spec: awire::ExtensionSpec) -> ExtensionSpec {
-    ExtensionSpecParts {
+pub(crate) fn extension_spec(spec: awire::PluginSpec) -> PluginSpec {
+    PluginSpecParts {
         coordinate: SmolStr::new(spec.coordinate),
         version: spec.version,
         suffixes: spec.suffixes.into_iter().map(SmolStr::new).collect(),
@@ -404,21 +404,21 @@ fn dependency_scope(scope: awire::DependencyScope) -> kndo_contract::adapter::De
     }
 }
 
-pub(crate) fn conduct_target(target: awire::ConductTarget) -> ConductTarget {
+pub(crate) fn plugin_target(target: awire::PluginTarget) -> PluginTarget {
     match target {
-        awire::ConductTarget::File(path) => ConductTarget::File(ProjectPath::new(path)),
-        awire::ConductTarget::Symbol(s) => ConductTarget::Symbol {
+        awire::PluginTarget::File(path) => PluginTarget::File(ProjectPath::new(path)),
+        awire::PluginTarget::Symbol(s) => PluginTarget::Symbol {
             path: ProjectPath::new(s.path),
             name: SmolStr::new(s.name),
         },
     }
 }
 
-pub(crate) fn conduct_severity(s: awire::ConductSeverity) -> ConductSeverity {
+pub(crate) fn plugin_severity(s: awire::PluginSeverity) -> PluginSeverity {
     match s {
-        awire::ConductSeverity::Error => ConductSeverity::Error,
-        awire::ConductSeverity::Warning => ConductSeverity::Warning,
-        awire::ConductSeverity::Info => ConductSeverity::Info,
+        awire::PluginSeverity::Error => PluginSeverity::Error,
+        awire::PluginSeverity::Warning => PluginSeverity::Warning,
+        awire::PluginSeverity::Info => PluginSeverity::Info,
     }
 }
 

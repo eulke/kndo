@@ -2,12 +2,12 @@
 
 Everything beyond the engine is an extension, built-in or external, on one
 trait: a language adapter, a coverage ingester, and a framework plugin
-implement the same `Extension` and declare what they do in one spec. The
+implement the same `Plugin` and declare what they do in one spec. The
 engine invokes only what a spec declares.
 
 ## Built in
 
-| Extension | Kind | What it does |
+| Plugin | Kind | What it does |
 |---|---|---|
 | `kndo:js-ts`, `kndo:rust`, `kndo:go`, `kndo:java`, `kndo:kotlin`, `kndo:python`, `kndo:swift`, `kndo:html`, `kndo:css` | adapters | claim files, read manifests and launchers, extract evidence, resolve imports |
 | `kndo:coverage-lcov`, `kndo:coverage-cobertura`, `kndo:coverage-jacoco`, `kndo:coverage-go` | ingesters | turn a report at a conventional path into coverage records |
@@ -37,7 +37,7 @@ that call and the run continues — never a crashed run — and the report's
 ## Writing one
 
 The SDK crate, `kndo-sdk`, makes the guest half the same code a built-in is:
-implement `kndo_contract::extension::Extension`, export it, build for
+implement `kndo_contract::plugin::Plugin`, export it, build for
 `wasm32-unknown-unknown`.
 
 ```toml
@@ -54,8 +54,8 @@ kndo-sdk = { git = "https://github.com/eulke/kondo" }
 ```
 
 ```rust
-use kndo_contract::extension::{
-    Activation, ActivationRule, ConductSink, ConductTarget, Extension, ExtensionSpec,
+use kndo_contract::plugin::{
+    Activation, ActivationRule, PluginSink, PluginTarget, Plugin, PluginSpec,
     GraphAccess, MutatesGraph,
 };
 use kndo_contract::evidence::RootKind;
@@ -63,13 +63,13 @@ use kndo_contract::vocab::Confidence;
 use smol_str::SmolStr;
 
 pub struct AcmeFramework {
-    spec: ExtensionSpec,
+    spec: PluginSpec,
 }
 
 impl Default for AcmeFramework {
     fn default() -> Self {
         AcmeFramework {
-            spec: ExtensionSpec::builder("acme:framework", 1)
+            spec: PluginSpec::builder("acme:framework", 1)
                 // Both gates are arguments, never defaults: when the plugin
                 // runs, and whether its roots change the graph.
                 .conduct(
@@ -85,16 +85,16 @@ impl Default for AcmeFramework {
     }
 }
 
-impl Extension for AcmeFramework {
-    fn spec(&self) -> &ExtensionSpec {
+impl Plugin for AcmeFramework {
+    fn spec(&self) -> &PluginSpec {
         &self.spec
     }
 
-    fn contribute(&self, graph: &dyn GraphAccess, sink: &mut ConductSink) {
+    fn contribute(&self, graph: &dyn GraphAccess, sink: &mut PluginSink) {
         for path in graph.paths() {
             if path.as_str().starts_with("routes/") {
                 sink.root(
-                    ConductTarget::File(path.clone()),
+                    PluginTarget::File(path.clone()),
                     RootKind::Production,
                     Confidence::Certain,
                 );
@@ -124,7 +124,7 @@ The spec is the whole declaration. What a builder chain can state:
 | `ladder`, `published_surface`, `import_cycles`, `dependency_scoping`, `dependency_identity`, `dependency_builtins`, `dependency_importers` | the language facts the engine's judgments consume (see [Languages](languages.md)); `ladder` pairs each reach the language can spell with the word it spells it with, narrowest first, and says which declarations can take it; `published_surface` says whether a unit publishes every export or only what its entries export |
 | `dispatch` | what the language's own statements mean: rules pairing a TRIGGER with an EFFECT and a confidence, so an attribute or a convention is a line of data and never a branch in an adapter. A trigger is a marker (path pattern, optionally an argument pattern, optionally the symbol kind it may sit on), a declaration NAME pattern, optionally narrowed to the kind of compilation the file lands in, a RELATION of a given kind to a base, a MEMBER of an owner another trigger matches, or the members an EXTERNAL base requires of whatever reaches it. An effect is a root of a color, a witness (kept while its owner is, of no color), an exemption from `unused`, or a generator's ownership of the file. Every pattern is compared against the name as the file writes it AND against the name the file's own binding imports qualify, so a rule written `org.junit.jupiter.api.Test` reaches an `@Test` imported from JUnit and not a same-named one from another package |
 | `conduct(activation, mutates_graph)` | the two gates of a plugin: when it runs (`Always`, or any of a set of rules — a manifest dependency by name, a file glob existing), and whether its contributions change reachability (`Yes` turns the persisted graph cache off for projects it activates on; `No` is a promise the engine holds you to) |
-| `rule(name, description)` | a finding category this extension may report, published as `ext:<coordinate>/<name>` |
+| `rule(name, description)` | a finding category this extension may report, published as `plugin:<coordinate>/<name>` |
 | `dependencies` | other extensions whose activation implies this one — the path to a plugin whose framework is an indirect dependency |
 | `requested_file_access` | globs of files the conduct hooks may read, name-scoped and budgeted |
 | `reads_reports` | report paths an ingester turns into coverage records |
@@ -180,7 +180,7 @@ not invalidate the graph cache — the rules and the active set are part of its
 key.
 
 ```rust
-ExtensionSpec::builder("kndo:spring", 1)
+PluginSpec::builder("kndo:spring", 1)
     .dispatch(vec![DispatchRule {
         // The FULL path. The engine qualifies the marker a file carries
         // through that file's own import bindings before comparing, so this
@@ -212,7 +212,7 @@ framework's, and only a rule that spells the whole path gets it — a bare name
 is the same few letters in every ecosystem. A pack that skips either one
 silences code it never meant to.
 
-The `rule_packs_are_data` gate holds the shape, and `builtin_conduct_proofs`
+The `rule_packs_are_data` gate holds the shape, and `builtin_plugin_proofs`
 demands the same baseline-then-pack proof every other conducting coordinate
 carries.
 

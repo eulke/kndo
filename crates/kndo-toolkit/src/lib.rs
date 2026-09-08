@@ -249,17 +249,17 @@ pub fn header_lines<'a>(
 /// The token every language's generated-file banner is reported under. What an
 /// adapter SAW is its own ecosystem's spelling (`@generated`,
 /// `// Code generated … DO NOT EDIT.`); what it SAYS is this one word, and
-/// what the word means is [`kndo_contract::extension::Effect::Generated`],
+/// what the word means is [`kndo_contract::plugin::Effect::Generated`],
 /// carried as a rule in the spec — so no adapter decides that a file is
 /// beyond judgment.
 pub const GENERATED_MARKER: &str = "generated";
 
 /// The default rule every marker-scanning language carries: the banner it
 /// reports means the generator owns the file.
-pub fn generated_rule() -> kndo_contract::extension::DispatchRule {
-    kndo_contract::extension::DispatchRule {
-        when: kndo_contract::extension::Trigger::marker(GENERATED_MARKER),
-        then: kndo_contract::extension::Effect::Generated,
+pub fn generated_rule() -> kndo_contract::plugin::DispatchRule {
+    kndo_contract::plugin::DispatchRule {
+        when: kndo_contract::plugin::Trigger::marker(GENERATED_MARKER),
+        then: kndo_contract::plugin::Effect::Generated,
         confidence: kndo_contract::vocab::Confidence::Certain,
     }
 }
@@ -306,7 +306,7 @@ pub mod jvm_manifest {
         coordinate: &'static str,
         version: u32,
         suffixes: &[&'static str],
-    ) -> kndo_contract::extension::ExtensionSpec {
+    ) -> kndo_contract::plugin::PluginSpec {
         jvm_builder(coordinate, version, suffixes).build()
     }
 
@@ -316,7 +316,7 @@ pub mod jvm_manifest {
         coordinate: &'static str,
         version: u32,
         suffixes: &[&'static str],
-    ) -> kndo_contract::extension::ExtensionSpecBuilder {
+    ) -> kndo_contract::plugin::PluginSpecBuilder {
         crate::source_adapter_builder(
             coordinate,
             version,
@@ -324,7 +324,7 @@ pub mod jvm_manifest {
             MANIFEST_GLOBS,
             // JVM compilers resolve reference cycles in multiple passes —
             // routine structure, never an initialization hazard worth a finding.
-            kndo_contract::extension::CycleTolerance::Tolerated,
+            kndo_contract::plugin::CycleTolerance::Tolerated,
         )
     }
 
@@ -333,10 +333,10 @@ pub mod jvm_manifest {
     /// exempt and says so as a keeper. The argument pattern matches the
     /// quoted name wherever it sits, alone (`@SuppressWarnings("unused")`) or
     /// inside a brace initializer (`{"unused", "rawtypes"}`).
-    pub fn suppresses_unused(marker: &'static str) -> kndo_contract::extension::DispatchRule {
-        kndo_contract::extension::DispatchRule {
-            when: kndo_contract::extension::Trigger::marker_with(marker, "*\"unused\"*"),
-            then: kndo_contract::extension::Effect::Exempt,
+    pub fn suppresses_unused(marker: &'static str) -> kndo_contract::plugin::DispatchRule {
+        kndo_contract::plugin::DispatchRule {
+            when: kndo_contract::plugin::Trigger::marker_with(marker, "*\"unused\"*"),
+            then: kndo_contract::plugin::Effect::Exempt,
             confidence: kndo_contract::vocab::Confidence::Certain,
         }
     }
@@ -1379,7 +1379,7 @@ pub mod jvm_manifest {
 /// Resolution by the NAMESPACE a dotted specifier names, for the languages
 /// whose imports name one rather than a file — `import com.foo.Bar;`,
 /// `import a.b.Foo`. The package is a clause its files declare
-/// ([`kndo_contract::extension::Nesting::Flat`]), so the files that answer are
+/// ([`kndo_contract::plugin::Nesting::Flat`]), so the files that answer are
 /// the files that wrote it, and the import's binding picks the name among
 /// them.
 ///
@@ -1471,8 +1471,8 @@ pub fn source_adapter_spec(
     version: u32,
     suffixes: &[&'static str],
     manifests: &[&'static str],
-    import_cycles: kndo_contract::extension::CycleTolerance,
-) -> kndo_contract::extension::ExtensionSpec {
+    import_cycles: kndo_contract::plugin::CycleTolerance,
+) -> kndo_contract::plugin::PluginSpec {
     source_adapter_builder(coordinate, version, suffixes, manifests, import_cycles).build()
 }
 
@@ -1484,10 +1484,10 @@ pub fn source_adapter_builder(
     version: u32,
     suffixes: &[&'static str],
     manifests: &[&'static str],
-    import_cycles: kndo_contract::extension::CycleTolerance,
-) -> kndo_contract::extension::ExtensionSpecBuilder {
+    import_cycles: kndo_contract::plugin::CycleTolerance,
+) -> kndo_contract::plugin::PluginSpecBuilder {
     use kndo_contract::evidence::{EvidenceStream, EvidenceStreams};
-    kndo_contract::extension::ExtensionSpec::builder(coordinate, version)
+    kndo_contract::plugin::PluginSpec::builder(coordinate, version)
         .suffixes(suffixes)
         // `Markers` and the generated rule ride together with
         // [`mark_generated`]: every source adapter reports the banner its

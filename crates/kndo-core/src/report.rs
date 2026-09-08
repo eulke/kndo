@@ -3,8 +3,8 @@
 //! (timings, timestamps) joins at the frontend edge when a milestone needs it.
 
 use crate::analysis::Abstention;
-use crate::conduct::Contribution;
 use crate::health::Health;
+use crate::plugin::Contribution;
 use crate::suppress::SuppressedSummary;
 use kndo_contract::evidence::DiagnosticLevel;
 use kndo_contract::finding::Finding;
@@ -16,7 +16,7 @@ pub const REPORT_SCHEMA: &str = "kndo-v2/m6";
 
 #[derive(Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-pub struct ExtensionRun {
+pub struct PluginRun {
     pub id: SmolStr,
     pub files: u32,
     /// The judgment capabilities this extension declared — the one-row answer
@@ -24,26 +24,26 @@ pub struct ExtensionRun {
     /// this ecosystem publishes: under `exports`, every exported declaration is
     /// the outside world's and `internal-only`'s Exported rung never fires;
     /// under `entries`, only what an entry exports is.
-    pub published_surface: kndo_contract::extension::PublishedSurface,
+    pub published_surface: kndo_contract::plugin::PublishedSurface,
     /// Whether the language calls import cycles a hazard (`cyclic` reads it);
     /// `tolerated` is why a cycle-free-by-compiler language reports none.
-    pub import_cycles: kndo_contract::extension::CycleTolerance,
+    pub import_cycles: kndo_contract::plugin::CycleTolerance,
     /// Whether the manifests this extension reads have dependency sections
     /// (`scoped`) or one flat requirement list (`unscoped`) — under `unscoped`,
     /// `test-only` never fires on a dependency: there is no section to move it to.
-    pub dependency_scoping: kndo_contract::extension::DependencyScoping,
+    pub dependency_scoping: kndo_contract::plugin::DependencyScoping,
     /// How this extension's import specifiers name a declared dependency —
     /// `underivable` is why no dependency finding can exist for its manifests.
-    pub dependency_identity: kndo_contract::extension::DependencyIdentity,
+    pub dependency_identity: kndo_contract::plugin::DependencyIdentity,
     /// The reaches this language can spell, narrowest first, each under the
     /// word this language uses for it (`internal-only` reads both: the rungs
     /// to know a narrower one exists, the word to say so). Empty means the
     /// language states no ladder and that analysis stays silent for its files.
     #[serde(
         default,
-        skip_serializing_if = "kndo_contract::extension::Ladder::is_empty"
+        skip_serializing_if = "kndo_contract::plugin::Ladder::is_empty"
     )]
-    pub ladder: kndo_contract::extension::Ladder,
+    pub ladder: kndo_contract::plugin::Ladder,
 }
 
 /// What this report's `findings`/`fixed` split was computed against. `full` is a
@@ -77,7 +77,7 @@ pub struct RunInfo {
     pub selection: Option<crate::session::Categories>,
     pub files_discovered: u32,
     pub files_claimed: u32,
-    pub extensions: Vec<ExtensionRun>,
+    pub extensions: Vec<PluginRun>,
 }
 
 #[cfg(feature = "schema")]

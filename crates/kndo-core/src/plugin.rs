@@ -17,12 +17,12 @@ use std::collections::{BTreeMap, BTreeSet};
 /// The conduct vocabulary is contract vocabulary (`kndo-contract`'s extension
 /// module — the one door); re-exported here where the engine that enforces it
 /// lives.
-pub use kndo_contract::extension::{
-    Activation, ActivationRule, CONTENT_MAX_BYTES, CONTENT_MAX_FILES, ConductSeverity, ConductSink,
-    ConductTarget, ContentView, DeclaredSymbol, Extension, GraphAccess, RuleDescriptor,
+pub use kndo_contract::plugin::{
+    Activation, ActivationRule, CONTENT_MAX_BYTES, CONTENT_MAX_FILES, ContentView, DeclaredSymbol,
+    GraphAccess, Plugin, PluginSeverity, PluginSink, PluginTarget, RuleDescriptor,
 };
 
-pub use kndo_contract::extension::is_reserved_coordinate;
+pub use kndo_contract::plugin::is_reserved_coordinate;
 
 /// The graph as a plugin may see it: paths and membership, no internals. The
 /// engine-side implementation of the contract's [`GraphAccess`].
@@ -120,7 +120,7 @@ pub enum ActivationReason {
 /// activation gates judgment, and an extraction-only extension has none to gate —
 /// it never appears in the round or as a contribution row.
 pub fn activate(
-    extensions: &[Box<dyn Extension>],
+    extensions: &[Box<dyn Plugin>],
     discovered: &[crate::discover::DiscoveredFile],
     declared_dependencies: &BTreeSet<SmolStr>,
 ) -> Vec<(usize, ActivationReason)> {
@@ -186,7 +186,7 @@ fn rule_matches(
             .is_some_and(|m| discovered.iter().any(|f| m.is_match(f.path.as_str()))),
         ActivationRule::ManifestDependency(pattern) => declared_dependencies
             .iter()
-            .any(|name| kndo_contract::extension::matches_pattern(pattern, name)),
+            .any(|name| kndo_contract::plugin::matches_pattern(pattern, name)),
         // Before any file is parsed there is no import stream to ask, so the
         // gate reads the one thing every specifier leaves in the source: its
         // literal text. The stem is the pattern up to its first `*` — what an
@@ -217,7 +217,7 @@ pub struct PluginRound {
 /// — roots applied onto `anchored` (target misses drop with a description), and
 /// advisory findings mapped under their namespaced categories.
 pub fn run_round(
-    extensions: &[Box<dyn Extension>],
+    extensions: &[Box<dyn Plugin>],
     active: &[(usize, ActivationReason)],
     graph: &mut Graph,
     root: &std::path::Path,
@@ -231,7 +231,7 @@ pub fn run_round(
     for &(ix, _) in active {
         let extension = &extensions[ix];
         let spec = extension.spec();
-        let mut sink = ConductSink::default();
+        let mut sink = PluginSink::default();
         let mut dropped = Vec::new();
 
         if coverage.is_none() {
@@ -343,10 +343,10 @@ fn file_index(graph: &Graph, path: &ProjectPath) -> Option<usize> {
     graph.files.binary_search_by(|f| f.path.cmp(path)).ok()
 }
 
-fn resolve_target(graph: &Graph, target: &ConductTarget) -> Option<(usize, RootTarget)> {
+fn resolve_target(graph: &Graph, target: &PluginTarget) -> Option<(usize, RootTarget)> {
     match target {
-        ConductTarget::File(path) => Some((file_index(graph, path)?, RootTarget::WholeFile)),
-        ConductTarget::Symbol { path, name } => {
+        PluginTarget::File(path) => Some((file_index(graph, path)?, RootTarget::WholeFile)),
+        PluginTarget::Symbol { path, name } => {
             let ix = file_index(graph, path)?;
             let (id, _) = graph.files[ix]
                 .evidence
@@ -357,13 +357,13 @@ fn resolve_target(graph: &Graph, target: &ConductTarget) -> Option<(usize, RootT
     }
 }
 
-fn target_subject(graph: &Graph, target: &ConductTarget) -> Option<Subject> {
+fn target_subject(graph: &Graph, target: &PluginTarget) -> Option<Subject> {
     match target {
-        ConductTarget::File(path) => {
+        PluginTarget::File(path) => {
             file_index(graph, path)?;
             Some(Subject::File { path: path.clone() })
         }
-        ConductTarget::Symbol { path, name } => {
+        PluginTarget::Symbol { path, name } => {
             let ix = file_index(graph, path)?;
             // The query contract's resolver, so a plugin names a symbol the
             // way a user does — and an ambiguous name resolves to nothing
@@ -376,10 +376,10 @@ fn target_subject(graph: &Graph, target: &ConductTarget) -> Option<Subject> {
 
 /// Neutral spelling of a target for dropped-contribution lines — each drop site
 /// states its own reason beside it.
-fn describe_target(target: &ConductTarget) -> String {
+fn describe_target(target: &PluginTarget) -> String {
     match target {
-        ConductTarget::File(path) => format!("file {}", path.as_str()),
-        ConductTarget::Symbol { path, name } => {
+        PluginTarget::File(path) => format!("file {}", path.as_str()),
+        PluginTarget::Symbol { path, name } => {
             format!("symbol {name} in {}", path.as_str())
         }
     }

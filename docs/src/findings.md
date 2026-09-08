@@ -33,8 +33,8 @@ name) or on graph shape where execution data would be stronger.
 until a corpus repository shows a production-role deep import worth judging,
 and it appears in no report.
 
-Extensions report under `ext:<coordinate>/<rule>` (for example
-`ext:acme:framework/routes`). Extension findings are advisory — `info` at most
+Extensions report under `plugin:<coordinate>/<rule>` (for example
+`ext:acme:framework/routes`). Plugin findings are advisory — `info` at most
 — and do not count toward health, because an extension's evidence is the
 extension's claim, not the graph's.
 

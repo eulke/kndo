@@ -10,7 +10,7 @@
 //!   silent, because "add an underscore" is advice about a convention, not a
 //!   language boundary.
 //! - The module IS the file: nothing is visible without an import, so
-//!   [`Extension::sees`] answers nothing at all — Python is the degenerate
+//!   [`Plugin::sees`] answers nothing at all — Python is the degenerate
 //!   case the default was designed for. Packages re-export through
 //!   `__init__.py` imports, which are ordinary edges.
 //! - Dispatch the source never names, each with a language-level reason:
@@ -36,11 +36,11 @@ mod resolve;
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::EvidenceSink;
 use kndo_contract::evidence::RootKind;
-use kndo_contract::extension::{DispatchRule, Extension, ExtensionSpec, FileRole};
+use kndo_contract::plugin::{DispatchRule, FileRole, Plugin, PluginSpec};
 use kndo_contract::vocab::{Confidence, ProjectPath};
 
 pub struct PythonAdapter {
-    spec: ExtensionSpec,
+    spec: PluginSpec,
 }
 
 impl PythonAdapter {
@@ -59,7 +59,7 @@ impl PythonAdapter {
                 ],
                 // Circular imports raise at import time (partially-initialized
                 // module AttributeError) — the classic Python hazard.
-                kndo_contract::extension::CycleTolerance::Hazard,
+                kndo_contract::plugin::CycleTolerance::Hazard,
             )
             // The interpreter's own directory for installed packages — no
             // package can be named `site-packages` — is never the project's
@@ -80,7 +80,7 @@ impl PythonAdapter {
             // Every source root a Python distribution has is a manifest's to
             // state (`package-dir`, `packages.find.where`, the `src` layout the
             // tree itself shows setuptools) — the language knows none of its own.
-            .nesting(kndo_contract::extension::Nesting::ByPath { roots: Vec::new() })
+            .nesting(kndo_contract::plugin::Nesting::ByPath { roots: Vec::new() })
             .ignores(&["**/site-packages/**"])
             // The runners' own discovery, where no manifest said what a file
             // is: pytest and unittest COLLECT `test_*.py` and `*_test.py` by
@@ -107,8 +107,8 @@ impl Default for PythonAdapter {
     }
 }
 
-impl Extension for PythonAdapter {
-    fn spec(&self) -> &ExtensionSpec {
+impl Plugin for PythonAdapter {
+    fn spec(&self) -> &PluginSpec {
         &self.spec
     }
 
@@ -147,8 +147,8 @@ pub(crate) const MAIN_GUARD: &str = "__main__";
 /// gated by the dependency that proves the framework is installed.
 fn dispatch_rules() -> Vec<DispatchRule> {
     use kndo_contract::evidence::SymbolKind;
-    use kndo_contract::extension::{Effect, Trigger};
     use kndo_contract::manifest::UnitKind;
+    use kndo_contract::plugin::{Effect, Trigger};
 
     // `@d def f` IS `f = d(f)`: whatever the decorator registers or wraps, the
     // hand-off is a use beyond static sight. WHICH decorator is unknowable

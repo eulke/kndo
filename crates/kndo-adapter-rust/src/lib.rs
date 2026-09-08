@@ -20,13 +20,11 @@ mod resolve;
 
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{EvidenceSink, EvidenceStream, EvidenceStreams, RootKind};
-use kndo_contract::extension::{
-    DispatchRule, Effect, Extension, ExtensionSpec, Rung, Step, Trigger,
-};
+use kndo_contract::plugin::{DispatchRule, Effect, Plugin, PluginSpec, Rung, Step, Trigger};
 use kndo_contract::vocab::{Confidence, ProjectPath};
 
 pub struct RustAdapter {
-    spec: ExtensionSpec,
+    spec: PluginSpec,
 }
 
 /// What Rust's attributes mean, as data — the language's own statements about
@@ -110,7 +108,7 @@ impl RustAdapter {
                 &["**/Cargo.toml"],
                 // Modules within a crate reference each other freely — legal,
                 // routine structure, never an initialization hazard.
-                kndo_contract::extension::CycleTolerance::Tolerated,
+                kndo_contract::plugin::CycleTolerance::Tolerated,
             )
             // No `pub` is the module's own — the narrowest rung Rust spells,
             // and the file is a module, so a `pub(crate)` item used only in
@@ -129,11 +127,11 @@ impl RustAdapter {
             .dispatch(dispatch_rules())
             // `mod x;` MOUNTS one namespace inside another: the forest is read
             // off those edges, and nothing a path spells names a Rust module.
-            .nesting(kndo_contract::extension::Nesting::Mounted)
+            .nesting(kndo_contract::plugin::Nesting::Mounted)
             // `serde_json::Value` names `serde-json`: the crate root segment,
             // hyphens spelled as underscores.
-            .dependency_identity(kndo_contract::extension::DependencyIdentity::CrateRoot)
-            .dependency_builtins(kndo_contract::extension::DependencyBuiltins::Named(
+            .dependency_identity(kndo_contract::plugin::DependencyIdentity::CrateRoot)
+            .dependency_builtins(kndo_contract::plugin::DependencyBuiltins::Named(
                 ["std", "core", "alloc", "proc_macro", "test"]
                     .iter()
                     .map(|s| smol_str::SmolStr::new_static(s))
@@ -150,8 +148,8 @@ impl Default for RustAdapter {
     }
 }
 
-impl Extension for RustAdapter {
-    fn spec(&self) -> &ExtensionSpec {
+impl Plugin for RustAdapter {
+    fn spec(&self) -> &PluginSpec {
         &self.spec
     }
 

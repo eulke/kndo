@@ -8,8 +8,8 @@
 //! in the evidence cache, so a rule change never has to re-extract anything.
 
 use kndo_contract::evidence::{FileEvidence, Marker, MarkerTarget, Root, RootTarget};
-use kndo_contract::extension::{DeclarationCx, DispatchRule, Effect};
 use kndo_contract::manifest::UnitKind;
+use kndo_contract::plugin::{DeclarationCx, DispatchRule, Effect};
 use smol_str::SmolStr;
 use std::collections::BTreeMap;
 
@@ -25,11 +25,11 @@ pub struct Dispatched {
     /// worth a line in the report, never a silent hole in the findings.
     pub notes: Vec<String>,
     /// A generator owns this file — see
-    /// [`kndo_contract::extension::Effect::Generated`].
+    /// [`kndo_contract::plugin::Effect::Generated`].
     pub generated: bool,
     /// Declarations a rule made witnesses, by index, each with the base whose
     /// surface it satisfies as the rule spells it — see
-    /// [`kndo_contract::extension::Effect::Witness`]. Sorted by index.
+    /// [`kndo_contract::plugin::Effect::Witness`]. Sorted by index.
     pub witnesses: Vec<(u32, SmolStr)>,
 }
 
@@ -187,8 +187,8 @@ pub fn declaration_effects(
 
 /// The name a reader recognizes behind a witness: the base a rule named, or
 /// the rule's own subject where it named none.
-fn witness_base(trigger: &kndo_contract::extension::Trigger) -> SmolStr {
-    use kndo_contract::extension::Trigger;
+fn witness_base(trigger: &kndo_contract::plugin::Trigger) -> SmolStr {
+    use kndo_contract::plugin::Trigger;
     match trigger {
         Trigger::ExternalWitness { base, .. } | Trigger::Relation { to: base, .. } => base.clone(),
         // The rule named the base on the OWNER; that is the name a reader
@@ -241,7 +241,7 @@ mod tests {
     use kndo_contract::evidence::{
         EvidenceSink, EvidenceStream, EvidenceStreams, Reach, RootKind, SymbolKind,
     };
-    use kndo_contract::extension::Trigger;
+    use kndo_contract::plugin::Trigger;
     use kndo_contract::vocab::{Confidence, Span};
     use smol_str::SmolStr;
 

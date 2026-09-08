@@ -1,6 +1,6 @@
 //! The extraction-side shared types: the file handed to extraction, the project
 //! context an extension resolves against, and what resolution/manifest reads return.
-//! [`crate::extension::Extension`] is the one trait that consumes them; this module
+//! [`crate::plugin::Plugin`] is the one trait that consumes them; this module
 //! holds the data shapes it shares with the engine.
 
 use crate::evidence::{EmbeddedRegion, RootKind};

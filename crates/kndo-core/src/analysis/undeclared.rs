@@ -15,8 +15,8 @@
 
 use super::{Analysis, AnalysisContext, dependency};
 use kndo_contract::evidence::{ImportShape, ImportTarget};
-use kndo_contract::extension::DependencyBuiltins;
 use kndo_contract::finding::{Finding, Severity};
+use kndo_contract::plugin::DependencyBuiltins;
 use kndo_contract::subject::Subject;
 use kndo_contract::vocab::{Category, Confidence};
 use smol_str::SmolStr;

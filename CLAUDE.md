@@ -39,7 +39,7 @@ Two deliberate version knobs exist; shape changes use neither.
 
 - A contract type changed shape → already done: `CONTRACT_FINGERPRINT` moved on its own.
 - This adapter now emits different evidence from the same source → bump its
-  version (the second argument of its `ExtensionSpec::builder`).
+  version (the second argument of its `PluginSpec::builder`).
 - The same evidence now assembles into a different graph → bump
   `GRAPH_SEMANTICS_VERSION`.
 
@@ -87,7 +87,7 @@ prose to explain which fields matter, redesign the API, not the prose.
 ## The ignorance rule
 
 Core never names a language. The moment `if language == X` looks necessary, the
-vocabulary is missing a concept: add an `ExtensionSpec` capability — with a default, a
+vocabulary is missing a concept: add an `PluginSpec` capability — with a default, a
 named consumer in core, and a conformance case. All three, or it doesn't merge.
 
 ## Where language knowledge lives
@@ -98,7 +98,7 @@ A language needs something new? Take the first floor that fits:
    a sink method paired with its `EvidenceStream` declaration; the pair ships
    together, so absence stays typed and analyses abstain instead of guessing.
 2. A fact about THE LANGUAGE itself — true for every file (visibility rungs, cycle
-   idioms, builtin member types) → `ExtensionSpec` data, with a default that reproduces
+   idioms, builtin member types) → `PluginSpec` data, with a default that reproduces
    pre-capability behavior, a named core consumer, and a conformance case.
 3. A fact about THE PROJECT around the file — what exists, what manifests declare →
    a `ResolveContext` query, engine-provided.

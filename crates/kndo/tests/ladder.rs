@@ -7,13 +7,13 @@ mod common;
 
 use common::reported;
 use kndo::Category;
-use kndo_contract::extension::{Rung, Step};
-use kndo_testkit::{MockExtension, TempProject};
+use kndo_contract::plugin::{Rung, Step};
+use kndo_testkit::{MockPlugin, TempProject};
 
 /// A mock language spelling four rungs: `own` for members alone, `local` for
 /// top-level declarations alone, `unit`, and `pub`.
-fn four_rungs() -> MockExtension {
-    MockExtension::laddered(&[
+fn four_rungs() -> MockPlugin {
+    MockPlugin::laddered(&[
         Step::for_members(Rung::Owner, "own"),
         Step::for_free(Rung::File, "local"),
         Step::new(Rung::Unit, "unit"),
@@ -84,13 +84,13 @@ fn a_member_takes_only_a_step_its_shape_can_stand_on() {
 fn a_language_spelling_nothing_narrower_gives_no_advice() {
     let p = TempProject::new();
     p.file("src/lib.kmock", "root-file\nunit fn helper\ncall helper\n");
-    let two_rungs = MockExtension::laddered(&[
+    let two_rungs = MockPlugin::laddered(&[
         Step::new(Rung::Unit, "unit"),
         Step::new(Rung::Exported, "pub"),
     ]);
     let snap = common::analyze(&p, vec![Box::new(two_rungs)]);
     assert!(advice(&snap).is_empty(), "{:?}", advice(&snap));
     // No ladder at all: the same silence.
-    let snap = common::analyze(&p, vec![Box::new(MockExtension::new())]);
+    let snap = common::analyze(&p, vec![Box::new(MockPlugin::new())]);
     assert!(advice(&snap).is_empty(), "{:?}", advice(&snap));
 }

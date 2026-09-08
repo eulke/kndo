@@ -5,7 +5,7 @@ use kndo_adapter_java::JavaAdapter;
 use kndo_contract::evidence::{
     Attachment, ImportShape, ImportTarget, MarkerTarget, Reach, RelationKind,
 };
-use kndo_contract::extension::Extension;
+use kndo_contract::plugin::Plugin;
 use kndo_testkit::{declaration_named, extract_evidence, import_named};
 
 fn ev(path: &str, source: &str) -> kndo_contract::evidence::FileEvidence {

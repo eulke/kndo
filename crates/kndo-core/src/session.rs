@@ -10,13 +10,13 @@ use crate::analysis::{
     Unresolved, Untested, Unused, VersionSkew, run_all,
 };
 use crate::cache::EvidenceCache;
-use crate::conduct::Contribution;
 use crate::graph::Graph;
-use crate::report::{ExtensionRun, REPORT_SCHEMA, Report, ReportDiagnostic, RunInfo};
+use crate::plugin::Contribution;
+use crate::report::{PluginRun, REPORT_SCHEMA, Report, ReportDiagnostic, RunInfo};
 use crate::{discover, extract};
 use kndo_contract::evidence::DiagnosticLevel;
-use kndo_contract::extension::Extension;
 use kndo_contract::finding::{Finding, LineSpan, Severity};
+use kndo_contract::plugin::Plugin;
 use kndo_contract::subject::Subject;
 use kndo_contract::vocab::ProjectPath;
 use serde::{Deserialize, Serialize};
@@ -126,7 +126,7 @@ pub enum Refusal {
 pub struct Session {
     root: PathBuf,
     config: Config,
-    extensions: Vec<Box<dyn Extension>>,
+    extensions: Vec<Box<dyn Plugin>>,
     composition_diagnostics: Vec<crate::report::ReportDiagnostic>,
 }
 
@@ -370,7 +370,7 @@ impl Session {
     pub fn open(
         root: impl Into<PathBuf>,
         config: Config,
-        extensions: Vec<Box<dyn Extension>>,
+        extensions: Vec<Box<dyn Plugin>>,
     ) -> Result<Session, Refusal> {
         let root = root.into();
         if !root.is_dir() {
@@ -402,7 +402,7 @@ impl Session {
 
     /// The composition this session runs, in registration order — introspection
     /// for `doctor`-shaped frontends; the specs are the extensions' own claims.
-    pub fn extensions(&self) -> impl Iterator<Item = &kndo_contract::extension::ExtensionSpec> {
+    pub fn extensions(&self) -> impl Iterator<Item = &kndo_contract::plugin::PluginSpec> {
         self.extensions.iter().map(|e| e.spec())
     }
 
@@ -549,7 +549,7 @@ impl Session {
             claims = extract::claim(&files, &self.extensions, &project_ignores);
         });
 
-        let active = crate::conduct::activate(&self.extensions, &files, &declared_dependencies);
+        let active = crate::plugin::activate(&self.extensions, &files, &declared_dependencies);
         let plugins_mutate = active
             .iter()
             .any(|(ix, _)| self.extensions[*ix].spec().mutates_graph());
@@ -623,7 +623,7 @@ impl Session {
             .map(|f| (f.path.clone(), f.content.as_slice()))
             .collect();
         let round =
-            crate::conduct::run_round(&self.extensions, &active, &mut graph, &self.root, &contents);
+            crate::plugin::run_round(&self.extensions, &active, &mut graph, &self.root, &contents);
         let crap = Crap {
             threshold: self.config.crap_threshold,
         };
@@ -646,7 +646,7 @@ impl Session {
             .collect();
         let mut outcome = run_all(&graph, round.coverage, &self.capabilities(), &selected);
         // Plugin findings ride the same suppression pass — a `kndo:allow
-        // ext:<coordinate>/<rule>` pragma reaches them like any category — and
+        // plugin:<coordinate>/<rule>` pragma reaches them like any category — and
         // `apply` owns the canonical final sort. The selection reaches them by
         // category name like any analysis's.
         outcome.findings.extend(
@@ -872,7 +872,7 @@ impl Snapshot {
                             .iter()
                             .find(|(c, _)| *c == id)
                             .map(|(_, caps)| caps);
-                        ExtensionRun {
+                        PluginRun {
                             id,
                             files,
                             published_surface: caps
@@ -912,7 +912,7 @@ impl Snapshot {
         };
         let at_or_above = self
             .new_findings()
-            .filter(|f| !f.category.is_extension() && f.severity.at_least(floor))
+            .filter(|f| !f.category.is_plugin() && f.severity.at_least(floor))
             .count() as u32;
         if at_or_above == 0 {
             RunOutcome::Pass

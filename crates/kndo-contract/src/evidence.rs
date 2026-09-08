@@ -235,7 +235,7 @@ impl SymbolKind {
 /// How far a declaration's name legally reaches, as an address in the scope
 /// forest: the engine names the pool each variant stands for and judges by the
 /// SET of files in it, never by comparing words. A variant on a rung
-/// ([`Reach::rung`]) is one a language's [`crate::extension::Ladder`] can
+/// ([`Reach::rung`]) is one a language's [`crate::plugin::Ladder`] can
 /// name, which is what lets `internal-only` say which keyword would do; a pool
 /// the engine cannot bound degrades to Exported treatment (keep-alive). The
 /// derived order is for sorting alone — narrowness is the rung's.
@@ -303,8 +303,8 @@ impl Reach {
     /// The rung this reach stands on — what a ladder step can name. `None`
     /// for an adapter's own token and for a reach that is its owner's: neither
     /// is a word a declaration could take.
-    pub fn rung(&self) -> Option<crate::extension::Rung> {
-        use crate::extension::Rung;
+    pub fn rung(&self) -> Option<crate::plugin::Rung> {
+        use crate::plugin::Rung;
         Some(match self {
             Reach::Owner => Rung::Owner,
             Reach::File => Rung::File,
@@ -326,7 +326,7 @@ impl Reach {
     /// CAP — a member under an owner the engine has not resolved — is compared
     /// as a namespace, so the slip narrows rather than publishes.
     pub fn capped_by(&self, owner: &Reach) -> Reach {
-        use crate::extension::Rung;
+        use crate::plugin::Rung;
         if matches!(self, Reach::Inherited) {
             return owner.clone();
         }
@@ -655,7 +655,7 @@ pub enum MarkerTarget {
 /// holds its top-level arguments as written, each trimmed with inner
 /// whitespace runs collapsed to one space (`dead_code`, `feature = "x"`,
 /// `rename_all = "camelCase"`). What a marker MEANS is a
-/// [`crate::extension::DispatchRule`] on the claiming extension's spec: the
+/// [`crate::plugin::DispatchRule`] on the claiming extension's spec: the
 /// engine matches the rules against the markers and derives roots and
 /// exemptions, so a framework's test attribute is one line of data and never
 /// a branch in an adapter.
@@ -1365,7 +1365,7 @@ impl EvidenceSink {
 
 /// What one file's coverage report states, before any project mapping: hit counts
 /// keyed by 1-based line. Test-execution evidence at the WIRE level — what an
-/// ingesting extension returns from [`crate::extension::Extension::ingest`] and
+/// ingesting extension returns from [`crate::plugin::Plugin::ingest`] and
 /// what the engine maps onto the project once it supplies the sources.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct FileRecords {

@@ -12,10 +12,10 @@ extern crate self as kndo_contract;
 
 pub mod adapter;
 pub mod evidence;
-pub mod extension;
 pub mod finding;
 pub mod fingerprint;
 pub mod manifest;
+pub mod plugin;
 pub mod subject;
 pub mod vocab;
 

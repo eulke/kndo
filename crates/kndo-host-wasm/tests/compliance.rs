@@ -6,7 +6,7 @@
 //! that the ABI's whole surface WORKS.
 
 use kndo_core::{CacheLocation, Config, RunMode, Session, Snapshot, Threads};
-use kndo_host_wasm::WasmExtension;
+use kndo_host_wasm::WasmPlugin;
 use kndo_testkit::TempProject;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -63,10 +63,10 @@ fn component(name: &str) -> PathBuf {
 fn kmini_session(
     p: &TempProject,
     cache: CacheLocation,
-    conduct: Vec<Box<dyn kndo_core::Extension>>,
+    conduct: Vec<Box<dyn kndo_core::Plugin>>,
 ) -> Session {
-    let adapter = WasmExtension::load(&component("kmini_adapter")).expect("kmini adapter loads");
-    let mut extensions: Vec<Box<dyn kndo_core::Extension>> = vec![Box::new(adapter)];
+    let adapter = WasmPlugin::load(&component("kmini_adapter")).expect("kmini adapter loads");
+    let mut extensions: Vec<Box<dyn kndo_core::Plugin>> = vec![Box::new(adapter)];
     extensions.extend(conduct);
     Session::open(
         p.root(),
@@ -146,8 +146,8 @@ fn the_wasm_adapter_world_is_a_first_class_language() {
 
     // The manifest's dependency names feed activation — through the same wasm
     // manifest pipeline.
-    let witness = kndo_testkit::MockExtension::scripted(
-        kndo_core::ExtensionSpec::builder("test:witness", 1)
+    let witness = kndo_testkit::MockPlugin::scripted(
+        kndo_core::PluginSpec::builder("test:witness", 1)
             .conduct(
                 kndo_core::Activation::AnyRule(vec![
                     kndo_core::ActivationRule::ManifestDependency("probe-framework".into()),
@@ -263,7 +263,7 @@ fn the_wasm_plugin_world_carries_the_containment_model() {
     p.file("orphan.kmini", "fn floats\n");
     p.file("config.probe", "sixteen bytes!!\n");
 
-    let plugin = WasmExtension::load(&component("probe_plugin")).expect("probe plugin loads");
+    let plugin = WasmPlugin::load(&component("probe_plugin")).expect("probe plugin loads");
     let session = kmini_session(&p, CacheLocation::InTree, vec![Box::new(plugin)]);
     let snap = session.analyze(RunMode::Full).expect("analyze");
 
@@ -305,7 +305,7 @@ fn the_wasm_plugin_world_carries_the_containment_model() {
     let note = snap
         .findings
         .iter()
-        .find(|f| f.category.as_str() == "ext:demo:probe/note")
+        .find(|f| f.category.as_str() == "plugin:demo:probe/note")
         .expect("the declared-rule finding lands");
     assert_eq!(note.message, "config.probe is 16 bytes");
 
@@ -332,7 +332,7 @@ fn the_wasm_ingester_world_feeds_untested_like_the_builtin() {
         "SF:lib.kmini\nFN:1,covered\nFN:2,never_ran\nFNDA:3,covered\nFNDA:0,never_ran\nend_of_record\n",
     );
 
-    let ingester = WasmExtension::load(&component("records_ingester")).expect("ingester loads");
+    let ingester = WasmPlugin::load(&component("records_ingester")).expect("ingester loads");
     let with = kmini_session(&p, CacheLocation::Off, vec![Box::new(ingester)])
         .analyze(RunMode::Full)
         .expect("analyze with ingester");
@@ -373,8 +373,8 @@ fn a_two_cluster_extension_speaks_a_language_and_conducts() {
     p.file("routes.acme", "handler index\nhandler health\n");
     p.file("extra.kmini", "fn di_wired\n");
 
-    let acme = WasmExtension::load(&component("acme_framework")).expect("acme loads");
-    let probe = WasmExtension::load(&component("probe_plugin")).expect("probe loads");
+    let acme = WasmPlugin::load(&component("acme_framework")).expect("acme loads");
+    let probe = WasmPlugin::load(&component("probe_plugin")).expect("probe loads");
     let snap = kmini_session(
         &p,
         CacheLocation::Off,
@@ -423,7 +423,7 @@ fn assert_extraction_violation(file_content: &str, violated_import: &str) {
     let p = TempProject::new();
     p.file("app.rude", file_content);
 
-    let rude = WasmExtension::load(&component("rude_probe")).expect("rude probe loads");
+    let rude = WasmPlugin::load(&component("rude_probe")).expect("rude probe loads");
     let session = Session::open(
         p.root(),
         Config {
@@ -474,13 +474,13 @@ fn a_conduct_import_during_a_manifest_read_traps_with_a_named_violation() {
     p.file("app.rude", "anything\n");
     p.file("manifest.rude", "graph\n");
 
-    let rude = WasmExtension::load(&component("rude_probe")).expect("rude probe loads");
+    let rude = WasmPlugin::load(&component("rude_probe")).expect("rude probe loads");
     // The rude spec declares no manifests, so drive the door directly: the
     // phase gate is the subject, not the engine's manifest routing.
     let known = std::collections::BTreeSet::new();
     let cx = kndo_contract::adapter::ResolveContext::new(&known);
     let mut sink = kndo_contract::manifest::ManifestSink::new();
-    kndo_core::Extension::extract_manifest(
+    kndo_core::Plugin::extract_manifest(
         &rude,
         &kndo_contract::adapter::SourceFile {
             path: &kndo_contract::vocab::ProjectPath::new("manifest.rude"),
@@ -507,14 +507,14 @@ fn a_guest_states_a_whole_unit_across_the_abi() {
     // the build enters it through, what it compiles against, and what its
     // manifest says about consumers outside — arrives shaped, and the host
     // replays it through the real `ManifestSink` like a native adapter's.
-    let kmini = WasmExtension::load(&component("kmini_adapter")).expect("kmini adapter loads");
+    let kmini = WasmPlugin::load(&component("kmini_adapter")).expect("kmini adapter loads");
     let known: std::collections::BTreeSet<kndo_contract::vocab::ProjectPath> = ["lib.kmini"]
         .iter()
         .map(|p| kndo_contract::vocab::ProjectPath::new(*p))
         .collect();
     let cx = kndo_contract::adapter::ResolveContext::new(&known);
     let mut sink = kndo_contract::manifest::ManifestSink::new();
-    kndo_core::Extension::extract_manifest(
+    kndo_core::Plugin::extract_manifest(
         &kmini,
         &kndo_contract::adapter::SourceFile {
             path: &kndo_contract::vocab::ProjectPath::new("kmini.pkg"),

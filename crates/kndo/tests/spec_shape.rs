@@ -7,20 +7,20 @@ mod common;
 
 use common::reported;
 use kndo::Category;
-use kndo_contract::extension::Nesting;
-use kndo_testkit::{MockExtension, TempProject};
+use kndo_contract::plugin::Nesting;
+use kndo_testkit::{MockPlugin, TempProject};
 
 /// The kmock language, and a second one whose bare specifiers name kmock's
 /// dependencies — css and html to js-ts, in miniature.
-fn kmock_and_guest() -> Vec<Box<dyn kndo::Extension>> {
+fn kmock_and_guest() -> Vec<Box<dyn kndo::Plugin>> {
     vec![
-        Box::new(MockExtension::with(|spec| {
-            spec.dependency_identity(kndo_contract::extension::DependencyIdentity::PackageName)
+        Box::new(MockPlugin::with(|spec| {
+            spec.dependency_identity(kndo_contract::plugin::DependencyIdentity::PackageName)
                 // kmock's manifest has no sections, so an unscoped declaration
                 // IS a usage claim — otherwise nothing here is judged at all.
-                .dependency_scoping(kndo_contract::extension::DependencyScoping::Unscoped)
+                .dependency_scoping(kndo_contract::plugin::DependencyScoping::Unscoped)
         })),
-        Box::new(MockExtension::beside("kguest", "kguest", |spec| {
+        Box::new(MockPlugin::beside("kguest", "kguest", |spec| {
             spec.ecosystem("kmock")
         })),
     ]
@@ -75,7 +75,7 @@ fn a_language_names_the_hidden_directories_its_source_lives_in() {
     .file(".khidden/unseen.kmock", "fn never_discovered\n");
     let snap = common::analyze(
         &p,
-        vec![Box::new(MockExtension::with(|spec| {
+        vec![Box::new(MockPlugin::with(|spec| {
             spec.hidden_opt_in(&[".kstore"])
         }))],
     );
@@ -111,8 +111,8 @@ fn a_directory_nested_language_keeps_two_same_named_namespaces_apart() {
     .file("b/two.kmock", "package util\nns fn helper\n");
 
     let by_directory =
-        |spec: kndo_contract::extension::ExtensionSpecBuilder| spec.nesting(Nesting::ByDirectory);
-    let snap = common::analyze(&p, vec![Box::new(MockExtension::with(by_directory))]);
+        |spec: kndo_contract::plugin::PluginSpecBuilder| spec.nesting(Nesting::ByDirectory);
+    let snap = common::analyze(&p, vec![Box::new(MockPlugin::with(by_directory))]);
     assert_eq!(
         reported(&snap, &Category::UNUSED),
         ["b/two.kmock — helper"],
@@ -122,8 +122,8 @@ fn a_directory_nested_language_keeps_two_same_named_namespaces_apart() {
     // Under `Flat` the clause is the whole key: one namespace, and the call in
     // `a` names the declaration in `b`. The same tree, two answers, and which
     // is right is the LANGUAGE's to say.
-    let flat = |spec: kndo_contract::extension::ExtensionSpecBuilder| spec.nesting(Nesting::Flat);
-    let snap = common::analyze(&p, vec![Box::new(MockExtension::with(flat))]);
+    let flat = |spec: kndo_contract::plugin::PluginSpecBuilder| spec.nesting(Nesting::Flat);
+    let snap = common::analyze(&p, vec![Box::new(MockPlugin::with(flat))]);
     assert!(
         reported(&snap, &Category::UNUSED).is_empty(),
         "one namespace: the call reaches across the directories, {:?}",
@@ -162,7 +162,7 @@ fn a_specifier_a_manifest_rewrites_resolves_against_what_it_names() {
     )
     .file("inner/own/lib.kmock", "pub fn local\n")
     .file("src/app/idle.kmock", "pub fn nobody\n");
-    let snap = common::analyze(&p, vec![Box::new(MockExtension::new())]);
+    let snap = common::analyze(&p, vec![Box::new(MockPlugin::new())]);
 
     assert_eq!(
         reported(&snap, &Category::UNUSED),

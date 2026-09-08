@@ -13,8 +13,8 @@ use super::{
     AbstentionReason, Analysis, AnalysisContext, RunContext, dependency, has_root_of, is_test_file,
 };
 use kndo_contract::evidence::RootKind;
-use kndo_contract::extension::DependencyScoping;
 use kndo_contract::finding::{Finding, Severity};
+use kndo_contract::plugin::DependencyScoping;
 use kndo_contract::subject::Subject;
 use kndo_contract::vocab::{Category, Confidence};
 

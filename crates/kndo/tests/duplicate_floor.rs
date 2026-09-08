@@ -8,13 +8,13 @@ mod common;
 use common::reported;
 use kndo::Category;
 use kndo_contract::evidence::{EvidenceStream, EvidenceStreams};
-use kndo_testkit::{MockExtension, TempProject};
+use kndo_testkit::{MockPlugin, TempProject};
 
 /// The kmock language declaring the metrics stream, which `duplicate`
 /// requires before it judges a file at all; the mock emits none, so only the
 /// byte-identity pass has anything to say.
-fn measured_for_duplicates() -> MockExtension {
-    MockExtension::with(|spec| {
+fn measured_for_duplicates() -> MockPlugin {
+    MockPlugin::with(|spec| {
         spec.emits(EvidenceStreams::of(&[
             EvidenceStream::Comments,
             EvidenceStream::Markers,

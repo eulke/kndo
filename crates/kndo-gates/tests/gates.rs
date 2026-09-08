@@ -668,7 +668,7 @@ fn incremental_and_full_assembly_are_byte_identical() {
 }
 
 #[test]
-fn builtin_conduct_proofs() {
+fn builtin_plugin_proofs() {
     // Every built-in conducting extension ships with the baseline-then-plugin
     // proof the authoring docs demand of anyone else: the run WITHOUT it
     // establishes what fires, the run WITH it changes exactly what it claims to
@@ -705,7 +705,7 @@ fn builtin_conduct_proofs() {
             cache: CacheLocation::Off,
             ..Config::default()
         };
-        let extraction_only: Vec<Box<dyn kndo::Extension>> = kndo::default_extensions()
+        let extraction_only: Vec<Box<dyn kndo::Plugin>> = kndo::default_extensions()
             .into_iter()
             .filter(|e| !e.spec().declares_conduct())
             .collect();
@@ -1028,15 +1028,14 @@ fn extension_dependency_implication() {
     use kndo_contract::evidence::RootKind;
     use kndo_contract::vocab::{Confidence, ProjectPath};
     use kndo_core::{
-        Activation, ActivationRule, ConductSeverity, ConductTarget, Extension, ExtensionSpec,
-        MutatesGraph,
+        Activation, ActivationRule, MutatesGraph, Plugin, PluginSeverity, PluginSpec, PluginTarget,
     };
-    use kndo_testkit::MockExtension;
+    use kndo_testkit::MockPlugin;
 
     // The probe every conducting mock runs: one scoped read, reported as a
     // finding — what the content view let it see IS the assertion.
-    let probing = |spec: ExtensionSpec, reads: &'static str| {
-        MockExtension::scripted(spec).on_report(move |_, content, out| {
+    let probing = |spec: PluginSpec, reads: &'static str| {
+        MockPlugin::scripted(spec).on_report(move |_, content, out| {
             let path = ProjectPath::new(reads);
             let message = match content.read(&path) {
                 Some(bytes) => format!("read {} bytes", bytes.len()),
@@ -1044,8 +1043,8 @@ fn extension_dependency_implication() {
             };
             out.finding(
                 "probe",
-                ConductSeverity::Info,
-                ConductTarget::File(path),
+                PluginSeverity::Info,
+                PluginTarget::File(path),
                 Confidence::Probable,
                 message,
             );
@@ -1053,10 +1052,10 @@ fn extension_dependency_implication() {
     };
 
     let p = fixture();
-    let extensions: Vec<Box<dyn Extension>> = vec![
+    let extensions: Vec<Box<dyn Plugin>> = vec![
         Box::new(MockAdapter::new()),
         Box::new(probing(
-            ExtensionSpec::builder("test:framework-a", 1)
+            PluginSpec::builder("test:framework-a", 1)
                 .conduct(
                     Activation::AnyRule(vec![ActivationRule::FileExists("*.kmock".into())]),
                     MutatesGraph::No,
@@ -1071,7 +1070,7 @@ fn extension_dependency_implication() {
         // content view is deny-by-default, budgeted, never ambient. And the
         // hand-written empty rule list IS the dependency-only posture.
         Box::new(probing(
-            ExtensionSpec::builder("test:middleware-b", 1)
+            PluginSpec::builder("test:middleware-b", 1)
                 .conduct(Activation::AnyRule(vec![]), MutatesGraph::No)
                 .dependencies(&["test:leaf-c"])
                 .rule("probe", "reports what the content view let it see")
@@ -1079,21 +1078,21 @@ fn extension_dependency_implication() {
             "lib.kmock",
         )),
         Box::new(
-            MockExtension::scripted(
-                ExtensionSpec::builder("test:leaf-c", 1)
+            MockPlugin::scripted(
+                PluginSpec::builder("test:leaf-c", 1)
                     .conduct(Activation::AnyRule(vec![]), MutatesGraph::Yes)
                     .build(),
             )
             .on_contribute(|_, _, out| {
                 out.root(
-                    ConductTarget::File(ProjectPath::new("orphan.kmock")),
+                    PluginTarget::File(ProjectPath::new("orphan.kmock")),
                     RootKind::Production,
                     Confidence::Certain,
                 );
             }),
         ),
-        Box::new(MockExtension::scripted(
-            ExtensionSpec::builder("test:dormant-d", 1)
+        Box::new(MockPlugin::scripted(
+            PluginSpec::builder("test:dormant-d", 1)
                 .conduct(
                     Activation::AnyRule(vec![ActivationRule::FileExists("never-*.xyz".into())]),
                     MutatesGraph::No,
@@ -1143,11 +1142,11 @@ fn extension_dependency_implication() {
             .clone()
     };
     assert!(
-        probe("ext:test:framework-a/probe").starts_with("read "),
+        probe("plugin:test:framework-a/probe").starts_with("read "),
         "declared access reads the run's own contents"
     );
     assert_eq!(
-        probe("ext:test:middleware-b/probe"),
+        probe("plugin:test:middleware-b/probe"),
         "read denied",
         "undeclared access is denied, not ambient"
     );
@@ -1195,10 +1194,10 @@ fn abi_compat_matrix() {
     // the break. Each world is driven through a real session to a real verdict —
     // loading is not the promise; contributing is.
     let compat = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../abi/compat");
-    let session = |p: &TempProject, conduct: Vec<Box<dyn kndo_core::Extension>>| {
-        let adapter = kndo_host_wasm::WasmExtension::load(&compat.join("kmini_adapter.wasm"))
+    let session = |p: &TempProject, conduct: Vec<Box<dyn kndo_core::Plugin>>| {
+        let adapter = kndo_host_wasm::WasmPlugin::load(&compat.join("kmini_adapter.wasm"))
             .expect("the pinned adapter component loads against the HEAD host");
-        let mut extensions: Vec<Box<dyn kndo_core::Extension>> = vec![Box::new(adapter)];
+        let mut extensions: Vec<Box<dyn kndo_core::Plugin>> = vec![Box::new(adapter)];
         extensions.extend(conduct);
         Session::open(
             p.root(),
@@ -1258,7 +1257,7 @@ fn abi_compat_matrix() {
     p.file("app.kmini", "entry\n");
     p.file("wired.kmini", "fn wired_dead\n");
     p.file("config.probe", "sixteen bytes!!\n");
-    let plugin = kndo_host_wasm::WasmExtension::load(&compat.join("probe_plugin.wasm"))
+    let plugin = kndo_host_wasm::WasmPlugin::load(&compat.join("probe_plugin.wasm"))
         .expect("the pinned plugin component loads against the HEAD host");
     let snap = session(&p, vec![Box::new(plugin)]);
     let contribution = &snap.contributions[0];
@@ -1275,7 +1274,7 @@ fn abi_compat_matrix() {
     assert!(
         snap.findings
             .iter()
-            .any(|f| f.category.as_str() == "ext:demo:probe/note"
+            .any(|f| f.category.as_str() == "plugin:demo:probe/note"
                 && f.message == "config.probe is 16 bytes"),
         "the pinned plugin still probes scoped content: {:#?}",
         snap.findings
@@ -1290,7 +1289,7 @@ fn abi_compat_matrix() {
         "lcov.info",
         "SF:lib.kmini\nFN:1,covered\nFN:2,never_ran\nFNDA:3,covered\nFNDA:0,never_ran\nend_of_record\n",
     );
-    let ingester = kndo_host_wasm::WasmExtension::load(&compat.join("records_ingester.wasm"))
+    let ingester = kndo_host_wasm::WasmPlugin::load(&compat.join("records_ingester.wasm"))
         .expect("the pinned ingester component loads against the HEAD host");
     let snap = session(&p, vec![Box::new(ingester)]);
     assert!(
@@ -1312,9 +1311,9 @@ fn abi_compat_matrix() {
     p.file("app.kmini", "entry\n");
     p.file("routes.acme", "handler index\n");
     p.file("extra.kmini", "fn di_wired\n");
-    let acme = kndo_host_wasm::WasmExtension::load(&compat.join("acme_framework.wasm"))
+    let acme = kndo_host_wasm::WasmPlugin::load(&compat.join("acme_framework.wasm"))
         .expect("the pinned two-cluster component loads against the HEAD host");
-    let probe = kndo_host_wasm::WasmExtension::load(&compat.join("probe_plugin.wasm"))
+    let probe = kndo_host_wasm::WasmPlugin::load(&compat.join("probe_plugin.wasm"))
         .expect("the pinned plugin component loads against the HEAD host");
     let snap = session(&p, vec![Box::new(acme), Box::new(probe)]);
     let coordinates: Vec<&str> = snap
@@ -1377,7 +1376,7 @@ fn agent_format_matches_its_committed_golden() {
     // if the grammar changed meaning, bump AGENT_FORMAT in the same commit.
     use kndo::{
         Abstention, AbstentionReason, AbstentionScope, Category, Confidence, Contribution,
-        DiagnosticLevel, ExtensionRun, Finding, LineSpan, ProjectPath, REPORT_SCHEMA, Report,
+        DiagnosticLevel, Finding, LineSpan, PluginRun, ProjectPath, REPORT_SCHEMA, Report,
         ReportDiagnostic, RunInfo, Severity, Span, Subject, SuppressedSummary, SymbolSelector,
         sort_findings,
     };
@@ -1479,7 +1478,7 @@ fn agent_format_matches_its_committed_golden() {
             files_discovered: 12,
             files_claimed: 11,
             extensions: vec![
-                ExtensionRun {
+                PluginRun {
                     id: SmolStr::new("kndo:python"),
                     files: 7,
                     published_surface: Default::default(),
@@ -1488,7 +1487,7 @@ fn agent_format_matches_its_committed_golden() {
                     dependency_identity: Default::default(),
                     ladder: Default::default(),
                 },
-                ExtensionRun {
+                PluginRun {
                     id: SmolStr::new("kndo:swift"),
                     files: 4,
                     published_surface: Default::default(),
@@ -1993,7 +1992,7 @@ fn every_adapter_declares_its_namespace_in_one_vocabulary() {
 }
 
 /// A file-role glob means what the language means. The declaration is data
-/// ([`kndo_contract::extension::FileRole`]) and the engine applies it, so the
+/// ([`kndo_contract::plugin::FileRole`]) and the engine applies it, so the
 /// one thing that can still be wrong is the SPELLING — a glob whose `**` sits
 /// where the convention does not. Each row is a path the language's own tool
 /// treats that way, asked through the engine's own matcher.
@@ -2150,11 +2149,11 @@ const RETIRED: &[(&str, &str)] = &[
     // which pins the trait's shape rather than scanning for four common words.
     (
         "manifest_dependencies",
-        "Extension::extract_manifest + ManifestSink::dependency",
+        "Plugin::extract_manifest + ManifestSink::dependency",
     ),
     (
         "manifest_mentions",
-        "Extension::extract_manifest + ManifestSink::mention",
+        "Plugin::extract_manifest + ManifestSink::mention",
     ),
     // Roots and generated files, before markers and dispatch rules.
     ("root_for_attrs", "EvidenceSink::marker + DispatchRule"),
@@ -2203,7 +2202,7 @@ const ROOTS_STILL_IN_THE_EXTRACTOR: &[(&str, &str)] = &[
     ),
 ];
 
-/// Every hook the design gives `Extension`, and nothing else. The four manifest
+/// Every hook the design gives `Plugin`, and nothing else. The four manifest
 /// hooks `extract_manifest` replaced were named `roots`, `packages`,
 /// `manifest_dependencies` and `manifest_mentions` — three of those words are
 /// too ordinary to scan for (a `Graph` has roots, a `ResolveContext` has
@@ -2262,13 +2261,13 @@ fn a_retired_mechanism_stays_retired() {
         found.join("\n")
     );
 
-    // The one door an extension speaks through, pinned by its shape: a fifth
+    // The one door a plugin speaks through, pinned by its shape: a fifth
     // manifest hook cannot be added back beside `extract_manifest` without
     // this failing, whatever it is called.
-    let trait_text = std::fs::read_to_string(root.join("crates/kndo-contract/src/extension.rs"))
+    let trait_text = std::fs::read_to_string(root.join("crates/kndo-contract/src/plugin.rs"))
         .expect("the contract is readable");
     let block = trait_text
-        .split_once("pub trait Extension")
+        .split_once("pub trait Plugin")
         .expect("the trait is declared")
         .1;
     let block = &block[..block.find("\n}").expect("the trait closes")];
@@ -2279,7 +2278,7 @@ fn a_retired_mechanism_stays_retired() {
         .collect();
     assert_eq!(
         hooks, HOOKS,
-        "the design gives Extension seven hooks, in this order"
+        "the design gives Plugin seven hooks, in this order"
     );
 
     // No adapter concludes a root the design says a rule states — except the

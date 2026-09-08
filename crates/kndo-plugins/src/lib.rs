@@ -19,11 +19,11 @@
 //! about a Swift file.
 //!
 //! Each pack states its measured population in its own module doc, and every
-//! shipped pack carries the baseline-then-pack proof `builtin_conduct_proofs`
+//! shipped pack carries the baseline-then-pack proof `builtin_plugin_proofs`
 //! demands of every conducting coordinate.
 //!
-//! [`Activation`]: kndo_contract::extension::Activation
-//! [`DispatchRule`]: kndo_contract::extension::DispatchRule
+//! [`Activation`]: kndo_contract::plugin::Activation
+//! [`DispatchRule`]: kndo_contract::plugin::DispatchRule
 
 mod spring;
 

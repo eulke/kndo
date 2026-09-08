@@ -1,5 +1,5 @@
 //! The unified extension surface — ONE species. An extension declares everything
-//! it does in an [`ExtensionSpec`] and implements the hooks for the capabilities
+//! it does in an [`PluginSpec`] and implements the hooks for the capabilities
 //! it declared; the engine routes by the spec and never invokes an undeclared
 //! hook. Claims gate the extraction cluster; activation gates conduct and
 //! ingestion — gathering evidence is ungated fact-collection, emitting judgment
@@ -74,7 +74,7 @@ pub enum ActivationRule {
     /// whose build file the run never sees.
     ///
     /// COARSE by construction, and never a verdict. Activation is decided
-    /// before any file is parsed (see `kndo_core::conduct::activate`), so the
+    /// before any file is parsed (see `kndo_core::plugin::activate`), so the
     /// engine matches the pattern's literal stem against file text: a
     /// specifier named in a comment or a string opens the gate too. What the
     /// pack then DOES is decided by its triggers, which read extracted
@@ -105,11 +105,11 @@ pub struct RuleDescriptor {
 }
 
 /// Whether this extension contributes to graph assembly through
-/// [`Extension::contribute_roots`]. Load-bearing, not a hint: any ACTIVE
+/// [`Plugin::contribute_roots`]. Load-bearing, not a hint: any ACTIVE
 /// graph-mutating extension bypasses the persisted graph cache for the run — the
 /// surgical patch never re-invokes conduct hooks, so it can never safely reuse a
 /// graph one influenced. An enum rather than a bool so the decision reads at the
-/// call site, and an argument of [`ExtensionSpecBuilder::conduct`] rather than a
+/// call site, and an argument of [`PluginSpecBuilder::conduct`] rather than a
 /// defaulted field so declaring conduct without deciding it does not compile.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MutatesGraph {
@@ -958,7 +958,7 @@ pub struct DispatchRule {
 /// conduct (gated by `activation` + `mutates_graph`), ingestion (gated by
 /// `activation` + `reads_reports`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct ExtensionSpec {
+pub struct PluginSpec {
     coordinate: SmolStr,
     version: u32,
     // -- extraction --
@@ -998,14 +998,14 @@ pub struct ExtensionSpec {
     reads_reports: Vec<SmolStr>,
 }
 
-impl ExtensionSpec {
+impl PluginSpec {
     /// Stage one of the two-stage builder: identity and the extraction cluster.
     /// The conduct and ingestion methods do not exist here — they live on the
-    /// builder [`ExtensionSpecBuilder::conduct`] returns, which demands the two
+    /// builder [`PluginSpecBuilder::conduct`] returns, which demands the two
     /// gates as arguments. Forgetting a gate is not a panic; it does not compile.
-    pub fn builder(coordinate: &'static str, version: u32) -> ExtensionSpecBuilder {
-        ExtensionSpecBuilder {
-            spec: ExtensionSpec {
+    pub fn builder(coordinate: &'static str, version: u32) -> PluginSpecBuilder {
+        PluginSpecBuilder {
+            spec: PluginSpec {
                 coordinate: SmolStr::new_static(coordinate),
                 version,
                 suffixes: Vec::new(),
@@ -1147,13 +1147,13 @@ impl ExtensionSpec {
     }
 
     /// Files read for the roots they declare and nothing else — see
-    /// [`ExtensionSpecBuilder::launchers`].
+    /// [`PluginSpecBuilder::launchers`].
     pub fn launchers(&self) -> &[SmolStr] {
         &self.launchers
     }
 
     /// Paths this language's own tool never compiles — see
-    /// [`ExtensionSpecBuilder::ignores`]. The claim pass and the manifest pass
+    /// [`PluginSpecBuilder::ignores`]. The claim pass and the manifest pass
     /// are the consumers: a file under one is discovered and never claimed by
     /// this extension, and a manifest under one is never read.
     pub fn ignores(&self) -> &[SmolStr] {
@@ -1161,7 +1161,7 @@ impl ExtensionSpec {
     }
 
     /// Whose dependencies this language's bare specifiers name — see
-    /// [`ExtensionSpecBuilder::ecosystem`]. `None` (the default) means its
+    /// [`PluginSpecBuilder::ecosystem`]. `None` (the default) means its
     /// own: a bare specifier is judged against the manifests this extension
     /// itself claims.
     pub fn ecosystem(&self) -> Option<&SmolStr> {
@@ -1169,7 +1169,7 @@ impl ExtensionSpec {
     }
 
     /// Dot-named directories this language's tooling lives in — see
-    /// [`ExtensionSpecBuilder::hidden_opt_in`]. Discovery is the consumer,
+    /// [`PluginSpecBuilder::hidden_opt_in`]. Discovery is the consumer,
     /// and it already admits the dot-named segments of every declared
     /// manifest and launcher glob; this is what a language knows BESIDE
     /// those.
@@ -1206,7 +1206,7 @@ impl ExtensionSpec {
 
     /// Root-relative report paths the engine reads through its well-known channel
     /// (run output is gitignored — discovery never sees it) and pushes to
-    /// [`Extension::ingest`], in declaration order.
+    /// [`Plugin::ingest`], in declaration order.
     pub fn reads_reports(&self) -> &[SmolStr] {
         &self.reads_reports
     }
@@ -1218,7 +1218,7 @@ impl ExtensionSpec {
 /// fields can swap silently. `conducts` is the loader's statement of which side
 /// of the door the component's world sits on until the worlds unify.
 #[derive(Debug, Default)]
-pub struct ExtensionSpecParts {
+pub struct PluginSpecParts {
     pub coordinate: SmolStr,
     pub version: u32,
     pub suffixes: Vec<SmolStr>,
@@ -1256,7 +1256,7 @@ pub struct ExtensionSpecParts {
 }
 
 impl Default for Activation {
-    /// The inert neutral (see [`ExtensionSpec::builder`]); a conducting spec
+    /// The inert neutral (see [`PluginSpec::builder`]); a conducting spec
     /// assembled from wire parts carries the activation its component declared.
     fn default() -> Self {
         Activation::Always
@@ -1269,9 +1269,9 @@ impl Default for EvidenceStreams {
     }
 }
 
-impl From<ExtensionSpecParts> for ExtensionSpec {
-    fn from(parts: ExtensionSpecParts) -> ExtensionSpec {
-        ExtensionSpec {
+impl From<PluginSpecParts> for PluginSpec {
+    fn from(parts: PluginSpecParts) -> PluginSpec {
+        PluginSpec {
             coordinate: parts.coordinate,
             version: parts.version,
             suffixes: parts.suffixes,
@@ -1319,12 +1319,12 @@ pub(crate) fn declare_suffixes(
     }
 }
 
-/// Identity + extraction. See [`ExtensionSpec::builder`].
-pub struct ExtensionSpecBuilder {
-    spec: ExtensionSpec,
+/// Identity + extraction. See [`PluginSpec::builder`].
+pub struct PluginSpecBuilder {
+    spec: PluginSpec,
 }
 
-impl ExtensionSpecBuilder {
+impl PluginSpecBuilder {
     /// Declare the file suffixes this extension speaks (no leading dot), in
     /// resolution-candidate priority order — see [`declare_suffixes`]; `claims`
     /// stays for patterns that are not extension-shaped.
@@ -1358,7 +1358,7 @@ impl ExtensionSpecBuilder {
     }
 
     /// Declare the suffixes of files outside this extension's claims that carry
-    /// its ecosystem's imports (see [`ExtensionSpec::dependency_importers`]).
+    /// its ecosystem's imports (see [`PluginSpec::dependency_importers`]).
     /// Omitted ⇒ none: only the files this extension claims import, and an
     /// unclaimed file never makes the dependency-usage judgment abstain.
     pub fn dependency_importers(mut self, suffixes: &'static [&'static str]) -> Self {
@@ -1448,7 +1448,7 @@ impl ExtensionSpecBuilder {
         self
     }
 
-    /// Omitted ⇒ no manifests consulted and [`Extension::roots`] never called —
+    /// Omitted ⇒ no manifests consulted and [`Plugin::roots`] never called —
     /// the default-compatibility rule.
     pub fn manifests(mut self, globs: &[&'static str]) -> Self {
         self.spec.manifests = globs.iter().map(|g| SmolStr::new_static(g)).collect();
@@ -1457,7 +1457,7 @@ impl ExtensionSpecBuilder {
 
     /// Files that RUN the project's files without being package manifests — a
     /// CI workflow, an action definition, a task runner's file. Each is handed
-    /// to [`Extension::roots`] like a manifest, and to nothing else: a launcher
+    /// to [`Plugin::roots`] like a manifest, and to nothing else: a launcher
     /// declares no package, no dependencies and no mentions, and owns no files,
     /// so a step's directory never becomes a package whose imports are judged
     /// against empty declarations. A glob naming a dot-directory (`.github`)
@@ -1513,29 +1513,25 @@ impl ExtensionSpecBuilder {
     /// forgotten `MutatesGraph` answer either breaks incremental analysis for
     /// everyone or corrupts it. The dependency-only posture is written by hand:
     /// `Activation::AnyRule(vec![])`.
-    pub fn conduct(
-        mut self,
-        activation: Activation,
-        mutates_graph: MutatesGraph,
-    ) -> ConductBuilder {
+    pub fn conduct(mut self, activation: Activation, mutates_graph: MutatesGraph) -> PluginBuilder {
         self.spec.conducts = true;
         self.spec.activation = activation;
         self.spec.mutates_graph = mutates_graph.as_bool();
-        ConductBuilder { spec: self.spec }
+        PluginBuilder { spec: self.spec }
     }
 
-    pub fn build(self) -> ExtensionSpec {
+    pub fn build(self) -> PluginSpec {
         self.spec
     }
 }
 
 /// Stage two: conduct and ingestion, reachable only through
-/// [`ExtensionSpecBuilder::conduct`].
-pub struct ConductBuilder {
-    spec: ExtensionSpec,
+/// [`PluginSpecBuilder::conduct`].
+pub struct PluginBuilder {
+    spec: PluginSpec,
 }
 
-impl ConductBuilder {
+impl PluginBuilder {
     pub fn rule(mut self, name: &'static str, description: &'static str) -> Self {
         assert!(
             !name.contains('/'),
@@ -1564,13 +1560,13 @@ impl ConductBuilder {
         self
     }
 
-    /// Root-relative report paths for [`Extension::ingest`], tried in order.
+    /// Root-relative report paths for [`Plugin::ingest`], tried in order.
     pub fn reads_reports(mut self, paths: &[&'static str]) -> Self {
         self.spec.reads_reports = paths.iter().map(|p| SmolStr::new_static(p)).collect();
         self
     }
 
-    pub fn build(self) -> ExtensionSpec {
+    pub fn build(self) -> PluginSpec {
         self.spec
     }
 }
@@ -1579,20 +1575,20 @@ impl ConductBuilder {
 /// engine maps it into the advisory channel, so an extension can never construct
 /// a gate-eligible finding directly.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ConductSeverity {
+pub enum PluginSeverity {
     Error,
     Warning,
     Info,
 }
 
-impl ConductSeverity {
+impl PluginSeverity {
     /// The advisory mapping the engine applies; findings so mapped ride the
     /// namespaced categories the gate never counts.
     pub fn advisory(self) -> Severity {
         match self {
-            ConductSeverity::Error => Severity::Error,
-            ConductSeverity::Warning => Severity::Warning,
-            ConductSeverity::Info => Severity::Info,
+            PluginSeverity::Error => Severity::Error,
+            PluginSeverity::Warning => Severity::Warning,
+            PluginSeverity::Info => Severity::Info,
         }
     }
 }
@@ -1602,7 +1598,7 @@ impl ConductSeverity {
 /// author debugging "contributed 0 roots" needs the why; the run never crashes
 /// on it.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ConductTarget {
+pub enum PluginTarget {
     File(ProjectPath),
     Symbol { path: ProjectPath, name: SmolStr },
 }
@@ -1620,7 +1616,7 @@ pub trait GraphAccess {
     /// Every declaration in the graph — file by file in path order, in
     /// declaration order within a file. A name an extension reads outside the
     /// code (a storyboard's class, a plist's principal class) becomes a
-    /// [`ConductTarget::Symbol`] only through here: the graph alone knows
+    /// [`PluginTarget::Symbol`] only through here: the graph alone knows
     /// where, and whether, the name is declared.
     fn declarations(&self) -> Box<dyn Iterator<Item = DeclaredSymbol<'_>> + '_>;
 }
@@ -1657,7 +1653,7 @@ impl<'a> DeclaredSymbol<'a> {
 /// twin, so consumers name fields instead of destructuring positions.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ContributedRoot {
-    pub target: ConductTarget,
+    pub target: PluginTarget,
     pub kind: RootKind,
     pub confidence: Confidence,
 }
@@ -1668,26 +1664,26 @@ pub struct ContributedRoot {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ContributedFinding {
     pub rule: SmolStr,
-    pub severity: ConductSeverity,
-    pub target: ConductTarget,
+    pub severity: PluginSeverity,
+    pub target: PluginTarget,
     pub confidence: Confidence,
     pub message: String,
 }
 
 #[derive(Default)]
-pub struct ConductSink {
+pub struct PluginSink {
     roots: Vec<ContributedRoot>,
     findings: Vec<ContributedFinding>,
     notes: Vec<String>,
 }
 
-impl ConductSink {
+impl PluginSink {
     /// Anchor liveness the language cannot see: a route file, a DI-registered
     /// symbol. Applied to the graph only from extensions whose spec declares
     /// `mutates_graph` — the declaration is self-enforcing, because the hook
     /// that fills this is only invoked on those; anything smuggled through the
     /// shared sink drops with a described line.
-    pub fn root(&mut self, target: ConductTarget, kind: RootKind, confidence: Confidence) {
+    pub fn root(&mut self, target: PluginTarget, kind: RootKind, confidence: Confidence) {
         self.roots.push(ContributedRoot {
             target,
             kind,
@@ -1700,8 +1696,8 @@ impl ConductSink {
     pub fn finding(
         &mut self,
         rule: &str,
-        severity: ConductSeverity,
-        target: ConductTarget,
+        severity: PluginSeverity,
+        target: PluginTarget,
         confidence: Confidence,
         message: impl Into<String>,
     ) {
@@ -1829,13 +1825,13 @@ impl ContentAccess for ContentView<'_> {
     }
 }
 
-/// The one door. Every hook has an abstaining default; [`Extension::spec`] is the
+/// The one door. Every hook has an abstaining default; [`Plugin::spec`] is the
 /// only obligation. The engine invokes a hook only when the spec declares its
 /// capability: extraction hooks for claimed files, manifest hooks for declared
 /// manifest globs, conduct hooks under activation (+ `mutates_graph` for roots),
 /// ingestion under activation for declared report paths.
-pub trait Extension: Send + Sync {
-    fn spec(&self) -> &ExtensionSpec;
+pub trait Plugin: Send + Sync {
+    fn spec(&self) -> &PluginSpec;
 
     // ---- extraction: per file, pure in (bytes, spec version); gated by claims ----
 
@@ -1859,7 +1855,7 @@ pub trait Extension: Send + Sync {
     /// Everything one manifest SAYS about the project: its units with their
     /// source roots, excludes and entries; the packages it declares; its
     /// dependencies and the names it mentions; the files it runs. The mirror
-    /// of [`Extension::extract`] — transcription of a project fact, which is
+    /// of [`Plugin::extract`] — transcription of a project fact, which is
     /// why claims gate it and activation does not, called for every discovered
     /// file matching the spec's manifest and launcher globs. Unparseable or
     /// dangling entries degrade to absence: structure nobody stated is
@@ -1884,7 +1880,7 @@ pub trait Extension: Send + Sync {
         &self,
         graph: &dyn GraphAccess,
         content: &dyn ContentAccess,
-        out: &mut ConductSink,
+        out: &mut PluginSink,
     ) {
         let _ = (graph, content, out);
     }
@@ -1894,7 +1890,7 @@ pub trait Extension: Send + Sync {
         &self,
         graph: &dyn GraphAccess,
         content: &dyn ContentAccess,
-        out: &mut ConductSink,
+        out: &mut PluginSink,
     ) {
         let _ = (graph, content, out);
     }
@@ -1917,7 +1913,7 @@ mod tests {
 
     #[test]
     fn the_two_stage_builder_produces_the_declared_spec() {
-        let extraction_only = ExtensionSpec::builder("kndo:kmini", 3)
+        let extraction_only = PluginSpec::builder("kndo:kmini", 3)
             .suffixes(&["kmini"])
             .claims(&["**/legacy.km"])
             .manifests(&["kmini.toml"])
@@ -1934,7 +1930,7 @@ mod tests {
         assert!(extraction_only.rules().is_empty());
         assert!(extraction_only.reads_reports().is_empty());
 
-        let conduct = ExtensionSpec::builder("acme:framework", 1)
+        let conduct = PluginSpec::builder("acme:framework", 1)
             .conduct(
                 Activation::AnyRule(vec![ActivationRule::ManifestDependency(
                     SmolStr::new_static("acme-framework"),
@@ -1949,7 +1945,7 @@ mod tests {
         assert_eq!(conduct.dependencies(), ["kndo:express"]);
         assert_eq!(conduct.rules().len(), 1);
 
-        let ingester = ExtensionSpec::builder("kndo:coverage-lcov", 1)
+        let ingester = PluginSpec::builder("kndo:coverage-lcov", 1)
             .conduct(Activation::Always, MutatesGraph::No)
             .reads_reports(&["coverage/lcov.info", "lcov.info"])
             .build();
@@ -2051,9 +2047,9 @@ mod tests {
 
     #[test]
     fn every_hook_defaults_to_abstention() {
-        struct Bare(ExtensionSpec);
-        impl Extension for Bare {
-            fn spec(&self) -> &ExtensionSpec {
+        struct Bare(PluginSpec);
+        impl Plugin for Bare {
+            fn spec(&self) -> &PluginSpec {
                 &self.0
             }
         }
@@ -2070,7 +2066,7 @@ mod tests {
             }
         }
 
-        let bare = Bare(ExtensionSpec::builder("demo:bare", 1).build());
+        let bare = Bare(PluginSpec::builder("demo:bare", 1).build());
         let cx_files = BTreeSet::new();
         let cx = ResolveContext::new(&cx_files);
         let from = ProjectPath::new("a.js");
@@ -2091,7 +2087,7 @@ mod tests {
 
         let contents = BTreeMap::new();
         let view = ContentView::new(&contents, bare.spec().requested_file_access());
-        let mut sink = ConductSink::default();
+        let mut sink = PluginSink::default();
         bare.contribute_roots(&NoGraph, &view, &mut sink);
         bare.report_findings(&NoGraph, &view, &mut sink);
         let (roots, findings, _) = sink.into_parts();

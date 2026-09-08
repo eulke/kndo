@@ -1,5 +1,5 @@
 //! The host half of the ABI: wasmtime, isolated. Loads `kndo:vocab@1` components
-//! through the ONE world and adapts them onto the same [`Extension`] trait the
+//! through the ONE world and adapts them onto the same [`Plugin`] trait the
 //! built-ins implement — so the engine cannot tell tiers apart and every
 //! containment rule (budgets, drops, the graph-cache bypass, namespaced
 //! findings, phase discipline) applies identically by construction.
@@ -9,9 +9,9 @@
 
 mod convert;
 mod engine;
-mod extension;
+mod plugin;
 
-pub use extension::WasmExtension;
+pub use plugin::WasmPlugin;
 
 /// A component that could not become a citizen. Everything AFTER a successful load
 /// degrades instead (a trap contributes nothing); refusing to load is the one
@@ -39,7 +39,7 @@ pub mod bindings {
 
     wasmtime::component::bindgen!({
         path: "../../wit",
-        world: "extension",
+        world: "plugin",
         trappable_imports: true,
     });
 }

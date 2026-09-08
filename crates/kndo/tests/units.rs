@@ -8,10 +8,10 @@ mod common;
 use common::reported;
 use kndo::Category;
 use kndo_contract::manifest::UnitKind;
-use kndo_testkit::{MockExtension, TempProject};
+use kndo_testkit::{MockPlugin, TempProject};
 
 fn run(project: &TempProject) -> kndo::Snapshot {
-    common::analyze(project, vec![Box::new(MockExtension::new())])
+    common::analyze(project, vec![Box::new(MockPlugin::new())])
 }
 
 fn unit_of<'s>(snap: &'s kndo::Snapshot, path: &str) -> Option<&'s str> {
@@ -107,9 +107,9 @@ fn a_manifest_root_carries_its_own_confidence_and_a_unit_entry_is_certain() {
 }
 
 /// The kmock language whose units publish every export, like a jar.
-fn publishing_exports() -> MockExtension {
-    MockExtension::with(|spec| {
-        spec.published_surface(kndo_contract::extension::PublishedSurface::Exports)
+fn publishing_exports() -> MockPlugin {
+    MockPlugin::with(|spec| {
+        spec.published_surface(kndo_contract::plugin::PublishedSurface::Exports)
     })
 }
 
@@ -216,9 +216,9 @@ fn a_published_units_exports_are_the_outside_worlds() {
 
 #[test]
 fn an_export_of_an_unpublished_unit_may_narrow() {
-    use kndo_contract::extension::{PublishedSurface, Rung, Step};
+    use kndo_contract::plugin::{PublishedSurface, Rung, Step};
     let laddered_jar = || {
-        MockExtension::with(|spec| {
+        MockPlugin::with(|spec| {
             spec.published_surface(PublishedSurface::Exports).ladder(&[
                 Step::for_free(Rung::File, "local"),
                 Step::new(Rung::Exported, "pub"),

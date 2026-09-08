@@ -112,7 +112,7 @@ fn references_that_leave_the_project_are_not_imports() {
 fn a_binary_file_yields_nothing_and_says_nothing() {
     let mut sink =
         kndo_contract::evidence::EvidenceSink::new(3, HtmlAdapter::new().spec().emits().clone());
-    use kndo_contract::extension::Extension;
+    use kndo_contract::plugin::Plugin;
     HtmlAdapter::new().extract(
         &kndo_contract::adapter::SourceFile {
             path: &kndo_contract::vocab::ProjectPath::new("x.html"),

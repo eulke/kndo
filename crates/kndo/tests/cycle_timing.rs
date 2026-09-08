@@ -6,10 +6,10 @@ mod common;
 
 use common::reported as categories;
 use kndo::Category;
-use kndo_testkit::{MockExtension, TempProject};
+use kndo_testkit::{MockPlugin, TempProject};
 
 fn run(project: &TempProject) -> kndo::Snapshot {
-    common::analyze(project, vec![Box::new(MockExtension::hazardous())])
+    common::analyze(project, vec![Box::new(MockPlugin::hazardous())])
 }
 
 #[test]

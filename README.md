@@ -294,9 +294,9 @@ Complete (CI verification pending only the credits reset, like M0–M2):
 ## M6 — status
 
 - **M6.a — done: the unified extension mechanism.** One species — extension —
-  replaced the adapter/plugin/ingester taxonomy: one `ExtensionSpec` with the
+  replaced the adapter/plugin/ingester taxonomy: one `PluginSpec` with the
   two-stage builder (`.conduct(activation, MutatesGraph)` is the compile-time
-  key to the conduct cluster), one `Extension` trait in the contract that
+  key to the conduct cluster), one `Plugin` trait in the contract that
   built-ins, embedders and WASM guests all implement, one WIT world with
   host-enforced phase discipline, one load path. Batch 1 landed the mechanism
   under the old names with PURE byte-identity held across all four commits;
@@ -470,7 +470,7 @@ vite 30 real, zero elsewhere, zero noise.
 
 **`cyclic`** completes the risk family's first member: SCCs over import edges,
 one warning per cycle with the shortest loop as its evidence chain, and hazard
-as the language's OWN declaration (`ExtensionSpec::import_cycles` — js-ts and
+as the language's OWN declaration (`PluginSpec::import_cycles` — js-ts and
 python say so; go/rust/JVM/swift tolerance is silence, retiring v1's JVM
 file-cycle vice). Corpus: vite 31 — the 88-file node tangle included — and
 flask 3, the package's own circular-import knot v1 never measured.
@@ -568,7 +568,7 @@ entry, never a builder's shortcut.
   serde, rkyv and wasmtime have no subjects in v2 by construction; nextjs measured
   zero demand; thymeleaf and libsass wait for M7.d's html and css adapters.
   Conduct gained `GraphAccess::declarations()` — the one door from a name read in
-  an artifact to a `ConductTarget` — natively and across the ABI.
+  an artifact to a `PluginTarget` — natively and across the ABI.
 - **M7.d — the web adapters** — **shipped 2026-09-02**: `kndo:html` (a document
   roots itself; `script[src]`, code-loading `link[href]` and the import statements
   of inline module scripts are its edges; resolution is the js-ts adapter's, plus

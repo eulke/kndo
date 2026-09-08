@@ -21,7 +21,7 @@
 # Extending kndo
 
 - [Languages](languages.md)
-- [Extensions](extensions.md)
+- [Extensions](plugins.md)
 
 ---
 

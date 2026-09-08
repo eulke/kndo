@@ -10,15 +10,15 @@ use kndo_contract::adapter::SourceFile;
 use kndo_contract::evidence::{
     EvidenceSink, EvidenceStreams, Reach, RootKind, RootTarget, SymbolKind,
 };
-use kndo_contract::extension::{
-    Activation, ActivationRule, ConductSink, ConductTarget, ContentAccess, Extension,
-    ExtensionSpec, GraphAccess, MutatesGraph,
+use kndo_contract::plugin::{
+    Activation, ActivationRule, PluginSink, PluginTarget, ContentAccess, Plugin,
+    PluginSpec, GraphAccess, MutatesGraph,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use std::sync::LazyLock;
 
-static SPEC: LazyLock<ExtensionSpec> = LazyLock::new(|| {
-    ExtensionSpec::builder("acme:framework", 1)
+static SPEC: LazyLock<PluginSpec> = LazyLock::new(|| {
+    PluginSpec::builder("acme:framework", 1)
         .suffixes(&["acme"])
         .emits(EvidenceStreams::none())
         .conduct(
@@ -34,8 +34,8 @@ static SPEC: LazyLock<ExtensionSpec> = LazyLock::new(|| {
 #[derive(Default)]
 struct AcmeFramework;
 
-impl Extension for AcmeFramework {
-    fn spec(&self) -> &ExtensionSpec {
+impl Plugin for AcmeFramework {
+    fn spec(&self) -> &PluginSpec {
         &SPEC
     }
 
@@ -66,11 +66,11 @@ impl Extension for AcmeFramework {
         &self,
         graph: &dyn GraphAccess,
         _content: &dyn ContentAccess,
-        out: &mut ConductSink,
+        out: &mut PluginSink,
     ) {
         if graph.contains(&ProjectPath::new("extra.kmini")) {
             out.root(
-                ConductTarget::Symbol {
+                PluginTarget::Symbol {
                     path: ProjectPath::new("extra.kmini"),
                     name: "di_wired".into(),
                 },

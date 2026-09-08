@@ -2,14 +2,14 @@
 //! the extensions it names, and read one category's subjects back.
 
 use kndo::query::{Answer, Outcome, Request, Verb};
-use kndo::{CacheLocation, Category, Config, Extension, RunMode, Session, Threads};
+use kndo::{CacheLocation, Category, Config, Plugin, RunMode, Session, Threads};
 use kndo_testkit::TempProject;
 
 // Rust compiles a shared test module once per test BINARY, so a helper another
 // binary uses reads as dead here — the harness's wart, per item rather than a
 // file-level blanket, which kndo would (rightly) report as one.
 #[allow(dead_code)]
-pub fn analyze(project: &TempProject, extensions: Vec<Box<dyn Extension>>) -> kndo::Snapshot {
+pub fn analyze(project: &TempProject, extensions: Vec<Box<dyn Plugin>>) -> kndo::Snapshot {
     let session = Session::open(
         project.root(),
         Config {

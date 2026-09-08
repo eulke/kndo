@@ -60,7 +60,7 @@ Entry points are not configured either: they come from manifests
 (`package.json` entries and scripts, `Cargo.toml`, `go.mod`, `pom.xml`,
 `Package.swift`, …), from launchers (workflow and action steps), from
 conventions (test files, config files, shebangs), and from
-[extensions](extensions.md) that know a framework. When something is reported
+[extensions](plugins.md) that know a framework. When something is reported
 unused because only a framework reaches it, the fix is an extension or a
 [suppression](suppressions.md) with the reason written down — not a list of
 paths in a config file that no one can verify.

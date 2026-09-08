@@ -22,14 +22,14 @@ mod resolve;
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::EvidenceSink;
 use kndo_contract::evidence::RootKind;
-use kndo_contract::extension::{
-    DispatchRule, Effect, Extension, ExtensionSpec, FileRole, Nesting, Rung, Step, Trigger,
-};
 use kndo_contract::manifest::ManifestSink;
+use kndo_contract::plugin::{
+    DispatchRule, Effect, FileRole, Nesting, Plugin, PluginSpec, Rung, Step, Trigger,
+};
 use kndo_contract::vocab::ProjectPath;
 
 pub struct GoAdapter {
-    spec: ExtensionSpec,
+    spec: PluginSpec,
 }
 
 /// What Go's own toolchain does with a name, as data. `go test` compiles a
@@ -83,7 +83,7 @@ impl GoAdapter {
                 &["**/go.mod"],
                 // The compiler forbids import cycles: one could only be a
                 // resolution artifact here.
-                kndo_contract::extension::CycleTolerance::Tolerated,
+                kndo_contract::plugin::CycleTolerance::Tolerated,
             )
             // The go tool's own rule: a file whose NAME begins with `_` is in
             // no package at all, and `vendor` holds copies of other modules,
@@ -116,11 +116,11 @@ impl GoAdapter {
             ])
             // go.mod has no sections: every direct requirement is a build
             // requirement, and "only tests import it" has nowhere to move.
-            .dependency_scoping(kndo_contract::extension::DependencyScoping::Unscoped)
+            .dependency_scoping(kndo_contract::plugin::DependencyScoping::Unscoped)
             // An import path names the module whose path prefixes it; a path
             // whose first segment carries no `.` is the standard library.
-            .dependency_identity(kndo_contract::extension::DependencyIdentity::ModulePath)
-            .dependency_builtins(kndo_contract::extension::DependencyBuiltins::UndottedFirstSegment)
+            .dependency_identity(kndo_contract::plugin::DependencyIdentity::ModulePath)
+            .dependency_builtins(kndo_contract::plugin::DependencyBuiltins::UndottedFirstSegment)
             .build(),
         }
     }
@@ -132,8 +132,8 @@ impl Default for GoAdapter {
     }
 }
 
-impl Extension for GoAdapter {
-    fn spec(&self) -> &ExtensionSpec {
+impl Plugin for GoAdapter {
+    fn spec(&self) -> &PluginSpec {
         &self.spec
     }
 

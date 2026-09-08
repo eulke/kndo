@@ -411,7 +411,7 @@ interface types {
         entries,
     }
 
-    /// Mirrors `ExtensionSpec` — the ONE manifest for every capability, claims
+    /// Mirrors `PluginSpec` — the ONE manifest for every capability, claims
     /// already derived (the guest-side builder does the extension-to-glob
     /// derivation; the wire carries the finished list). `coordinate` is identity
     /// AND provenance; the `kndo:` namespace is reserved for built-ins — the host
@@ -480,7 +480,7 @@ interface types {
         undotted-first-segment,
     }
 
-    record extension-spec {
+    record plugin-spec {
         coordinate: string,
         version: u32,
         suffixes: list<string>,
@@ -675,7 +675,7 @@ interface types {
 
     /// Mirrors `PluginSeverity` — a plugin's own vocabulary, mapped host-side into
     /// the advisory channel; a guest can never construct a gate-eligible finding.
-    enum conduct-severity {
+    enum plugin-severity {
         error,
         warning,
         info,
@@ -687,7 +687,7 @@ interface types {
         name: string,
     }
 
-    variant conduct-target {
+    variant plugin-target {
         file(string),
         symbol(symbol-ref),
     }
@@ -702,15 +702,15 @@ interface types {
     }
 
     record contributed-root {
-        target: conduct-target,
+        target: plugin-target,
         kind: root-kind,
         confidence: confidence,
     }
 
     record contributed-finding {
         rule: string,
-        severity: conduct-severity,
-        target: conduct-target,
+        severity: plugin-severity,
+        target: plugin-target,
         /// The extension's own claim about this finding — a fact parsed from a
         /// lockfile is certain, a heuristic possible; carried verbatim.
         confidence: confidence,

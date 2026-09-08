@@ -9,7 +9,7 @@
 //! evidence chain.
 //!
 //! Whether a cycle is worth a finding is a LANGUAGE fact, declared per adapter
-//! as [`kndo_contract::extension::CycleTolerance`] and read here from
+//! as [`kndo_contract::plugin::CycleTolerance`] and read here from
 //! [`super::RunContext::cycle_hazards`]: a cycle fires iff at least one
 //! participant's language calls cycles a hazard — the hazard is real for that
 //! language — and a cycle whose every participant tolerates them is true
@@ -43,7 +43,7 @@ impl Analysis for Cyclic {
             .iter()
             .map(|f| {
                 cx.run.capabilities_of(&f.adapter).is_some_and(|caps| {
-                    caps.import_cycles == kndo_contract::extension::CycleTolerance::Hazard
+                    caps.import_cycles == kndo_contract::plugin::CycleTolerance::Hazard
                 })
             })
             .collect();

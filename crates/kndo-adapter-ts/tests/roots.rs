@@ -9,8 +9,8 @@ use kndo_adapter_ts::TypeScriptAdapter;
 use kndo_contract::adapter::DependencyScope;
 use kndo_contract::adapter::SourceFile;
 use kndo_contract::evidence::{Attachment, EvidenceSink, MarkerTarget, RootKind, RootTarget};
-use kndo_contract::extension::Extension;
 use kndo_contract::manifest::{ManifestEvidence, Publication, UnitKind};
+use kndo_contract::plugin::Plugin;
 use kndo_contract::vocab::ProjectPath;
 
 fn evidence(manifest_path: &str, json: &str, files: &[&str]) -> ManifestEvidence {

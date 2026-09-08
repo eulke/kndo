@@ -10,7 +10,7 @@
 
 use crate::graph::Graph;
 use kndo_contract::evidence::FileEvidence;
-use kndo_contract::extension::{Extension, ExtensionSpec};
+use kndo_contract::plugin::{Plugin, PluginSpec};
 use kndo_contract::vocab::ProjectPath;
 use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
@@ -35,7 +35,7 @@ impl EvidenceCache {
 
     fn entry_path(
         &self,
-        spec: &ExtensionSpec,
+        spec: &PluginSpec,
         path: &ProjectPath,
         content_hash: &[u8; 32],
     ) -> Option<PathBuf> {
@@ -66,10 +66,10 @@ impl EvidenceCache {
     /// could learn, so it is checked here instead of hashed.
     pub fn get(
         &self,
-        spec: &ExtensionSpec,
+        spec: &PluginSpec,
         path: &ProjectPath,
         content_hash: &[u8; 32],
-        extensions: &[Box<dyn Extension>],
+        extensions: &[Box<dyn Plugin>],
     ) -> Option<FileEvidence> {
         let path = self.entry_path(spec, path, content_hash)?;
         let bytes = std::fs::read(path).ok()?;
@@ -95,7 +95,7 @@ impl EvidenceCache {
     /// handed to — for [`EvidenceCache::get`] to check.
     pub fn put(
         &self,
-        spec: &ExtensionSpec,
+        spec: &PluginSpec,
         path: &ProjectPath,
         content_hash: &[u8; 32],
         evidence: &FileEvidence,

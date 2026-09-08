@@ -68,7 +68,7 @@ fn a_wasm_language_and_plugin_run_from_kndo_plugins_through_the_cli() {
     assert!(
         findings
             .iter()
-            .any(|f| f["category"] == "ext:demo:probe/note"
+            .any(|f| f["category"] == "plugin:demo:probe/note"
                 && f["message"] == "config.probe is 16 bytes"),
         "{}",
         out.stdout

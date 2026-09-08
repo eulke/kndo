@@ -9,7 +9,7 @@ use kndo_contract::evidence::{
     Attachment, FileEvidence, ImportShape, ImportTarget, MarkerTarget, Reach, RootKind, RootTarget,
     SymbolKind,
 };
-use kndo_contract::extension::Extension;
+use kndo_contract::plugin::Plugin;
 
 fn extract(path: &str, source: &str) -> FileEvidence {
     kndo_testkit::extract_evidence(&GoAdapter::new(), path, source)

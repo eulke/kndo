@@ -1,7 +1,7 @@
 //! The coverage extensions — ALL the format knowledge in one crate, and only
 //! format knowledge: each parser turns one report format into the contract's
 //! records ("what the report states", in the report's own path spelling), and
-//! each built-in ingester is that parser behind the same [`Extension`] trait
+//! each built-in ingester is that parser behind the same [`Plugin`] trait
 //! everything else implements. No I/O and no engine dependency by design: the
 //! crate compiles natively (the built-ins) and to WASM (the reference external
 //! ingester), so the two can never drift apart by prose — and mapping records
@@ -26,7 +26,7 @@ pub use cobertura::{CoberturaPlugin, parse_cobertura_records};
 pub use gocover::{GoCoverPlugin, parse_gocover_records};
 pub use jacoco::{JacocoPlugin, parse_jacoco_records};
 
-use kndo_contract::extension::{Activation, Extension, ExtensionSpec, MutatesGraph};
+use kndo_contract::plugin::{Activation, MutatesGraph, Plugin, PluginSpec};
 use kndo_contract::vocab::ProjectPath;
 use std::collections::BTreeMap;
 use std::sync::LazyLock;
@@ -118,8 +118,8 @@ pub(crate) fn xml_options() -> roxmltree::ParsingOptions {
     }
 }
 
-static SPEC: LazyLock<ExtensionSpec> = LazyLock::new(|| {
-    ExtensionSpec::builder("kndo:coverage-lcov", 2)
+static SPEC: LazyLock<PluginSpec> = LazyLock::new(|| {
+    PluginSpec::builder("kndo:coverage-lcov", 2)
         // MutatesGraph::No is load-bearing: an ingester contributes analysis
         // input, never graph facts, and Yes here would turn the persisted graph
         // cache off for every project, because this extension is always on.
@@ -136,8 +136,8 @@ static SPEC: LazyLock<ExtensionSpec> = LazyLock::new(|| {
 /// extension only turns bytes into records.
 pub struct LcovPlugin;
 
-impl Extension for LcovPlugin {
-    fn spec(&self) -> &ExtensionSpec {
+impl Plugin for LcovPlugin {
+    fn spec(&self) -> &PluginSpec {
         &SPEC
     }
 

@@ -16,7 +16,7 @@
 
 use crate::analysis::DeclaredCapabilities;
 use crate::graph::Graph;
-use kndo_contract::extension::{NamespaceSpan, Nesting, UnnamedUnit};
+use kndo_contract::plugin::{NamespaceSpan, Nesting, UnnamedUnit};
 use smol_str::SmolStr;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -41,7 +41,7 @@ pub struct Scopes {
     spans: Vec<bool>,
     /// file → whether the language that claims it says the namespace a file
     /// declares IS its unit where no manifest named one — see
-    /// [`kndo_contract::extension::UnnamedUnit`].
+    /// [`kndo_contract::plugin::UnnamedUnit`].
     namespace_is_unit: Vec<bool>,
     /// unit → the files a unit-reaching declaration in it pools over: the
     /// unit's own files plus every friend's, ascending. The unit layer of the
@@ -316,7 +316,7 @@ impl Scopes {
     /// The files a `Reach::Unit { up: 0 }` declaration pools over where NO
     /// manifest named the unit: the tree the mounts spell, or — for a language
     /// that spells nothing between a namespace and a build unit
-    /// ([`kndo_contract::extension::UnnamedUnit::Namespace`], Swift's module) —
+    /// ([`kndo_contract::plugin::UnnamedUnit::Namespace`], Swift's module) —
     /// the namespace the file itself declared. `None` where neither answers:
     /// the reach is unbounded and says so, never a directory an adapter walked.
     pub fn unnamed_unit_pool(&self, file: usize) -> Option<&[u32]> {
@@ -980,7 +980,7 @@ mod tests {
         vec![(
             SmolStr::new_static("test"),
             DeclaredCapabilities {
-                nesting: kndo_contract::extension::Nesting::ByPath { roots: Vec::new() },
+                nesting: kndo_contract::plugin::Nesting::ByPath { roots: Vec::new() },
                 ..Default::default()
             },
         )]

@@ -6,11 +6,11 @@ mod common;
 
 use common::reported;
 use kndo::Category;
-use kndo_testkit::{MockExtension, TempProject};
+use kndo_testkit::{MockPlugin, TempProject};
 
 /// The kmock language whose tool never compiles a `vendor` directory.
-fn vendoring() -> MockExtension {
-    MockExtension::with(|spec| spec.ignores(&["**/vendor/**"]))
+fn vendoring() -> MockPlugin {
+    MockPlugin::with(|spec| spec.ignores(&["**/vendor/**"]))
 }
 
 /// A project that imports from a vendored copy carrying its own manifest and
@@ -72,7 +72,7 @@ fn an_ignored_file_is_discovered_and_never_judged() {
 #[test]
 fn without_the_declaration_the_same_tree_is_judged_whole() {
     let p = vendored_project();
-    let snap = common::analyze(&p, vec![Box::new(MockExtension::new())]);
+    let snap = common::analyze(&p, vec![Box::new(MockPlugin::new())]);
 
     assert_eq!(claimed(&snap), ["src/main.kmock", "src/vendor/dep.kmock"]);
     assert_eq!(units(&snap), ["core", "dep"]);

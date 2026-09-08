@@ -7,7 +7,7 @@
 
 use crate::merge_record;
 use kndo_contract::evidence::{CoverageRecords, FileRecords};
-use kndo_contract::extension::{Activation, Extension, ExtensionSpec, MutatesGraph};
+use kndo_contract::plugin::{Activation, MutatesGraph, Plugin, PluginSpec};
 use kndo_contract::vocab::ProjectPath;
 use std::collections::BTreeMap;
 use std::sync::LazyLock;
@@ -52,8 +52,8 @@ pub fn parse_gocover_records(text: &str) -> Option<CoverageRecords> {
     (!files.is_empty()).then_some(CoverageRecords { files })
 }
 
-static SPEC: LazyLock<ExtensionSpec> = LazyLock::new(|| {
-    ExtensionSpec::builder("kndo:coverage-go", 1)
+static SPEC: LazyLock<PluginSpec> = LazyLock::new(|| {
+    PluginSpec::builder("kndo:coverage-go", 1)
         .conduct(Activation::Always, MutatesGraph::No)
         .reads_reports(&["coverage.out", "cover.out", "coverage.txt"])
         .build()
@@ -63,8 +63,8 @@ static SPEC: LazyLock<ExtensionSpec> = LazyLock::new(|| {
 /// turns bytes into records.
 pub struct GoCoverPlugin;
 
-impl Extension for GoCoverPlugin {
-    fn spec(&self) -> &ExtensionSpec {
+impl Plugin for GoCoverPlugin {
+    fn spec(&self) -> &PluginSpec {
         &SPEC
     }
 

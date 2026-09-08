@@ -1,7 +1,7 @@
 use kndo_adapter_swift::SwiftAdapter;
 use kndo_contract::adapter::{Resolution, ResolveContext};
-use kndo_contract::extension::Extension;
 use kndo_contract::manifest::{UnitDep, UnitKind, UnitRoot};
+use kndo_contract::plugin::Plugin;
 use kndo_contract::vocab::ProjectPath;
 use std::collections::BTreeSet;
 

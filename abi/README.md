@@ -32,17 +32,17 @@ built exactly the way yours will be.
 ## You implement the real trait — every cluster alike
 
 `kndo-contract` and `kndo-sdk` compile to `wasm32-unknown-unknown`, so an
-external extension implements the REAL `Extension` trait — the same trait, the
-same `EvidenceSink`, `ResolveContext`, `ConductSink` and content scope a
+external extension implements the REAL `Plugin` trait — the same trait, the
+same `EvidenceSink`, `ResolveContext`, `PluginSink` and content scope a
 built-in uses — and exports it in one line:
 
 ```rust
-use kndo_contract::extension::{Extension, ExtensionSpec};
+use kndo_contract::plugin::{Plugin, PluginSpec};
 
 #[derive(Default)]
 struct MyExtension { /* … */ }
 
-impl Extension for MyExtension { /* spec, plus the hooks you declared */ }
+impl Plugin for MyExtension { /* spec, plus the hooks you declared */ }
 
 kndo_sdk::export_extension!(MyExtension);
 ```
@@ -66,7 +66,7 @@ refuses a rule it cannot read rather than guessing at one.
 Markers cross as written and mean what your spec's `dispatch` rules
 say, matched host-side; an import's timing crosses as the field it is.
 Everything your conduct sink writes lands under the engine's own
-containment: findings under `ext:<coordinate>/<rule>` for rules your spec
+containment: findings under `plugin:<coordinate>/<rule>` for rules your spec
 declared, roots only if your spec says `mutates-graph` (which also bypasses the
 persisted graph cache while you are active) — anything misdirected drops with a
 described line on your contribution, never silently and never applied.

@@ -5,7 +5,7 @@
 //! conventions (a source-set layout, a Cargo target's auto-discovery, SwiftPM's
 //! `path:`), which is why nine adapters each carried a convention table and why
 //! a project laid out unusually was judged as if it were laid out normally. Now
-//! one hook, [`kndo_contract::extension::Extension::extract_manifest`], writes
+//! one hook, [`kndo_contract::plugin::Plugin::extract_manifest`], writes
 //! [`ManifestEvidence`], and the engine owns the structure: which unit compiles
 //! a file, which files a unit is entered through, and — through
 //! [`UnitKind::color`] — what color those entries anchor.
@@ -15,8 +15,8 @@
 
 use crate::discover::DiscoveredFile;
 use kndo_contract::adapter::{ResolveContext, SourceFile};
-use kndo_contract::extension::{Extension, ExtensionSpec};
 use kndo_contract::manifest::{ManifestEvidence, ManifestSink, UnitKind, UnitRoot};
+use kndo_contract::plugin::{Plugin, PluginSpec};
 use kndo_contract::vocab::ProjectPath;
 use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
@@ -130,7 +130,7 @@ impl Project {
     /// reads that library's namespace as its own.
     ///
     /// The engine asks this only where a language has said its namespaces
-    /// span a compilation ([`kndo_contract::extension::NamespaceSpan`]) — the
+    /// span a compilation ([`kndo_contract::plugin::NamespaceSpan`]) — the
     /// relation is about who is BUILT together, and what that implies about
     /// naming is the language's to state.
     pub fn sees_into(&self, viewer: u32, target: u32) -> bool {
@@ -156,10 +156,10 @@ impl Project {
 
 /// Every discovered manifest read once, merged across the adapters that claim
 /// it. Launchers are read too and contribute their roots alone: a launcher
-/// declares no unit, no package and no dependency ([`ExtensionSpec::launchers`]).
+/// declares no unit, no package and no dependency ([`PluginSpec::launchers`]).
 pub fn read_manifests(
     files: &[DiscoveredFile],
-    adapters: &[Box<dyn Extension>],
+    adapters: &[Box<dyn Plugin>],
     known: &BTreeSet<ProjectPath>,
 ) -> Vec<ManifestRead> {
     // Every manifest's content beside every other's: a reader whose build
@@ -177,7 +177,7 @@ pub fn read_manifests(
     let cx = ResolveContext::with_manifests(known, &manifests);
     let mut by_path: std::collections::BTreeMap<ProjectPath, (ManifestEvidence, Vec<SmolStr>)> =
         std::collections::BTreeMap::new();
-    let mut read = |adapter: &dyn Extension, file: SourceFile<'_>, whole: bool| {
+    let mut read = |adapter: &dyn Plugin, file: SourceFile<'_>, whole: bool| {
         let mut sink = ManifestSink::new();
         adapter.extract_manifest(&file, &cx, &mut sink);
         let read = sink.finish();
@@ -207,10 +207,10 @@ pub fn read_manifests(
         union(&mut merged.aliases, read.aliases);
         union(&mut merged.ignores, read.ignores);
     };
-    crate::graph::for_each_matching(files, adapters, ExtensionSpec::manifests, |a, f| {
+    crate::graph::for_each_matching(files, adapters, PluginSpec::manifests, |a, f| {
         read(a, f, true)
     });
-    crate::graph::for_each_matching(files, adapters, ExtensionSpec::launchers, |a, f| {
+    crate::graph::for_each_matching(files, adapters, PluginSpec::launchers, |a, f| {
         read(a, f, false)
     });
     by_path

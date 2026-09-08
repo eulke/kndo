@@ -101,14 +101,14 @@ pub fn extract(
     let mut type_ids = TypeIds::new();
     for item in &children {
         if matches!(item.kind(), "class_declaration" | "protocol_declaration")
-            && !is_extension(*item, source)
+            && !is_plugin(*item, source)
         {
             top_level_item(*item, source, &mut type_ids, out);
         }
     }
     for item in children {
         if matches!(item.kind(), "class_declaration" | "protocol_declaration")
-            && !is_extension(item, source)
+            && !is_plugin(item, source)
         {
             continue;
         }
@@ -128,7 +128,7 @@ fn bare(name: &str) -> &str {
         .unwrap_or(name)
 }
 
-fn is_extension(item: Node<'_>, source: &[u8]) -> bool {
+fn is_plugin(item: Node<'_>, source: &[u8]) -> bool {
     item.kind() == "class_declaration"
         && item
             .child_by_field_name("declaration_kind")

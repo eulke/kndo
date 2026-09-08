@@ -7,16 +7,13 @@ mod common;
 
 use common::{keeper_kinds, reported};
 use kndo::Category;
-use kndo_testkit::{MockExtension, TempProject};
+use kndo_testkit::{MockPlugin, TempProject};
 
 /// The kmock language beside the kdoc documents that embed it.
 fn run(project: &TempProject) -> kndo::Snapshot {
     common::analyze(
         project,
-        vec![
-            Box::new(MockExtension::new()),
-            Box::new(MockExtension::hosting()),
-        ],
+        vec![Box::new(MockPlugin::new()), Box::new(MockPlugin::hosting())],
     )
 }
 

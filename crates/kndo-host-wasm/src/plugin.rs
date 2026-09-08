@@ -1,4 +1,4 @@
-//! A loaded component as an [`Extension`] — THE bridge: one world, one load
+//! A loaded component as an [`Plugin`] — THE bridge: one world, one load
 //! path, no sniffing. The engine sees one more extension (same spec shape, same
 //! cache keys, same claim wiring, same conduct containment), so a WASM extension
 //! is a first-class citizen because nothing downstream can tell.
@@ -12,13 +12,13 @@
 
 use crate::LoadError;
 use crate::bindings::kndo::vocab::types as wire;
-use crate::bindings::{Extension as GuestWorld, ExtensionImports};
+use crate::bindings::{Plugin as GuestWorld, PluginImports};
 use crate::convert;
 use crate::engine::{budgeted_store, guest_limits, shared_engine};
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{CoverageRecords, DiagnosticLevel, EvidenceSink};
-use kndo_contract::extension::is_reserved_coordinate;
-use kndo_contract::extension::{ConductSink, ContentAccess, Extension, ExtensionSpec, GraphAccess};
+use kndo_contract::plugin::is_reserved_coordinate;
+use kndo_contract::plugin::{ContentAccess, GraphAccess, Plugin, PluginSink, PluginSpec};
 use kndo_contract::vocab::ProjectPath;
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -127,7 +127,7 @@ impl StoreData {
 
 impl wire::Host for StoreData {}
 
-impl ExtensionImports for StoreData {
+impl PluginImports for StoreData {
     fn known_files(&mut self) -> wasmtime::Result<Vec<String>> {
         self.gate("known-files", Phase::Project)?;
         Ok(self.known_files.clone())
@@ -164,18 +164,18 @@ impl ExtensionImports for StoreData {
     }
 }
 
-pub struct WasmExtension {
+pub struct WasmPlugin {
     component: Component,
     linker: Linker<StoreData>,
-    spec: ExtensionSpec,
+    spec: PluginSpec,
 }
 
-impl WasmExtension {
+impl WasmPlugin {
     /// Load a component targeting the extension world; the spec is read once and
     /// cached — a spec is folded into evidence cache keys, so it must be stable
     /// for the process. External components claiming the `kndo:` coordinate
     /// namespace are rejected here.
-    pub fn load(path: &Path) -> Result<WasmExtension, LoadError> {
+    pub fn load(path: &Path) -> Result<WasmPlugin, LoadError> {
         let bytes = std::fs::read(path)?;
         let component = Component::from_binary(shared_engine(), &bytes)
             .map_err(|e| LoadError::Component(e.to_string()))?;
@@ -207,7 +207,7 @@ impl WasmExtension {
                 rule.name
             )));
         }
-        Ok(WasmExtension {
+        Ok(WasmPlugin {
             component,
             linker,
             spec,
@@ -233,8 +233,8 @@ impl WasmExtension {
     }
 }
 
-impl Extension for WasmExtension {
-    fn spec(&self) -> &ExtensionSpec {
+impl Plugin for WasmPlugin {
+    fn spec(&self) -> &PluginSpec {
         &self.spec
     }
 
@@ -288,7 +288,7 @@ impl Extension for WasmExtension {
         &self,
         graph: &dyn GraphAccess,
         content: &dyn ContentAccess,
-        out: &mut ConductSink,
+        out: &mut PluginSink,
     ) {
         let roots = match self.call(StoreData::conduct(graph, content), |guest, store| {
             guest.call_contribute_roots(store)
@@ -301,7 +301,7 @@ impl Extension for WasmExtension {
         };
         for root in roots {
             out.root(
-                convert::conduct_target(root.target),
+                convert::plugin_target(root.target),
                 convert::root_kind(root.kind),
                 convert::confidence(root.confidence),
             );
@@ -312,7 +312,7 @@ impl Extension for WasmExtension {
         &self,
         graph: &dyn GraphAccess,
         content: &dyn ContentAccess,
-        out: &mut ConductSink,
+        out: &mut PluginSink,
     ) {
         let findings = match self.call(StoreData::conduct(graph, content), |guest, store| {
             guest.call_report_findings(store)
@@ -326,8 +326,8 @@ impl Extension for WasmExtension {
         for finding in findings {
             out.finding(
                 &finding.rule,
-                convert::conduct_severity(finding.severity),
-                convert::conduct_target(finding.target),
+                convert::plugin_severity(finding.severity),
+                convert::plugin_target(finding.target),
                 convert::confidence(finding.confidence),
                 finding.message,
             );

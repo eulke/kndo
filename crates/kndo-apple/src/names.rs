@@ -3,7 +3,7 @@
 //! is declared.
 
 use kndo_contract::evidence::SymbolKind;
-use kndo_contract::extension::GraphAccess;
+use kndo_contract::plugin::GraphAccess;
 use kndo_contract::vocab::ProjectPath;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -95,7 +95,7 @@ fn under(dir: &str, path: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kndo_contract::extension::DeclaredSymbol;
+    use kndo_contract::plugin::DeclaredSymbol;
 
     struct Graph {
         paths: Vec<ProjectPath>,

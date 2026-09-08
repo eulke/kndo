@@ -10,12 +10,12 @@ mod common;
 
 use common::{keeper_kinds, reaches, reported};
 use kndo::Category;
-use kndo_contract::extension::PublishedSurface;
-use kndo_testkit::{MockExtension, TempProject};
+use kndo_contract::plugin::PublishedSurface;
+use kndo_testkit::{MockPlugin, TempProject};
 
 /// The kmock language whose units publish every export, like a jar or a crate.
-fn publishing() -> MockExtension {
-    MockExtension::with(|spec| spec.published_surface(PublishedSurface::Exports))
+fn publishing() -> MockPlugin {
+    MockPlugin::with(|spec| spec.published_surface(PublishedSurface::Exports))
 }
 
 #[test]
@@ -127,7 +127,7 @@ fn a_unit_reach_pools_the_tree_when_no_manifest_named_the_unit() {
         .file("a.kmock", "call wide\n")
         // Another tree entirely: naming `wide` from here is a different name.
         .file("other.kmock", "root-file\ncall wide\n");
-    let snap = common::analyze(&p, vec![Box::new(MockExtension::new())]);
+    let snap = common::analyze(&p, vec![Box::new(MockPlugin::new())]);
 
     assert_eq!(
         reaches(&snap, "lib.kmock#wide"),
@@ -179,7 +179,7 @@ fn a_covisible_namespace_reaches_its_own_files_but_never_through_a_test() {
     )
     // Another namespace entirely, exporting nothing and imported by nobody.
     .file("src/other/dead.kmock", "package other\nns fn alone\n");
-    let snap = common::analyze(&p, vec![Box::new(MockExtension::new())]);
+    let snap = common::analyze(&p, vec![Box::new(MockPlugin::new())]);
 
     // The exported file roots on the unit's published surface, and the
     // namespace carries that colour to the file that exports nothing.

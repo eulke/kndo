@@ -41,7 +41,7 @@ pub(super) fn eligibility(graph: &Graph, reach: &Reachability) -> Vec<Option<Abs
         .manifest_declarations
         .iter()
         .map(|md| {
-            if md.identity == kndo_contract::extension::DependencyIdentity::Underivable {
+            if md.identity == kndo_contract::plugin::DependencyIdentity::Underivable {
                 return Some(AbstentionReason::SpecifierIdentityUnderivable);
             }
             // What the adapter never compiles imports nothing on its behalf:

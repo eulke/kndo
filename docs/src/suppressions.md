@@ -53,7 +53,7 @@ re-renders.
 
 - The finding is wrong for a reason the code can state (a framework reaches
   it, a reflection site names it): `kndo:allow` with the reason. Better still,
-  if the reason is a framework, an [extension](extensions.md) that states the
+  if the reason is a framework, an [extension](plugins.md) that states the
   fact once for every file.
 - The finding is right and you are not fixing it now: the baseline.
 - The finding is right and you are fixing it: fix it.

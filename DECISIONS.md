@@ -6629,3 +6629,62 @@ Also names `kndo-adapter-rust/macro-template-names` and
 `kndo-adapter-rust/macro-use-mod`, which the previous commit moved and described
 without spelling. Second time the gate has extracted a fixture name from me in
 this sweep, which is the gate working.
+
+## 2026-09-08 — one word: plugin
+
+Owner decision, and it reverses mine. On 2026-08-31 I renamed the `Plugin*`
+cluster to `Conduct*` under the reason "the conduct cluster stops speaking v1's
+plugin". That reason does not survive this repository's own law: the quarry rule
+is about not inheriting v1's JUDGMENTS, while its shipped surface — verbs,
+formats, words — is inherited value that is either kept, carried with a
+disposition, or dead with its vice named. Nobody ever named a vice for the word.
+It was dropped for being v1's, which is the one thing the law forbids.
+
+**Why `plugin` and not `extension`.** `extension` has a permanent collision in
+this domain: a tool that reads files talks about FILE extensions constantly, and
+that same 2026-08-31 commit already paid one rename for it —
+`PluginSpec::extensions` → `suffixes`, with the reason written down as
+"'extension' already means the species". A word that costs a rename the first
+time it meets its own domain is the wrong word. `plugin` collides with nothing
+here, and the report envelope's key has said `plugins` all along: the published
+noun never moved, only the internals drifted off it.
+
+`pack` fails the owner's test — one word for anything you can build. "A Rust
+language pack" reads wrong where "a Rust plugin" does not.
+
+**What moved.** The WIT world `extension` → `plugin` (file `wit/plugin.wit`);
+`ExtensionSpec`/`Builder`/`Parts` → `PluginSpec*`; the trait `Extension` →
+`Plugin`; `ConductTarget`/`ConductSeverity`/`ConductSink`/`ConductBuilder`/
+`ConductHook` → `Plugin*`; `MockExtension` → `MockPlugin`; `WasmExtension` →
+`WasmPlugin`; `Category::is_extension` → `is_plugin`; modules
+`kndo-contract/src/extension.rs`, `kndo-core/src/conduct.rs` and
+`kndo-host-wasm/src/extension.rs` all become `plugin.rs`; crate `kndo-packs` →
+`kndo-plugins`; `docs/src/extensions.md` → `plugins.md`; gate
+`builtin_conduct_proofs` → `builtin_plugin_proofs`. And the category namespace
+`ext:<coordinate>/<rule>` → `plugin:<coordinate>/<rule>`, which is FINDING
+IDENTITY and the reason this rides one commit.
+
+**What deliberately did not move, with its reason:**
+
+- **`Phase::Conduct`** and `declares_conduct`/`conducts`. A phase is not a
+  species: extraction is done by plugins too, so "the plugin phase" would name
+  nothing. The conduct round is the round where the assembled graph exists, and
+  that is a fact about TIME, not about who is speaking.
+- **`ExtensionDelegate`, `WatchKit Extension`.** Xcode's own names inside the
+  apple-bundles fixture. A blanket rename caught three of them and the
+  `builtin_plugin_proofs` gate refused the commit until they were put back,
+  which is the fixture discipline doing exactly its job.
+- **DECISIONS.md, EXPERIMENTS.md, COMPARISON.md.** The rename pass rewrote them
+  and the edit was reverted: an append-only record says what happened in the
+  words used then, and "`PluginSeverity` → `PluginSeverity`" is not a history,
+  it is a lie about one. Living documents (README, CONTEXT, CLAUDE, the docs
+  site) carry the new name; the ledgers keep theirs.
+
+**Measured: the corpus is byte-identical, all nine repositories.** The
+fingerprint did not move either — it is structural, and renaming a type changes
+no shape. What moved is the ABI (`cargo xtask pin-abi` re-pinned all four compat
+guests) and the plugin-contributed categories in the conformance fixtures.
+
+The cost was symmetric — whichever word won, exactly one of (ABI, schema key)
+had to break. The ABI is pre-1.0 with a compat matrix built to make this
+visible; the schema key was already `plugins`.

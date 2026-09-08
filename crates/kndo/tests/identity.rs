@@ -6,7 +6,7 @@
 mod common;
 
 use kndo::Category;
-use kndo_testkit::{MockExtension, TempProject};
+use kndo_testkit::{MockPlugin, TempProject};
 
 #[test]
 fn an_import_written_twice_is_two_unresolved_findings() {
@@ -19,7 +19,7 @@ fn an_import_written_twice_is_two_unresolved_findings() {
         "src/main.kmock",
         "import ./missing\nfn work\nimport ./missing\ncall work\n",
     );
-    let snap = common::analyze(&p, vec![Box::new(MockExtension::new())]);
+    let snap = common::analyze(&p, vec![Box::new(MockPlugin::new())]);
     let unresolved: Vec<_> = snap
         .findings
         .iter()

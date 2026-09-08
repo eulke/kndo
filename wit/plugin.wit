@@ -14,9 +14,9 @@
 // diagnostic. A guest that traps anyway is caught by the host's fuel and memory
 // budgets and that call contributes nothing — never a crashed run.
 
-world extension {
+world plugin {
     use types.{
-        extension-spec, file-evidence, resolution, manifest-evidence, package-entry,
+        plugin-spec, file-evidence, resolution, manifest-evidence, package-entry,
         contributed-root, contributed-finding, coverage-records, declared-symbol, reach,
         embedded-region,
     };
@@ -54,7 +54,7 @@ world extension {
 
     /// Called once at load; the host caches and validates the result (a spec is
     /// folded into evidence cache keys, so it must be stable for the process).
-    export spec: func() -> extension-spec;
+    export spec: func() -> plugin-spec;
 
     /// Extract one claimed file's evidence — or, when `region` is given, one
     /// embedded region of the file at `path` whose language named this

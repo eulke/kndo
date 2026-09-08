@@ -2,7 +2,7 @@
 //! adapter is built on: a package is declared (`package com.foo;`) AND the
 //! compiler-checked file/directory convention makes it directory-shaped — so
 //! imports resolve by PATH SUFFIX (`com.foo.Bar` → `**/com/foo/Bar.java`) and
-//! [`Extension::sees`] is the directory, plus the Maven/Gradle standard
+//! [`Plugin::sees`] is the directory, plus the Maven/Gradle standard
 //! layout's test↔main mirror (a test class shares its package with the main
 //! classes it exercises, from a parallel source root). Java is nominal, so —
 //! unlike Go's structural interfaces — members are declared and judged; the
@@ -17,11 +17,11 @@ mod resolve;
 
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{EvidenceSink, RootKind};
-use kndo_contract::extension::{Extension, ExtensionSpec, FileRole, Rung, Step};
+use kndo_contract::plugin::{FileRole, Plugin, PluginSpec, Rung, Step};
 use kndo_contract::vocab::ProjectPath;
 
 pub struct JavaAdapter {
-    spec: ExtensionSpec,
+    spec: PluginSpec,
 }
 
 /// What Java's annotations and its own runtime mean, as data.
@@ -44,8 +44,8 @@ pub struct JavaAdapter {
 /// crate owns, so the fact and the rule that reads it cannot drift apart.
 pub(crate) const LAUNCHER: &str = "main(String[])";
 
-fn dispatch_rules() -> Vec<kndo_contract::extension::DispatchRule> {
-    use kndo_contract::extension::{DispatchRule, Effect, Trigger};
+fn dispatch_rules() -> Vec<kndo_contract::plugin::DispatchRule> {
+    use kndo_contract::plugin::{DispatchRule, Effect, Trigger};
     use kndo_contract::vocab::Confidence;
     let witness = |when: Trigger| DispatchRule {
         when,
@@ -137,11 +137,11 @@ impl JavaAdapter {
                 // classpath contributing to `com.google.common.io` see each
                 // other's package-private members, which is how a test module
                 // exercises the library it is compiled against.
-                .namespace_span(kndo_contract::extension::NamespaceSpan::Compilation)
+                .namespace_span(kndo_contract::plugin::NamespaceSpan::Compilation)
                 // The `package` clause is the namespace, whole: javac reads it
                 // from the file, and a package whose directory does not match
                 // is unusual, not a different package.
-                .nesting(kndo_contract::extension::Nesting::Flat)
+                .nesting(kndo_contract::plugin::Nesting::Flat)
                 .emits(kndo_contract::evidence::EvidenceStreams::of(&[
                     kndo_contract::evidence::EvidenceStream::Comments,
                     kndo_contract::evidence::EvidenceStream::Metrics,
@@ -161,8 +161,8 @@ impl Default for JavaAdapter {
     }
 }
 
-impl Extension for JavaAdapter {
-    fn spec(&self) -> &ExtensionSpec {
+impl Plugin for JavaAdapter {
+    fn spec(&self) -> &PluginSpec {
         &self.spec
     }
 

@@ -3,7 +3,7 @@
 
 use kndo_adapter_ts::TypeScriptAdapter;
 use kndo_contract::adapter::{Resolution, ResolveContext};
-use kndo_contract::extension::Extension;
+use kndo_contract::plugin::Plugin;
 use kndo_contract::vocab::ProjectPath;
 use std::collections::BTreeSet;
 

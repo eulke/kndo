@@ -280,7 +280,7 @@ _Avoid_: claims (that word names file claiming by suffix)
 
 ### Extensions
 
-**Extension**:
+**Plugin**:
 One species: anything that declares a spec and implements the hooks its spec gates.
 A language **adapter** claims files and extracts evidence; **conduct** contributes
 roots, findings or ingested coverage under activation.

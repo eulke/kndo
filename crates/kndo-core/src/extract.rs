@@ -1,6 +1,6 @@
 //! Claim + extract: first adapter whose claim globs match owns the file (M1 rule; the
 //! priority-as-data registry arrives with real languages) — unless the path is one
-//! its language's own tool never compiles ([`ExtensionSpec::ignores`]) or one THIS
+//! its language's own tool never compiles ([`PluginSpec::ignores`]) or one THIS
 //! PROJECT excludes ([`ManifestEvidence::ignores`]), which it then leaves
 //! unclaimed. Both ignores stop at the claim: the file stays DISCOVERED, so an
 //! unclaimed path under one casts no doubt on a dependency and a manifest that
@@ -8,14 +8,14 @@
 //! deterministic — results are collected and consumed in path order, never in
 //! completion order.
 //!
-//! [`ExtensionSpec::ignores`]: kndo_contract::extension::ExtensionSpec::ignores
+//! [`PluginSpec::ignores`]: kndo_contract::plugin::PluginSpec::ignores
 //! [`ManifestEvidence::ignores`]: kndo_contract::manifest::ManifestEvidence::ignores
 
 use crate::cache::EvidenceCache;
 use crate::discover::DiscoveredFile;
 use kndo_contract::adapter::SourceFile;
 use kndo_contract::evidence::{DiagnosticLevel, EvidenceSink, FileEvidence};
-use kndo_contract::extension::Extension;
+use kndo_contract::plugin::Plugin;
 use rayon::prelude::*;
 use smol_str::SmolStr;
 
@@ -26,7 +26,7 @@ pub struct ClaimedFile {
 
 pub fn claim(
     files: &[DiscoveredFile],
-    adapters: &[Box<dyn Extension>],
+    adapters: &[Box<dyn Plugin>],
     project_ignores: &globset::GlobSet,
 ) -> Vec<ClaimedFile> {
     let sets: Vec<globset::GlobSet> = adapters
@@ -57,7 +57,7 @@ pub fn claim(
 /// claim pass and every manifest pass leave alone. An ignore names path
 /// segments: `*` stays inside one, so `**/_*.go` is a file whose name begins
 /// with `_`, never a file under a directory that does.
-pub(crate) fn ignore_sets(adapters: &[Box<dyn Extension>]) -> Vec<globset::GlobSet> {
+pub(crate) fn ignore_sets(adapters: &[Box<dyn Plugin>]) -> Vec<globset::GlobSet> {
     adapters
         .iter()
         .map(|a| ignore_set(a.spec().ignores()))
@@ -100,7 +100,7 @@ fn glob_set(
 pub fn extract(
     files: &[DiscoveredFile],
     claims: &[ClaimedFile],
-    adapters: &[Box<dyn Extension>],
+    adapters: &[Box<dyn Plugin>],
     cache: &EvidenceCache,
 ) -> Vec<FileEvidence> {
     claims
@@ -122,8 +122,8 @@ pub fn extract(
 /// of a language nothing claims is left unread, with a diagnostic on the file.
 pub fn extract_one(
     file: &DiscoveredFile,
-    adapter: &dyn Extension,
-    adapters: &[Box<dyn Extension>],
+    adapter: &dyn Plugin,
+    adapters: &[Box<dyn Plugin>],
     cache: &EvidenceCache,
 ) -> FileEvidence {
     let spec = adapter.spec();
@@ -179,7 +179,7 @@ pub fn extract_one(
 /// The extension that claims a file of `suffix` — the one an embedded region
 /// of that language is handed to, and the one that resolves what the region
 /// imports. The first registered wins, as it does for a file's claim.
-pub(crate) fn claimant_of_suffix(adapters: &[Box<dyn Extension>], suffix: &str) -> Option<usize> {
+pub(crate) fn claimant_of_suffix(adapters: &[Box<dyn Plugin>], suffix: &str) -> Option<usize> {
     adapters
         .iter()
         .position(|a| a.spec().suffixes().iter().any(|s| s == suffix))

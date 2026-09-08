@@ -45,7 +45,7 @@
 //! # text               a comment (the Comments stream, declared)
 //! ```
 //!
-//! Markers mean nothing until a spec says so: [`MockExtension::dispatching`]
+//! Markers mean nothing until a spec says so: [`MockPlugin::dispatching`]
 //! speaks the same language under the dispatch rules a test hands it.
 //!
 //! A `kmock.pkg` manifest states the project's structure, one unit per line:
@@ -66,10 +66,10 @@
 //! aggregator lists, which is how two units of one name stay apart.
 //! `publish=yes|no` states the unit's publication; unstated, a library is
 //! published and nothing else is. The kmock ecosystem publishes through its
-//! entries, like npm; [`MockExtension::with`] speaks the variant that
+//! entries, like npm; [`MockPlugin::with`] speaks the variant that
 //! publishes every export, like a jar.
 //!
-//! A `.kdoc` document ([`MockExtension::hosting`]) is a page holding kmock in
+//! A `.kdoc` document ([`MockPlugin::hosting`]) is a page holding kmock in
 //! fences — what a test of embedded regions speaks:
 //!
 //! ```text
@@ -88,33 +88,33 @@ use kndo_contract::evidence::{
     EvidenceStreams, ImportBinding, ImportShape, ImportTarget, MarkerTarget, Reach, RefKind,
     RegionMode, RelationKind, RootKind, RootTarget, SymbolKind, Timing,
 };
-use kndo_contract::extension::{
-    ConductSink, ContentAccess, DispatchRule, Extension, ExtensionSpec, ExtensionSpecBuilder,
-    GraphAccess, PublishedSurface, Step,
-};
 use kndo_contract::manifest::{ManifestSink, Publication, Unit, UnitDep, UnitKind, UnitRoot};
+use kndo_contract::plugin::{
+    ContentAccess, DispatchRule, GraphAccess, Plugin, PluginSink, PluginSpec, PluginSpecBuilder,
+    PublishedSurface, Step,
+};
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use std::collections::BTreeMap;
 use std::path::Path;
 
-type ConductHook = dyn Fn(&dyn GraphAccess, &dyn ContentAccess, &mut ConductSink) + Send + Sync;
+type PluginHook = dyn Fn(&dyn GraphAccess, &dyn ContentAccess, &mut PluginSink) + Send + Sync;
 type IngestHook = dyn Fn(&str, &[u8]) -> Option<CoverageRecords> + Send + Sync;
 
-/// The one mock for every cluster. [`MockExtension::new`] speaks the kmock
-/// language (extraction + resolution); [`MockExtension::scripted`] carries any
+/// The one mock for every cluster. [`MockPlugin::new`] speaks the kmock
+/// language (extraction + resolution); [`MockPlugin::scripted`] carries any
 /// spec and runs the closures a test hangs on its conduct and ingestion hooks —
 /// including behavior a correct extension never has, because drops and refusals
 /// are exactly what containment tests script.
-pub struct MockExtension {
-    spec: ExtensionSpec,
+pub struct MockPlugin {
+    spec: PluginSpec,
     speaks: Speaks,
-    on_contribute: Option<Box<ConductHook>>,
-    on_report: Option<Box<ConductHook>>,
+    on_contribute: Option<Box<PluginHook>>,
+    on_report: Option<Box<PluginHook>>,
     on_ingest: Option<Box<IngestHook>>,
 }
 
 /// The kmock-speaking mock under its historical name.
-pub type MockAdapter = MockExtension;
+pub type MockAdapter = MockPlugin;
 
 /// What a mock speaks: kmock (extraction, resolution, manifests), kdoc (a
 /// document embedding kmock regions), or nothing (a conduct or ingestion
@@ -159,8 +159,8 @@ fn host_extract(file: &SourceFile<'_>, out: &mut EvidenceSink) {
 }
 
 /// The kmock language's spec, before the capability a test adds to it.
-fn kmock_spec() -> ExtensionSpecBuilder {
-    ExtensionSpec::builder("kmock", 1)
+fn kmock_spec() -> PluginSpecBuilder {
+    PluginSpec::builder("kmock", 1)
         .suffixes(&["kmock"])
         .emits(EvidenceStreams::of(&[
             EvidenceStream::Comments,
@@ -173,17 +173,17 @@ fn kmock_spec() -> ExtensionSpecBuilder {
         .published_surface(PublishedSurface::Entries)
 }
 
-impl MockExtension {
+impl MockPlugin {
     pub fn new() -> Self {
-        MockExtension::speaking(kmock_spec().build())
+        MockPlugin::speaking(kmock_spec().build())
     }
 
     /// The kmock language declaring import cycles a hazard — what a test of the
     /// `cyclic` analysis speaks, since the plain mock tolerates them.
     pub fn hazardous() -> Self {
-        MockExtension::speaking(
+        MockPlugin::speaking(
             kmock_spec()
-                .import_cycles(kndo_contract::extension::CycleTolerance::Hazard)
+                .import_cycles(kndo_contract::plugin::CycleTolerance::Hazard)
                 .build(),
         )
     }
@@ -192,9 +192,9 @@ impl MockExtension {
     /// of unit friendship speaks, since the plain mock keeps each namespace
     /// inside the unit that compiles it.
     pub fn spanning() -> Self {
-        MockExtension::speaking(
+        MockPlugin::speaking(
             kmock_spec()
-                .namespace_span(kndo_contract::extension::NamespaceSpan::Compilation)
+                .namespace_span(kndo_contract::plugin::NamespaceSpan::Compilation)
                 .build(),
         )
     }
@@ -203,7 +203,7 @@ impl MockExtension {
     /// dispatch speaks: `mark` lines become markers, and these rules say what
     /// they mean.
     pub fn dispatching(rules: Vec<DispatchRule>) -> Self {
-        MockExtension::speaking(kmock_spec().dispatch(rules).build())
+        MockPlugin::speaking(kmock_spec().dispatch(rules).build())
     }
 
     /// The kdoc language: a document holding kmock in fenced regions — what a
@@ -211,10 +211,8 @@ impl MockExtension {
     /// page, and each `<<LANG module` (or `script`) … `>>` fence is a region
     /// of language `LANG`, read by the extension claiming that suffix.
     pub fn hosting() -> Self {
-        MockExtension {
-            spec: ExtensionSpec::builder("kdoc", 1)
-                .suffixes(&["kdoc"])
-                .build(),
+        MockPlugin {
+            spec: PluginSpec::builder("kdoc", 1).suffixes(&["kdoc"]).build(),
             speaks: Speaks::Kdoc,
             on_contribute: None,
             on_report: None,
@@ -226,14 +224,14 @@ impl MockExtension {
     /// speaks, since the plain mock states none and gets no advice. Its unit
     /// is the whole project: every kmock file is one compilation.
     pub fn laddered(steps: &[Step]) -> Self {
-        MockExtension::speaking(kmock_spec().ladder(steps).build())
+        MockPlugin::speaking(kmock_spec().ladder(steps).build())
     }
 
     /// The kmock language declaring more than the plain mock does — whatever
     /// `declare` adds to its spec: a published surface of every export, a
     /// ladder, both.
-    pub fn with(declare: impl FnOnce(ExtensionSpecBuilder) -> ExtensionSpecBuilder) -> Self {
-        MockExtension::speaking(declare(kmock_spec()).build())
+    pub fn with(declare: impl FnOnce(PluginSpecBuilder) -> PluginSpecBuilder) -> Self {
+        MockPlugin::speaking(declare(kmock_spec()).build())
     }
 
     /// A SECOND kmock-speaking language under its own coordinate and suffix —
@@ -242,9 +240,9 @@ impl MockExtension {
     pub fn beside(
         coordinate: &'static str,
         suffix: &'static str,
-        declare: impl FnOnce(ExtensionSpecBuilder) -> ExtensionSpecBuilder,
+        declare: impl FnOnce(PluginSpecBuilder) -> PluginSpecBuilder,
     ) -> Self {
-        let spec = ExtensionSpec::builder(coordinate, 1)
+        let spec = PluginSpec::builder(coordinate, 1)
             .suffixes(&[suffix])
             .emits(EvidenceStreams::of(&[
                 EvidenceStream::Comments,
@@ -253,11 +251,11 @@ impl MockExtension {
                 EvidenceStream::Qualifiers,
             ]))
             .published_surface(PublishedSurface::Entries);
-        MockExtension::speaking(declare(spec).build())
+        MockPlugin::speaking(declare(spec).build())
     }
 
-    fn speaking(spec: ExtensionSpec) -> Self {
-        MockExtension {
+    fn speaking(spec: PluginSpec) -> Self {
+        MockPlugin {
             spec,
             speaks: Speaks::Kmock,
             on_contribute: None,
@@ -268,8 +266,8 @@ impl MockExtension {
 
     /// A conduct/ingestion mock: no language, the given spec, and whatever the
     /// closures script.
-    pub fn scripted(spec: ExtensionSpec) -> Self {
-        MockExtension {
+    pub fn scripted(spec: PluginSpec) -> Self {
+        MockPlugin {
             spec,
             speaks: Speaks::Nothing,
             on_contribute: None,
@@ -280,7 +278,7 @@ impl MockExtension {
 
     pub fn on_contribute(
         mut self,
-        f: impl Fn(&dyn GraphAccess, &dyn ContentAccess, &mut ConductSink) + Send + Sync + 'static,
+        f: impl Fn(&dyn GraphAccess, &dyn ContentAccess, &mut PluginSink) + Send + Sync + 'static,
     ) -> Self {
         self.on_contribute = Some(Box::new(f));
         self
@@ -288,7 +286,7 @@ impl MockExtension {
 
     pub fn on_report(
         mut self,
-        f: impl Fn(&dyn GraphAccess, &dyn ContentAccess, &mut ConductSink) + Send + Sync + 'static,
+        f: impl Fn(&dyn GraphAccess, &dyn ContentAccess, &mut PluginSink) + Send + Sync + 'static,
     ) -> Self {
         self.on_report = Some(Box::new(f));
         self
@@ -303,14 +301,14 @@ impl MockExtension {
     }
 }
 
-impl Default for MockExtension {
+impl Default for MockPlugin {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Extension for MockExtension {
-    fn spec(&self) -> &ExtensionSpec {
+impl Plugin for MockPlugin {
+    fn spec(&self) -> &PluginSpec {
         &self.spec
     }
 
@@ -318,7 +316,7 @@ impl Extension for MockExtension {
         &self,
         graph: &dyn GraphAccess,
         content: &dyn ContentAccess,
-        out: &mut ConductSink,
+        out: &mut PluginSink,
     ) {
         if let Some(f) = &self.on_contribute {
             f(graph, content, out);
@@ -329,7 +327,7 @@ impl Extension for MockExtension {
         &self,
         graph: &dyn GraphAccess,
         content: &dyn ContentAccess,
-        out: &mut ConductSink,
+        out: &mut PluginSink,
     ) {
         if let Some(f) = &self.on_report {
             f(graph, content, out);
@@ -883,7 +881,7 @@ pub fn js_demo_project() -> TempProject {
 /// fresh sink and return the finished evidence. The shared front half of every
 /// adapter's extraction tests.
 pub fn extract_evidence(
-    adapter: &dyn Extension,
+    adapter: &dyn Plugin,
     path: &str,
     source: &str,
 ) -> kndo_contract::evidence::FileEvidence {
@@ -907,7 +905,7 @@ pub fn extract_evidence(
 /// different manifest. The shared front half of every adapter's manifest
 /// tests.
 pub fn manifest_evidence(
-    adapter: &dyn Extension,
+    adapter: &dyn Plugin,
     path: &str,
     content: &str,
     tree: &[&str],
@@ -943,12 +941,7 @@ pub fn declaration_named<'e>(
 
 /// One resolution against a synthetic file set — the shared front half of every
 /// adapter's resolution tests.
-pub fn resolve_in(
-    adapter: &dyn Extension,
-    files: &[&str],
-    from: &str,
-    specifier: &str,
-) -> Resolution {
+pub fn resolve_in(adapter: &dyn Plugin, files: &[&str], from: &str, specifier: &str) -> Resolution {
     let known: std::collections::BTreeSet<ProjectPath> =
         files.iter().map(|p| ProjectPath::new(*p)).collect();
     let cx = ResolveContext::new(&known);
@@ -967,7 +960,7 @@ pub type NamespaceCase<'a> = (&'a str, &'a [(&'a str, &'a str)], &'a str, &'a [&
 /// in the unnamed one), which is the same fact the adapter's own extraction
 /// emits and the engine indexes.
 pub fn resolve_in_namespaces(
-    adapter: &dyn Extension,
+    adapter: &dyn Plugin,
     files: &[(&str, &str)],
     from: &str,
     specifier: &str,

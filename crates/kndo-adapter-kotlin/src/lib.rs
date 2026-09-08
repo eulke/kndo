@@ -23,21 +23,21 @@ mod resolve;
 
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{EvidenceSink, RootKind};
-use kndo_contract::extension::{Extension, ExtensionSpec, FileRole, Rung, Step};
+use kndo_contract::plugin::{FileRole, Plugin, PluginSpec, Rung, Step};
 use kndo_contract::vocab::ProjectPath;
 
 pub struct KotlinAdapter {
-    spec: ExtensionSpec,
+    spec: PluginSpec,
 }
 
 /// What Kotlin's own language dispatches on, as data. Frameworks are NOT here:
 /// JUnit's `@Test`, Spring's stereotypes and Compose's `@Composable` are their
 /// packs' rules to state, gated by the dependency that proves the framework is
 /// installed.
-fn dispatch_rules() -> Vec<kndo_contract::extension::DispatchRule> {
+fn dispatch_rules() -> Vec<kndo_contract::plugin::DispatchRule> {
     use kndo_contract::evidence::RootKind;
     use kndo_contract::evidence::SymbolKind;
-    use kndo_contract::extension::{DispatchRule, Effect, Trigger};
+    use kndo_contract::plugin::{DispatchRule, Effect, Trigger};
     use kndo_contract::vocab::Confidence;
 
     // `override` and `operator` are reported as markers by the extractor —
@@ -93,10 +93,10 @@ impl KotlinAdapter {
                 // Java's: `src/test/kotlin/com/foo` and `src/main/kotlin/com/foo`
                 // are the same namespace, and the test set's build holds the
                 // main set it compiles against.
-                .namespace_span(kndo_contract::extension::NamespaceSpan::Compilation)
+                .namespace_span(kndo_contract::plugin::NamespaceSpan::Compilation)
                 // Kotlin's `package` clause is as free of the directory as
                 // Java's, and more often takes the freedom.
-                .nesting(kndo_contract::extension::Nesting::Flat)
+                .nesting(kndo_contract::plugin::Nesting::Flat)
                 // What this adapter WRITES, so an absence stays typed: the
                 // annotations a declaration carries, the supertypes it
                 // promises, and a function's shape. A stream it does not
@@ -125,8 +125,8 @@ impl Default for KotlinAdapter {
     }
 }
 
-impl Extension for KotlinAdapter {
-    fn spec(&self) -> &ExtensionSpec {
+impl Plugin for KotlinAdapter {
+    fn spec(&self) -> &PluginSpec {
         &self.spec
     }
 

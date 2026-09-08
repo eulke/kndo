@@ -7,7 +7,7 @@
 
 use crate::merge_record;
 use kndo_contract::evidence::{CoverageRecords, FileRecords};
-use kndo_contract::extension::{Activation, Extension, ExtensionSpec, MutatesGraph};
+use kndo_contract::plugin::{Activation, MutatesGraph, Plugin, PluginSpec};
 use kndo_contract::vocab::ProjectPath;
 use std::collections::BTreeMap;
 use std::sync::LazyLock;
@@ -43,8 +43,8 @@ pub fn parse_cobertura_records(text: &str) -> Option<CoverageRecords> {
     (!files.is_empty()).then_some(CoverageRecords { files })
 }
 
-static SPEC: LazyLock<ExtensionSpec> = LazyLock::new(|| {
-    ExtensionSpec::builder("kndo:coverage-cobertura", 1)
+static SPEC: LazyLock<PluginSpec> = LazyLock::new(|| {
+    PluginSpec::builder("kndo:coverage-cobertura", 1)
         .conduct(Activation::Always, MutatesGraph::No)
         .reads_reports(&[
             "coverage.xml",
@@ -58,8 +58,8 @@ static SPEC: LazyLock<ExtensionSpec> = LazyLock::new(|| {
 /// bytes into records.
 pub struct CoberturaPlugin;
 
-impl Extension for CoberturaPlugin {
-    fn spec(&self) -> &ExtensionSpec {
+impl Plugin for CoberturaPlugin {
+    fn spec(&self) -> &PluginSpec {
         &SPEC
     }
 

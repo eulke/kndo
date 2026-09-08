@@ -27,11 +27,11 @@ mod resolve;
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::EvidenceSink;
 use kndo_contract::evidence::RootKind;
-use kndo_contract::extension::{Extension, ExtensionSpec, FileRole};
+use kndo_contract::plugin::{FileRole, Plugin, PluginSpec};
 use kndo_contract::vocab::ProjectPath;
 
 pub struct HtmlAdapter {
-    spec: ExtensionSpec,
+    spec: PluginSpec,
 }
 
 impl HtmlAdapter {
@@ -39,7 +39,7 @@ impl HtmlAdapter {
         HtmlAdapter {
             // No manifest of its own: a document declares no package. No
             // evidence streams: nothing here carries a pragma or a metric.
-            spec: ExtensionSpec::builder("kndo:html", 4)
+            spec: PluginSpec::builder("kndo:html", 4)
                 .suffixes(&["html", "htm"])
                 // A page inside npm's installed dependencies is a dependency's.
                 .ignores(&["**/node_modules/**"])
@@ -78,8 +78,8 @@ impl Default for HtmlAdapter {
     }
 }
 
-impl Extension for HtmlAdapter {
-    fn spec(&self) -> &ExtensionSpec {
+impl Plugin for HtmlAdapter {
+    fn spec(&self) -> &PluginSpec {
         &self.spec
     }
 

@@ -13,8 +13,8 @@ use kndo_contract::adapter::{PackageEntry, Resolution, ResolveContext, SourceFil
 use kndo_contract::evidence::{
     Attachment, FileEvidence, ImportShape, ImportTarget, Reach, Root, RootKind, RootTarget,
 };
-use kndo_contract::extension::{DispatchRule, Extension, ExtensionSpec, PublishedSurface};
 use kndo_contract::manifest::UnitKind;
+use kndo_contract::plugin::{DispatchRule, Plugin, PluginSpec, PublishedSurface};
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
@@ -78,7 +78,7 @@ pub struct GraphFile {
     /// exemption) — reported as diagnostics.
     pub dispatch_notes: Vec<String>,
     /// A generator wrote this file, so what it DECLARES is not this project's
-    /// to judge — see [`kndo_contract::extension::Effect::Generated`]. The
+    /// to judge — see [`kndo_contract::plugin::Effect::Generated`]. The
     /// file is judged like any other: nothing roots it for being generated.
     pub generated: bool,
     /// Declarations a dispatch rule made witnesses, by index, each with the
@@ -225,27 +225,27 @@ pub struct ManifestDeclarations {
     /// whatever order the manifest stated them in.
     pub declarations: Vec<kndo_contract::adapter::DependencyDeclaration>,
     /// The claiming adapter's declared
-    /// [`kndo_contract::extension::DependencyIdentity`] — the spelling that
+    /// [`kndo_contract::plugin::DependencyIdentity`] — the spelling that
     /// judged `users`. `Underivable` leaves every `users` list empty and no
     /// dependency here ever judged: abstention, never accusation.
-    pub identity: kndo_contract::extension::DependencyIdentity,
+    pub identity: kndo_contract::plugin::DependencyIdentity,
     /// The claiming adapter's coordinate.
     pub adapter: SmolStr,
     /// The claiming adapter's declared
-    /// [`kndo_contract::extension::DependencyScoping`]: under `Unscoped` an
+    /// [`kndo_contract::plugin::DependencyScoping`]: under `Unscoped` an
     /// unscoped declaration is a usage claim, and "only tests import it" has
     /// no section to move to.
-    pub scoping: kndo_contract::extension::DependencyScoping,
+    pub scoping: kndo_contract::plugin::DependencyScoping,
     /// The claiming adapter's declared
-    /// [`kndo_contract::extension::ExtensionSpec::dependency_importers`]:
+    /// [`kndo_contract::plugin::PluginSpec::dependency_importers`]:
     /// suffixes of files outside its claims that carry this manifest's
     /// ecosystem's imports — read when another extension claims them, doubt on
     /// any usage judgment when nothing does.
     pub importers: Vec<SmolStr>,
     /// The claiming adapter's declared
-    /// [`kndo_contract::extension::DependencyBuiltins`] — the platform's own
+    /// [`kndo_contract::plugin::DependencyBuiltins`] — the platform's own
     /// modules, never a dependency to declare.
-    pub builtins: kndo_contract::extension::DependencyBuiltins,
+    pub builtins: kndo_contract::plugin::DependencyBuiltins,
     /// Names the manifest spells outside its declarations, sorted and
     /// deduplicated ([`kndo_contract::manifest::ManifestEvidence::mentions`]):
     /// a dependency it names is in use without any import; a package it names
@@ -268,10 +268,10 @@ pub struct ManifestDeclarations {
     /// own users from cross-package ones.
     pub users: Vec<Vec<u32>>,
     /// The paths this manifest's adapter never compiles
-    /// ([`ExtensionSpec::ignores`]): an unclaimed file under one casts no doubt
+    /// ([`PluginSpec::ignores`]): an unclaimed file under one casts no doubt
     /// on the judgment, since the adapter itself left it unread.
     ///
-    /// [`ExtensionSpec::ignores`]: kndo_contract::extension::ExtensionSpec::ignores
+    /// [`PluginSpec::ignores`]: kndo_contract::plugin::PluginSpec::ignores
     pub ignores: Vec<SmolStr>,
 }
 
@@ -303,13 +303,13 @@ impl Graph {
 
     /// For every manifest, which files use each declared dependency — under
     /// the claiming adapter's declared spelling
-    /// ([`kndo_contract::extension::DependencyIdentity`]), over every file that
+    /// ([`kndo_contract::plugin::DependencyIdentity`]), over every file that
     /// adapter claims. A manifest whose adapter derives no identity keeps every
     /// `users` list empty.
     fn judge_dependency_usage(
         &mut self,
         reads: &[crate::project::ManifestRead],
-        adapters: &[Box<dyn Extension>],
+        adapters: &[Box<dyn Plugin>],
     ) {
         let mut claimant: BTreeMap<ProjectPath, SmolStr> = BTreeMap::new();
         let mut mentions: BTreeMap<ProjectPath, Vec<SmolStr>> = BTreeMap::new();
@@ -365,11 +365,11 @@ impl Graph {
             }
         }
         struct Judged {
-            identity: kndo_contract::extension::DependencyIdentity,
+            identity: kndo_contract::plugin::DependencyIdentity,
             adapter: SmolStr,
-            scoping: kndo_contract::extension::DependencyScoping,
+            scoping: kndo_contract::plugin::DependencyScoping,
             importers: Vec<SmolStr>,
-            builtins: kndo_contract::extension::DependencyBuiltins,
+            builtins: kndo_contract::plugin::DependencyBuiltins,
             mentions: Vec<SmolStr>,
             package: Option<u32>,
             owned: Vec<u32>,
@@ -402,9 +402,9 @@ impl Graph {
             };
             let adapter = adapter_by_id(adapters, coordinate);
             let identity = adapter.spec().dependency_identity();
-            let judgeable = identity != kndo_contract::extension::DependencyIdentity::Underivable;
+            let judgeable = identity != kndo_contract::plugin::DependencyIdentity::Underivable;
             let scoping = adapter.spec().dependency_scoping();
-            let unscoped = scoping == kndo_contract::extension::DependencyScoping::Unscoped;
+            let unscoped = scoping == kndo_contract::plugin::DependencyScoping::Unscoped;
             let ownership = ManifestDeclarations {
                 package,
                 ..ManifestDeclarations::unjudged(md.manifest.clone(), Vec::new())
@@ -504,7 +504,7 @@ pub fn assemble(
     files: &[DiscoveredFile],
     claims: &[ClaimedFile],
     evidence: Vec<FileEvidence>,
-    adapters: &[Box<dyn Extension>],
+    adapters: &[Box<dyn Plugin>],
     active: &BTreeSet<SmolStr>,
 ) -> Graph {
     let known: BTreeSet<ProjectPath> = claims
@@ -707,7 +707,7 @@ impl ManifestDeclarations {
     }
 }
 
-fn adapter_by_id<'a>(adapters: &'a [Box<dyn Extension>], id: &str) -> &'a dyn Extension {
+fn adapter_by_id<'a>(adapters: &'a [Box<dyn Plugin>], id: &str) -> &'a dyn Plugin {
     adapters
         .iter()
         .find(|a| a.spec().coordinate() == id)
@@ -843,7 +843,7 @@ fn mount_and_own(files: &mut [GraphFile], project: &crate::project::Project) {
 /// agree to the byte.
 fn dispatch_files(
     files: &mut [GraphFile],
-    adapters: &[Box<dyn Extension>],
+    adapters: &[Box<dyn Plugin>],
     active: &BTreeSet<SmolStr>,
 ) -> BTreeMap<SmolStr, u32> {
     // A RULE PACK is a conduct extension that claims no files and declares
@@ -858,7 +858,7 @@ fn dispatch_files(
     // Spring's on a JVM file and Vapor's on a Swift one. A pack whose
     // framework the project neither depends on nor imports never reaches a
     // file it could be wrong about.
-    let packs: Vec<&ExtensionSpec> = adapters
+    let packs: Vec<&PluginSpec> = adapters
         .iter()
         .map(|a| a.spec())
         .filter(|s| s.suffixes().is_empty() && !s.dispatch_rules().is_empty())
@@ -928,7 +928,7 @@ fn dispatch_files(
 
 fn publish_surfaces(
     files: &mut [GraphFile],
-    adapters: &[Box<dyn Extension>],
+    adapters: &[Box<dyn Plugin>],
     project: &crate::project::Project,
 ) {
     for f in files.iter_mut() {
@@ -984,7 +984,7 @@ fn mount_cap(files: &[GraphFile], file: usize) -> Option<Reach> {
 
 /// One adapter's file-role conventions, compiled: the globs as a set and the
 /// verdict each carries, index-parallel — see
-/// [`kndo_contract::extension::FileRole`].
+/// [`kndo_contract::plugin::FileRole`].
 struct DeclaredRoles {
     adapter: SmolStr,
     globs: globset::GlobSet,
@@ -995,7 +995,7 @@ struct DeclaredRoles {
 /// as anchoring applies them, so a caller outside the engine (a gate proving
 /// nine adapters spelled their conventions right) asks the engine's own
 /// question instead of re-deriving how a path-shaped glob matches.
-pub fn declared_roles(spec: &ExtensionSpec, path: &str) -> Vec<(RootKind, Confidence)> {
+pub fn declared_roles(spec: &PluginSpec, path: &str) -> Vec<(RootKind, Confidence)> {
     let declared = spec.file_roles();
     role_globs(spec)
         .matches(path)
@@ -1005,12 +1005,12 @@ pub fn declared_roles(spec: &ExtensionSpec, path: &str) -> Vec<(RootKind, Confid
 }
 
 /// One spec's file-role globs, compiled — index-parallel to `file_roles()`.
-fn role_globs(spec: &ExtensionSpec) -> globset::GlobSet {
+fn role_globs(spec: &PluginSpec) -> globset::GlobSet {
     crate::extract::path_glob_set(spec.file_roles().iter().map(|r| r.glob.as_str()))
 }
 
 impl DeclaredRoles {
-    fn of(adapter: &dyn Extension) -> DeclaredRoles {
+    fn of(adapter: &dyn Plugin) -> DeclaredRoles {
         let spec = adapter.spec();
         let declared = spec.file_roles();
         DeclaredRoles {
@@ -1072,8 +1072,8 @@ struct ResolvedEdges {
 fn resolve_file(
     from: &ProjectPath,
     evidence: &FileEvidence,
-    adapter: &dyn Extension,
-    adapters: &[Box<dyn Extension>],
+    adapter: &dyn Plugin,
+    adapters: &[Box<dyn Plugin>],
     cx: &ResolveContext<'_>,
     sorted_paths: &[ProjectPath],
 ) -> ResolvedEdges {
@@ -1098,7 +1098,7 @@ fn resolve_file(
             per_import.push(Vec::new());
             continue;
         }
-        let resolver: &dyn Extension = import
+        let resolver: &dyn Plugin = import
             .embedded_in
             .and_then(|r| evidence.embedded.get(r.index()))
             .and_then(|region| crate::extract::claimant_of_suffix(adapters, &region.language))
@@ -1135,7 +1135,7 @@ fn resolve_file(
 /// Hash over every discovered manifest's (path, content), in path order — the
 /// manifest-derived parts of a graph (anchors, the package map) are pure functions
 /// of this state.
-pub fn manifest_state(files: &[DiscoveredFile], adapters: &[Box<dyn Extension>]) -> [u8; 32] {
+pub fn manifest_state(files: &[DiscoveredFile], adapters: &[Box<dyn Plugin>]) -> [u8; 32] {
     let mut h = blake3::Hasher::new();
     for_each_manifest(files, adapters, |_, manifest| {
         let path = manifest.path.as_str().as_bytes();
@@ -1157,7 +1157,7 @@ pub fn patch(
     prev_manifest_state: [u8; 32],
     files: &[DiscoveredFile],
     claims: &[ClaimedFile],
-    adapters: &[Box<dyn Extension>],
+    adapters: &[Box<dyn Plugin>],
     active: &BTreeSet<SmolStr>,
     cache: &EvidenceCache,
 ) -> Option<Graph> {
@@ -1237,8 +1237,8 @@ pub fn patch(
 /// pass for plugin activation).
 pub(crate) fn for_each_manifest(
     files: &[DiscoveredFile],
-    adapters: &[Box<dyn Extension>],
-    f: impl FnMut(&dyn Extension, SourceFile<'_>),
+    adapters: &[Box<dyn Plugin>],
+    f: impl FnMut(&dyn Plugin, SourceFile<'_>),
 ) {
     for_each_matching(files, adapters, |spec| spec.manifests(), f);
 }
@@ -1248,9 +1248,9 @@ pub(crate) fn for_each_manifest(
 /// roots pass alone — in file-path order.
 pub(crate) fn for_each_matching(
     files: &[DiscoveredFile],
-    adapters: &[Box<dyn Extension>],
-    globs_of: impl Fn(&kndo_contract::extension::ExtensionSpec) -> &[SmolStr],
-    mut f: impl FnMut(&dyn Extension, SourceFile<'_>),
+    adapters: &[Box<dyn Plugin>],
+    globs_of: impl Fn(&kndo_contract::plugin::PluginSpec) -> &[SmolStr],
+    mut f: impl FnMut(&dyn Plugin, SourceFile<'_>),
 ) {
     let manifest_sets: Vec<Option<globset::GlobSet>> = adapters
         .iter()
@@ -1296,7 +1296,7 @@ pub(crate) fn for_each_matching(
 /// each manifest's own roots. Everything is read from `project` and `reads`,
 /// both assembled in path order, so the result is a pure function of the tree.
 fn anchor_manifest_roots(
-    adapters: &[Box<dyn Extension>],
+    adapters: &[Box<dyn Plugin>],
     project: &crate::project::Project,
     reads: &[crate::project::ManifestRead],
     graph_files: &mut [GraphFile],
@@ -1341,7 +1341,7 @@ fn anchor_manifest_roots(
     // Where no unit said what a file IS, its language's own tooling may still
     // have a convention for it — `go test` compiles exactly the `_test.go`
     // files. The adapter declares the convention as data
-    // ([`kndo_contract::extension::FileRole`]) rather than reading a path and
+    // ([`kndo_contract::plugin::FileRole`]) rather than reading a path and
     // concluding a root, so the precedence above is the engine's to apply and
     // not nine adapters' to remember.
     let roles: Vec<DeclaredRoles> = adapters

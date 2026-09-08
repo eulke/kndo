@@ -19,11 +19,11 @@ mod resolve;
 
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{EvidenceSink, EvidenceStream, EvidenceStreams};
-use kndo_contract::extension::{Extension, ExtensionSpec};
+use kndo_contract::plugin::{Plugin, PluginSpec};
 use kndo_contract::vocab::ProjectPath;
 
 pub struct CssAdapter {
-    spec: ExtensionSpec,
+    spec: PluginSpec,
 }
 
 impl CssAdapter {
@@ -32,7 +32,7 @@ impl CssAdapter {
             // Comments for suppression pragmas; no metrics, since nothing
             // declared carries a body. No manifest of its own. 2: the
             // generated banner is reported, never concluded.
-            spec: ExtensionSpec::builder("kndo:css", 2)
+            spec: PluginSpec::builder("kndo:css", 2)
                 .suffixes(&["css", "scss"])
                 .emits(EvidenceStreams::of(&[
                     EvidenceStream::Comments,
@@ -57,8 +57,8 @@ impl Default for CssAdapter {
     }
 }
 
-impl Extension for CssAdapter {
-    fn spec(&self) -> &ExtensionSpec {
+impl Plugin for CssAdapter {
+    fn spec(&self) -> &PluginSpec {
         &self.spec
     }
 

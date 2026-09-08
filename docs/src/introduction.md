@@ -37,4 +37,4 @@ how [health](health.md) is measured and how coverage reports sharpen it,
 running kndo in [CI](ci.md), reading the graph with the
 [navigation verbs](navigation.md) and from [agents](agents.md), what each
 [language adapter](languages.md) reads, and how to write an
-[extension](extensions.md).
+[extension](plugins.md).

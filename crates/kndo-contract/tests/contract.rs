@@ -111,9 +111,9 @@ fn subject_derives_kind_and_identity_ignores_spans() {
 #[test]
 fn plugin_categories_are_namespaced() {
     let c = Category::extension("github.com/acme/kndo-x", "no-foo");
-    assert!(c.is_extension());
-    assert_eq!(c.as_str(), "ext:github.com/acme/kndo-x/no-foo");
-    assert!(!Category::UNUSED.is_extension());
+    assert!(c.is_plugin());
+    assert_eq!(c.as_str(), "plugin:github.com/acme/kndo-x/no-foo");
+    assert!(!Category::UNUSED.is_plugin());
 }
 
 #[test]
@@ -126,8 +126,8 @@ fn contract_fingerprint_is_stable_within_a_build() {
 
 #[test]
 fn declaring_extensions_is_claiming_them() {
-    use kndo_contract::extension::ExtensionSpec;
-    let spec = ExtensionSpec::builder("demo", 1)
+    use kndo_contract::plugin::PluginSpec;
+    let spec = PluginSpec::builder("demo", 1)
         .suffixes(&["ts", "tsx"])
         .claims(&["**/special.conf"])
         .build();
@@ -336,7 +336,7 @@ fn a_suppression_carries_what_it_allows_and_its_position() {
 
 #[test]
 fn a_ladder_names_the_narrowest_step_a_declaration_can_take() {
-    use kndo_contract::extension::{Bearer, Ladder, PublishedSurface, Rung, Step};
+    use kndo_contract::plugin::{Bearer, Ladder, PublishedSurface, Rung, Step};
     // Kotlin's shape: `private` twice — the class on a member, the file on a
     // top-level declaration — then `internal`, then `public`.
     let ladder = Ladder::new(vec![
@@ -440,7 +440,7 @@ fn a_regions_writes_land_in_the_files_coordinates_and_never_nest() {
 #[test]
 fn a_reach_stands_on_a_rung_and_never_reaches_wider_than_its_owner() {
     use kndo_contract::evidence::{EvidenceSink, EvidenceStreams, Reach, SymbolKind};
-    use kndo_contract::extension::Rung;
+    use kndo_contract::plugin::Rung;
     use kndo_contract::vocab::Span;
     let named = Reach::Named {
         namespace: vec!["crate".into(), "a".into()],
@@ -556,7 +556,7 @@ fn a_mount_reach_reads_from_where_it_stands_and_the_fewer_levels_cap() {
 
 #[test]
 fn the_heirs_step_is_another_axis_of_the_ladder() {
-    use kndo_contract::extension::{Ladder, Rung, Step};
+    use kndo_contract::plugin::{Ladder, Rung, Step};
     let ladder = Ladder::new(vec![
         Step::for_members(Rung::Owner, "private"),
         Step::for_members(Rung::Heirs, "protected"),

@@ -7,8 +7,8 @@
 use kndo_adapter_python::PythonAdapter;
 use kndo_contract::adapter::SourceFile;
 use kndo_contract::adapter::{DependencyScope, ResolveContext};
-use kndo_contract::extension::Extension;
 use kndo_contract::manifest::{ManifestEvidence, ManifestSink, Publication, UnitKind};
+use kndo_contract::plugin::Plugin;
 use kndo_contract::vocab::ProjectPath;
 use std::collections::BTreeSet;
 

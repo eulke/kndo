@@ -1,7 +1,7 @@
 //! A language's own conventions, declared as data and applied by the engine:
 //! `go test` compiles exactly the `_test.go` files, pytest collects `test_*.py`,
 //! a page is its own entry. The adapter states the glob and the colour
-//! ([`kndo_contract::extension::FileRole`]) and never reads a path to conclude
+//! ([`kndo_contract::plugin::FileRole`]) and never reads a path to conclude
 //! a root, so the precedence — a manifest that named the file's role outranks
 //! every convention — is the engine's to apply once and not nine adapters' to
 //! remember.
@@ -11,14 +11,14 @@ mod common;
 use common::{color, reported};
 use kndo::Category;
 use kndo_contract::evidence::RootKind;
-use kndo_contract::extension::FileRole;
-use kndo_testkit::{MockExtension, TempProject};
+use kndo_contract::plugin::FileRole;
+use kndo_testkit::{MockPlugin, TempProject};
 
 /// The mock language's conventions: anything under `spec/` is the runner's, a
 /// `*.entry.kmock` is a page-shaped entry of its own, and the two overlap
 /// freely — a `spec/x.entry.kmock` is both.
-fn conventional() -> MockExtension {
-    MockExtension::with(|b| {
+fn conventional() -> MockPlugin {
+    MockPlugin::with(|b| {
         b.file_roles(&[
             FileRole::certain("spec/**", RootKind::Test),
             FileRole::certain("**/spec/**", RootKind::Test),
@@ -104,7 +104,7 @@ fn a_language_declaring_nothing_reads_no_path_at_all() {
         "import ./../src/lib { shared }\ncall shared\n",
     )
     .file("src/lib.kmock", "pub fn shared\n");
-    let snap = common::analyze(&p, vec![Box::new(MockExtension::new())]);
+    let snap = common::analyze(&p, vec![Box::new(MockPlugin::new())]);
 
     // No convention declared, so `spec/` is a directory like any other and
     // nothing colours it: the default is silence, not a guess from the name.

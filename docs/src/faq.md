@@ -5,7 +5,7 @@ from roots: manifest entries and scripts, launchers, conventions, and what
 extensions declare. Ask `kndo trace <path>` to see whether anything reaches it
 and `kndo used-by <path>` for what keeps it alive. If the framework's rule is
 statable — a directory it scans, an annotation it dispatches on, a name a
-manifest declares — an [extension](extensions.md) states it once for every
+manifest declares — an [extension](plugins.md) states it once for every
 project. If it is a one-off, a `kndo:allow unused -- reason` in the file is the
 honest record.
 

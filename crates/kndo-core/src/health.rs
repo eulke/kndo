@@ -207,7 +207,7 @@ impl Health {
 }
 
 fn counts(finding: &Finding, universe: &Universe) -> bool {
-    !finding.category.is_extension()
+    !finding.category.is_plugin()
         && finding.severity.at_least(Severity::Warning)
         && universe.contains(&finding.subject)
 }
@@ -266,7 +266,7 @@ mod tests {
         let findings = vec![
             // Info is the advisory severity tier.
             finding(Category::INTERNAL_ONLY, Severity::Info, symbol("a.py", "f")),
-            // Extension findings are advisory by the two-tier decision.
+            // Plugin findings are advisory by the two-tier decision.
             finding(
                 Category::extension("demo:probe", "note"),
                 Severity::Warning,

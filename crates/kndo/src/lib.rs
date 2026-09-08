@@ -6,19 +6,19 @@
 
 pub use kndo_contract::adapter::{ResolveContext, SourceFile};
 pub use kndo_contract::evidence::{DiagnosticLevel, RootKind};
-pub use kndo_contract::extension::{
-    DeclaredSymbol, DependencyIdentity, DependencyScoping, Extension, ExtensionSpec,
-    ExtensionSpecBuilder, GraphAccess, MutatesGraph,
-};
 pub use kndo_contract::finding::{Finding, LineSpan, Severity, sort_findings};
+pub use kndo_contract::plugin::{
+    DeclaredSymbol, DependencyIdentity, DependencyScoping, GraphAccess, MutatesGraph, Plugin,
+    PluginSpec, PluginSpecBuilder,
+};
 pub use kndo_contract::subject::{FindingId, Subject, SymbolSelector};
 pub use kndo_contract::vocab::{Category, Confidence, ProjectPath, Span, SubjectKind};
 pub use kndo_core::query;
 pub use kndo_core::{
     Abstention, AbstentionReason, AbstentionScope, Activation, ActivationRule, CONTENT_MAX_BYTES,
-    CONTENT_MAX_FILES, CacheLocation, Categories, CategoryCount, ConductSeverity, ConductSink,
-    ConductTarget, Config, ContentView, Contribution, ExtensionRun, GatePolicy, Graph, GraphView,
-    Health, Mode, PhaseTimings, PinnedSide, REPORT_SCHEMA, Refusal, Report, ReportDiagnostic,
+    CONTENT_MAX_FILES, CacheLocation, Categories, CategoryCount, Config, ContentView, Contribution,
+    GatePolicy, Graph, GraphView, Health, Mode, PhaseTimings, PinnedSide, PluginRun,
+    PluginSeverity, PluginSink, PluginTarget, REPORT_SCHEMA, Refusal, Report, ReportDiagnostic,
     RuleDescriptor, RunInfo, RunMode, RunOutcome, Session, Snapshot, SuppressedSummary, Threads,
     Universe, is_reserved_coordinate,
 };
@@ -34,14 +34,14 @@ use kndo_adapter_swift::SwiftAdapter;
 use kndo_adapter_ts::TypeScriptAdapter;
 use kndo_apple::{InfoPlistPlugin, InterfaceBuilderPlugin};
 use kndo_coverage::{CoberturaPlugin, GoCoverPlugin, JacocoPlugin, LcovPlugin};
-use kndo_packs::SpringRules;
+use kndo_plugins::SpringRules;
 
 /// Everything a stock run is, in deterministic registration order: claim priority
 /// among claiming extensions, and — among conduct-declaring ones — coverage
 /// precedence and contribution order. The `builtin_plugin_proofs` gate closes over
 /// this list's conduct subset: a conducting coordinate shipped without its
 /// baseline-then-plugin proof fails the suite.
-pub fn default_extensions() -> Vec<Box<dyn Extension>> {
+pub fn default_extensions() -> Vec<Box<dyn Plugin>> {
     vec![
         Box::new(TypeScriptAdapter::new()),
         Box::new(RustAdapter::new()),
@@ -89,15 +89,15 @@ mod external {
     //! the mistake the channel exists to show.
 
     use kndo_contract::evidence::DiagnosticLevel;
-    use kndo_contract::extension::Extension;
+    use kndo_contract::plugin::Plugin;
     use kndo_contract::vocab::ProjectPath;
     use kndo_core::ReportDiagnostic;
-    use kndo_host_wasm::WasmExtension;
+    use kndo_host_wasm::WasmPlugin;
     use std::path::Path;
 
     pub(crate) fn load_into(
         root: &Path,
-        extensions: &mut Vec<Box<dyn Extension>>,
+        extensions: &mut Vec<Box<dyn Plugin>>,
     ) -> Vec<ReportDiagnostic> {
         let dir = root.join(".kndo/plugins");
         let Ok(entries) = std::fs::read_dir(&dir) else {
@@ -117,7 +117,7 @@ mod external {
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_default();
             let report_path = ProjectPath::new(format!(".kndo/plugins/{name}"));
-            match WasmExtension::load(&path) {
+            match WasmPlugin::load(&path) {
                 Ok(extension) => extensions.push(Box::new(extension)),
                 Err(kndo_host_wasm::LoadError::ReservedCoordinate { coordinate }) => {
                     diagnostics.push(ReportDiagnostic {

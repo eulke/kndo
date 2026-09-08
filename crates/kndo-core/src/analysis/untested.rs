@@ -72,7 +72,7 @@ impl Analysis for Untested {
             // Where coverage said nothing about this file, the graph decides, at the
             // file's own granularity. A file the ENGINE anchors as Production — a
             // manifest's entry, or a role its language declares for every file of
-            // that shape ([`kndo_contract::extension::FileRole`], an HTML page) — is
+            // that shape ([`kndo_contract::plugin::FileRole`], an HTML page) — is
             // wiring: an entry point nothing can import, so the heuristic asks the
             // question of what it leads to instead. What the file itself claimed is
             // not that, and is judged here; measured coverage above judges either.

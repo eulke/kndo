@@ -16,9 +16,8 @@
 //! the same six letters.
 
 use kndo_contract::evidence::{RootKind, SymbolKind};
-use kndo_contract::extension::{
-    Activation, ActivationRule, DispatchRule, Effect, Extension, ExtensionSpec, MutatesGraph,
-    Trigger,
+use kndo_contract::plugin::{
+    Activation, ActivationRule, DispatchRule, Effect, MutatesGraph, Plugin, PluginSpec, Trigger,
 };
 use kndo_contract::vocab::Confidence;
 use std::sync::LazyLock;
@@ -67,7 +66,7 @@ const HANDLERS: &[&str] = &[
     "jakarta.jms.annotation.JmsListener",
 ];
 
-static SPEC: LazyLock<ExtensionSpec> = LazyLock::new(|| {
+static SPEC: LazyLock<PluginSpec> = LazyLock::new(|| {
     let mut rules: Vec<DispatchRule> = STEREOTYPES
         .iter()
         .map(|marker| DispatchRule {
@@ -87,7 +86,7 @@ static SPEC: LazyLock<ExtensionSpec> = LazyLock::new(|| {
         then: Effect::Root(RootKind::Production),
         confidence: Confidence::Probable,
     }));
-    ExtensionSpec::builder("kndo:spring", 1)
+    PluginSpec::builder("kndo:spring", 1)
         .dispatch(rules)
         .conduct(
             Activation::AnyRule(vec![ActivationRule::ManifestDependency(
@@ -103,8 +102,8 @@ static SPEC: LazyLock<ExtensionSpec> = LazyLock::new(|| {
 /// The Spring pack: stereotypes and handler methods are the container's entries.
 pub struct SpringRules;
 
-impl Extension for SpringRules {
-    fn spec(&self) -> &ExtensionSpec {
+impl Plugin for SpringRules {
+    fn spec(&self) -> &PluginSpec {
         &SPEC
     }
 }

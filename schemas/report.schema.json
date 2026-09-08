@@ -142,7 +142,7 @@
           "const": "specifier-identity-underivable"
         },
         {
-          "description": "Files no extension claims sit inside the package with a suffix the\nclaiming extension declares can import\n(`ExtensionSpec::dependency_importers`) — a `.vue` component, an `.html`\npage — so an import of the dependency may exist where nothing can see it.",
+          "description": "Files no extension claims sit inside the package with a suffix the\nclaiming extension declares can import\n(`PluginSpec::dependency_importers`) — a `.vue` component, an `.html`\npage — so an import of the dependency may exist where nothing can see it.",
           "type": "object",
           "properties": {
             "unclaimed-importers": {
@@ -307,7 +307,7 @@
       ]
     },
     "Category": {
-      "description": "A finding category: a validated string newtype, not an enum, because the\n`ext:<coordinate>/<rule>` namespace is open. First-party categories are the\nassociated constants.",
+      "description": "A finding category: a validated string newtype, not an enum, because the\n`plugin:<coordinate>/<rule>` namespace is open. First-party categories are the\nassociated constants.",
       "type": "string"
     },
     "CategoryCount": {
@@ -447,47 +447,6 @@
           "type": "string",
           "const": "qualifiers"
         }
-      ]
-    },
-    "ExtensionRun": {
-      "type": "object",
-      "properties": {
-        "dependency_identity": {
-          "description": "How this extension's import specifiers name a declared dependency —\n`underivable` is why no dependency finding can exist for its manifests.",
-          "$ref": "#/$defs/DependencyIdentity"
-        },
-        "dependency_scoping": {
-          "description": "Whether the manifests this extension reads have dependency sections\n(`scoped`) or one flat requirement list (`unscoped`) — under `unscoped`,\n`test-only` never fires on a dependency: there is no section to move it to.",
-          "$ref": "#/$defs/DependencyScoping"
-        },
-        "files": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "id": {
-          "type": "string"
-        },
-        "import_cycles": {
-          "description": "Whether the language calls import cycles a hazard (`cyclic` reads it);\n`tolerated` is why a cycle-free-by-compiler language reports none.",
-          "$ref": "#/$defs/CycleTolerance"
-        },
-        "ladder": {
-          "description": "The reaches this language can spell, narrowest first, each under the\nword this language uses for it (`internal-only` reads both: the rungs\nto know a narrower one exists, the word to say so). Empty means the\nlanguage states no ladder and that analysis stays silent for its files.",
-          "$ref": "#/$defs/Ladder"
-        },
-        "published_surface": {
-          "description": "The judgment capabilities this extension declared — the one-row answer\nto \"why does kndo (not) report X for this language\". What a unit of\nthis ecosystem publishes: under `exports`, every exported declaration is\nthe outside world's and `internal-only`'s Exported rung never fires;\nunder `entries`, only what an entry exports is.",
-          "$ref": "#/$defs/PublishedSurface"
-        }
-      },
-      "required": [
-        "id",
-        "files",
-        "published_surface",
-        "import_cycles",
-        "dependency_scoping",
-        "dependency_identity"
       ]
     },
     "Finding": {
@@ -648,6 +607,47 @@
         "subjects"
       ]
     },
+    "PluginRun": {
+      "type": "object",
+      "properties": {
+        "dependency_identity": {
+          "description": "How this extension's import specifiers name a declared dependency —\n`underivable` is why no dependency finding can exist for its manifests.",
+          "$ref": "#/$defs/DependencyIdentity"
+        },
+        "dependency_scoping": {
+          "description": "Whether the manifests this extension reads have dependency sections\n(`scoped`) or one flat requirement list (`unscoped`) — under `unscoped`,\n`test-only` never fires on a dependency: there is no section to move it to.",
+          "$ref": "#/$defs/DependencyScoping"
+        },
+        "files": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "id": {
+          "type": "string"
+        },
+        "import_cycles": {
+          "description": "Whether the language calls import cycles a hazard (`cyclic` reads it);\n`tolerated` is why a cycle-free-by-compiler language reports none.",
+          "$ref": "#/$defs/CycleTolerance"
+        },
+        "ladder": {
+          "description": "The reaches this language can spell, narrowest first, each under the\nword this language uses for it (`internal-only` reads both: the rungs\nto know a narrower one exists, the word to say so). Empty means the\nlanguage states no ladder and that analysis stays silent for its files.",
+          "$ref": "#/$defs/Ladder"
+        },
+        "published_surface": {
+          "description": "The judgment capabilities this extension declared — the one-row answer\nto \"why does kndo (not) report X for this language\". What a unit of\nthis ecosystem publishes: under `exports`, every exported declaration is\nthe outside world's and `internal-only`'s Exported rung never fires;\nunder `entries`, only what an entry exports is.",
+          "$ref": "#/$defs/PublishedSurface"
+        }
+      },
+      "required": [
+        "id",
+        "files",
+        "published_surface",
+        "import_cycles",
+        "dependency_scoping",
+        "dependency_identity"
+      ]
+    },
     "ProjectPath": {
       "description": "A `/`-separated, project-relative path. The one path spelling that crosses crate\nboundaries; OS paths stay at the discovery edge.",
       "type": "string"
@@ -685,7 +685,7 @@
         "extensions": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ExtensionRun"
+            "$ref": "#/$defs/PluginRun"
           }
         },
         "files_claimed": {

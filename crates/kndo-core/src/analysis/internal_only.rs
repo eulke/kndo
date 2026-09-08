@@ -1,7 +1,7 @@
 //! Declared wider than it is used: a declaration whose every use sits inside a
 //! narrower reach than the one it declares could take the language's keyword
 //! for that reach. One claim, read off the language's ladder
-//! ([`kndo_contract::extension::Ladder`]): the declaration stands on a rung —
+//! ([`kndo_contract::plugin::Ladder`]): the declaration stands on a rung —
 //! its namespace, its unit, exported — and its uses need a narrower one — the
 //! declaration that owns it, or its file. The advice names the narrowest step
 //! between the two that the declaration's shape can take; a language that
@@ -18,7 +18,7 @@
 //! unreachable file still compiles against the export it spells (vite's
 //! `__tests_dts__` type-tests proved that vice). And it is judged only where
 //! the export is nobody's outside: an ecosystem that publishes through entries
-//! ([`kndo_contract::extension::PublishedSurface::Entries`]), or a unit that
+//! ([`kndo_contract::plugin::PublishedSurface::Entries`]), or a unit that
 //! publishes nothing — an executable, a test set, a library its manifest keeps
 //! private. Where every export is published, an exported declaration is the
 //! outside world's however it is used inside. A whole-file-rooted file is
@@ -36,8 +36,8 @@ use crate::navigate::Pool;
 use kndo_contract::evidence::{
     Declaration, EvidenceStream, FileEvidence, ImportShape, Reach, RootTarget, SymbolKind,
 };
-use kndo_contract::extension::{PublishedSurface, Rung};
 use kndo_contract::finding::{Finding, Severity};
+use kndo_contract::plugin::{PublishedSurface, Rung};
 use kndo_contract::vocab::{Category, Confidence};
 use std::collections::{BTreeMap, BTreeSet};
 

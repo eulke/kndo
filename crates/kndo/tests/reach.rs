@@ -6,21 +6,21 @@ mod common;
 
 use common::{keeper_kinds, reaches, reported};
 use kndo::Category;
-use kndo_contract::extension::{PublishedSurface, Rung, Step};
-use kndo_testkit::{MockExtension, TempProject};
+use kndo_contract::plugin::{PublishedSurface, Rung, Step};
+use kndo_testkit::{MockPlugin, TempProject};
 
 fn pair(declared: &str, effective: &str) -> (String, String) {
     (declared.to_string(), effective.to_string())
 }
 
 /// The kmock language whose units publish every export, like a jar.
-fn publishing() -> MockExtension {
-    MockExtension::with(|spec| spec.published_surface(PublishedSurface::Exports))
+fn publishing() -> MockPlugin {
+    MockPlugin::with(|spec| spec.published_surface(PublishedSurface::Exports))
 }
 
 /// The kmock language with every rung the engine pools on its ladder — one
 /// step per rung, under the word these tests read back.
-fn laddered() -> MockExtension {
+fn laddered() -> MockPlugin {
     let words = [
         (Rung::Owner, "own"),
         (Rung::File, "local"),
@@ -39,7 +39,7 @@ fn laddered() -> MockExtension {
             _ => Step::new(rung, word),
         })
         .collect();
-    MockExtension::laddered(&steps)
+    MockPlugin::laddered(&steps)
 }
 
 #[test]

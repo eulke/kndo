@@ -1,6 +1,6 @@
 //! The guest half of the ABI — one world, one macro, the REAL trait. An external
-//! author implements [`kndo_contract::extension::Extension`] — the same trait,
-//! the same `EvidenceSink`, `ResolveContext`, `ConductSink` and content scope a
+//! author implements [`kndo_contract::plugin::Plugin`] — the same trait,
+//! the same `EvidenceSink`, `ResolveContext`, `PluginSink` and content scope a
 //! built-in uses — and exports it with [`export_extension!`]. This crate rebuilds
 //! the extraction context from the host's enumeration imports, hands conduct
 //! hooks a graph and content view backed by the conduct imports, and converts
@@ -18,13 +18,13 @@ use kndo_contract::adapter::{PackageEntry, ProjectRoot, Resolution, ResolveConte
 use kndo_contract::evidence::{
     self as ev, CoverageRecords, EvidenceSink, EvidenceStream, FileEvidence,
 };
-use kndo_contract::extension::{
-    Activation, ActivationRule, Bearer, ConductSeverity, ConductSink, ConductTarget, ContentAccess,
-    CycleTolerance, DeclaredSymbol, DependencyBuiltins, DependencyIdentity, DependencyScoping,
-    DispatchRule, Effect, Extension, ExtensionSpec, GraphAccess, NamespaceSpan, Nesting,
+use kndo_contract::manifest::UnitKind;
+use kndo_contract::plugin::{
+    Activation, ActivationRule, Bearer, ContentAccess, CycleTolerance, DeclaredSymbol,
+    DependencyBuiltins, DependencyIdentity, DependencyScoping, DispatchRule, Effect, GraphAccess,
+    NamespaceSpan, Nesting, Plugin, PluginSeverity, PluginSink, PluginSpec, PluginTarget,
     PublishedSurface, Rung, Step, Trigger, UnnamedUnit,
 };
-use kndo_contract::manifest::UnitKind;
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use smol_str::SmolStr;
 use std::collections::{BTreeMap, BTreeSet};
@@ -38,7 +38,7 @@ use std::sync::OnceLock;
 pub mod bindings {
     wit_bindgen::generate!({
         path: "../../wit",
-        world: "extension",
+        world: "plugin",
         pub_export_macro: true,
     });
 }
@@ -49,8 +49,8 @@ pub use bindings::kndo::vocab::types as wire;
 
 // ---------------------------------------------------------------- contract → wire
 
-pub fn spec_to_wire(spec: &ExtensionSpec) -> wire::ExtensionSpec {
-    wire::ExtensionSpec {
+pub fn spec_to_wire(spec: &PluginSpec) -> wire::PluginSpec {
+    wire::PluginSpec {
         coordinate: spec.coordinate().to_string(),
         version: spec.version(),
         suffixes: spec.suffixes().iter().map(|s| s.to_string()).collect(),
@@ -714,21 +714,21 @@ fn package_entry_from_wire(entry: wire::PackageEntry) -> PackageEntry {
     }
 }
 
-fn conduct_target_to_wire(target: &ConductTarget) -> wire::ConductTarget {
+fn plugin_target_to_wire(target: &PluginTarget) -> wire::PluginTarget {
     match target {
-        ConductTarget::File(p) => wire::ConductTarget::File(p.as_str().to_string()),
-        ConductTarget::Symbol { path, name } => wire::ConductTarget::Symbol(wire::SymbolRef {
+        PluginTarget::File(p) => wire::PluginTarget::File(p.as_str().to_string()),
+        PluginTarget::Symbol { path, name } => wire::PluginTarget::Symbol(wire::SymbolRef {
             path: path.as_str().to_string(),
             name: name.to_string(),
         }),
     }
 }
 
-fn severity_to_wire(severity: ConductSeverity) -> wire::ConductSeverity {
+fn severity_to_wire(severity: PluginSeverity) -> wire::PluginSeverity {
     match severity {
-        ConductSeverity::Error => wire::ConductSeverity::Error,
-        ConductSeverity::Warning => wire::ConductSeverity::Warning,
-        ConductSeverity::Info => wire::ConductSeverity::Info,
+        PluginSeverity::Error => wire::PluginSeverity::Error,
+        PluginSeverity::Warning => wire::PluginSeverity::Warning,
+        PluginSeverity::Info => wire::PluginSeverity::Info,
     }
 }
 
@@ -881,12 +881,12 @@ impl ContentAccess for WireContent {
 
 // ------------------------------------------------------------- the one export
 
-/// Implements the generated `Guest` trait for any real [`Extension`]. Used
+/// Implements the generated `Guest` trait for any real [`Plugin`]. Used
 /// through [`export_extension!`]; public so the macro's expansion can name it.
 pub struct ExportedExtension<E>(core::marker::PhantomData<E>);
 
-impl<E: Extension + Default> bindings::Guest for ExportedExtension<E> {
-    fn spec() -> wire::ExtensionSpec {
+impl<E: Plugin + Default> bindings::Guest for ExportedExtension<E> {
+    fn spec() -> wire::PluginSpec {
         spec_to_wire(E::default().spec())
     }
 
@@ -936,13 +936,13 @@ impl<E: Extension + Default> bindings::Guest for ExportedExtension<E> {
         let extension = E::default();
         let graph = WireGraph::fetch();
         let content = WireContent::fetch();
-        let mut sink = ConductSink::default();
+        let mut sink = PluginSink::default();
         extension.contribute_roots(&graph, &content, &mut sink);
         let (roots, _, _) = sink.into_parts();
         roots
             .into_iter()
             .map(|r| wire::ContributedRoot {
-                target: conduct_target_to_wire(&r.target),
+                target: plugin_target_to_wire(&r.target),
                 kind: root_kind_to_wire(r.kind),
                 confidence: confidence_to_wire(r.confidence),
             })
@@ -953,7 +953,7 @@ impl<E: Extension + Default> bindings::Guest for ExportedExtension<E> {
         let extension = E::default();
         let graph = WireGraph::fetch();
         let content = WireContent::fetch();
-        let mut sink = ConductSink::default();
+        let mut sink = PluginSink::default();
         extension.report_findings(&graph, &content, &mut sink);
         let (_, findings, _) = sink.into_parts();
         findings
@@ -961,7 +961,7 @@ impl<E: Extension + Default> bindings::Guest for ExportedExtension<E> {
             .map(|f| wire::ContributedFinding {
                 rule: f.rule.to_string(),
                 severity: severity_to_wire(f.severity),
-                target: conduct_target_to_wire(&f.target),
+                target: plugin_target_to_wire(&f.target),
                 confidence: confidence_to_wire(f.confidence),
                 message: f.message,
             })
@@ -976,7 +976,7 @@ impl<E: Extension + Default> bindings::Guest for ExportedExtension<E> {
     }
 }
 
-/// Export a real [`Extension`] as this component's `kndo:vocab/extension` world.
+/// Export a real [`Plugin`] as this component's `kndo:vocab/extension` world.
 /// The author's type needs `Default`; everything else is the same trait a
 /// built-in implements — whichever clusters its spec declares.
 #[macro_export]

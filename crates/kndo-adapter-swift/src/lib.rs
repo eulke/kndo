@@ -40,11 +40,11 @@ mod resolve;
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::EvidenceSink;
 use kndo_contract::evidence::RootKind;
-use kndo_contract::extension::{Extension, ExtensionSpec, FileRole, Rung, Step, UnnamedUnit};
+use kndo_contract::plugin::{FileRole, Plugin, PluginSpec, Rung, Step, UnnamedUnit};
 use kndo_contract::vocab::ProjectPath;
 
 pub struct SwiftAdapter {
-    spec: ExtensionSpec,
+    spec: PluginSpec,
 }
 
 /// What SWIFT ITSELF dispatches on, as data. The line the design draws: a
@@ -53,9 +53,9 @@ pub struct SwiftAdapter {
 /// swift-testing's `@Test`, SwiftUI's `View` and UIKit's `@UIApplicationMain`
 /// are libraries you import, and their rules are `kndo:xctest`,
 /// `kndo:swift-testing`, `kndo:swiftui` and `kndo:uikit` (M8.e).
-fn dispatch_rules() -> Vec<kndo_contract::extension::DispatchRule> {
+fn dispatch_rules() -> Vec<kndo_contract::plugin::DispatchRule> {
     use kndo_contract::evidence::RootKind;
-    use kndo_contract::extension::{DispatchRule, Effect, Trigger};
+    use kndo_contract::plugin::{DispatchRule, Effect, Trigger};
     use kndo_contract::vocab::Confidence;
     vec![
         // `@main` — the language's own entry attribute. SwiftPM resolves the
@@ -97,7 +97,7 @@ impl SwiftAdapter {
                 &["**/Package.swift"],
                 // Files in a module compile as one unit; cross-references are
                 // routine, and the compiler rejects target-level cycles.
-                kndo_contract::extension::CycleTolerance::Tolerated,
+                kndo_contract::plugin::CycleTolerance::Tolerated,
             )
             // What a rule reads about a Swift declaration: the attributes and
             // the one modifier it carries, the types it promises the surface
@@ -146,8 +146,8 @@ impl Default for SwiftAdapter {
     }
 }
 
-impl Extension for SwiftAdapter {
-    fn spec(&self) -> &ExtensionSpec {
+impl Plugin for SwiftAdapter {
+    fn spec(&self) -> &PluginSpec {
         &self.spec
     }
 

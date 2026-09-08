@@ -5,11 +5,10 @@
 //! same suppression pass as first-party ones.
 
 use kndo::{
-    Activation, CacheLocation, Category, ConductSeverity, ConductTarget, Confidence, Config,
-    Extension, ExtensionSpec, MutatesGraph, ProjectPath, RootKind, RunMode, Session, Snapshot,
-    Subject, Threads,
+    Activation, CacheLocation, Category, Confidence, Config, MutatesGraph, Plugin, PluginSeverity,
+    PluginSpec, PluginTarget, ProjectPath, RootKind, RunMode, Session, Snapshot, Subject, Threads,
 };
-use kndo_testkit::{MockAdapter, MockExtension, TempProject};
+use kndo_testkit::{MockAdapter, MockPlugin, TempProject};
 
 fn fixture() -> TempProject {
     let p = TempProject::new();
@@ -22,8 +21,8 @@ fn fixture() -> TempProject {
     p
 }
 
-fn analyze(p: &TempProject, conduct: Vec<Box<dyn Extension>>) -> Snapshot {
-    let mut extensions: Vec<Box<dyn Extension>> = vec![Box::new(MockAdapter::new())];
+fn analyze(p: &TempProject, conduct: Vec<Box<dyn Plugin>>) -> Snapshot {
+    let mut extensions: Vec<Box<dyn Plugin>> = vec![Box::new(MockAdapter::new())];
     extensions.extend(conduct);
     Session::open(
         p.root(),
@@ -39,12 +38,12 @@ fn analyze(p: &TempProject, conduct: Vec<Box<dyn Extension>>) -> Snapshot {
     .expect("analyze")
 }
 
-fn file(path: &str) -> ConductTarget {
-    ConductTarget::File(ProjectPath::new(path))
+fn file(path: &str) -> PluginTarget {
+    PluginTarget::File(ProjectPath::new(path))
 }
 
-fn symbol(path: &str, name: &str) -> ConductTarget {
-    ConductTarget::Symbol {
+fn symbol(path: &str, name: &str) -> PluginTarget {
+    PluginTarget::Symbol {
         path: ProjectPath::new(path),
         name: name.into(),
     }
@@ -52,8 +51,8 @@ fn symbol(path: &str, name: &str) -> ConductTarget {
 
 #[test]
 fn misdirected_contributions_drop_with_described_lines() {
-    let m = MockExtension::scripted(
-        ExtensionSpec::builder("test:m", 1)
+    let m = MockPlugin::scripted(
+        PluginSpec::builder("test:m", 1)
             .conduct(Activation::Always, MutatesGraph::Yes)
             .rule("hello", "a declared rule")
             .build(),
@@ -79,21 +78,21 @@ fn misdirected_contributions_drop_with_described_lines() {
     .on_report(|_, _, out| {
         out.finding(
             "ghost",
-            ConductSeverity::Info,
+            PluginSeverity::Info,
             file("main.kmock"),
             Confidence::Probable,
             "scripted",
         );
         out.finding(
             "hello",
-            ConductSeverity::Info,
+            PluginSeverity::Info,
             file("missing.kmock"),
             Confidence::Probable,
             "scripted",
         );
         out.finding(
             "hello",
-            ConductSeverity::Info,
+            PluginSeverity::Info,
             symbol("lib.kmock", "helper"),
             Confidence::Probable,
             "scripted",
@@ -134,7 +133,7 @@ fn misdirected_contributions_drop_with_described_lines() {
     let hello = snap
         .findings
         .iter()
-        .find(|f| f.category.as_str() == "ext:test:m/hello")
+        .find(|f| f.category.as_str() == "plugin:test:m/hello")
         .expect("the declared-rule finding lands");
     assert_eq!(hello.confidence, Confidence::Probable);
     assert!(matches!(&hello.subject, Subject::Symbol { path, .. } if path.as_str() == "lib.kmock"));
@@ -142,8 +141,8 @@ fn misdirected_contributions_drop_with_described_lines() {
 
 #[test]
 fn a_non_mutating_plugin_cannot_smuggle_roots_through_the_sink() {
-    let n = MockExtension::scripted(
-        ExtensionSpec::builder("test:n", 1)
+    let n = MockPlugin::scripted(
+        PluginSpec::builder("test:n", 1)
             .conduct(Activation::Always, MutatesGraph::No)
             .build(),
     )
@@ -177,8 +176,8 @@ fn the_content_budget_cut_is_reported_on_the_contribution() {
     for i in 0..kndo::CONTENT_MAX_FILES {
         p.file(&format!("bulk_{i:03}.kmock"), "fn filler\n");
     }
-    let n = MockExtension::scripted(
-        ExtensionSpec::builder("test:n", 1)
+    let n = MockPlugin::scripted(
+        PluginSpec::builder("test:n", 1)
             .conduct(Activation::Always, MutatesGraph::No)
             .requested_file_access(&["*.kmock"])
             .build(),
@@ -201,10 +200,10 @@ fn plugin_findings_ride_the_same_suppression_pass() {
     let p = fixture();
     p.file(
         "lib.kmock",
-        "# kndo:allow-file ext:test:m/hello\npub fn helper\n",
+        "# kndo:allow-file plugin:test:m/hello\npub fn helper\n",
     );
-    let m = MockExtension::scripted(
-        ExtensionSpec::builder("test:m", 1)
+    let m = MockPlugin::scripted(
+        PluginSpec::builder("test:m", 1)
             .conduct(Activation::Always, MutatesGraph::No)
             .rule("hello", "a declared rule")
             .build(),
@@ -212,7 +211,7 @@ fn plugin_findings_ride_the_same_suppression_pass() {
     .on_report(|_, _, out| {
         out.finding(
             "hello",
-            ConductSeverity::Info,
+            PluginSeverity::Info,
             symbol("lib.kmock", "helper"),
             Confidence::Probable,
             "scripted",
@@ -224,10 +223,10 @@ fn plugin_findings_ride_the_same_suppression_pass() {
         !snap
             .findings
             .iter()
-            .any(|f| f.category.as_str() == "ext:test:m/hello"),
+            .any(|f| f.category.as_str() == "plugin:test:m/hello"),
         "the pragma suppressed the plugin finding"
     );
-    let category = Category::parse("ext:test:m/hello").expect("namespaced category parses");
+    let category = Category::parse("plugin:test:m/hello").expect("namespaced category parses");
     assert!(
         snap.suppressed
             .by_category

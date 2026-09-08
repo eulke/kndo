@@ -117,7 +117,7 @@ fn flood(graph: &Graph, scopes: &crate::scopes::Scopes, kind: RootKind) -> Vec<b
     // module the production build never compiles is not an entry to it,
     // whatever colour a root on it claims. That is what lets a language
     // declare its conventions as overlapping globs
-    // ([`kndo_contract::extension::FileRole`]) — `**/*.html` is a page and
+    // ([`kndo_contract::plugin::FileRole`]) — `**/*.html` is a page and
     // `**/__tests__/**` is a test page, both true of one file — without the
     // narrower one having to subtract the wider.
     let through_tests = kind == RootKind::Test;
@@ -252,7 +252,7 @@ pub enum AbstentionReason {
     SpecifierIdentityUnderivable,
     /// Files no extension claims sit inside the package with a suffix the
     /// claiming extension declares can import
-    /// (`ExtensionSpec::dependency_importers`) — a `.vue` component, an `.html`
+    /// (`PluginSpec::dependency_importers`) — a `.vue` component, an `.html`
     /// page — so an import of the dependency may exist where nothing can see it.
     UnclaimedImporters {
         suffixes: Vec<SmolStr>,
@@ -347,23 +347,23 @@ pub struct AnalysisOutcome {
 #[derive(Debug, Clone, Default)]
 pub struct DeclaredCapabilities {
     /// What a unit of this language's ecosystem publishes — see
-    /// [`kndo_contract::extension::PublishedSurface`].
-    pub published_surface: kndo_contract::extension::PublishedSurface,
-    pub import_cycles: kndo_contract::extension::CycleTolerance,
-    pub dependency_scoping: kndo_contract::extension::DependencyScoping,
-    pub dependency_identity: kndo_contract::extension::DependencyIdentity,
+    /// [`kndo_contract::plugin::PublishedSurface`].
+    pub published_surface: kndo_contract::plugin::PublishedSurface,
+    pub import_cycles: kndo_contract::plugin::CycleTolerance,
+    pub dependency_scoping: kndo_contract::plugin::DependencyScoping,
+    pub dependency_identity: kndo_contract::plugin::DependencyIdentity,
     /// The reaches this language can spell, narrowest first, each under this
-    /// language's own word for it — see [`kndo_contract::extension::Ladder`].
-    pub ladder: kndo_contract::extension::Ladder,
+    /// language's own word for it — see [`kndo_contract::plugin::Ladder`].
+    pub ladder: kndo_contract::plugin::Ladder,
     /// How far one of this language's namespaces reaches across the project's
-    /// units — see [`kndo_contract::extension::NamespaceSpan`].
-    pub namespace_span: kndo_contract::extension::NamespaceSpan,
+    /// units — see [`kndo_contract::plugin::NamespaceSpan`].
+    pub namespace_span: kndo_contract::plugin::NamespaceSpan,
     /// What bounds a unit-wide reach where no manifest named the unit — see
-    /// [`kndo_contract::extension::UnnamedUnit`].
-    pub unnamed_unit: kndo_contract::extension::UnnamedUnit,
+    /// [`kndo_contract::plugin::UnnamedUnit`].
+    pub unnamed_unit: kndo_contract::plugin::UnnamedUnit,
     /// How this language shapes its namespace nodes — see
-    /// [`kndo_contract::extension::Nesting`].
-    pub nesting: kndo_contract::extension::Nesting,
+    /// [`kndo_contract::plugin::Nesting`].
+    pub nesting: kndo_contract::plugin::Nesting,
 }
 
 pub fn run_all(

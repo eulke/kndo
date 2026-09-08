@@ -2,7 +2,7 @@
 //! ("kmini") hand-scanned with no dependency beyond the SDK — a tree-sitter
 //! grammar would mean cross-compiling C to wasm32, a choice for native adapters,
 //! not a requirement of the ABI. The author-facing surface is the point: this
-//! crate implements the same [`Extension`] a built-in does, sink, resolve
+//! crate implements the same [`Plugin`] a built-in does, sink, resolve
 //! context and all, and two lines at the bottom export it as a component.
 //!
 //! kmini, the whole of it — one statement per line:
@@ -33,14 +33,14 @@ use kndo_contract::evidence::{
     EvidenceSink, EvidenceStream, EvidenceStreams, ImportBinding, ImportShape, ImportTarget,
     MarkerTarget, Reach, RefKind, RootKind, RootTarget, SymbolKind, Timing,
 };
-use kndo_contract::extension::{
-    CycleTolerance, DispatchRule, Effect, Extension, ExtensionSpec, Trigger,
+use kndo_contract::plugin::{
+    CycleTolerance, DispatchRule, Effect, Plugin, PluginSpec, Trigger,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use smol_str::SmolStr;
 
 pub struct KminiAdapter {
-    spec: ExtensionSpec,
+    spec: PluginSpec,
 }
 
 impl Default for KminiAdapter {
@@ -52,7 +52,7 @@ impl Default for KminiAdapter {
         };
         KminiAdapter {
             // 2: markers, dispatch rules, import timing and cycle tolerance.
-            spec: ExtensionSpec::builder("kmini", 2)
+            spec: PluginSpec::builder("kmini", 2)
                 .suffixes(&["kmini"])
                 .emits(EvidenceStreams::of(&[
                     EvidenceStream::Comments,
@@ -114,8 +114,8 @@ fn namespace_of(path: &ProjectPath) -> Option<SmolStr> {
     Some(SmolStr::new(stem.strip_suffix("_part").unwrap_or(stem)))
 }
 
-impl Extension for KminiAdapter {
-    fn spec(&self) -> &ExtensionSpec {
+impl Plugin for KminiAdapter {
+    fn spec(&self) -> &PluginSpec {
         &self.spec
     }
 

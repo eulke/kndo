@@ -1,7 +1,7 @@
 use kndo_adapter_python::PythonAdapter;
 use kndo_contract::adapter::{ProjectView, Resolution, ResolveContext, UnitView};
-use kndo_contract::extension::Extension;
 use kndo_contract::manifest::{PathAlias, UnitKind, UnitRoot};
+use kndo_contract::plugin::Plugin;
 use kndo_contract::vocab::ProjectPath;
 use std::collections::{BTreeMap, BTreeSet};
 

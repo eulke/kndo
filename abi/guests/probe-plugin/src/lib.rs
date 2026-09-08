@@ -1,6 +1,6 @@
-//! The reference external plugin — written against the REAL [`Extension`]
+//! The reference external plugin — written against the REAL [`Plugin`]
 //! trait, the same one a built-in implements: the spec through the two-stage
-//! builder, roots and findings through the contract's own `ConductSink`, content
+//! builder, roots and findings through the contract's own `PluginSink`, content
 //! through the same scoped view. It exercises rule-based activation, a
 //! contributed root (its spec declares `MutatesGraph::Yes`), findings under a
 //! declared rule — one built from a scoped content probe — plus two deliberate
@@ -8,15 +8,15 @@
 //! report on the contribution: the containment model, observed from outside.
 
 use kndo_contract::evidence::RootKind;
-use kndo_contract::extension::{
-    Activation, ActivationRule, ConductSeverity, ConductSink, ConductTarget, ContentAccess,
-    Extension, ExtensionSpec, GraphAccess, MutatesGraph,
+use kndo_contract::plugin::{
+    Activation, ActivationRule, PluginSeverity, PluginSink, PluginTarget, ContentAccess,
+    Plugin, PluginSpec, GraphAccess, MutatesGraph,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use std::sync::LazyLock;
 
-static SPEC: LazyLock<ExtensionSpec> = LazyLock::new(|| {
-    ExtensionSpec::builder("demo:probe", 1)
+static SPEC: LazyLock<PluginSpec> = LazyLock::new(|| {
+    PluginSpec::builder("demo:probe", 1)
         .conduct(
             Activation::AnyRule(vec![ActivationRule::FileExists("*.kmini".into())]),
             MutatesGraph::Yes,
@@ -29,8 +29,8 @@ static SPEC: LazyLock<ExtensionSpec> = LazyLock::new(|| {
 #[derive(Default)]
 struct ProbePlugin;
 
-impl Extension for ProbePlugin {
-    fn spec(&self) -> &ExtensionSpec {
+impl Plugin for ProbePlugin {
+    fn spec(&self) -> &PluginSpec {
         &SPEC
     }
 
@@ -38,19 +38,19 @@ impl Extension for ProbePlugin {
         &self,
         graph: &dyn GraphAccess,
         _content: &dyn ContentAccess,
-        out: &mut ConductSink,
+        out: &mut PluginSink,
     ) {
         // Anchor liveness the language cannot see, when the target exists.
         if graph.contains(&ProjectPath::new("wired.kmini")) {
             out.root(
-                ConductTarget::File(ProjectPath::new("wired.kmini")),
+                PluginTarget::File(ProjectPath::new("wired.kmini")),
                 RootKind::Production,
                 Confidence::Certain,
             );
         }
         // A root at a file no graph holds — the host must drop it, described.
         out.root(
-            ConductTarget::File(ProjectPath::new("nowhere.kmini")),
+            PluginTarget::File(ProjectPath::new("nowhere.kmini")),
             RootKind::Production,
             Confidence::Certain,
         );
@@ -60,7 +60,7 @@ impl Extension for ProbePlugin {
         &self,
         graph: &dyn GraphAccess,
         content: &dyn ContentAccess,
-        out: &mut ConductSink,
+        out: &mut PluginSink,
     ) {
         let first = graph
             .paths()
@@ -73,16 +73,16 @@ impl Extension for ProbePlugin {
         };
         out.finding(
             "note",
-            ConductSeverity::Info,
-            ConductTarget::File(first),
+            PluginSeverity::Info,
+            PluginTarget::File(first),
             Confidence::Certain,
             seen,
         );
         // Under a rule the spec never declared — the host must drop it.
         out.finding(
             "ghost",
-            ConductSeverity::Info,
-            ConductTarget::File(ProjectPath::new("wired.kmini")),
+            PluginSeverity::Info,
+            PluginTarget::File(ProjectPath::new("wired.kmini")),
             Confidence::Possible,
             "never lands",
         );

@@ -10,10 +10,10 @@ mod common;
 use common::{keeper_kinds, reported};
 use kndo::Category;
 use kndo_contract::evidence::{RelationKind, RootKind, SymbolKind};
-use kndo_contract::extension::{DispatchRule, Effect, Trigger};
 use kndo_contract::manifest::UnitKind;
+use kndo_contract::plugin::{DispatchRule, Effect, Trigger};
 use kndo_contract::vocab::Confidence;
-use kndo_testkit::{MockExtension, TempProject};
+use kndo_testkit::{MockPlugin, TempProject};
 
 fn rules() -> Vec<DispatchRule> {
     let certain = |when: Trigger, then: Effect| DispatchRule {
@@ -29,7 +29,7 @@ fn rules() -> Vec<DispatchRule> {
 }
 
 fn run(project: &TempProject) -> kndo::Snapshot {
-    common::analyze(project, vec![Box::new(MockExtension::dispatching(rules()))])
+    common::analyze(project, vec![Box::new(MockPlugin::dispatching(rules()))])
 }
 
 #[test]
@@ -49,7 +49,7 @@ fn a_rooting_marker_is_an_entry_of_its_color() {
 
     // The same marker with no rule for it derives nothing: the file has no
     // root, so the run abstains from judging it at all.
-    let plain = common::analyze(&p, vec![Box::new(MockExtension::new())]);
+    let plain = common::analyze(&p, vec![Box::new(MockPlugin::new())]);
     assert!(plain.report().findings.is_empty());
     assert!(
         plain
@@ -176,7 +176,7 @@ fn a_name_rule_reads_the_kind_of_compilation_the_file_lands_in() {
     )
     .file("src/inline.kmock", "test-only\nfn CheckThree\n")
     .file("src/app.kmock", "fn boot\nfn stale\ntype CheckKind\n");
-    let snap = common::analyze(&p, vec![Box::new(MockExtension::dispatching(rules))]);
+    let snap = common::analyze(&p, vec![Box::new(MockPlugin::dispatching(rules))]);
 
     // The rule fires where the compilation says it should, and its color is
     // the one that compilation implies.
@@ -241,7 +241,7 @@ fn a_witness_is_kept_by_the_surface_its_owner_promised_and_by_no_color() {
          pub member Sub.render\n\
          mark render Override\n",
     );
-    let snap = common::analyze(&p, vec![Box::new(MockExtension::dispatching(rules))]);
+    let snap = common::analyze(&p, vec![Box::new(MockPlugin::dispatching(rules))]);
 
     // The base names it: kept, and the keeper SAYS which base.
     assert_eq!(
@@ -309,7 +309,7 @@ fn a_rule_can_name_a_base_and_its_requirement_separately() {
          extends Inherits Closer\n\
          pub member Inherits.shutdown\n",
     );
-    let snap = common::analyze(&p, vec![Box::new(MockExtension::dispatching(rules))]);
+    let snap = common::analyze(&p, vec![Box::new(MockPlugin::dispatching(rules))]);
 
     assert_eq!(
         keeper_kinds(&snap, "app.kmock#Handle.shutdown"),
@@ -341,7 +341,7 @@ fn a_marker_rule_can_name_the_kind_it_means() {
         "app.kmock",
         "root-file\nfn run\nmark run Entry\ntype Holder\nmark Holder Entry\n",
     );
-    let snap = common::analyze(&p, vec![Box::new(MockExtension::dispatching(rules))]);
+    let snap = common::analyze(&p, vec![Box::new(MockPlugin::dispatching(rules))]);
     assert_eq!(
         keeper_kinds(&snap, "app.kmock#run"),
         ["dispatch:production"]

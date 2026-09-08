@@ -7,7 +7,7 @@
 mod bindings {
     wit_bindgen::generate!({
         path: "../../../wit",
-        world: "extension",
+        world: "plugin",
     });
 }
 
@@ -16,8 +16,8 @@ use bindings::kndo::vocab::types as wire;
 struct RudeProbe;
 
 impl bindings::Guest for RudeProbe {
-    fn spec() -> wire::ExtensionSpec {
-        wire::ExtensionSpec {
+    fn spec() -> wire::PluginSpec {
+        wire::PluginSpec {
             coordinate: "demo:rude".to_string(),
             version: 1,
             suffixes: vec!["rude".to_string()],

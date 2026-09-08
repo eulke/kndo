@@ -13,7 +13,7 @@ mod resolve;
 
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{Attachment, EvidenceSink, RootKind};
-use kndo_contract::extension::{Extension, ExtensionSpec, FileRole, PublishedSurface, Rung, Step};
+use kndo_contract::plugin::{FileRole, Plugin, PluginSpec, PublishedSurface, Rung, Step};
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use tree_sitter::Language;
 
@@ -80,7 +80,7 @@ const NODE_BUILTINS: &[&str] = &[
 ];
 
 pub struct TypeScriptAdapter {
-    spec: ExtensionSpec,
+    spec: PluginSpec,
     /// Dotted resolution candidates in TS priority order, derived once from the
     /// spec's declared extensions (with `.d.ts` after the TS pair) — resolution and
     /// manifest logic read this, never a second extension list.
@@ -91,8 +91,8 @@ pub struct TypeScriptAdapter {
 /// path convention can state: the file says it is run, whatever it is called
 /// and wherever it sits. Framework dispatch — Storybook's `*.stories.*`,
 /// Vitest's config patterns — is its pack's (M8.e).
-fn dispatch_rules() -> Vec<kndo_contract::extension::DispatchRule> {
-    use kndo_contract::extension::{DispatchRule, Effect, Trigger};
+fn dispatch_rules() -> Vec<kndo_contract::plugin::DispatchRule> {
+    use kndo_contract::plugin::{DispatchRule, Effect, Trigger};
     vec![DispatchRule {
         when: Trigger::Marker {
             path: SHEBANG.into(),
@@ -118,7 +118,7 @@ impl TypeScriptAdapter {
             &["**/package.json", "**/tsconfig.json", "**/tsconfig.*.json"],
             // ESM/CJS initialization order makes cycles bite: TDZ errors and
             // partially-initialized modules at run time.
-            kndo_contract::extension::CycleTolerance::Hazard,
+            kndo_contract::plugin::CycleTolerance::Hazard,
         )
         // npm's installed dependencies are never the project's own source,
         // committed or not.
@@ -166,8 +166,8 @@ impl TypeScriptAdapter {
         // however it is spelled.
         .published_surface(PublishedSurface::Entries)
         // `lodash/fp` names `lodash`; a scoped name carries its own slash.
-        .dependency_identity(kndo_contract::extension::DependencyIdentity::PackageName)
-        .dependency_builtins(kndo_contract::extension::DependencyBuiltins::Named(
+        .dependency_identity(kndo_contract::plugin::DependencyIdentity::PackageName)
+        .dependency_builtins(kndo_contract::plugin::DependencyBuiltins::Named(
             NODE_BUILTINS
                 .iter()
                 .map(|s| smol_str::SmolStr::new_static(s))
@@ -219,8 +219,8 @@ fn grammar(suffix: &str) -> Language {
     }
 }
 
-impl Extension for TypeScriptAdapter {
-    fn spec(&self) -> &ExtensionSpec {
+impl Plugin for TypeScriptAdapter {
+    fn spec(&self) -> &PluginSpec {
         &self.spec
     }
 

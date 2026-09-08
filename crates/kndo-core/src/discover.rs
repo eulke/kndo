@@ -25,10 +25,10 @@ pub struct HiddenOptIn(BTreeSet<String>);
 impl HiddenOptIn {
     /// Every dot-named LITERAL segment of the globs (`.github`; never a
     /// pattern such as `.*`), plus the names a language DECLARES it keeps
-    /// source in ([`ExtensionSpec::hidden_opt_in`]) — the ones no manifest or
+    /// source in ([`PluginSpec::hidden_opt_in`]) — the ones no manifest or
     /// launcher glob happens to spell.
     ///
-    /// [`ExtensionSpec::hidden_opt_in`]: kndo_contract::extension::ExtensionSpec::hidden_opt_in
+    /// [`PluginSpec::hidden_opt_in`]: kndo_contract::plugin::PluginSpec::hidden_opt_in
     pub fn from_manifest_globs<'a>(globs: impl Iterator<Item = &'a str>) -> Self {
         let mut names = BTreeSet::new();
         for glob in globs {
