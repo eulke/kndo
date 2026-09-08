@@ -90,6 +90,132 @@ pub struct ResolveContext<'a> {
     known_files: &'a BTreeSet<ProjectPath>,
     packages: Option<&'a std::collections::BTreeMap<SmolStr, PackageEntry>>,
     manifests: Option<&'a std::collections::BTreeMap<ProjectPath, &'a [u8]>>,
+    project: Option<&'a ProjectView<'a>>,
+}
+
+/// One unit, as RESOLUTION asks about it: what the build compiles it from and
+/// what it hands out. The read side of [`crate::manifest::Unit`] — an adapter
+/// resolving a specifier needs the roots to walk and the name they hang under,
+/// never the dependency list or the aggregator.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnitView {
+    pub name: SmolStr,
+    pub kind: crate::manifest::UnitKind,
+    pub roots: Vec<crate::manifest::UnitRoot>,
+    /// See [`crate::manifest::Unit::namespace_root`].
+    pub namespace_root: Option<SmolStr>,
+    /// See [`crate::manifest::Unit::is_published`], read once.
+    pub published: bool,
+}
+
+/// What the project's MANIFESTS declared and its files' own clauses say, as
+/// the five questions resolution asks — the engine's answers, so an adapter
+/// never re-derives a source root from a path convention or re-parses another
+/// ecosystem's alias table.
+///
+/// Every query is a lookup over data the engine assembled once. Absence is
+/// honest throughout: no unit compiles a file the manifests never covered, no
+/// alias rewrites a specifier no manifest named, and a language whose files
+/// declare no namespace answers with none.
+pub struct ProjectView<'a> {
+    pub(crate) units: &'a [UnitView],
+    pub(crate) unit_of: &'a std::collections::BTreeMap<ProjectPath, u32>,
+    /// Each alias with the DIRECTORY of the manifest declaring it: the nearest
+    /// declaration to the resolving file wins, the way every build system
+    /// composes its own configuration.
+    pub(crate) aliases: &'a [(SmolStr, crate::manifest::PathAlias)],
+    pub(crate) namespaces: &'a std::collections::BTreeMap<ProjectPath, Vec<SmolStr>>,
+    pub(crate) in_namespace: &'a std::collections::BTreeMap<Vec<SmolStr>, Vec<ProjectPath>>,
+}
+
+impl<'a> ProjectView<'a> {
+    /// Assembled by the engine, which owns the indices this borrows.
+    pub fn new(
+        units: &'a [UnitView],
+        unit_of: &'a std::collections::BTreeMap<ProjectPath, u32>,
+        aliases: &'a [(SmolStr, crate::manifest::PathAlias)],
+        namespaces: &'a std::collections::BTreeMap<ProjectPath, Vec<SmolStr>>,
+        in_namespace: &'a std::collections::BTreeMap<Vec<SmolStr>, Vec<ProjectPath>>,
+    ) -> ProjectView<'a> {
+        ProjectView {
+            units,
+            unit_of,
+            aliases,
+            namespaces,
+            in_namespace,
+        }
+    }
+
+    /// The unit compiling `path` — `None` where no manifest covers it.
+    pub fn unit_of(&self, path: &ProjectPath) -> Option<&'a UnitView> {
+        self.unit_of.get(path).map(|&u| &self.units[u as usize])
+    }
+
+    /// The directories that unit compiles, in path order; empty where no unit
+    /// covers the file, which is a language's cue to fall back on nothing.
+    pub fn source_roots_of(&self, path: &ProjectPath) -> &'a [crate::manifest::UnitRoot] {
+        self.unit_of(path).map_or(&[], |u| &u.roots)
+    }
+
+    /// The directories a specifier rewrites to, in the order the build tries
+    /// them — `tsconfig` paths, Sass `loadPaths`, a go.mod `replace`. The
+    /// prefix is replaced, the rest kept: `@app/x` under `@app/ → src/app`
+    /// answers `src/app/x`. Empty where no alias names it.
+    ///
+    /// `from` decides WHICH declaration applies when several match: the one
+    /// declared nearest above the resolving file.
+    pub fn alias(&self, from: &ProjectPath, specifier: &str) -> Vec<SmolStr> {
+        let mut best: Option<(usize, usize, &crate::manifest::PathAlias)> = None;
+        for (dir, alias) in self.aliases {
+            if !crate::vocab::is_under(dir, from.as_str()) {
+                continue;
+            }
+            let Some(rest) = specifier.strip_prefix(alias.prefix.as_str()) else {
+                continue;
+            };
+            // The longest prefix wins first, and the nearest manifest breaks
+            // a tie — two aliases spelling one prefix are two build
+            // configurations, and the inner one is the one in force.
+            let key = (alias.prefix.len(), dir.len());
+            if best.is_none_or(|(p, d, _)| (p, d) < key) {
+                let _ = rest;
+                best = Some((key.0, key.1, alias));
+            }
+        }
+        let alias = match best {
+            Some((_, _, alias)) => alias,
+            None => return Vec::new(),
+        };
+        let rest = specifier
+            .strip_prefix(alias.prefix.as_str())
+            .unwrap_or_default();
+        alias
+            .targets
+            .iter()
+            .map(|target| match (target.is_empty(), rest.is_empty()) {
+                (true, _) => SmolStr::new(rest),
+                (false, true) => target.clone(),
+                (false, false) => SmolStr::new(format!(
+                    "{}/{}",
+                    target.trim_end_matches('/'),
+                    rest.trim_start_matches('/')
+                )),
+            })
+            .collect()
+    }
+
+    /// The namespace a file declared, as its own clause spelled it — empty for
+    /// a language whose files declare none.
+    pub fn namespace_of(&self, path: &ProjectPath) -> &'a [SmolStr] {
+        self.namespaces.get(path).map_or(&[], Vec::as_slice)
+    }
+
+    /// Every file declaring exactly this namespace, in path order — how a
+    /// language whose imports name a namespace rather than a file (Kotlin's
+    /// `com.example.Thing`) finds what to resolve to.
+    pub fn files_in_namespace(&self, segments: &[SmolStr]) -> &'a [ProjectPath] {
+        self.in_namespace.get(segments).map_or(&[], Vec::as_slice)
+    }
 }
 
 impl<'a> ResolveContext<'a> {
@@ -98,6 +224,7 @@ impl<'a> ResolveContext<'a> {
             known_files,
             packages: None,
             manifests: None,
+            project: None,
         }
     }
 
@@ -109,6 +236,22 @@ impl<'a> ResolveContext<'a> {
             known_files,
             packages: Some(packages),
             manifests: None,
+            project: None,
+        }
+    }
+
+    /// The same, with the project model the engine assembled — what `resolve`
+    /// gets, and the only door to a source root, an alias or a namespace.
+    pub fn with_project(
+        known_files: &'a BTreeSet<ProjectPath>,
+        packages: &'a std::collections::BTreeMap<SmolStr, PackageEntry>,
+        project: &'a ProjectView<'a>,
+    ) -> Self {
+        ResolveContext {
+            known_files,
+            packages: Some(packages),
+            manifests: None,
+            project: Some(project),
         }
     }
 
@@ -124,7 +267,14 @@ impl<'a> ResolveContext<'a> {
             known_files,
             packages: None,
             manifests: Some(manifests),
+            project: None,
         }
+    }
+
+    /// What the manifests declared, as resolution asks it — see
+    /// [`ProjectView`]. `None` outside a resolve, where no project exists yet.
+    pub fn project(&self) -> Option<&'a ProjectView<'a>> {
+        self.project
     }
 
     /// The content of another discovered manifest — `None` outside a manifest
@@ -198,4 +348,138 @@ pub struct ProjectRoot {
     pub file: ProjectPath,
     pub kind: RootKind,
     pub confidence: Confidence,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::manifest::{PathAlias, UnitKind, UnitRoot};
+    use std::collections::BTreeMap;
+
+    /// One unit rooted at `src`, two aliases — the outer manifest's and a
+    /// nested one's — and two files declaring one namespace.
+    struct Fixture {
+        units: Vec<UnitView>,
+        unit_of: BTreeMap<ProjectPath, u32>,
+        aliases: Vec<(SmolStr, PathAlias)>,
+        namespaces: BTreeMap<ProjectPath, Vec<SmolStr>>,
+        in_namespace: BTreeMap<Vec<SmolStr>, Vec<ProjectPath>>,
+    }
+
+    fn fixture() -> Fixture {
+        let alias = |prefix: &str, targets: &[&str]| PathAlias {
+            prefix: prefix.into(),
+            targets: targets.iter().map(|t| SmolStr::new(*t)).collect(),
+        };
+        Fixture {
+            units: vec![UnitView {
+                name: "app".into(),
+                kind: UnitKind::Library,
+                roots: vec![UnitRoot::from("src")],
+                namespace_root: Some("app".into()),
+                published: true,
+            }],
+            unit_of: [(ProjectPath::new("src/a.ts"), 0)].into_iter().collect(),
+            aliases: vec![
+                (
+                    SmolStr::default(),
+                    alias("@app/", &["src/app", "src/vendor"]),
+                ),
+                (SmolStr::default(), alias("@app/deep/", &["src/deep"])),
+                (SmolStr::new("inner"), alias("@app/", &["inner/own"])),
+                (SmolStr::default(), alias("~", &[""])),
+            ],
+            namespaces: [
+                (ProjectPath::new("src/a.ts"), vec![SmolStr::new("com")]),
+                (ProjectPath::new("src/b.ts"), vec![SmolStr::new("com")]),
+            ]
+            .into_iter()
+            .collect(),
+            in_namespace: [(
+                vec![SmolStr::new("com")],
+                vec![ProjectPath::new("src/a.ts"), ProjectPath::new("src/b.ts")],
+            )]
+            .into_iter()
+            .collect(),
+        }
+    }
+
+    fn view(f: &Fixture) -> ProjectView<'_> {
+        ProjectView::new(
+            &f.units,
+            &f.unit_of,
+            &f.aliases,
+            &f.namespaces,
+            &f.in_namespace,
+        )
+    }
+
+    #[test]
+    fn the_unit_answers_what_it_compiles_and_what_it_hangs_under() {
+        let f = fixture();
+        let view = view(&f);
+        let unit = view
+            .unit_of(&ProjectPath::new("src/a.ts"))
+            .expect("covered");
+        assert_eq!(unit.name, "app");
+        assert!(unit.published);
+        assert_eq!(unit.namespace_root.as_deref(), Some("app"));
+        assert_eq!(
+            view.source_roots_of(&ProjectPath::new("src/a.ts")),
+            [UnitRoot::from("src")]
+        );
+        // A file no manifest covers has no unit and no roots — never a guess.
+        assert!(view.unit_of(&ProjectPath::new("scripts/x.ts")).is_none());
+        assert!(
+            view.source_roots_of(&ProjectPath::new("scripts/x.ts"))
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn an_alias_rewrites_the_prefix_and_the_nearest_longest_one_wins() {
+        let f = fixture();
+        let view = view(&f);
+        let at = |from: &str, spec: &str| -> Vec<String> {
+            view.alias(&ProjectPath::new(from), spec)
+                .iter()
+                .map(SmolStr::to_string)
+                .collect()
+        };
+        // The prefix is replaced and the rest kept, in the order the build
+        // tries the targets.
+        assert_eq!(at("main.ts", "@app/lib"), ["src/app/lib", "src/vendor/lib"]);
+        // The LONGEST prefix wins: `@app/deep/x` is not `@app/`'s `deep/x`.
+        assert_eq!(at("main.ts", "@app/deep/x"), ["src/deep/x"]);
+        // Two declarations of one prefix are two build configurations, and the
+        // nearest above the resolving file is the one in force.
+        assert_eq!(at("inner/caller.ts", "@app/lib"), ["inner/own/lib"]);
+        assert_eq!(
+            at("outer/caller.ts", "@app/lib"),
+            ["src/app/lib", "src/vendor/lib"],
+            "the nested declaration covers only the files under it"
+        );
+        // An empty target rewrites to the rest alone — `~x` at the root.
+        assert_eq!(at("main.ts", "~x"), ["x"]);
+        // A specifier no alias names rewrites to nothing, which is silence.
+        assert!(at("main.ts", "./sibling").is_empty());
+    }
+
+    #[test]
+    fn a_namespace_answers_both_ways_and_absence_is_empty() {
+        let f = fixture();
+        let view = view(&f);
+        assert_eq!(
+            view.namespace_of(&ProjectPath::new("src/a.ts")),
+            [SmolStr::new("com")]
+        );
+        assert_eq!(
+            view.files_in_namespace(&[SmolStr::new("com")]),
+            [ProjectPath::new("src/a.ts"), ProjectPath::new("src/b.ts")]
+        );
+        // A language whose files declare no namespace answers with none, and a
+        // namespace nothing declares holds no files.
+        assert!(view.namespace_of(&ProjectPath::new("src/c.ts")).is_empty());
+        assert!(view.files_in_namespace(&[SmolStr::new("org")]).is_empty());
+    }
 }

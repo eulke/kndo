@@ -518,7 +518,21 @@ pub fn assemble(
     let reads = crate::project::read_manifests(files, adapters, &known);
     let project = crate::project::assemble(&reads);
     let packages = package_map(&reads);
-    let cx = ResolveContext::with_packages(&known, &packages);
+    // Resolution asks the project what the manifests declared and what each
+    // file's own clause says — source roots, aliases, namespaces — so no
+    // adapter re-derives a root from a path convention.
+    let index = crate::project::ProjectIndex::build(
+        &project,
+        &reads,
+        claims.iter().zip(evidence.iter()).map(|(c, ev)| {
+            (
+                files[c.file_index].path.clone(),
+                ev.namespace.to_vec(),
+            )
+        }),
+    );
+    let view = index.view();
+    let cx = ResolveContext::with_project(&known, &packages, &view);
 
     let mut graph_files: Vec<GraphFile> = claims
         .iter()
@@ -1174,8 +1188,22 @@ pub fn patch(
     }
 
     let known: BTreeSet<ProjectPath> = prev.files.iter().map(|g| g.path.clone()).collect();
-    let packages = package_map(&crate::project::read_manifests(files, adapters, &known));
-    let cx = ResolveContext::with_packages(&known, &packages);
+    let reads = crate::project::read_manifests(files, adapters, &known);
+    let packages = package_map(&reads);
+    // The same view the full pass builds, off the graph the patch is amending
+    // — the namespaces of every file it is NOT re-extracting, plus its own.
+    let index = crate::project::ProjectIndex::build(
+        &prev.project,
+        &reads,
+        prev.files.iter().map(|g| {
+            (
+                g.path.clone(),
+                g.evidence.namespace.to_vec(),
+            )
+        }),
+    );
+    let view = index.view();
+    let cx = ResolveContext::with_project(&known, &packages, &view);
     let sorted_paths: Vec<ProjectPath> = prev.files.iter().map(|g| g.path.clone()).collect();
 
     for (ix, file_index) in changed {

@@ -635,6 +635,18 @@ impl Extension for MockExtension {
         if self.speaks != Speaks::Kmock {
             return Resolution::Unresolved;
         }
+        let ext = &self.spec.suffixes()[0];
+        // A prefix a manifest REWRITES resolves against the directories it
+        // names, in the order the build tries them — the project's answer,
+        // never a table this language keeps of another ecosystem's config.
+        if let Some(project) = cx.project() {
+            for target in project.alias(from, specifier) {
+                let candidate = ProjectPath::new(format!("{}.{ext}", normalized(&target)));
+                if cx.contains(&candidate) {
+                    return Resolution::File(candidate);
+                }
+            }
+        }
         let Some(name) = specifier.strip_prefix("./") else {
             return Resolution::Unresolved;
         };
@@ -642,7 +654,6 @@ impl Extension for MockExtension {
             Some((dir, _)) => format!("{dir}/"),
             None => String::new(),
         };
-        let ext = &self.spec.suffixes()[0];
         let candidate = ProjectPath::new(format!("{}.{ext}", normalized(&format!("{dir}{name}"))));
         if cx.contains(&candidate) {
             Resolution::File(candidate)

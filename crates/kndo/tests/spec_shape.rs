@@ -130,3 +130,43 @@ fn a_directory_nested_language_keeps_two_same_named_namespaces_apart() {
         reported(&snap, &Category::UNUSED)
     );
 }
+
+#[test]
+fn a_specifier_a_manifest_rewrites_resolves_against_what_it_names() {
+    // `@app/` is a prefix the manifest rewrites to `src/app`, and the nested
+    // manifest rewrites it somewhere else for the files it covers. Both are
+    // the PROJECT's answer, asked through `cx.project().alias(from, …)` — the
+    // language keeps no table of its own.
+    let p = TempProject::new();
+    p.file(
+        "kmock.pkg",
+        concat!(
+            "unit app executable roots=. entries=main.kmock\n",
+            "alias @app/ src/app\n",
+        ),
+    )
+    .file("inner/kmock.pkg", "alias @app/ inner/own\n")
+    .file(
+        "main.kmock",
+        concat!(
+            "pub fn main\n",
+            "import @app/lib { shared }\n",
+            "call shared\n",
+            "import ./inner/caller\n",
+        ),
+    )
+    .file("src/app/lib.kmock", "pub fn shared\n")
+    .file(
+        "inner/caller.kmock",
+        "import @app/lib { local }\ncall local\n",
+    )
+    .file("inner/own/lib.kmock", "pub fn local\n")
+    .file("src/app/idle.kmock", "pub fn nobody\n");
+    let snap = common::analyze(&p, vec![Box::new(MockExtension::new())]);
+
+    assert_eq!(
+        reported(&snap, &Category::UNUSED),
+        ["src/app/idle.kmock"],
+        "both rewrites resolved: only the file no alias reaches is accused"
+    );
+}

@@ -6138,3 +6138,44 @@ directory was never the same as judging it correctly.
 graph (the forest's shape is declared, discovery enters more, and a bare
 specifier can name another ecosystem's declaration). The contract fingerprint
 is unmoved — none of this is file evidence.
+
+## 2026-09-08 — `cx.project()`: the five questions resolution asks
+
+The last item of the contract-v3 audit. `ResolveContext::project()` returns a
+`ProjectView` with the queries the design names — `unit_of`,
+`source_roots_of`, `alias`, `namespace_of`, `files_in_namespace` — beside the
+`package` lookup that already existed. The engine assembles the indices once
+(`ProjectIndex::build`, from the manifest reads and every file's own namespace
+clause) and both resolve sites hand the view to `resolve`: the full pass and
+the surgical patch, which builds the same view off the graph it is amending.
+
+The point is what it takes AWAY. An adapter resolving a specifier had two
+choices before: re-derive a source root from a path convention, or re-parse
+another ecosystem's alias table. Both are the wrong floor — the manifest is
+the only thing that knows a source root, and the engine already read it. The
+plan's deletions across the adapter rows (python's resolution by suffix and
+`parent_dir`, css reading js-ts's `exports` conditions, ts's `paths`) all
+resolve to this one door.
+
+`alias(from, specifier)` carries the declaring manifest's directory with each
+alias, so the LONGEST prefix wins and the NEAREST declaration breaks a tie: two
+manifests spelling one prefix are two build configurations, and the inner one
+is in force for the files under it. A specifier no alias names rewrites to
+nothing rather than to itself — silence, not an identity that would look like
+an answer.
+
+`ProjectView` is data with borrows, not a callback: every query is a lookup
+over what the engine assembled, so determinism is structural and an adapter
+cannot ask the project a question the engine did not already answer.
+
+The kmock proof is the whole path: a manifest declares `alias @app/ src/app`, a
+nested one rewrites the same prefix elsewhere, and the mock's `resolve` reads
+both through `cx.project()` — only the file no alias reaches is accused. The
+contract's own tests pin the rest: the longest-prefix and nearest-manifest
+rules, an empty target rewriting to the rest alone, and the empty answers a
+file no manifest covers and a namespace nothing declares both get.
+
+**Measurement.** Every repository byte-identical: the query surface is
+additive, and until each adapter's row consumes it nothing resolves
+differently. `GRAPH_SEMANTICS_VERSION` did not move, and neither did the
+fingerprint — no evidence changed and no graph assembled differently.

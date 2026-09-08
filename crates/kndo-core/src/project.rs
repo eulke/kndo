@@ -399,6 +399,90 @@ impl Aggregators {
     }
 }
 
+/// The five answers `resolve` asks the project for, indexed once — see
+/// [`kndo_contract::adapter::ProjectView`]. Owned here because the view
+/// borrows: an adapter reads it, and the engine is what holds it alive.
+pub struct ProjectIndex {
+    units: Vec<kndo_contract::adapter::UnitView>,
+    unit_of: BTreeMap<ProjectPath, u32>,
+    aliases: Vec<(SmolStr, kndo_contract::manifest::PathAlias)>,
+    namespaces: BTreeMap<ProjectPath, Vec<SmolStr>>,
+    in_namespace: BTreeMap<Vec<SmolStr>, Vec<ProjectPath>>,
+}
+
+impl ProjectIndex {
+    /// Built from what the manifests declared and what each file's own clause
+    /// says — the two halves of the plan's "namespaces por cláusula". The
+    /// namespace halves are empty on the paths that have no evidence yet (a
+    /// manifest read runs before extraction), and a query over them answers
+    /// nothing rather than guessing.
+    pub fn build(
+        project: &Project,
+        reads: &[ManifestRead],
+        namespaces: impl Iterator<Item = (ProjectPath, Vec<SmolStr>)>,
+    ) -> ProjectIndex {
+        let units: Vec<kndo_contract::adapter::UnitView> = project
+            .units
+            .iter()
+            .map(|u| kndo_contract::adapter::UnitView {
+                name: u.name.clone(),
+                kind: u.kind,
+                roots: u.roots.clone(),
+                namespace_root: u.namespace_root.clone(),
+                published: u.published,
+            })
+            .collect();
+        let mut aliases: Vec<(SmolStr, kndo_contract::manifest::PathAlias)> = reads
+            .iter()
+            .flat_map(|r| {
+                let dir = SmolStr::new(r.manifest.as_str().rsplit_once('/').map_or("", |(d, _)| d));
+                r.evidence
+                    .aliases
+                    .iter()
+                    .map(move |a| (dir.clone(), a.clone()))
+            })
+            .collect();
+        aliases.sort();
+        aliases.dedup();
+        let mut of_file: BTreeMap<ProjectPath, u32> = BTreeMap::new();
+        let mut by_namespace: BTreeMap<Vec<SmolStr>, Vec<ProjectPath>> = BTreeMap::new();
+        let mut of_path: BTreeMap<ProjectPath, Vec<SmolStr>> = BTreeMap::new();
+        for (path, segments) in namespaces {
+            if let Some(unit) = project.unit_of(&path) {
+                of_file.insert(path.clone(), unit);
+            }
+            if !segments.is_empty() {
+                by_namespace
+                    .entry(segments.clone())
+                    .or_default()
+                    .push(path.clone());
+                of_path.insert(path, segments);
+            }
+        }
+        for files in by_namespace.values_mut() {
+            files.sort();
+            files.dedup();
+        }
+        ProjectIndex {
+            units,
+            unit_of: of_file,
+            aliases,
+            namespaces: of_path,
+            in_namespace: by_namespace,
+        }
+    }
+
+    pub fn view(&self) -> kndo_contract::adapter::ProjectView<'_> {
+        kndo_contract::adapter::ProjectView::new(
+            &self.units,
+            &self.unit_of,
+            &self.aliases,
+            &self.namespaces,
+            &self.in_namespace,
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
