@@ -151,6 +151,14 @@ impl<'a> ProjectView<'a> {
         self.unit_of.get(path).map(|&u| &self.units[u as usize])
     }
 
+    /// Every unit the manifests declared, in the project's own order — what a
+    /// language whose imports name no file has to search: a dotted module path
+    /// is resolved against the source roots that EXIST, and which those are is
+    /// the manifests' answer, never a walk of the tree looking for a shape.
+    pub fn units(&self) -> impl Iterator<Item = &'a UnitView> + '_ {
+        self.units.iter()
+    }
+
     /// The directories that unit compiles, in path order; empty where no unit
     /// covers the file, which is a language's cue to fall back on nothing.
     pub fn source_roots_of(&self, path: &ProjectPath) -> &'a [crate::manifest::UnitRoot] {

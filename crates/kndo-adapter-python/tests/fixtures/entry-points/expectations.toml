@@ -1,0 +1,25 @@
+# entry-points: `[project.entry-points.<group>]` registers `pkg.mod:func` with
+# the installer, and whoever owns the group calls it from the metadata — pytest
+# imports every `pytest11` module, Flask runs every `flask.commands` callable.
+# Nothing in the tree names either one, so the manifest is the only witness.
+#
+# `Private :: Do Not Upload` is what makes the fixture answerable at all: an
+# uploadable distribution publishes its whole export surface, and then no
+# module here could be accused of anything. The classifier removes that keep,
+# leaving the entry-point tables as the only thing between these modules and
+# the orphan the third one is.
+
+[[alive]]
+subject = "src/internal_tools/pytest_plugin.py"
+category = "unused"
+why = "the `pytest11` group names this module, and an entry point is a unit entry: rooted by the manifest, reached by nothing else"
+
+[[alive]]
+subject = "src/internal_tools/commands.py"
+category = "unused"
+why = "the `flask.commands` group names `internal_tools.commands:seed` — the module half of a registered callable is the file the framework imports"
+
+[[dead]]
+subject = "src/internal_tools/orphan.py"
+category = "unused"
+why = "the control: no group registers it, nothing imports it, and the distribution does not publish — the accusation the other two would carry if the entry-point tables went unread"

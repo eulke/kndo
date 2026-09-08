@@ -1,0 +1,14 @@
+[project]
+name = "ledger"
+version = "0.1.0"
+classifiers = ["Private :: Do Not Upload"]
+dependencies = ["requests"]
+
+[project.optional-dependencies]
+dev = ["black"]
+
+[dependency-groups]
+test = ["pytest-cov"]
+
+[tool.poetry]
+packages = [{ include = "app", from = "lib" }]

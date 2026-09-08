@@ -1,0 +1,131 @@
+{
+  "run": {
+    "schema": "kndo-v2/m6",
+    "mode": "full",
+    "files_discovered": 5,
+    "files_claimed": 4,
+    "extensions": [
+      {
+        "id": "kndo:python",
+        "files": 4,
+        "published_surface": "exports",
+        "import_cycles": "hazard",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "underivable"
+      }
+    ]
+  },
+  "health": {
+    "implicated": 1,
+    "subjects": 8,
+    "by_category": [
+      {
+        "category": "unused",
+        "findings": 1
+      }
+    ],
+    "by_package": [
+      {
+        "name": "dist",
+        "manifest": "pyproject.toml",
+        "implicated": 1,
+        "subjects": 8
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "kndo-e8a9abd7fed4",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "src/dist/helpers.py",
+        "selector": {
+          "name": "_never_named"
+        },
+        "span": {
+          "start": 26,
+          "end": 118
+        }
+      },
+      "lines": {
+        "start": 5,
+        "end": 7
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    }
+  ],
+  "fixed": [],
+  "baselined": 0,
+  "abstained": [
+    {
+      "category": "unused",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 1
+        }
+      }
+    },
+    {
+      "category": "test-only",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 1
+        }
+      }
+    },
+    {
+      "category": "undeclared",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 1
+        }
+      }
+    },
+    {
+      "category": "crap",
+      "reason": "no-coverage-ingested",
+      "scope": "whole-run"
+    }
+  ],
+  "suppressed": {
+    "total": 0,
+    "by_category": []
+  },
+  "plugins": [
+    {
+      "coordinate": "kndo:coverage-lcov",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-cobertura",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-jacoco",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-go",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    }
+  ],
+  "diagnostics": []
+}

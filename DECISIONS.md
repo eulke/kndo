@@ -6271,3 +6271,75 @@ ts's `#!` root is FILE CONTENT (the file says it is run), and go's
 `package main` + `func main` is a unit fact go.mod cannot state — a Go module
 is one Library unit, so no `in_unit` reaches it. Both stay until their row
 gives them a shape; neither is a convention read from a path.
+
+## 2026-09-08 — python's row closes: resolution against declared roots, the entry-point tables, and the P-ledger
+
+Python's row of the design table is done. Everything in its deletion column is
+gone, everything in its capability column is present, and the ten fixtures the
+plan names exist with expectations that bite.
+
+**Resolution stops asking the tree for a look-alike tail.** The old resolver
+searched for a file whose path ENDS in the dotted name. It now asks
+`cx.project()`: the unit compiling the importing file first, then every other
+unit, stripping each one's `namespace_root` off the specifier before joining
+the path; the project root answers last and always, because `sys.path` holds
+the directory the interpreter starts in — which is why `from src.logic import
+add` works from a test run under a `package-dir = {"" = "src"}` layout while
+the installed distribution calls the same module `logic`. Both readings are
+real; the declared roots answer first because that is the shape the package
+ships as.
+
+**flask 20 → 19, and the withdrawn finding is a false positive v1 also
+shipped.** `src/flask/json/provider.py` writes `import json`, meaning the
+standard library; suffix matching found `src/flask/json/__init__.py`, drew an
+edge from flask's JSON package to itself, and reported the cycle it had just
+invented. Import edges fell 226 → 197 on the same run: 28 more stdlib and
+third-party names that had a look-alike tail inside the distribution. An edge
+that should not exist is not free even where nothing accuses on it. Eight
+repositories are byte-identical, which is the claim — the new resolver
+reproduces every correct answer and drops one class of wrong ones.
+
+**`[project.entry-points]` is read.** `[project.scripts]` was, its sibling
+table was not, so a pytest plugin, a Flask command or a Django app registered
+through the installer had no witness at all: the manifest is the only place
+such a module is ever named. Every group is read now, because what registers a
+callable is what calls it — the group decides who does the calling, never
+whether anyone does. No corpus distribution registers one, so the number is
+zero and `entry-points` is the proof.
+
+**A whole-file root makes a file an entry surface, and that is why one fixture
+had to be rebuilt.** `unittest-discovery` first claimed `setUp` as a known gap
+owed to `kndo:pytest`. It was not: the file's Test unit roots it whole, so its
+exported surface is the door the runner opens, and `setUp` needs no framework
+knowledge. Ablating the `test*` member rule changed nothing — `describe` shows
+`dispatch:test` sitting AHEAD of `entry-surface` on `test_add`, a second keeper
+where the first already held. A fixture whose ablation is silent pins nothing,
+so the fixture now turns on a helper module under `testpaths` that matches no
+runner pattern: with the Test unit it is test code, without it the whole file
+is accused as an orphan.
+
+**The P-ledger.** Every python row of the nine-adapter audit, what closed it,
+and what holds it shut:
+
+| finding | mechanism | pinned by |
+|---|---|---|
+| P1 (resolution) | resolve against the unit's declared source roots, `namespace_root` stripped, project root last | `stdlib-shadow`, `src-layout-roots`; flask −1 `cyclic` |
+| P2 (namespace packages) | no package initializer required, every declared root searched | `namespace-package` (PEP 420 across two roots) |
+| P3 (defaults) | toolkit `Seats` — binder seats by field, not by parent kind | `default-values` |
+| P4 (`_x`) | `Reach::Unit{0}` with an empty ladder, re-measured in the current context | `underscore-cross-module`, `underscore-namespace-access` |
+| P5 (string annotations) | annotation strings emitted as references | `string-annotations` |
+| P6 (cycles) | `Timing` — `TYPE_CHECKING` → Erased, in-function/`try` → Lazy; `cyclic` on Load alone | `type-checking-cycle` |
+| P7 (manifests) | `toml` → `ManifestEvidence`: PEP 621, PEP 735, poetry/PDM/uv/hatch, setup.cfg, requirements with PEP 508/503 | `pyproject-tables`, `entry-points`, `manifest-dependency-skip` + the manifest unit tests |
+| P8 (test roles) | `testpaths` → a declared Test unit, outranking the spec's `file_roles` | `unittest-discovery`, `test-convention` |
+| P9 (grammar silences) | OPEN — the generated node-types inventory ledger is M8.f's | nothing yet; the only python row still owed |
+
+P9 is the one that stays open, and it stays open honestly: no adapter has the
+inventory ledger, it is a single generated test for all nine, and building it
+one adapter at a time is how it ends up nine times.
+
+**Deletions.** The private `parent_dir` and `GENERATED_NEEDLES` copies are gone
+(`"Generated by"` moved into the toolkit's list, where the other eight readers
+already were); `nearest_suffix_match` has no python caller left. The adapter's
+version moved 10 → 11 — the same source, different manifest evidence and
+different resolutions, which is one adapter's behaviour and therefore one knob.
+Neither the graph semantics nor the fingerprint moved.

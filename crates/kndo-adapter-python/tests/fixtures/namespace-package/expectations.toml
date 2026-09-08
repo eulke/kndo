@@ -1,0 +1,23 @@
+# namespace-package: PEP 420. `acme` has no `__init__.py` in either place, and
+# its two portions live under two source roots the manifest declares
+# (`packages.find.where = ["src", "vendor"]`). Both facts have to hold for
+# `from acme import extra` to reach `vendor/acme/extra.py`: a resolver that
+# demanded a package initializer, or that searched only the root the importing
+# file sits under, leaves the import unresolved.
+#
+# What keeps `_shared` is then the QUALIFIED reference `extra._shared()` —
+# `describe` names its keeper `qualified` at `src/acme/core.py:7` — so the
+# claim is about resolution reaching across roots, not about the namespace node
+# the two portions share. Making that node root-inclusive changes nothing here;
+# reading one root instead of two makes `vendor/` stop being source at all, and
+# every claim below goes with it.
+
+[[alive]]
+subject = "vendor/acme/extra.py#_shared"
+category = "unused"
+why = "reached as `extra._shared()` from `src/acme/core.py`, whose receiver resolves to this file across the SECOND declared source root and with no package initializer anywhere on the way"
+
+[[dead]]
+subject = "vendor/acme/extra.py#_alone"
+category = "unused"
+why = "the control: same file, same reach, named by nobody — what the file's other name would be if resolution never arrived"

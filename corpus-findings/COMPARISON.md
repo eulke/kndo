@@ -2418,3 +2418,65 @@ Frameworks stayed out: pytest's collection of a `TestCase` subclass, Django's
 URL conf, Flask's `@app.route` are their packs' rules, gated by the dependency
 that proves the framework is installed. What is here is the LANGUAGE's, which
 is the line the design draws.
+
+### Python resolves against declared roots, not against a path's tail (2026-09-08)
+
+Resolution asked the tree for a file whose path ENDS in the dotted name — the
+last thing python's row still did by convention rather than by manifest. It now
+asks `cx.project()`: the source roots the unit declared, its `namespace_root`
+where the manifest mapped a package onto a directory that does not contain it,
+and finally the project root, always, because `sys.path` holds the directory
+the interpreter starts in.
+
+| repo | before | after | delta |
+|---|---|---|---|
+| flask | 20 | 19 | −1 `cyclic` |
+| every other repository | — | — | byte-identical |
+
+**The withdrawn finding is a false positive v1 also shipped.** `src/flask/json/
+provider.py` writes `import json`, meaning the standard library. Suffix
+matching found `src/flask/json/__init__.py` — a path that genuinely ends in
+`json/__init__.py` — and drew an edge from flask's JSON package to itself, then
+reported the cycle it had just invented. Under declared roots the candidate is
+`src/json.py`, which does not exist, so the import stays unresolved the way
+every third-party import does. `stdlib-shadow` is that case as a fixture, and
+restoring the suffix resolver makes it fail by name.
+
+Import edges fell 226 → 197 on flask in the same run. Those 29 are the same
+error in its harmless form: stdlib and third-party names that happened to have
+a look-alike tail inside the distribution. An edge that should not exist is not
+free even when nothing accuses on it — it feeds `cyclic`, `test-only` and every
+reachability answer downstream.
+
+**Nothing else moved, and that is the claim.** Eight repositories are
+byte-identical, so the new resolver reproduces every correct answer the old one
+gave and drops one class of wrong ones. The remaining python surface the
+change touches — PEP 420 portions under two declared roots, `package-dir`
+namespace roots, the `src` layout read off the tree — is pinned by
+`namespace-package`, `src-layout-roots` and the manifest unit tests rather than
+by a corpus number, because flask declares none of those shapes.
+
+### `[project.entry-points]` is read, and the tables it joins (2026-09-08)
+
+`[project.scripts]` was read and `[project.entry-points.<group>]` was not, so a
+pytest plugin, a Flask command or a Django app registered through the installer
+was invisible: the manifest is the only witness such a module ever has. Every
+group is now read, because what registers a callable is what calls it — the
+group decides who does the calling, never whether anyone does.
+
+| repo | before | after |
+|---|---|---|
+| every repository | — | — | byte-identical |
+
+No corpus distribution registers an entry-point group, so the number is zero
+and the proof is `entry-points`: three modules in a distribution the classifier
+marks `Private :: Do Not Upload`, two named by groups and one named by nothing.
+Un-reading the table turns the first two into the third — the accusation the
+fixture's control carries.
+
+The private classifier is what makes that fixture answerable at all, and it is
+worth stating plainly: an uploadable python distribution publishes its whole
+export surface, so `unused` on public API is a question v2 can only ask of a
+distribution that says it does not upload. `_x` remains the class of dead code
+python reports everywhere else, which is what the `_x → Unit{0}` decision was
+weighed against and why re-measuring it changed nothing.

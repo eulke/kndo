@@ -1,0 +1,9 @@
+[project]
+name = "app"
+version = "0.1.0"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

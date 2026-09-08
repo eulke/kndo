@@ -2159,7 +2159,10 @@ const RETIRED: &[(&str, &str)] = &[
 const ROOTS_STILL_IN_THE_EXTRACTOR: &[(&str, &str)] = &[
     // `package main` + `func main` is a UNIT fact Go's manifest cannot state
     // yet: a module is one Library unit, so no `in_unit` reaches it.
-    ("kndo-adapter-go", "the module's entries (go 3/3 left it named)"),
+    (
+        "kndo-adapter-go",
+        "the module's entries (go 3/3 left it named)",
+    ),
     ("kndo-adapter-java", "the language rules of its row"),
     ("kndo-adapter-kotlin", "the language rules of its row"),
     ("kndo-adapter-rust", "the language rules of its row"),

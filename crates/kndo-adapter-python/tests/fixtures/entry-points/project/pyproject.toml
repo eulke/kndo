@@ -1,0 +1,13 @@
+[project]
+name = "internal-tools"
+version = "0.1.0"
+classifiers = ["Private :: Do Not Upload"]
+
+[project.entry-points."pytest11"]
+internal_tools = "internal_tools.pytest_plugin"
+
+[project.entry-points."flask.commands"]
+seed = "internal_tools.commands:seed"
+
+[tool.setuptools]
+package-dir = {"" = "src"}

@@ -1,0 +1,25 @@
+# src-layout-roots: one distribution, two true absolute names for one module.
+# `package-dir = {"" = "src"}` makes `src` the source root, so the installed
+# package calls `src/dist/helpers.py` the module `dist.helpers` — and a pytest
+# run from the repository root puts the root itself on `sys.path`, so the same
+# file is also `src.dist.core`. Both resolve because both roots are real: the
+# one the manifest declared, and the one the interpreter always adds.
+#
+# What this pins is that neither is GUESSED. A resolver matching path suffixes
+# would answer both by accident and answer a third thing wrong (see
+# `stdlib-shadow`); these resolve because a manifest said where the root is.
+
+[[alive]]
+subject = "src/dist/helpers.py"
+category = "unused"
+why = "reached as `dist.helpers` from `core.py` — the distribution's own name under the declared root"
+
+[[alive]]
+subject = "src/dist/core.py"
+category = "untested"
+why = "reached as `src.dist.core` from the test — the project root is a source root too"
+
+[[dead]]
+subject = "src/dist/helpers.py#_never_named"
+category = "unused"
+why = "module-private and named by nothing: resolving the module does not keep every declaration in it"

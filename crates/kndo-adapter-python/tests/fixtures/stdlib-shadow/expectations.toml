@@ -1,0 +1,25 @@
+# stdlib-shadow: a package named `json` inside a distribution, and an absolute
+# `import json` from a module inside it. The stdlib is what that names — the
+# package's own `json` is `mypkg.json`, and nothing on `sys.path` makes a bare
+# `json` reach it. Resolution against the DECLARED source root is what gets this
+# right: `src` is the root, so `json` would be `src/json.py`, which does not
+# exist, and the import stays unresolved the way every third-party import does.
+#
+# A resolver that searched the tree for a file whose path ENDS in `json/
+# __init__.py` finds the package instead, and invents an import cycle between
+# it and the module importing the stdlib.
+
+[[alive]]
+subject = "src/mypkg/json/encoder.py"
+category = "cyclic"
+why = "`import json` is the stdlib, not this package: no cycle exists to report"
+
+[[alive]]
+subject = "src/mypkg/json/__init__.py"
+category = "cyclic"
+why = "the other half of the cycle a suffix-matching resolver would invent"
+
+[[dead]]
+subject = "src/mypkg/json/encoder.py#_unused_helper"
+category = "unused"
+why = "module-private and named by nothing: the control that proves the fixture is judged at all"

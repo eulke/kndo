@@ -1,0 +1,44 @@
+# unittest-discovery: what makes a test file's surface alive, and what does not.
+#
+# `[tool.pytest.ini_options] testpaths` is the manifest STATING that `tests/`
+# holds tests — a unit of kind Test, not a convention about a name. Its files
+# are rooted by their unit's kind, which is what stands between `support.py`
+# and a whole-file accusation: it matches no runner pattern and no module
+# imports it, so with nothing but the name conventions to go on it reads as an
+# orphan rather than as the test code it is.
+#
+# Inside a rooted test file the entry surface is the runner's own door: it
+# enters the module and reaches everything exported there, so `setUp` needs no
+# framework knowledge to stay alive. What the `test*` rule adds is a SECOND
+# keeper on `test_add` (`dispatch:test`); what the underscore takes away is the
+# first, which is why the two private leftovers are still answerable.
+
+[[alive]]
+subject = "tests/support.py"
+category = "unused"
+why = "`testpaths` declared `tests/` a Test unit and a Test unit's files are rooted by their kind — the claim that fails, as a whole-file accusation, the moment that unit stops being declared"
+
+[[alive]]
+subject = "tests/support.py#make_calc_case"
+category = "unused"
+why = "exported from a file its unit roots: the runner's door opens on the whole module, whatever collects it"
+
+[[dead]]
+subject = "tests/support.py#_scratch"
+category = "unused"
+why = "the control: being inside a rooted test file does not keep what the file never exported"
+
+[[alive]]
+subject = "tests/test_calc.py#CalcTest.test_add"
+category = "unused"
+why = "a `test*` member of a type in a Test unit — the runner's own dispatch, stated as a rule; `describe` shows it kept by `dispatch:test` ahead of `entry-surface`"
+
+[[alive]]
+subject = "tests/test_calc.py#CalcTest.setUp"
+category = "unused"
+why = "unittest calls it, and nothing here has to know that: the file is its unit's test entry, so its exported surface is the door the runner opens"
+
+[[dead]]
+subject = "tests/test_calc.py#CalcTest._not_a_test"
+category = "unused"
+why = "the same control one file over: module-private, named by nothing, and off the entry surface its neighbours ride"

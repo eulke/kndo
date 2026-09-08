@@ -224,6 +224,33 @@ fn source_roots(
     (vec![join("")], None)
 }
 
+/// Every `pkg.mod:func` this manifest registers with the installer. Three
+/// tables spell one thing: `[project.scripts]` and `[project.gui-scripts]` are
+/// the console entry points, and `[project.entry-points.<group>]` is every
+/// other group — `pytest11`, `console_scripts`, `flask.commands`. What
+/// registers a callable is what CALLS it: the group decides who does the
+/// calling, never whether anyone does.
+fn callables(root: &Value) -> Vec<&str> {
+    let project = root.get("project");
+    let mut out: Vec<&str> = Vec::new();
+    for name in ["scripts", "gui-scripts"] {
+        if let Some(t) = project.and_then(|p| p.get(name)).and_then(Value::as_table) {
+            out.extend(t.values().filter_map(Value::as_str));
+        }
+    }
+    if let Some(groups) = project
+        .and_then(|p| p.get("entry-points"))
+        .and_then(Value::as_table)
+    {
+        for group in groups.values().filter_map(Value::as_table) {
+            out.extend(group.values().filter_map(Value::as_str));
+        }
+    }
+    out.sort_unstable();
+    out.dedup();
+    out
+}
+
 /// How this distribution is entered, which for Python is two things.
 ///
 /// `[project.scripts]` and `[project.gui-scripts]` name a callable as
@@ -268,27 +295,18 @@ fn entries(
             }
         }
     }
-    for table in ["scripts", "gui-scripts"] {
-        let Some(scripts) = root
-            .get("project")
-            .and_then(|p| p.get(table))
-            .and_then(Value::as_table)
-        else {
-            continue;
-        };
-        for target in scripts.values().filter_map(Value::as_str) {
-            let module = target.split(':').next().unwrap_or(target).replace('.', "/");
-            for base in roots {
-                for shape in [format!("{module}.py"), format!("{module}/__init__.py")] {
-                    let path = if base.is_empty() {
-                        shape
-                    } else {
-                        format!("{base}/{shape}")
-                    };
-                    let candidate = ProjectPath::new(path);
-                    if cx.contains(&candidate) {
-                        out.push(candidate);
-                    }
+    for target in callables(root) {
+        let module = target.split(':').next().unwrap_or(target).replace('.', "/");
+        for base in roots {
+            for shape in [format!("{module}.py"), format!("{module}/__init__.py")] {
+                let path = if base.is_empty() {
+                    shape
+                } else {
+                    format!("{base}/{shape}")
+                };
+                let candidate = ProjectPath::new(path);
+                if cx.contains(&candidate) {
+                    out.push(candidate);
                 }
             }
         }

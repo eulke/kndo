@@ -32,12 +32,12 @@
     ]
   },
   "health": {
-    "implicated": 9,
+    "implicated": 8,
     "subjects": 1228,
     "by_category": [
       {
         "category": "cyclic",
-        "findings": 3
+        "findings": 2
       },
       {
         "category": "unused",
@@ -48,7 +48,7 @@
       {
         "name": "Flask",
         "manifest": "pyproject.toml",
-        "implicated": 6,
+        "implicated": 5,
         "subjects": 1127
       },
       {
@@ -93,17 +93,6 @@
         "path": "src/flask/__init__.py"
       },
       "message": "9 files form an import cycle: src/flask/__init__.py → src/flask/app.py → src/flask/__init__.py"
-    },
-    {
-      "id": "kndo-1ffc8568d487",
-      "category": "cyclic",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "src/flask/json/__init__.py"
-      },
-      "message": "2 files form an import cycle: src/flask/json/__init__.py → src/flask/json/provider.py → src/flask/json/__init__.py"
     },
     {
       "id": "kndo-dbe4c933098d",

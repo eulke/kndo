@@ -1,0 +1,30 @@
+# pyproject-tables: one manifest, three kinds of table, and a judgement that
+# needs each of them read to come out this way.
+#
+#   [tool.poetry] packages = [{ include = "app", from = "lib" }]  → the source
+#       root is `lib`, a directory no layout convention would have guessed, and
+#       `app` is a package under it rather than a directory beside it.
+#   [project] classifiers = ["Private :: Do Not Upload"]  → the distribution
+#       does not publish, so its export surface stops being a keep and its
+#       public API becomes answerable. PEP 621 has no other word for this, and
+#       it is the whole of the exception.
+#   [project] dependencies, [project.optional-dependencies] and
+#       [dependency-groups]  → three requirement tables under two scopes, none
+#       of which this language judges yet. Their consequence is the abstention
+#       block `expected.json` carries beside these claims
+#       (`specifier-identity-underivable`): the run declines the dependency
+#       family outright rather than guessing at a distribution's import name.
+#
+# Un-reading either of the first two erases the accusation below — the poetry
+# root because `lib/` stops being source at all, the classifier because a
+# published distribution keeps its whole export surface.
+
+[[alive]]
+subject = "lib/app/service.py#serve"
+category = "unused"
+why = "re-exported by `lib/app/__init__.py`, the package door under the root poetry declared — a door that exists only if `from = \"lib\"` was read"
+
+[[dead]]
+subject = "lib/app/service.py#dangling"
+category = "unused"
+why = "public, named by nothing, and in a distribution that says it does not upload: the accusation `Private :: Do Not Upload` unlocks and an uploadable sibling would never carry"
