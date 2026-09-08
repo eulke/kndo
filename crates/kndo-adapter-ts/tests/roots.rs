@@ -247,7 +247,13 @@ fn manifest_dependencies_report_every_section() {
     deps.sort_by(|a, b| a.name.cmp(&b.name));
     let brief: Vec<(&str, Option<DependencyScope>, Option<&str>)> = deps
         .iter()
-        .map(|d| (d.name.as_str(), d.scope, d.version_req.as_deref()))
+        .map(|d| {
+            (
+                d.name.as_str(),
+                d.scope,
+                d.version_req.as_ref().map(|v| v.spelled.as_str()),
+            )
+        })
         .collect();
     assert_eq!(
         brief,
@@ -401,7 +407,10 @@ fn a_package_states_the_unit_npm_compiles() {
         unit.entries.iter().map(|e| e.as_str()).collect::<Vec<_>>(),
         ["packages/core/src/index.ts"]
     );
-    assert_eq!(unit.depends_on, ["@demo/util"]);
+    assert_eq!(
+        unit.depends_on,
+        [kndo_contract::manifest::UnitDep::on("@demo/util")]
+    );
 
     // A manifest with no entry field is run, not imported.
     let app = evidence("app/package.json", r#"{ "name": "app" }"#, &[]);

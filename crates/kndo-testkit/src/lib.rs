@@ -88,7 +88,7 @@ use kndo_contract::extension::{
     ConductSink, ContentAccess, DispatchRule, Extension, ExtensionSpec, ExtensionSpecBuilder,
     GraphAccess, PublishedSurface, Step,
 };
-use kndo_contract::manifest::{ManifestSink, Publication, Unit, UnitKind};
+use kndo_contract::manifest::{ManifestSink, Publication, Unit, UnitDep, UnitKind, UnitRoot};
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -523,6 +523,20 @@ impl Extension for MockExtension {
                 out.member(ProjectPath::new(rest.trim()));
                 continue;
             }
+            if let Some(rest) = line.strip_prefix("ignore ") {
+                out.ignore(rest.trim());
+                continue;
+            }
+            if let Some(rest) = line.strip_prefix("alias ") {
+                let mut words = rest.split_whitespace();
+                if let Some(prefix) = words.next() {
+                    out.alias(kndo_contract::manifest::PathAlias {
+                        prefix: prefix.into(),
+                        targets: words.map(Into::into).collect(),
+                    });
+                }
+                continue;
+            }
             let Some(rest) = line.strip_prefix("unit ") else {
                 continue;
             };
@@ -550,15 +564,38 @@ impl Extension for MockExtension {
                 Some("no") => Publication::Unpublished,
                 _ => Publication::Unstated,
             };
+            let friends = list("friends=");
+            let mut depends_on: Vec<UnitDep> = list("needs=")
+                .into_iter()
+                .chain(friends.iter().copied())
+                .map(|n| match friends.contains(&n) {
+                    true => UnitDep::friend(n),
+                    false => UnitDep::on(n),
+                })
+                .collect();
+            depends_on.dedup();
             out.unit(Unit {
                 name: name.into(),
                 kind,
-                roots: list("roots=").into_iter().map(Into::into).collect(),
+                roots: list("roots=")
+                    .into_iter()
+                    .map(UnitRoot::from)
+                    // `flat=` is the same directory taken WITHOUT what nests
+                    // under it — a unit that compiles one level and leaves the
+                    // rest to another.
+                    .chain(list("flat=").into_iter().map(|p| UnitRoot {
+                        path: p.into(),
+                        recursive: false,
+                    }))
+                    .collect(),
                 excludes: list("excludes=").into_iter().map(Into::into).collect(),
                 entries: list("entries=").into_iter().map(ProjectPath::new).collect(),
-                depends_on: list("needs=").into_iter().map(Into::into).collect(),
-                friend_of: list("friends=").into_iter().map(Into::into).collect(),
+                depends_on,
                 publication,
+                namespace_root: words
+                    .clone()
+                    .find_map(|w| w.strip_prefix("namespace="))
+                    .map(Into::into),
             });
         }
     }

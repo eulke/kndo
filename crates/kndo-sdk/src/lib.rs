@@ -522,6 +522,7 @@ pub fn package_entry_to_wire(entry: &PackageEntry) -> wire::PackageEntry {
         name: entry.name.to_string(),
         entry: entry.entry.as_ref().map(|p| p.as_str().to_string()),
         dir: entry.dir.to_string(),
+        aliases: entry.aliases.iter().map(SmolStr::to_string).collect(),
     }
 }
 
@@ -539,11 +540,24 @@ pub fn manifest_evidence_to_wire(
                 Some(wire::Unit {
                     name: u.name.to_string(),
                     kind: unit_kind_to_wire(u.kind)?,
-                    roots: u.roots.iter().map(|r| r.to_string()).collect(),
+                    roots: u
+                        .roots
+                        .iter()
+                        .map(|r| wire::UnitRoot {
+                            path: r.path.to_string(),
+                            recursive: r.recursive,
+                        })
+                        .collect(),
                     excludes: u.excludes.iter().map(|e| e.to_string()).collect(),
                     entries: u.entries.iter().map(|e| e.as_str().to_string()).collect(),
-                    depends_on: u.depends_on.iter().map(|d| d.to_string()).collect(),
-                    friend_of: u.friend_of.iter().map(|f| f.to_string()).collect(),
+                    depends_on: u
+                        .depends_on
+                        .iter()
+                        .map(|d| wire::UnitDep {
+                            unit: d.unit.to_string(),
+                            friend: d.friend,
+                        })
+                        .collect(),
                     publication: match u.publication {
                         kndo_contract::manifest::Publication::Published => {
                             wire::Publication::Published
@@ -555,6 +569,7 @@ pub fn manifest_evidence_to_wire(
                             wire::Publication::Unstated
                         }
                     },
+                    namespace_root: u.namespace_root.as_ref().map(SmolStr::to_string),
                 })
             })
             .collect(),
@@ -565,11 +580,20 @@ pub fn manifest_evidence_to_wire(
             .map(|d| wire::DependencyDeclaration {
                 name: d.name.to_string(),
                 scope: d.scope.map(dependency_scope_to_wire),
-                version_req: d.version_req.as_ref().map(|v| v.to_string()),
+                version_req: d.version_req.as_ref().map(version_req_to_wire),
             })
             .collect(),
         mentions: read.mentions.iter().map(|m| m.to_string()).collect(),
+        aliases: read
+            .aliases
+            .iter()
+            .map(|a| wire::PathAlias {
+                prefix: a.prefix.to_string(),
+                targets: a.targets.iter().map(SmolStr::to_string).collect(),
+            })
+            .collect(),
         roots: read.roots.iter().map(project_root_to_wire).collect(),
+        ignores: read.ignores.iter().map(SmolStr::to_string).collect(),
         members: read
             .members
             .iter()
@@ -588,6 +612,21 @@ pub fn manifest_evidence_to_wire(
                 span: d.span.map(span_to_wire),
             })
             .collect(),
+    }
+}
+
+fn version_req_to_wire(req: &kndo_contract::manifest::VersionReq) -> wire::VersionReq {
+    let version = |v: &kndo_contract::manifest::Version| wire::Version {
+        major: v.major,
+        minor: v.minor,
+        patch: v.patch,
+    };
+    wire::VersionReq {
+        spelled: req.spelled.to_string(),
+        range: req
+            .range
+            .as_ref()
+            .map(|(lo, hi)| (version(lo), version(hi))),
     }
 }
 
@@ -610,6 +649,7 @@ fn package_entry_from_wire(entry: wire::PackageEntry) -> PackageEntry {
         name: SmolStr::new(entry.name),
         entry: entry.entry.map(ProjectPath::new),
         dir: SmolStr::new(entry.dir),
+        aliases: entry.aliases.into_iter().map(SmolStr::new).collect(),
     }
 }
 

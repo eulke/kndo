@@ -5,7 +5,7 @@
 //! answers all of them the same way.
 
 use kndo_adapter_go::GoAdapter;
-use kndo_contract::manifest::{ManifestEvidence, Publication, UnitKind};
+use kndo_contract::manifest::{ManifestEvidence, Publication, UnitDep, UnitKind};
 
 fn read(manifest_path: &str, content: &str) -> ManifestEvidence {
     kndo_testkit::manifest_evidence(&GoAdapter::new(), manifest_path, content, &[])
@@ -85,7 +85,9 @@ fn the_module_is_one_published_library_unit_over_its_own_directory() {
     assert!(unit.roots.is_empty());
     // No entry: a Go module is entered through import paths, not through a file.
     assert!(unit.entries.is_empty());
-    assert_eq!(unit.depends_on, ["example.com/dep"]);
+    assert_eq!(unit.depends_on, [UnitDep::on("example.com/dep")]);
+    // Every package of the module hangs under the `module` line.
+    assert_eq!(unit.namespace_root.as_deref(), Some("example.com/api"));
     assert_eq!(unit.publication, Publication::Unstated);
     assert!(
         unit.is_published(),

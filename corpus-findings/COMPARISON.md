@@ -2299,3 +2299,40 @@ never who may import it and say which module they mean.
 The `underscore-namespace-access` fixture is what found the gap and what pins
 it: `inner._qualified()` from a sibling keeps it alive; `_alone`, which nobody
 qualifies, stays accused.
+
+### Two texts are not two requirements (2026-09-08)
+
+`VersionReq { spelled, range }` lands, and with it the comparison a range is
+for. Before, `version-skew` compared the requirement TEXTS: two manifests that
+spelled the same resolvable requirement differently diverged. That was never a
+statement about the build — cargo unifies compatible carets at resolve time, and
+npm's ranges overlap or they do not — it was a statement about typography.
+
+| repo | before | after | why |
+|---|---|---|---|
+| ripgrep | 151 | 141 | −10 `version-skew`, every one compatible under cargo's caret |
+| vite | 687 | 685 | −2 `version-skew`, both overlapping npm ranges |
+| every other repository | — | — | byte-identical |
+
+Every removal is a false positive with a name. ripgrep's workspace pins
+`serde_json = "1.0.23"` while `crates/globset` asks for `1.0.107`: one range,
+`[1.0.23, 2.0.0)` ∩ `[1.0.107, 2.0.0)`, one build, nothing to reconcile. The
+same shape ten times, across `bstr`, `termcolor`, `log`, `walkdir`, `serde`,
+`anyhow`, `winapi-util`, `regex-syntax` and `regex-automata`. On vite, `vue`
+at `^3.5.41` beside `^3.5.18` and `react` at `^19.2.8` beside the pin `19.2.8`
+— overlapping, so silent.
+
+**What survives is the finding the category exists for.** vite's `tailwindcss`
+is declared `^4.3.3` in three playgrounds and `^3.4.19` in `playground/tailwind-v3`:
+`[4.3.3, 5.0.0)` and `[3.4.19, 4.0.0)` cannot both hold, and it is still
+reported. One real skew kept, twelve typographic ones dropped.
+
+The range reader is `kndo_toolkit::semver_range`, one function for two
+ecosystems: npm and cargo spell `^`, `~`, `=`, `>=` and the `x`/`*` wildcards
+identically and differ on the BARE form alone (npm pins it, cargo widens it to
+a caret), which is why `Bare` is its only parameter. What it cannot spell — a
+comma-joined conjunction, a `||` union, a hyphen range — returns no range at
+all, and a requirement with no range is never a conflict: `disjoint` answers
+`None`, and the analysis falls back to the text comparison that is all the
+evidence there is. Guessing a range wrong is worse than having none, because a
+comparison silently made against the wrong bounds is a finding nobody can check.

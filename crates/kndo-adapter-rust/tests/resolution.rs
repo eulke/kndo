@@ -118,6 +118,7 @@ fn workspace_packages_link_by_import_name() {
             name: SmolStr::new("demo_core"),
             entry: Some(ProjectPath::new("crates/core/src/lib.rs")),
             dir: SmolStr::new("crates/core"),
+            aliases: Vec::new(),
         },
     );
     let cx = ResolveContext::with_packages(&known, &packages);
@@ -157,6 +158,7 @@ fn crate_base_comes_from_the_owning_package() {
                 name: SmolStr::new(name),
                 entry: entry.map(ProjectPath::new),
                 dir: SmolStr::new(dir),
+                aliases: Vec::new(),
             },
         );
     }

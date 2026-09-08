@@ -6021,3 +6021,70 @@ code with two type names swapped, once per enum, on both sides of the ABI.
 the macro writes the rest, and both the SDK and the host use it. The previous
 commit (78ea211) moved `GRAPH_SEMANTICS_VERSION` without naming the knob in
 this file; naming it here is that entry's completion.
+
+## 2026-09-08 — the manifest's shapes, all of them, and the ranges they make comparable
+
+The manifest half of the contract-v3 audit, under the same standing
+instruction as the evidence half: every shape the design details exists, and
+where an adapter can already state a fact of that shape from what it ALREADY
+reads, it states it. New PARSING waits for each adapter's own row; typing an
+existing reading correctly does not.
+
+**Types.**
+
+- **`Version` / `VersionReq { spelled, range }`** — `DependencyDeclaration
+  .version_req` is no longer a `SmolStr`. `range` is the half-open `[lo, hi)`
+  the declaring adapter's ecosystem reads the text as, `None` wherever the
+  adapter cannot map it; `disjoint` answers `None` for a comparison that could
+  not be performed, because unknown is never a conflict.
+- **`UnitRoot { path, recursive }`** — a non-recursive root is a real shape: a
+  target that compiles ONE directory and leaves what nests under it to another
+  unit. `ProjectUnit::depth_of` honours it, and a bare path is recursive,
+  which is every build system's default and what every adapter meant before.
+- **`UnitDep { unit, friend }`** replaces `depends_on` + `friend_of`. A
+  dependency and a friendship are one fact the manifest states once, and two
+  parallel lists could disagree; now they cannot.
+- **`Unit.namespace_root`** — the name a unit's namespaces hang under when its
+  ROOTS do not contain it. `Scopes::build` prefixes the segments a `ByPath`
+  language derives.
+- **`PackageEntry.aliases`** — the other names a package answers to. The graph
+  indexes them beside the name (never over one), so `ResolveContext::package`
+  finds an entry through a rename and only where nothing carries the name
+  outright.
+- **`PathAlias { prefix, targets }`**, **`ManifestEvidence.aliases`** and
+  **`.ignores`**, with `ManifestSink::alias` and `::ignore`. An alias with no
+  prefix or no target is dropped and described: resolution would read it as
+  "this prefix resolves", and the honest answer is silence.
+
+**Consumers.** `version-skew` compares ranges; the claim pass reads project
+ignores; `Scopes` reads namespace roots; `package_map` reads aliases;
+`ProjectUnit::depth_of` reads recursion. `ManifestEvidence.aliases` is the one
+shape whose consumer is still owed — it is read through
+`ResolveContext::project()`, which lands with the rest of that query surface,
+and converting tsconfig's `paths` from today's `PackageEntry` emission before
+the query exists would break resolution rather than move it.
+
+**Adapters, from what they already read.** rust states its hyphen spelling as
+a package alias and its crate name as the unit's namespace root, and normalizes
+cargo's requirement to a range; ts normalizes npm's; go states the module path
+as its namespace root; python states PEP 503's normal form and the underscore
+spelling as distribution aliases, and reads setuptools' NAMED `package-dir`
+key as a namespace root — under which the mapped root's own `__init__.py` is
+the package door `import mypkg` executes. `kndo_toolkit::semver_range` is the
+one reader for two ecosystems (`Bare::{Caret, Exact}` is the only difference);
+it is the toolkit's because it is identical for a grammar it has never seen.
+
+**Measurement.** ripgrep 151 → 141 and vite 687 → 685, all `version-skew`,
+every removal a false positive the text comparison manufactured and every
+survivor a range that genuinely cannot hold beside another (vite's
+`tailwindcss` at `^4.3.3` beside `^3.4.19`). Decomposed in
+`corpus-findings/COMPARISON.md`.
+
+**Knobs.** `GRAPH_SEMANTICS_VERSION` 35 → 36: the same evidence now assembles
+into a different graph (units carry roots that may be non-recursive, packages
+carry aliases the map indexes, the claim pass drops what a manifest excludes).
+The contract fingerprint did NOT move — manifest evidence is not cached by
+file content, which is the whole reason it takes the other knob.
+`abi/compat/*.wasm` are re-pinned against `kndo:vocab` with `unit-root`,
+`unit-dep`, `version`, `version-req`, `path-alias`, and `manifest-evidence`'s
+`aliases` and `ignores`.

@@ -16,7 +16,9 @@
 use kndo_contract::adapter::{
     DependencyDeclaration, DependencyScope, PackageEntry, ResolveContext, SourceFile,
 };
-use kndo_contract::manifest::{ManifestSink, Publication, Unit, UnitKind};
+use kndo_contract::manifest::{
+    ManifestSink, Publication, Unit, UnitDep, UnitKind, UnitRoot, VersionReq,
+};
 use kndo_contract::vocab::ProjectPath;
 use smol_str::SmolStr;
 
@@ -61,18 +63,21 @@ pub fn structure(manifest: &SourceFile<'_>, cx: &ResolveContext<'_>, out: &mut M
         out.unit(Unit {
             name,
             kind,
-            roots: vec![SmolStr::new(parent_dir(&entry))],
+            roots: vec![UnitRoot::from(parent_dir(&entry))],
             excludes: Vec::new(),
             entries: vec![entry],
-            depends_on,
             // Cargo says nothing of the sort: an integration test is a
-            // separate crate that sees only what the library exports.
-            friend_of: Vec::new(),
+            // separate crate that sees only what the library exports, so no
+            // dependency it states is a friendship.
+            depends_on: depends_on.into_iter().map(UnitDep::on).collect(),
             publication: if kind == UnitKind::Library {
                 publication
             } else {
                 Publication::Unstated
             },
+            // Every path a rust file writes hangs under its crate, whose name
+            // is the lib target's — `-` is not a path character.
+            namespace_root: Some(SmolStr::new(package_name.replace('-', "_"))),
         });
     }
 }
@@ -204,10 +209,18 @@ fn packages(manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<PackageEn
         .unwrap_or(package_name)
         .replace('-', "_");
     let entry = lib_entry(&toml, &dir).filter(|e| cx.contains(e));
+    // The manifest names the package with `-` where the code spells it with
+    // `_`: cargo's own rename, and the one a dependency declaration is written
+    // in while every import is written in the other.
+    let aliases = match import_name == package_name {
+        true => Vec::new(),
+        false => vec![SmolStr::new(package_name)],
+    };
     vec![PackageEntry {
         name: SmolStr::new(import_name),
         entry,
         dir: SmolStr::new(dir),
+        aliases,
     }]
 }
 
@@ -269,12 +282,17 @@ fn dependencies(manifest: &SourceFile<'_>) -> Vec<DependencyDeclaration> {
 /// bare-string form, or a table's `version` key. A path/git/workspace-inherited
 /// spec names a resolution mechanism, not a version — a comparison the manifest
 /// does not enable must stay silent instead of diverging from every real one.
-fn comparable_req(spec: &toml::Value) -> Option<SmolStr> {
-    match spec {
-        toml::Value::String(req) => Some(SmolStr::new(req)),
-        toml::Value::Table(t) => t.get("version").and_then(|v| v.as_str()).map(SmolStr::new),
+fn comparable_req(spec: &toml::Value) -> Option<VersionReq> {
+    let spelled = match spec {
+        toml::Value::String(req) => Some(req.as_str()),
+        toml::Value::Table(t) => t.get("version").and_then(|v| v.as_str()),
         _ => None,
-    }
+    }?;
+    Some(VersionReq {
+        // Cargo reads a bare requirement as caret.
+        spelled: SmolStr::new(spelled),
+        range: kndo_toolkit::semver_range(spelled, kndo_toolkit::Bare::Caret),
+    })
 }
 
 fn lib_entry(toml: &toml::Value, dir: &str) -> Option<ProjectPath> {

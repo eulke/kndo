@@ -5,7 +5,7 @@
 //! comment never reads as a target's.
 
 use kndo_contract::adapter::DependencyDeclaration;
-use kndo_contract::manifest::{ManifestSink, Publication, Unit, UnitKind};
+use kndo_contract::manifest::{ManifestSink, Publication, Unit, UnitDep, UnitKind, UnitRoot};
 use kndo_contract::vocab::ProjectPath;
 use kndo_toolkit as tk;
 use smol_str::SmolStr;
@@ -180,14 +180,19 @@ pub fn structure(manifest: &ProjectPath, content: &[u8], out: &mut ManifestSink)
                     ".macro" | ".plugin" => UnitKind::Tooling,
                     _ => UnitKind::Library,
                 },
-                roots,
+                roots: roots.into_iter().map(UnitRoot::from).collect(),
                 excludes,
                 entries: Vec::new(),
                 // A test target's dependencies are its FRIENDS: `@testable
                 // import Vapor` reaches Vapor's `internal`, which is exactly
                 // what friendship means and what no path convention can know.
-                friend_of: if test { depends_on.clone() } else { Vec::new() },
-                depends_on,
+                depends_on: depends_on
+                    .into_iter()
+                    .map(|d| match test {
+                        true => UnitDep::friend(d),
+                        false => UnitDep::on(d),
+                    })
+                    .collect(),
                 // A library product NAMES the targets it publishes, so a
                 // target no product names is the package's own — the one
                 // place SwiftPM states this, and stating it is not the same
@@ -197,6 +202,10 @@ pub fn structure(manifest: &ProjectPath, content: &[u8], out: &mut ManifestSink)
                 } else {
                     Publication::Unpublished
                 },
+                // A Swift module IS the target, and its files declare no
+                // namespace clause: the module name is the scope forest's,
+                // never a prefix on a path.
+                namespace_root: None,
             });
         }
     }

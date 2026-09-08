@@ -511,13 +511,12 @@ impl Session {
             files = discover::discover(&self.root, &hidden);
         });
 
-        let mut claims = Vec::new();
-        timed(&mut timings.claim, &mut || {
-            claims = extract::claim(&files, &self.extensions);
-        });
-
-        // Activation is decided before the graph exists — its inputs are what
-        // discovery and the manifest pass already know — because the cache decision
+        // Two facts a manifest states that the passes BELOW it need: what this
+        // project excludes (the claim reads it) and the names it declares
+        // (activation reads them). One read of the same door the graph pass
+        // reads later, asked here because both answers gate what follows.
+        //
+        // Activation is decided before the graph exists because the cache decision
         // hangs on it: any ACTIVE graph-mutating plugin bypasses the persisted graph
         // entirely (the surgical patch never re-invokes plugin hooks, so it could
         // never safely reuse a graph one influenced). The evidence cache stays on:
@@ -525,18 +524,26 @@ impl Session {
         let discovered_paths: BTreeSet<ProjectPath> =
             files.iter().map(|f| f.path.clone()).collect();
         let mut manifest_dependencies: BTreeSet<SmolStr> = BTreeSet::new();
+        let mut project_ignores: Vec<SmolStr> = Vec::new();
         {
-            // The same door the graph pass reads, asked earlier and for one
-            // field: activation needs the NAMES a manifest declares, and a
-            // manifest states them beside everything else.
             let cx = kndo_contract::adapter::ResolveContext::new(&discovered_paths);
             crate::graph::for_each_manifest(&files, &self.extensions, |extension, manifest| {
                 let mut sink = kndo_contract::manifest::ManifestSink::new();
                 extension.extract_manifest(&manifest, &cx, &mut sink);
-                manifest_dependencies
-                    .extend(sink.finish().dependencies.into_iter().map(|d| d.name));
+                let read = sink.finish();
+                manifest_dependencies.extend(read.dependencies.into_iter().map(|d| d.name));
+                project_ignores.extend(read.ignores);
             });
         }
+        project_ignores.sort_unstable();
+        project_ignores.dedup();
+        let project_ignores = crate::extract::ignore_set(&project_ignores);
+
+        let mut claims = Vec::new();
+        timed(&mut timings.claim, &mut || {
+            claims = extract::claim(&files, &self.extensions, &project_ignores);
+        });
+
         let active = crate::conduct::activate(&self.extensions, &files, &manifest_dependencies);
         let plugins_mutate = active
             .iter()

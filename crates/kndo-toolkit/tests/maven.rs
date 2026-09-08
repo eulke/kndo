@@ -152,7 +152,7 @@ fn an_inherited_test_source_directory_is_the_childs_own() {
         .find(|u| u.name == "child:test")
         .expect("the test unit");
     assert!(
-        tests.roots.iter().any(|r| r == "child/test-src"),
+        tests.roots.iter().any(|r| r.path == "child/test-src"),
         "{:?}",
         tests.roots
     );

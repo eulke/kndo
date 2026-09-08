@@ -17,7 +17,7 @@
 use crate::discover::DiscoveredFile;
 use kndo_contract::adapter::{ResolveContext, SourceFile};
 use kndo_contract::extension::{Extension, ExtensionSpec};
-use kndo_contract::manifest::{ManifestEvidence, ManifestSink, UnitKind};
+use kndo_contract::manifest::{ManifestEvidence, ManifestSink, UnitKind, UnitRoot};
 use kndo_contract::vocab::ProjectPath;
 use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
@@ -43,10 +43,10 @@ pub struct ProjectUnit {
     pub name: SmolStr,
     pub kind: UnitKind,
     pub manifest: ProjectPath,
-    /// Source-root directories, normalized: a unit that declared none compiles
-    /// its manifest's own directory, so this is never empty of entries — only
-    /// of characters, at the project root.
-    pub roots: Vec<SmolStr>,
+    /// Source roots, normalized: a unit that declared none compiles its
+    /// manifest's own directory, so this is never empty of entries — only of
+    /// characters, at the project root.
+    pub roots: Vec<UnitRoot>,
     pub excludes: Vec<SmolStr>,
     pub entries: Vec<ProjectPath>,
     /// Every unit of this project this one compiles against, transitively,
@@ -55,9 +55,9 @@ pub struct ProjectUnit {
     /// unit list alone.
     pub compiles_against: Vec<u32>,
     /// The units whose unit-reaching names this one may use — the resolution
-    /// of [`kndo_contract::manifest::Unit::friend_of`], direct and ascending:
-    /// friendship is the build system's statement about one pair of units and
-    /// never carries over a third.
+    /// of the [`kndo_contract::manifest::UnitDep`]s the manifest marked
+    /// FRIEND, direct and ascending: friendship is the build system's
+    /// statement about one pair of units and never carries over a third.
     pub friend_of: Vec<u32>,
     /// The manifest that aggregates this unit's — Maven's `<modules>`,
     /// Cargo's `workspace.members`, a SwiftPM package's targets — which is
@@ -67,6 +67,9 @@ pub struct ProjectUnit {
     /// Whether the outside world consumes this unit's exported API —
     /// [`kndo_contract::manifest::Unit::is_published`], read once.
     pub published: bool,
+    /// The name this unit's namespaces hang under when its ROOTS do not
+    /// contain it — see [`kndo_contract::manifest::Unit::namespace_root`].
+    pub namespace_root: Option<SmolStr>,
 }
 
 impl ProjectUnit {
@@ -80,10 +83,20 @@ impl ProjectUnit {
         }
         self.roots
             .iter()
-            .filter(|r| path.is_under(r))
-            .map(|r| r.len())
+            .filter(|r| path.is_under(&r.path) && (r.recursive || directly_in(path, &r.path)))
+            .map(|r| r.path.len())
             .max()
     }
+}
+
+/// Is `path` a file OF `dir` rather than of something nested under it? What a
+/// non-recursive [`UnitRoot`] compiles.
+fn directly_in(path: &ProjectPath, dir: &str) -> bool {
+    let rest = match dir.is_empty() {
+        true => path.as_str(),
+        false => &path.as_str()[dir.len() + 1..],
+    };
+    !rest.contains('/')
 }
 
 /// What the project's manifests declared, assembled. Serialized with the graph:
@@ -192,6 +205,8 @@ pub fn read_manifests(
         union(&mut merged.packages, read.packages);
         union(&mut merged.dependencies, read.dependencies);
         union(&mut merged.mentions, read.mentions);
+        union(&mut merged.aliases, read.aliases);
+        union(&mut merged.ignores, read.ignores);
     };
     crate::graph::for_each_matching(files, adapters, ExtensionSpec::manifests, |a, f| {
         read(a, f, true)
@@ -221,14 +236,14 @@ pub fn assemble(reads: &[ManifestRead]) -> Project {
             .rsplit_once('/')
             .map_or("", |(d, _)| d);
         for unit in &read.evidence.units {
-            let mut roots: Vec<SmolStr> = unit.roots.clone();
+            let mut roots: Vec<UnitRoot> = unit.roots.clone();
             // A unit that names no source root compiles its manifest's own
             // directory: the engine knows where the manifest is, so an adapter
             // never spells a path it did not read.
             if roots.is_empty() {
-                roots.push(SmolStr::new(dir));
+                roots.push(UnitRoot::from(dir));
             }
-            roots.sort();
+            roots.sort_by(|a, b| (&a.path, a.recursive).cmp(&(&b.path, b.recursive)));
             roots.dedup();
             let mut excludes = unit.excludes.clone();
             excludes.sort();
@@ -247,8 +262,16 @@ pub fn assemble(reads: &[ManifestRead]) -> Project {
                 friend_of: Vec::new(),
                 published: unit.is_published(),
                 group: None,
+                namespace_root: unit.namespace_root.clone(),
             });
-            named.push((unit.depends_on.clone(), unit.friend_of.clone()));
+            named.push((
+                unit.depends_on.iter().map(|d| d.unit.clone()).collect(),
+                unit.depends_on
+                    .iter()
+                    .filter(|d| d.friend)
+                    .map(|d| d.unit.clone())
+                    .collect(),
+            ));
         }
     }
     let mut order: Vec<usize> = (0..units.len()).collect();
@@ -379,7 +402,7 @@ impl Aggregators {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kndo_contract::manifest::Unit;
+    use kndo_contract::manifest::{Unit, UnitDep};
 
     fn read(manifest: &str, units: Vec<Unit>) -> ManifestRead {
         ManifestRead {
@@ -406,7 +429,13 @@ mod tests {
     }
 
     fn needing(mut unit: Unit, names: &[&str]) -> Unit {
-        unit.depends_on = names.iter().map(|n| SmolStr::new(*n)).collect();
+        unit.depends_on = names.iter().map(|n| UnitDep::on(*n)).collect();
+        unit
+    }
+
+    /// The same, with every named dependency marked a friendship.
+    fn befriending(mut unit: Unit, names: &[&str]) -> Unit {
+        unit.depends_on = names.iter().map(|n| UnitDep::friend(*n)).collect();
         unit
     }
 
@@ -522,12 +551,12 @@ mod tests {
         Unit {
             name: name.into(),
             kind,
-            roots: roots.iter().map(|r| SmolStr::new(*r)).collect(),
+            roots: roots.iter().map(|r| UnitRoot::from(*r)).collect(),
             excludes: excludes.iter().map(|e| SmolStr::new(*e)).collect(),
             entries: Vec::new(),
             depends_on: Vec::new(),
-            friend_of: Vec::new(),
             publication: Default::default(),
+            namespace_root: None,
         }
     }
 
@@ -539,21 +568,18 @@ mod tests {
                 "core/pom.xml",
                 vec![
                     unit("core", UnitKind::Library, &["core/src/main/java"], &[]),
-                    Unit {
-                        friend_of: vec![SmolStr::new("core")],
-                        ..needing(
-                            unit("core:test", UnitKind::Test, &["core/src/test/java"], &[]),
-                            &["core"],
-                        )
-                    },
+                    befriending(
+                        unit("core:test", UnitKind::Test, &["core/src/test/java"], &[]),
+                        &["core"],
+                    ),
                 ],
             ),
             read(
                 "other/pom.xml",
-                vec![Unit {
-                    friend_of: vec![SmolStr::new("core:test")],
-                    ..needing(unit("other", UnitKind::Library, &["other"], &[]), &["core"])
-                }],
+                vec![befriending(
+                    unit("other", UnitKind::Library, &["other"], &[]),
+                    &["core:test"],
+                )],
             ),
         ]);
         let by_name = |n: &str| -> &ProjectUnit {
@@ -628,7 +654,7 @@ mod tests {
             "services/api/package.json",
             vec![unit("api", UnitKind::Library, &[], &[])],
         )]);
-        assert_eq!(project.units[0].roots, ["services/api"]);
+        assert_eq!(project.units[0].roots, [UnitRoot::from("services/api")]);
         assert!(
             project
                 .unit_of(&ProjectPath::new("services/api/src/index.js"))

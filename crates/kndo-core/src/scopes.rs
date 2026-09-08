@@ -587,12 +587,11 @@ fn by_path(
         return None;
     }
     let path = f.path.as_str();
-    let under = f
-        .unit
-        .map(|u| &graph.project.units[u as usize])
+    let unit = f.unit.map(|u| &graph.project.units[u as usize]);
+    let under = unit
         .into_iter()
         .flat_map(|u| u.roots.iter())
-        .map(|r| r.as_str())
+        .map(|r| r.path.as_str())
         .filter(|r| !r.is_empty() && path.starts_with(r) && path.as_bytes()[r.len()] == b'/')
         // The innermost root wins: a unit rooted at both `.` and `src` puts
         // `src/app/views.py` in `app.views`, never `src.app.views`.
@@ -600,7 +599,14 @@ fn by_path(
         .map(|r| &path[r.len() + 1..])
         .unwrap_or(path);
     let stem = under.rsplit_once('.').map_or(under, |(s, _)| s);
-    let mut segments: Vec<SmolStr> = stem.split('/').map(SmolStr::new).collect();
+    // The name the unit hangs under when its ROOTS do not contain it —
+    // setuptools' `package-dir = {"mypkg": "lib"}`, where `lib/mod.py` is the
+    // module `mypkg.mod` and `mypkg` is nowhere in the path.
+    let mut segments: Vec<SmolStr> = unit
+        .and_then(|u| u.namespace_root.clone())
+        .into_iter()
+        .chain(stem.split('/').map(SmolStr::new))
+        .collect();
     // A package initializer IS its package, not a module inside it.
     if segments.last().is_some_and(|s| s == "__init__") {
         segments.pop();
@@ -631,7 +637,17 @@ mod tests {
         aggregator: (&str, &[&str]),
         files: &[(&str, &[&str])],
     ) -> Graph {
-        use kndo_contract::manifest::{ManifestEvidence, Unit, UnitKind};
+        graph_with_named_units(manifests, aggregator, files, None)
+    }
+
+    /// The same, with every unit hanging under one namespace root.
+    fn graph_with_named_units(
+        manifests: &[(&str, &str, &[&str], &[&str])],
+        aggregator: (&str, &[&str]),
+        files: &[(&str, &[&str])],
+        namespace_root: Option<&str>,
+    ) -> Graph {
+        use kndo_contract::manifest::{ManifestEvidence, Unit, UnitDep, UnitKind, UnitRoot};
         let mut reads = vec![crate::project::ManifestRead {
             manifest: ProjectPath::new(aggregator.0),
             evidence: ManifestEvidence {
@@ -647,12 +663,12 @@ mod tests {
                     units: vec![Unit {
                         name: SmolStr::new(*name),
                         kind: UnitKind::Library,
-                        roots: roots.iter().map(|r| SmolStr::new(*r)).collect(),
+                        roots: roots.iter().map(|r| UnitRoot::from(*r)).collect(),
                         excludes: Vec::new(),
                         entries: Vec::new(),
-                        depends_on: needs.iter().map(|n| SmolStr::new(*n)).collect(),
-                        friend_of: Vec::new(),
+                        depends_on: needs.iter().map(|n| UnitDep::on(*n)).collect(),
                         publication: Default::default(),
+                        namespace_root: namespace_root.map(SmolStr::new),
                     }],
                     ..ManifestEvidence::default()
                 },
@@ -893,5 +909,58 @@ mod tests {
         let graph = graph_of(&[("A.java", &["com", "foo"])]);
         let scopes = Scopes::build(&graph, &[]);
         assert_eq!(scopes.namespace_pool(0, 1), None);
+    }
+
+    /// Every namespace the forest holds, in node order — what a file's dotted
+    /// path derived to.
+    fn namespaces(scopes: &Scopes) -> Vec<Vec<&str>> {
+        let mut out: Vec<(u32, Vec<&str>)> = scopes
+            .nodes
+            .iter()
+            .map(|((_, segments), node)| (*node, segments.iter().map(SmolStr::as_str).collect()))
+            .collect();
+        out.sort_by_key(|(node, _)| *node);
+        out.into_iter().map(|(_, segments)| segments).collect()
+    }
+
+    /// The one adapter of these tests, saying its namespaces are shaped by PATH.
+    fn by_path_caps() -> Vec<(SmolStr, DeclaredCapabilities)> {
+        vec![(
+            SmolStr::new_static("test"),
+            DeclaredCapabilities {
+                nesting: kndo_contract::extension::Nesting::ByPath,
+                ..Default::default()
+            },
+        )]
+    }
+
+    #[test]
+    fn a_units_namespace_root_prefixes_what_its_paths_derive() {
+        // setuptools' `package-dir = {"mypkg" = "lib"}`: the unit compiles
+        // `lib`, and the package it hangs under is nowhere in any path.
+        let rooted = graph_with_named_units(
+            &[("pyproject.toml", "mypkg", &["lib"], &[])],
+            ("workspace.toml", &["pyproject.toml"]),
+            &[("lib/api.py", &[]), ("lib/deep/impl.py", &[])],
+            Some("mypkg"),
+        );
+        assert_eq!(
+            namespaces(&Scopes::build(&rooted, &by_path_caps())),
+            [vec!["mypkg", "api"], vec!["mypkg", "deep", "impl"]]
+        );
+
+        // The same tree with the mapping unstated derives the path alone —
+        // which is what `package-dir = {"" = "lib"}` means and why the root is
+        // the manifest's to state rather than the engine's to guess.
+        let bare = graph_with_named_units(
+            &[("pyproject.toml", "mypkg", &["lib"], &[])],
+            ("workspace.toml", &["pyproject.toml"]),
+            &[("lib/api.py", &[]), ("lib/deep/impl.py", &[])],
+            None,
+        );
+        assert_eq!(
+            namespaces(&Scopes::build(&bare, &by_path_caps())),
+            [vec!["api"], vec!["deep", "impl"]]
+        );
     }
 }

@@ -23,7 +23,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Bump when the SAME evidence assembles into a DIFFERENT graph — resolution
 /// candidate changes, reachability semantics, new assembled fields. Folded into the
 /// graph cache key beside the contract fingerprint and the adapter set.
-pub const GRAPH_SEMANTICS_VERSION: u32 = 35;
+pub const GRAPH_SEMANTICS_VERSION: u32 = 36;
 
 #[derive(Serialize, Deserialize)]
 pub struct GraphFile {
@@ -647,16 +647,11 @@ fn collect_manifest_declarations(
             let manifest = read.manifest.clone();
             let mut declarations = read.evidence.dependencies.clone();
             declarations.sort_by(|a, b| {
-                (
-                    a.name.as_str(),
-                    a.scope.map(|s| s as u8),
-                    a.version_req.as_deref(),
-                )
-                    .cmp(&(
-                        b.name.as_str(),
-                        b.scope.map(|s| s as u8),
-                        b.version_req.as_deref(),
-                    ))
+                (a.name.as_str(), a.scope.map(|s| s as u8), &a.version_req).cmp(&(
+                    b.name.as_str(),
+                    b.scope.map(|s| s as u8),
+                    &b.version_req,
+                ))
             });
             declarations.dedup();
             ManifestDeclarations::unjudged(manifest, declarations)
@@ -705,6 +700,16 @@ fn package_map(reads: &[crate::project::ManifestRead]) -> BTreeMap<SmolStr, Pack
     for read in reads {
         for pkg in &read.evidence.packages {
             packages.entry(pkg.name.clone()).or_insert(pkg.clone());
+        }
+    }
+    // A renaming manifest's spelling reaches the same entry — but never over a
+    // package that carries the name outright, so an alias can only add an
+    // answer where there was none.
+    for read in reads {
+        for pkg in &read.evidence.packages {
+            for alias in &pkg.aliases {
+                packages.entry(alias.clone()).or_insert(pkg.clone());
+            }
         }
     }
     packages

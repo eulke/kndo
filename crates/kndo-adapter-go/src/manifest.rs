@@ -9,7 +9,7 @@
 use kndo_contract::adapter::{
     DependencyDeclaration, DependencyScope, PackageEntry, ResolveContext, SourceFile,
 };
-use kndo_contract::manifest::{ManifestSink, Publication, Unit, UnitKind};
+use kndo_contract::manifest::{ManifestSink, Publication, Unit, UnitDep, UnitKind};
 use smol_str::SmolStr;
 
 pub fn structure(manifest: &SourceFile<'_>, _cx: &ResolveContext<'_>, out: &mut ManifestSink) {
@@ -35,6 +35,7 @@ pub fn structure(manifest: &SourceFile<'_>, _cx: &ResolveContext<'_>, out: &mut 
         name: SmolStr::new(&module),
         entry: None,
         dir: SmolStr::new(kndo_toolkit::parent_dir(manifest.path.as_str())),
+        aliases: Vec::new(),
     });
     out.unit(Unit {
         name: SmolStr::new(&module),
@@ -44,12 +45,16 @@ pub fn structure(manifest: &SourceFile<'_>, _cx: &ResolveContext<'_>, out: &mut 
         roots: Vec::new(),
         excludes: Vec::new(),
         entries: Vec::new(),
-        depends_on,
-        friend_of: Vec::new(),
+        // Go compiles a module as one thing: every requirement is a plain
+        // dependency, and there is no second unit to befriend.
+        depends_on: depends_on.into_iter().map(UnitDep::on).collect(),
         // Go has no `publish = false`: a module path resolvable by the proxy is
         // importable by anyone who spells it, and nothing in go.mod says
         // otherwise.
         publication: Publication::Unstated,
+        // Every package of the module is imported by the module path plus its
+        // directory — the `module` line is the prefix all of them hang under.
+        namespace_root: Some(SmolStr::new(&module)),
     });
 }
 

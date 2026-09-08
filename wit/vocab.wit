@@ -450,11 +450,14 @@ interface types {
         reads-reports: list<string>,
     }
 
-    /// Mirrors `PackageEntry`.
+    /// Mirrors `PackageEntry`. `aliases` are the other names a RENAMING
+    /// manifest gives it (cargo's `package =`, npm's `npm:`, a go.mod
+    /// `replace`).
     record package-entry {
         name: string,
         entry: option<string>,
         dir: string,
+        aliases: list<string>,
     }
 
     /// Mirrors `Publication` — what a manifest says about a unit's consumers
@@ -472,12 +475,26 @@ interface types {
     record unit {
         name: string,
         kind: unit-kind,
-        roots: list<string>,
+        roots: list<unit-root>,
         excludes: list<string>,
         entries: list<string>,
-        depends-on: list<string>,
-        friend-of: list<string>,
+        depends-on: list<unit-dep>,
         publication: publication,
+        namespace-root: option<string>,
+    }
+
+    /// Mirrors `UnitRoot` — one directory a unit compiles, and whether it takes
+    /// what is nested under it.
+    record unit-root {
+        path: string,
+        recursive: bool,
+    }
+
+    /// Mirrors `UnitDep` — one unit this unit compiles against, and whether it
+    /// also sees that unit's unit-reaching names.
+    record unit-dep {
+        unit: string,
+        friend: bool,
     }
 
     /// Mirrors `DependencyScope` — the manifest section a declaration sits in.
@@ -496,7 +513,30 @@ interface types {
     record dependency-declaration {
         name: string,
         scope: option<dependency-scope>,
-        version-req: option<string>,
+        version-req: option<version-req>,
+    }
+
+    /// Mirrors `VersionReq` — the requirement as the manifest writes it, plus
+    /// the half-open range `[lo, hi)` its ecosystem reads that text as where
+    /// the declaring adapter could normalize it. `range` absent is the honest
+    /// answer for a requirement this vocabulary cannot compare.
+    record version-req {
+        spelled: string,
+        range: option<tuple<version, version>>,
+    }
+
+    /// Mirrors `Version` — the numeric triple every ecosystem orders on.
+    record version {
+        major: u64,
+        minor: u64,
+        patch: u64,
+    }
+
+    /// Mirrors `PathAlias` — a specifier prefix the build system rewrites to
+    /// directories, in the order the build tries them.
+    record path-alias {
+        prefix: string,
+        targets: list<string>,
     }
 
     /// Mirrors `ManifestEvidence` — everything ONE manifest states about the
@@ -508,7 +548,9 @@ interface types {
         packages: list<package-entry>,
         dependencies: list<dependency-declaration>,
         mentions: list<string>,
+        aliases: list<path-alias>,
         roots: list<project-root>,
+        ignores: list<string>,
         members: list<string>,
         diagnostics: list<diagnostic>,
     }

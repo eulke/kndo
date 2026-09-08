@@ -309,3 +309,67 @@ fn a_units_kind_gives_its_files_their_role() {
         "a test set's exports are its runner's"
     );
 }
+
+#[test]
+fn a_non_recursive_root_takes_one_directory_and_leaves_what_nests_under_it() {
+    // Two units over one tree: the outer compiles `src` alone, the inner takes
+    // everything under `src/plugin`. A recursive outer root would take the
+    // nested unit's deep files by the longest-prefix rule; `flat=` is the
+    // manifest saying it does not.
+    let p = TempProject::new();
+    p.file(
+        "kmock.pkg",
+        concat!(
+            "unit shell library flat=src entries=src/lib.kmock\n",
+            "unit plugin library roots=src/plugin entries=src/plugin/lib.kmock\n",
+        ),
+    )
+    .file("src/lib.kmock", "pub fn shell\n")
+    .file("src/plugin/lib.kmock", "pub fn plugin\n")
+    .file("src/plugin/deep/extra.kmock", "pub fn extra\n");
+    let snap = run(&p);
+
+    assert_eq!(unit_of(&snap, "src/lib.kmock"), Some("shell"));
+    assert_eq!(
+        unit_of(&snap, "src/plugin/lib.kmock"),
+        Some("plugin"),
+        "the inner unit's own root is longer, so it wins either way"
+    );
+    assert_eq!(
+        unit_of(&snap, "src/plugin/deep/extra.kmock"),
+        Some("plugin"),
+        "nested under `src` too, but `flat=src` compiles that one directory"
+    );
+}
+
+#[test]
+fn a_path_this_project_excludes_stays_discovered_and_is_never_claimed() {
+    // A manifest's own ignore, not the language's: `generated` is a directory
+    // THIS project excludes, so nothing under it is claimed or judged — and
+    // the manifest naming it is still read, so its unit still stands.
+    let p = TempProject::new();
+    p.file(
+        "kmock.pkg",
+        concat!(
+            "unit core library roots=src entries=src/lib.kmock\n",
+            "ignore generated/**\n",
+        ),
+    )
+    .file("src/lib.kmock", "pub fn door\n")
+    .file("src/orphan.kmock", "fn floats\n")
+    .file("generated/machine.kmock", "fn nobody_wrote_this\n");
+    let snap = run(&p);
+
+    assert_eq!(
+        reported(&snap, &Category::UNUSED),
+        ["src/orphan.kmock"],
+        "the excluded file is not judged; the file beside it still is"
+    );
+    assert!(
+        snap.graph
+            .files
+            .iter()
+            .all(|f| f.path.as_str() != "generated/machine.kmock"),
+        "unclaimed, so it never enters the graph"
+    );
+}

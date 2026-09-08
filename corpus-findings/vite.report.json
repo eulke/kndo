@@ -10112,30 +10112,6 @@
       "message": "production-reachable, but no test reaches this file"
     },
     {
-      "id": "kndo-e2042f1053f5",
-      "category": "version-skew",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "dependency",
-        "owner_manifest": "docs/package.json",
-        "name": "vue"
-      },
-      "message": "declared with diverging version requirements: docs/package.json (^3.5.41), packages/create-vite/template-vue-ts/package.json (^3.5.41), packages/create-vite/template-vue/package.json (^3.5.41), packages/vite/src/node/__tests__/package.json (^3.5.18), playground/alias/package.json (^3.5.41), playground/devtools/package.json (^3.5.41), playground/extensions/package.json (^3.5.41), playground/external/dep-that-imports/package.json (^3.5.41), playground/external/dep-that-requires/package.json (^3.5.41), playground/external/package.json (^3.5.41), playground/json/package.json (^3.5.41), playground/optimize-deps-no-discovery/package.json (^3.5.41), playground/optimize-deps/package.json (^3.5.41)"
-    },
-    {
-      "id": "kndo-1e1525d427c3",
-      "category": "version-skew",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "dependency",
-        "owner_manifest": "packages/create-vite/template-react-ts/package.json",
-        "name": "react"
-      },
-      "message": "declared with diverging version requirements: packages/create-vite/template-react-ts/package.json (^19.2.8), packages/create-vite/template-react/package.json (^19.2.8), playground/environment-react-ssr/package.json (^19.2.8), playground/optimize-deps/dep-linked-include/package.json (19.2.8), playground/optimize-deps/package.json (^19.2.8), playground/ssr-webworker/package.json (^19.2.8)"
-    },
-    {
       "id": "kndo-9fc599f7b8b2",
       "category": "version-skew",
       "severity": "info",

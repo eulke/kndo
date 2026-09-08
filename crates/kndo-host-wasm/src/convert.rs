@@ -279,21 +279,35 @@ pub(crate) fn manifest_evidence(
     read: awire::ManifestEvidence,
     out: &mut kndo_contract::manifest::ManifestSink,
 ) {
-    use kndo_contract::manifest::{Publication, Unit};
+    use kndo_contract::manifest::{PathAlias, Publication, Unit, UnitDep, UnitRoot};
     for unit in read.units {
         out.unit(Unit {
             name: SmolStr::new(unit.name),
             kind: unit_kind(unit.kind),
-            roots: unit.roots.into_iter().map(SmolStr::new).collect(),
+            roots: unit
+                .roots
+                .into_iter()
+                .map(|r| UnitRoot {
+                    path: SmolStr::new(r.path),
+                    recursive: r.recursive,
+                })
+                .collect(),
             excludes: unit.excludes.into_iter().map(SmolStr::new).collect(),
             entries: unit.entries.into_iter().map(ProjectPath::new).collect(),
-            depends_on: unit.depends_on.into_iter().map(SmolStr::new).collect(),
-            friend_of: unit.friend_of.into_iter().map(SmolStr::new).collect(),
+            depends_on: unit
+                .depends_on
+                .into_iter()
+                .map(|d| UnitDep {
+                    unit: SmolStr::new(d.unit),
+                    friend: d.friend,
+                })
+                .collect(),
             publication: match unit.publication {
                 awire::Publication::Published => Publication::Published,
                 awire::Publication::Unpublished => Publication::Unpublished,
                 awire::Publication::Unstated => Publication::Unstated,
             },
+            namespace_root: unit.namespace_root.map(SmolStr::new),
         });
     }
     for entry in read.packages {
@@ -303,14 +317,23 @@ pub(crate) fn manifest_evidence(
         out.dependency(kndo_contract::adapter::DependencyDeclaration {
             name: SmolStr::new(declaration.name),
             scope: declaration.scope.map(dependency_scope),
-            version_req: declaration.version_req.map(SmolStr::new),
+            version_req: declaration.version_req.map(version_req),
         });
     }
     for name in read.mentions {
         out.mention(name);
     }
+    for alias in read.aliases {
+        out.alias(PathAlias {
+            prefix: SmolStr::new(alias.prefix),
+            targets: alias.targets.into_iter().map(SmolStr::new).collect(),
+        });
+    }
     for root in read.roots {
         out.root(project_root(root));
+    }
+    for path in read.ignores {
+        out.ignore(path);
     }
     for member in read.members {
         out.member(ProjectPath::new(member));
@@ -378,6 +401,7 @@ pub(crate) fn package_entry(entry: awire::PackageEntry) -> PackageEntry {
         name: SmolStr::new(entry.name),
         entry: entry.entry.map(ProjectPath::new),
         dir: SmolStr::new(entry.dir),
+        aliases: entry.aliases.into_iter().map(SmolStr::new).collect(),
     }
 }
 
@@ -386,7 +410,19 @@ pub(crate) fn package_entry_to_wire(entry: &PackageEntry) -> awire::PackageEntry
         name: entry.name.to_string(),
         entry: entry.entry.as_ref().map(|p| p.as_str().to_string()),
         dir: entry.dir.to_string(),
+        aliases: entry.aliases.iter().map(SmolStr::to_string).collect(),
     }
+}
+
+fn version_req(req: awire::VersionReq) -> kndo_contract::manifest::VersionReq {
+    kndo_contract::manifest::VersionReq {
+        spelled: SmolStr::new(req.spelled),
+        range: req.range.map(|(lo, hi)| (version(lo), version(hi))),
+    }
+}
+
+fn version(v: awire::Version) -> kndo_contract::manifest::Version {
+    kndo_contract::manifest::Version::new(v.major, v.minor, v.patch)
 }
 
 pub(crate) fn resolution(r: awire::Resolution) -> Resolution {

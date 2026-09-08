@@ -1,11 +1,15 @@
 //! Claim + extract: first adapter whose claim globs match owns the file (M1 rule; the
 //! priority-as-data registry arrives with real languages) — unless the path is one
-//! its language's own tool never compiles ([`ExtensionSpec::ignores`]), which it
-//! then leaves unclaimed. Extraction runs in parallel, and the reduce is
+//! its language's own tool never compiles ([`ExtensionSpec::ignores`]) or one THIS
+//! PROJECT excludes ([`ManifestEvidence::ignores`]), which it then leaves
+//! unclaimed. Both ignores stop at the claim: the file stays DISCOVERED, so an
+//! unclaimed path under one casts no doubt on a dependency and a manifest that
+//! names it is still read. Extraction runs in parallel, and the reduce is
 //! deterministic — results are collected and consumed in path order, never in
 //! completion order.
 //!
 //! [`ExtensionSpec::ignores`]: kndo_contract::extension::ExtensionSpec::ignores
+//! [`ManifestEvidence::ignores`]: kndo_contract::manifest::ManifestEvidence::ignores
 
 use crate::cache::EvidenceCache;
 use crate::discover::DiscoveredFile;
@@ -20,7 +24,11 @@ pub struct ClaimedFile {
     pub adapter_index: usize,
 }
 
-pub fn claim(files: &[DiscoveredFile], adapters: &[Box<dyn Extension>]) -> Vec<ClaimedFile> {
+pub fn claim(
+    files: &[DiscoveredFile],
+    adapters: &[Box<dyn Extension>],
+    project_ignores: &globset::GlobSet,
+) -> Vec<ClaimedFile> {
     let sets: Vec<globset::GlobSet> = adapters
         .iter()
         .map(|a| glob_set(a.spec().claims(), globset::Glob::new))
@@ -30,6 +38,7 @@ pub fn claim(files: &[DiscoveredFile], adapters: &[Box<dyn Extension>]) -> Vec<C
     files
         .iter()
         .enumerate()
+        .filter(|(_, f)| !project_ignores.is_match(f.path.as_str()))
         .filter_map(|(file_index, f)| {
             sets.iter()
                 .zip(&ignored)

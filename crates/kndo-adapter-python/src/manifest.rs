@@ -21,7 +21,7 @@
 use kndo_contract::adapter::{
     DependencyDeclaration, DependencyScope, PackageEntry, ResolveContext,
 };
-use kndo_contract::manifest::{ManifestSink, Publication, Unit, UnitKind};
+use kndo_contract::manifest::{ManifestSink, Publication, Unit, UnitKind, UnitRoot};
 use kndo_contract::vocab::ProjectPath;
 use smol_str::SmolStr;
 use toml::Value;
@@ -76,20 +76,21 @@ fn pyproject(text: &str, dir: &str, cx: &ResolveContext<'_>, out: &mut ManifestS
         return;
     };
 
-    let roots = source_roots(&root, dir, name, cx);
+    let (roots, namespace_root) = source_roots(&root, dir, name, cx);
     out.package(PackageEntry {
         name: SmolStr::new(name),
         entry: None,
         dir: SmolStr::new(dir),
+        aliases: distribution_aliases(name),
     });
     out.unit(Unit {
         name: SmolStr::new(name),
         kind: UnitKind::Library,
-        entries: entries(&root, &roots, cx),
-        roots,
+        entries: entries(&root, &roots, namespace_root.as_ref(), cx),
+        roots: roots.into_iter().map(UnitRoot::from).collect(),
         excludes: Vec::new(),
         depends_on: Vec::new(),
-        friend_of: Vec::new(),
+        namespace_root,
         // A `[project]` table is a distribution: it exists to be built and
         // uploaded. The one thing that says otherwise is the classifier the
         // index itself refuses, and saying so is not the same as leaving it
@@ -121,7 +122,12 @@ fn private(root: &Value) -> bool {
 /// answered by the first that speaks. Every root is relative to the manifest's
 /// own directory, which is the only thing a backend's paths are ever relative
 /// to.
-fn source_roots(root: &Value, dir: &str, name: &str, cx: &ResolveContext<'_>) -> Vec<SmolStr> {
+fn source_roots(
+    root: &Value,
+    dir: &str,
+    name: &str,
+    cx: &ResolveContext<'_>,
+) -> (Vec<SmolStr>, Option<SmolStr>) {
     let join = |rel: &str| -> SmolStr {
         let rel = rel.trim_matches('/');
         match (dir.is_empty(), rel.is_empty()) {
@@ -143,18 +149,25 @@ fn source_roots(root: &Value, dir: &str, name: &str, cx: &ResolveContext<'_>) ->
     // and `packages.find.where` lists directories to search. Both are read
     // from the file — `read_configuration` does not run discovery, so there is
     // no richer answer to defer to (see `tests/captured/tooling.json`).
-    if let Some(v) = tool(&["setuptools", "package-dir"])
+    if let Some((package, directory)) = tool(&["setuptools", "package-dir"])
         .and_then(Value::as_table)
-        .and_then(|t| t.get("").or_else(|| t.values().next()))
-        .and_then(Value::as_str)
+        .and_then(|t| match t.get("") {
+            Some(v) => Some(("", v)),
+            None => t.iter().next().map(|(k, v)| (k.as_str(), v)),
+        })
+        .and_then(|(k, v)| Some((k, v.as_str()?)))
     {
-        return vec![join(v)];
+        // A NAMED key maps one package to a directory that does not contain
+        // it: `{"mypkg": "lib"}` makes `lib/mod.py` the module `mypkg.mod`,
+        // and the name is nowhere in the path.
+        let namespace = (!package.is_empty()).then(|| SmolStr::new(package));
+        return (vec![join(directory)], namespace);
     }
     if let Some(list) = tool(&["setuptools", "packages", "find", "where"]).and_then(Value::as_array)
     {
         let roots: Vec<SmolStr> = list.iter().filter_map(Value::as_str).map(join).collect();
         if !roots.is_empty() {
-            return roots;
+            return (roots, None);
         }
     }
     // poetry: each entry names a package and optionally the directory holding
@@ -173,7 +186,7 @@ fn source_roots(root: &Value, dir: &str, name: &str, cx: &ResolveContext<'_>) ->
         roots.sort_unstable();
         roots.dedup();
         if !roots.is_empty() {
-            return roots;
+            return (roots, None);
         }
     }
     // hatch: `packages = ["src/demo"]` names the package WITH its directory,
@@ -189,7 +202,7 @@ fn source_roots(root: &Value, dir: &str, name: &str, cx: &ResolveContext<'_>) ->
         roots.sort_unstable();
         roots.dedup();
         if !roots.is_empty() {
-            return roots;
+            return (roots, None);
         }
     }
 
@@ -206,9 +219,9 @@ fn source_roots(root: &Value, dir: &str, name: &str, cx: &ResolveContext<'_>) ->
         .known_files()
         .any(|p| p.as_str().starts_with(&prefix) && p.as_str().ends_with(".py"))
     {
-        return vec![src];
+        return (vec![src], None);
     }
-    vec![join("")]
+    (vec![join("")], None)
 }
 
 /// How this distribution is entered, which for Python is two things.
@@ -223,7 +236,12 @@ fn source_roots(root: &Value, dir: &str, name: &str, cx: &ResolveContext<'_>) ->
 /// the published surface already answers, and calling it an entry would tell
 /// `untested` it is wiring. Which top-level names exist is a question about
 /// the tree, which is why both halves read `cx`.
-fn entries(root: &Value, roots: &[SmolStr], cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
+fn entries(
+    root: &Value,
+    roots: &[SmolStr],
+    namespace_root: Option<&SmolStr>,
+    cx: &ResolveContext<'_>,
+) -> Vec<ProjectPath> {
     let mut out: Vec<ProjectPath> = Vec::new();
     for base in roots {
         let prefix = if base.is_empty() {
@@ -235,11 +253,17 @@ fn entries(root: &Value, roots: &[SmolStr], cx: &ResolveContext<'_>) -> Vec<Proj
             let Some(rest) = path.as_str().strip_prefix(prefix.as_str()) else {
                 continue;
             };
-            // `<root>/pkg/__init__.py` — the door the name `pkg` opens.
-            if rest
-                .split_once('/')
-                .is_some_and(|(_, tail)| tail == "__init__.py")
-            {
+            // `<root>/pkg/__init__.py` — the door the name `pkg` opens. Where
+            // the manifest MAPPED a package onto the root itself, the root's
+            // own initializer is that door: `package-dir = {"pkg" = "lib"}`
+            // makes `lib/__init__.py` what `import pkg` executes.
+            let door = match namespace_root {
+                Some(_) => rest == "__init__.py",
+                None => rest
+                    .split_once('/')
+                    .is_some_and(|(_, tail)| tail == "__init__.py"),
+            };
+            if door {
                 out.push(path.clone());
             }
         }
@@ -307,12 +331,14 @@ fn test_unit(root: &Value, dir: &str, out: &mut ManifestSink) {
     out.unit(Unit {
         name: SmolStr::new("pytest"),
         kind: UnitKind::Test,
-        roots,
+        roots: roots.into_iter().map(UnitRoot::from).collect(),
         excludes: Vec::new(),
         entries: Vec::new(),
         depends_on: Vec::new(),
-        friend_of: Vec::new(),
         publication: Publication::Unpublished,
+        // A test root is a directory pytest walks, not a package: the modules
+        // under it carry their own dotted paths and hang under nothing.
+        namespace_root: None,
     });
 }
 
@@ -422,16 +448,19 @@ fn setup_cfg(text: &str, dir: &str, cx: &ResolveContext<'_>, out: &mut ManifestS
         name: SmolStr::new(&name),
         entry: None,
         dir: SmolStr::new(dir),
+        aliases: distribution_aliases(&name),
     });
     out.unit(Unit {
         name: SmolStr::new(&name),
         kind: UnitKind::Library,
-        roots: vec![base],
+        roots: vec![UnitRoot::from(base)],
         excludes: Vec::new(),
         entries: Vec::new(),
         depends_on: Vec::new(),
-        friend_of: Vec::new(),
         publication: Publication::Published,
+        // Every layout `setup.cfg` states puts the package UNDER the root it
+        // names, so the dotted path already carries the package's own name.
+        namespace_root: None,
     });
 }
 
@@ -518,4 +547,35 @@ fn declare(out: &mut ManifestSink, spec: &str, scope: Option<DependencyScope>) {
             version_req: None,
         });
     }
+}
+
+/// The other spellings one distribution name answers to. PEP 503 normalizes a
+/// name by lowercasing it and folding every run of `-`, `_` and `.` into one
+/// `-`; PyPI matches on that, so a requirement spelled `Flask_SQLAlchemy` and a
+/// distribution named `flask-sqlalchemy` are the same package. The normal form
+/// plus the underscore spelling an import uses — never the name itself, which
+/// the entry already carries.
+fn distribution_aliases(name: &str) -> Vec<SmolStr> {
+    let normalized: String = {
+        let mut out = String::with_capacity(name.len());
+        for c in name.chars() {
+            match c {
+                '-' | '_' | '.' => {
+                    if !out.ends_with('-') {
+                        out.push('-');
+                    }
+                }
+                c => out.extend(c.to_lowercase()),
+            }
+        }
+        out
+    };
+    let mut aliases = vec![
+        SmolStr::new(&normalized),
+        SmolStr::new(normalized.replace('-', "_")),
+    ];
+    aliases.retain(|a| a.as_str() != name);
+    aliases.sort_unstable();
+    aliases.dedup();
+    aliases
 }

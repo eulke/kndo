@@ -28,7 +28,7 @@ use kndo_contract::adapter::{
     DependencyDeclaration, DependencyScope, PackageEntry, ProjectRoot, ResolveContext, SourceFile,
 };
 use kndo_contract::evidence::RootKind;
-use kndo_contract::manifest::{ManifestSink, Publication, Unit, UnitKind};
+use kndo_contract::manifest::{ManifestSink, Publication, Unit, UnitDep, UnitKind, VersionReq};
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use kndo_toolkit::github_actions::{self, Launcher};
 use smol_str::SmolStr;
@@ -91,16 +91,20 @@ fn package(
         roots: Vec::new(),
         excludes: Vec::new(),
         entries,
+        // npm has no friendship: a workspace member sees another's exports
+        // and nothing else, whatever section declared it.
         depends_on: dependency_declarations(&json)
             .iter()
-            .map(|d| d.name.clone())
+            .map(|d| UnitDep::on(d.name.clone()))
             .collect(),
-        friend_of: Vec::new(),
         // `"private": true` is npm's own word for "no consumer outside".
         publication: match json.get("private").and_then(serde_json::Value::as_bool) {
             Some(true) => Publication::Unpublished,
             _ => Publication::Unstated,
         },
+        // A module's specifier is its path from the package root: nothing
+        // hangs the files of an npm package under a name of their own.
+        namespace_root: None,
     });
     for package in packages(manifest, cx, exts) {
         out.package(package);
@@ -171,6 +175,7 @@ fn tsconfig(
                     name: SmolStr::new(name),
                     entry: None,
                     dir: SmolStr::new(under),
+                    aliases: Vec::new(),
                 });
             }
             (None, None) => {
@@ -179,6 +184,7 @@ fn tsconfig(
                         name: SmolStr::new(alias),
                         entry: Some(entry),
                         dir: SmolStr::new(&base),
+                        aliases: Vec::new(),
                     });
                 }
             }
@@ -427,6 +433,7 @@ fn packages(
             name: SmolStr::new(name),
             entry: Some(entry),
             dir: SmolStr::new(dir),
+            aliases: Vec::new(),
         }],
         None => Vec::new(),
     }
@@ -560,7 +567,7 @@ fn path_package(word: &str) -> Option<&str> {
 /// (`workspace:*`, `file:…`, `link:…`, git/url refs, `*`) name a RESOLUTION
 /// mechanism, not a version — encoding them as text would diverge from every
 /// real requirement and draw false skew wherever manifests otherwise agree.
-fn comparable_req(req: &str) -> Option<SmolStr> {
+fn comparable_req(req: &str) -> Option<VersionReq> {
     let non_version = req.is_empty()
         || req == "*"
         || [
@@ -574,7 +581,11 @@ fn comparable_req(req: &str) -> Option<SmolStr> {
         ]
         .iter()
         .any(|p| req.starts_with(p));
-    (!non_version).then(|| SmolStr::new(req))
+    (!non_version).then(|| VersionReq {
+        // npm reads a bare requirement as an exact pin.
+        spelled: SmolStr::new(req),
+        range: kndo_toolkit::semver_range(req, kndo_toolkit::Bare::Exact),
+    })
 }
 
 /// Every string leaf of the `exports` value — plain, per-subpath, or per-condition

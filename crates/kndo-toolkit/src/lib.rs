@@ -5,6 +5,7 @@
 
 pub mod github_actions;
 
+use kndo_contract::manifest::Version;
 use kndo_contract::vocab::Span;
 use tree_sitter::{Language, Node, Parser, Tree};
 
@@ -481,19 +482,36 @@ pub mod jvm_manifest {
             roots: Vec::new(),
             excludes: Vec::new(),
             entries: Vec::new(),
-            depends_on,
-            friend_of: Vec::new(),
+            depends_on: depends_on
+                .into_iter()
+                .map(kndo_contract::manifest::UnitDep::on)
+                .collect(),
             publication: kndo_contract::manifest::Publication::Unstated,
+            namespace_root: None,
         });
         out.unit(kndo_contract::manifest::Unit {
             name: SmolStr::new(format!("{name}:test")),
             kind: kndo_contract::manifest::UnitKind::Test,
-            roots: test_roots,
+            roots: test_roots
+                .into_iter()
+                .map(kndo_contract::manifest::UnitRoot::from)
+                .collect(),
             excludes: Vec::new(),
             entries: Vec::new(),
-            depends_on: test_depends_on,
-            friend_of: vec![SmolStr::new(name)],
+            // Surefire compiles the test sources against the main classes,
+            // which for package-private names is friendship.
+            depends_on: test_depends_on
+                .into_iter()
+                .map(|d| {
+                    if d == name {
+                        kndo_contract::manifest::UnitDep::friend(d)
+                    } else {
+                        kndo_contract::manifest::UnitDep::on(d)
+                    }
+                })
+                .collect(),
             publication: kndo_contract::manifest::Publication::Unstated,
+            namespace_root: None,
         });
     }
 
@@ -565,6 +583,7 @@ pub mod jvm_manifest {
                     name: SmolStr::new(name),
                     entry: None,
                     dir: SmolStr::new(join(&rel)),
+                    aliases: Vec::new(),
                 });
                 // A module's own build script states its units; naming it here
                 // is how two same-named modules in different builds stay apart.
@@ -593,7 +612,7 @@ pub mod jvm_manifest {
         out: &mut kndo_contract::manifest::ManifestSink,
     ) {
         use kndo_contract::adapter::{DependencyDeclaration, DependencyScope};
-        use kndo_contract::manifest::{Publication, Unit, UnitKind};
+        use kndo_contract::manifest::{Publication, Unit, UnitDep, UnitKind, UnitRoot};
         let dir = path.rsplit_once('/').map_or("", |(d, _)| d);
         let join = |rel: &str| -> SmolStr {
             if dir.is_empty() {
@@ -673,25 +692,34 @@ pub mod jvm_manifest {
         out.unit(Unit {
             name: SmolStr::new(&name),
             kind: UnitKind::Library,
-            roots: main_roots,
+            roots: main_roots.into_iter().map(UnitRoot::from).collect(),
             excludes: test_roots.clone(),
             entries: Vec::new(),
-            depends_on,
-            friend_of: Vec::new(),
+            depends_on: depends_on.into_iter().map(UnitDep::on).collect(),
             publication: Publication::Unstated,
+            namespace_root: None,
         });
         out.unit(Unit {
             name: SmolStr::new(format!("{name}:test")),
             kind: UnitKind::Test,
-            roots: test_roots,
+            roots: test_roots.into_iter().map(UnitRoot::from).collect(),
             excludes: Vec::new(),
             entries: Vec::new(),
-            depends_on: test_depends_on,
             // Kotlin's `internal` and Java's package-private both reach a
             // module's own tests: Gradle compiles the test set against the
             // main one as an associated compilation, which is friendship.
-            friend_of: vec![SmolStr::new(&name)],
+            depends_on: test_depends_on
+                .into_iter()
+                .map(|d| {
+                    if d == name {
+                        UnitDep::friend(d)
+                    } else {
+                        UnitDep::on(d)
+                    }
+                })
+                .collect(),
             publication: Publication::Unpublished,
+            namespace_root: None,
         });
     }
 
@@ -1261,6 +1289,7 @@ pub mod jvm_manifest {
             name: SmolStr::new(name),
             entry: None,
             dir: SmolStr::new(path.rsplit_once('/').map_or("", |(d, _)| d)),
+            aliases: Vec::new(),
         });
     }
 
@@ -1648,4 +1677,72 @@ pub fn normalize_whitespace(text: &str) -> String {
         out.push(ch);
     }
     out
+}
+
+/// How an ecosystem reads a requirement that names a version and no operator:
+/// npm pins it, cargo widens it to a caret. The one place the two grammars
+/// differ, so one reader answers both.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Bare {
+    Caret,
+    Exact,
+}
+
+/// The half-open range `[lo, hi)` a semver requirement names, for the SINGLE
+/// comparator forms npm and cargo spell the same way (`^`, `~`, `=`, `>=`, a
+/// bare version, and a trailing `x`/`*`). A conjunction, a hyphen range, or
+/// anything else this does not spell returns `None`: a range guessed wrong is
+/// worse than no range at all, because a comparison silently made against the
+/// wrong bounds is a finding nobody can check.
+pub fn semver_range(req: &str, bare: Bare) -> Option<(Version, Version)> {
+    let req = req.trim();
+    if req.is_empty() || req.contains([',', '|', ' ']) {
+        return None;
+    }
+    let (op, rest) = match req.strip_prefix(">=") {
+        Some(rest) => (">=", rest),
+        None => match req.split_at_checked(1) {
+            Some(("^", rest)) => ("^", rest),
+            Some(("~", rest)) => ("~", rest),
+            Some(("=", rest)) | Some(("v", rest)) if !rest.is_empty() => ("=", rest),
+            _ => match bare {
+                Bare::Caret => ("^", req),
+                Bare::Exact => ("=", req),
+            },
+        },
+    };
+    let rest = rest.trim().trim_start_matches('v');
+    // `1.x`, `1.*` and `1` name the same range: the numbers stated, widened at
+    // the first one that is not.
+    let stated: Vec<&str> = rest
+        .split(['-', '+'])
+        .next()?
+        .split('.')
+        .take_while(|p| !matches!(*p, "x" | "X" | "*"))
+        .collect();
+    if stated.is_empty() {
+        return None;
+    }
+    let number = |i: usize| -> Option<u64> { stated.get(i).map_or(Some(0), |p| p.parse().ok()) };
+    let lo = Version::new(number(0)?, number(1)?, number(2)?);
+    let width = stated.len();
+    let hi = match op {
+        // Open above: nothing bounds it, so nothing is disjoint from it.
+        ">=" => Version::new(u64::MAX, 0, 0),
+        // A pin moves at the first number it did NOT state; a tilde moves at
+        // the patch wherever the minor is stated at all.
+        "=" if width >= 3 => Version::new(lo.major, lo.minor, lo.patch + 1),
+        "=" if width == 2 => Version::new(lo.major, lo.minor + 1, 0),
+        "=" => Version::new(lo.major + 1, 0, 0),
+        "~" if width >= 2 => Version::new(lo.major, lo.minor + 1, 0),
+        "~" => Version::new(lo.major + 1, 0, 0),
+        // Caret holds the leftmost NON-ZERO number fixed — and where every
+        // stated number is zero, the first UNSTATED one is what may move.
+        _ if lo.major > 0 => Version::new(lo.major + 1, 0, 0),
+        _ if lo.minor > 0 => Version::new(0, lo.minor + 1, 0),
+        _ if width >= 3 => Version::new(0, 0, lo.patch + 1),
+        _ if width == 2 => Version::new(0, 1, 0),
+        _ => Version::new(1, 0, 0),
+    };
+    Some((lo, hi))
 }

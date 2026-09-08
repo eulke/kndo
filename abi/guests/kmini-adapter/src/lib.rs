@@ -237,6 +237,7 @@ impl Extension for KminiAdapter {
                 name: SmolStr::new(name),
                 entry: entries.first().cloned(),
                 dir: SmolStr::new(dir),
+                aliases: Vec::new(),
             });
             out.unit(kndo_contract::manifest::Unit {
                 name: SmolStr::new(name),
@@ -244,9 +245,13 @@ impl Extension for KminiAdapter {
                 roots: Vec::new(),
                 excludes: Vec::new(),
                 entries,
-                depends_on: deps.clone(),
-                friend_of: Vec::new(),
+                depends_on: deps
+                    .iter()
+                    .cloned()
+                    .map(kndo_contract::manifest::UnitDep::on)
+                    .collect(),
                 publication: kndo_contract::manifest::Publication::Unstated,
+                namespace_root: None,
             });
         } else {
             // No name, so no unit to own them: the entries are the manifest's

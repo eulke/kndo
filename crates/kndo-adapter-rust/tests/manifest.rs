@@ -3,7 +3,7 @@
 //! tables, and degradation on dangling or broken manifests.
 
 use kndo_adapter_rust::RustAdapter;
-use kndo_contract::manifest::{ManifestEvidence, Publication, UnitKind};
+use kndo_contract::manifest::{ManifestEvidence, Publication, UnitDep, UnitKind};
 
 fn read(manifest_path: &str, manifest: &str, files: &[&str]) -> ManifestEvidence {
     kndo_testkit::manifest_evidence(&RustAdapter::new(), manifest_path, manifest, files)
@@ -22,7 +22,10 @@ fn units(evidence: &ManifestEvidence) -> Vec<(String, UnitKind, String, String)>
                     .first()
                     .map(|e| e.as_str().to_string())
                     .unwrap_or_default(),
-                u.roots.first().map(|r| r.to_string()).unwrap_or_default(),
+                u.roots
+                    .first()
+                    .map(|r| r.path.to_string())
+                    .unwrap_or_default(),
             )
         })
         .collect();
@@ -156,11 +159,15 @@ fn every_other_target_compiles_against_the_library() {
             .find(|u| u.name == name)
             .unwrap_or_else(|| panic!("no unit {name}"))
     };
-    assert_eq!(unit("demo").depends_on, ["serde"]);
-    assert_eq!(unit("test:api").depends_on, ["serde", "demo"]);
+    assert_eq!(unit("demo").depends_on, [UnitDep::on("serde")]);
+    assert_eq!(
+        unit("test:api").depends_on,
+        [UnitDep::on("serde"), UnitDep::on("demo")]
+    );
     // Cargo never says an integration test may read what its library keeps
-    // private, because it may not: it is a separate crate.
-    assert!(unit("test:api").friend_of.is_empty());
+    // private, because it may not: it is a separate crate — so not one of the
+    // dependencies it states is a friendship.
+    assert!(unit("test:api").depends_on.iter().all(|d| !d.friend));
 }
 
 #[test]
@@ -234,6 +241,12 @@ fn packages_are_entry_optional_and_underscored() {
         "the ecosystem imports underscores"
     );
     assert_eq!(
+        libs[0].aliases,
+        ["demo-core"],
+        "and the manifest DECLARES hyphens: cargo's own rename, so a dependency \
+         declaration and an import spell one package two ways"
+    );
+    assert_eq!(
         libs[0].entry.as_ref().map(|e| e.as_str()),
         Some("crates/demo-core/src/lib.rs")
     );
@@ -250,6 +263,10 @@ fn packages_are_entry_optional_and_underscored() {
     assert_eq!(bins.len(), 1);
     assert!(bins[0].entry.is_none());
     assert_eq!(bins[0].dir, "crates/tool");
+    assert!(
+        bins[0].aliases.is_empty(),
+        "a name with no hyphen is spelled one way, so it answers to nothing else"
+    );
 }
 
 #[test]
@@ -260,6 +277,11 @@ fn lib_name_overrides_the_import_name() {
         &["src/lib.rs"],
     );
     assert_eq!(evidence.packages[0].name, "demo");
+    assert_eq!(
+        evidence.packages[0].aliases,
+        ["demo-cli"],
+        "the package the manifest declares still names the same entry"
+    );
 }
 
 #[test]
@@ -289,7 +311,13 @@ winapi = "0.3"
     use kndo_contract::adapter::DependencyScope as S;
     let brief: Vec<(&str, Option<S>, Option<&str>)> = deps
         .iter()
-        .map(|d| (d.name.as_str(), d.scope, d.version_req.as_deref()))
+        .map(|d| {
+            (
+                d.name.as_str(),
+                d.scope,
+                d.version_req.as_ref().map(|v| v.spelled.as_str()),
+            )
+        })
         .collect();
     assert_eq!(
         brief,

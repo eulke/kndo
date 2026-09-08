@@ -1,7 +1,7 @@
 use kndo_adapter_swift::SwiftAdapter;
 use kndo_contract::adapter::{Resolution, ResolveContext};
 use kndo_contract::extension::Extension;
-use kndo_contract::manifest::UnitKind;
+use kndo_contract::manifest::{UnitDep, UnitKind, UnitRoot};
 use kndo_contract::vocab::ProjectPath;
 use std::collections::BTreeSet;
 
@@ -59,7 +59,11 @@ fn a_test_target_is_a_friend_of_what_it_tests() {
     );
     let app = unit_named(&units, "App");
     assert_eq!(app.kind, UnitKind::Library);
-    assert_eq!(app.roots, vec!["Sources/App"], "SwiftPM's predefined place");
+    assert_eq!(
+        app.roots,
+        vec![UnitRoot::from("Sources/App")],
+        "SwiftPM's predefined place"
+    );
     assert!(app.is_published(), "a library product names it");
     let helper = unit_named(&units, "Helper");
     assert!(
@@ -68,11 +72,11 @@ fn a_test_target_is_a_friend_of_what_it_tests() {
     );
     let tests = unit_named(&units, "AppTests");
     assert_eq!(tests.kind, UnitKind::Test);
-    assert_eq!(tests.roots, vec!["Tests/AppTests"]);
+    assert_eq!(tests.roots, vec![UnitRoot::from("Tests/AppTests")]);
     assert_eq!(
-        tests.friend_of,
-        vec!["App"],
-        "and NOT Helper, which it never named"
+        tests.depends_on,
+        vec![UnitDep::friend("App")],
+        "a test target's dependency IS a friendship — and NOT Helper, which it never named"
     );
 }
 
@@ -93,9 +97,12 @@ fn a_path_override_moves_the_target_and_exclude_narrows_it() {
         "#,
     );
     let lib = unit_named(&units, "Alamofire");
-    assert_eq!(lib.roots, vec!["Source"]);
+    assert_eq!(lib.roots, vec![UnitRoot::from("Source")]);
     assert_eq!(lib.excludes, vec!["Source/Info.plist"]);
-    assert_eq!(unit_named(&units, "AlamofireTests").roots, vec!["Tests"]);
+    assert_eq!(
+        unit_named(&units, "AlamofireTests").roots,
+        vec![UnitRoot::from("Tests")]
+    );
 }
 
 #[test]
@@ -112,7 +119,10 @@ fn sources_narrows_the_target_to_what_it_lists() {
     // Joined under the manifest's own directory, like every other root.
     assert_eq!(
         unit_named(&units, "Core").roots,
-        vec!["pkg/Sources/Core/a", "pkg/Sources/Core/b/c.swift"]
+        vec![
+            UnitRoot::from("pkg/Sources/Core/a"),
+            UnitRoot::from("pkg/Sources/Core/b/c.swift")
+        ]
     );
 }
 
@@ -133,7 +143,7 @@ fn a_dependency_on_another_package_names_no_unit_here() {
     );
     assert_eq!(
         unit_named(&units, "Core").depends_on,
-        vec!["Bare", "Sibling"],
+        vec![UnitDep::on("Bare"), UnitDep::on("Sibling")],
         "a `.product` is another package's, so it names no unit of this project"
     );
 }

@@ -4,6 +4,7 @@
 //! holds the data shapes it shares with the engine.
 
 use crate::evidence::{EmbeddedRegion, RootKind};
+use crate::manifest::VersionReq;
 use crate::vocab::{Confidence, ProjectPath};
 use smol_str::SmolStr;
 use std::collections::BTreeSet;
@@ -31,6 +32,11 @@ pub struct PackageEntry {
     pub entry: Option<ProjectPath>,
     /// `/`-separated directory of the declaring manifest; empty at the project root.
     pub dir: SmolStr,
+    /// The other names this package answers to, stated by a manifest that
+    /// RENAMES it: cargo's `dep = { package = "real" }`, npm's `npm:` alias, a
+    /// go.mod `replace`. A specifier spelling an alias resolves to this entry,
+    /// and a dependency declaration spelling one is in use.
+    pub aliases: Vec<SmolStr>,
 }
 
 /// The manifest section a dependency declaration sits in, translated to the
@@ -61,7 +67,7 @@ pub enum DependencyScope {
 pub struct DependencyDeclaration {
     pub name: SmolStr,
     pub scope: Option<DependencyScope>,
-    pub version_req: Option<SmolStr>,
+    pub version_req: Option<VersionReq>,
 }
 
 impl DependencyDeclaration {

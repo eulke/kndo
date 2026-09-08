@@ -14,6 +14,12 @@
 //!   `version_req: None` from the adapter that knows the ecosystem, and a
 //!   comparison the manifest does not enable stays silent.
 //!
+//! Two texts are not two requirements. Where the declaring adapter normalized
+//! its ecosystem's spelling into a range, `^1.2` and `^1.3` are one resolvable
+//! requirement and this says nothing; the divergence is reported when the
+//! ranges cannot both hold, or when the requirements carry no range and the
+//! TEXTS differ — the only reading left when nothing can be compared.
+//!
 //! Severity `info`: the divergence is a fact (`certain`), but whether it bites
 //! is ecosystem-dependent — cargo unifies compatible ranges at build time, npm
 //! may install duplicates — so this nudges, and deliberately never dents
@@ -22,6 +28,7 @@
 use super::{Analysis, AnalysisContext};
 use kndo_contract::adapter::DependencyScope;
 use kndo_contract::finding::{Finding, Severity};
+use kndo_contract::manifest::VersionReq;
 use kndo_contract::subject::Subject;
 use kndo_contract::vocab::{Category, Confidence};
 use std::collections::BTreeMap;
@@ -38,7 +45,7 @@ impl Analysis for VersionSkew {
     }
 
     fn run(&self, cx: &AnalysisContext<'_>) -> Vec<Finding> {
-        let mut by_name: BTreeMap<&str, Vec<(&str, &str)>> = BTreeMap::new();
+        let mut by_name: BTreeMap<&str, Vec<(&str, &VersionReq)>> = BTreeMap::new();
         for entry in &cx.graph().manifest_declarations {
             for d in &entry.declarations {
                 if d.scope == Some(DependencyScope::Peer) {
@@ -48,21 +55,19 @@ impl Analysis for VersionSkew {
                 by_name
                     .entry(d.name.as_str())
                     .or_default()
-                    .push((entry.manifest.as_str(), req.as_str()));
+                    .push((entry.manifest.as_str(), req));
             }
         }
         let mut out = Vec::new();
         for (name, mut declarations) in by_name {
-            declarations.sort_unstable();
+            declarations.sort_unstable_by_key(|&(m, r)| (m, r));
             declarations.dedup();
-            let distinct: std::collections::BTreeSet<&str> =
-                declarations.iter().map(|&(_, r)| r).collect();
-            if distinct.len() <= 1 {
+            if !diverges(&declarations) {
                 continue;
             }
             let evidence = declarations
                 .iter()
-                .map(|(manifest, req)| format!("{manifest} ({req})"))
+                .map(|(manifest, req)| format!("{manifest} ({})", req.spelled))
                 .collect::<Vec<_>>()
                 .join(", ");
             out.push(Finding::new(
@@ -81,4 +86,16 @@ impl Analysis for VersionSkew {
         }
         out
     }
+}
+
+/// Do these declarations state requirements that cannot all hold? Two answers,
+/// and which one applies is the evidence's to decide: where every pair could
+/// be compared, only a pair whose ranges are disjoint diverges; where a pair
+/// could not be compared, its two spellings are all there is to go on.
+fn diverges(declarations: &[(&str, &VersionReq)]) -> bool {
+    declarations.iter().enumerate().any(|(i, (_, a))| {
+        declarations[i + 1..]
+            .iter()
+            .any(|(_, b)| a.disjoint(b).unwrap_or(a.spelled != b.spelled))
+    })
 }

@@ -33,7 +33,7 @@ fn roots_of(e: &ManifestEvidence, name: &str) -> Vec<String> {
     e.units
         .iter()
         .find(|u| u.name == name)
-        .map(|u| u.roots.iter().map(|r| r.to_string()).collect())
+        .map(|u| u.roots.iter().map(|r| r.path.to_string()).collect())
         .unwrap_or_default()
 }
 
@@ -202,7 +202,11 @@ testpaths = ["tests"]
         .expect("pytest's own unit");
     assert_eq!(tests.kind, UnitKind::Test);
     assert_eq!(
-        tests.roots.iter().map(|r| r.as_str()).collect::<Vec<_>>(),
+        tests
+            .roots
+            .iter()
+            .map(|r| r.path.as_str())
+            .collect::<Vec<_>>(),
         ["tests"]
     );
 }
@@ -297,4 +301,74 @@ fn a_requirements_file_declares_dependencies_and_no_unit() {
         ["blinker", "click"],
         "an option line is not a requirement"
     );
+}
+
+#[test]
+fn a_named_package_dir_key_is_the_units_namespace_root_and_its_own_door() {
+    // `package-dir = {"" = "src"}` maps the ROOT package to a directory that
+    // CONTAINS the packages, so every module's dotted path is already in its
+    // path and the unit hangs under nothing.
+    let e = read(
+        "pyproject.toml",
+        "[project]\nname = \"demo\"\n[tool.setuptools]\npackage-dir = {\"\" = \"src\"}\n",
+        &["src/demo/__init__.py", "src/demo/api.py"],
+    );
+    let unit = e.units.iter().find(|u| u.name == "demo").expect("declared");
+    assert_eq!(unit.namespace_root, None);
+    assert_eq!(
+        unit.entries.iter().map(|e| e.as_str()).collect::<Vec<_>>(),
+        ["src/demo/__init__.py"],
+        "`import demo` runs the initializer of the package UNDER the root"
+    );
+
+    // A NAMED key maps one package onto the directory itself: `lib/api.py` is
+    // the module `mypkg.api`, `mypkg` is nowhere in the path, and the file
+    // `import mypkg` runs is the root's own initializer.
+    let e = read(
+        "pyproject.toml",
+        "[project]\nname = \"mypkg\"\n[tool.setuptools]\npackage-dir = {\"mypkg\" = \"lib\"}\n",
+        &["lib/__init__.py", "lib/api.py"],
+    );
+    let unit = e
+        .units
+        .iter()
+        .find(|u| u.name == "mypkg")
+        .expect("declared");
+    assert_eq!(roots_of(&e, "mypkg"), ["lib"]);
+    assert_eq!(unit.namespace_root.as_deref(), Some("mypkg"));
+    assert_eq!(
+        unit.entries.iter().map(|e| e.as_str()).collect::<Vec<_>>(),
+        ["lib/__init__.py"]
+    );
+}
+
+#[test]
+fn a_distribution_answers_to_every_spelling_pep_503_normalizes() {
+    // PyPI matches on the normal form, so a requirement spelled
+    // `Flask_SQLAlchemy` and a distribution named `Flask-SQLAlchemy` are one
+    // package — and the underscore spelling is the one an import uses.
+    let e = read(
+        "pyproject.toml",
+        "[project]\nname = \"Flask_SQLAlchemy\"\nversion = \"1.0\"\n",
+        &[],
+    );
+    let package = e.packages.first().expect("the distribution");
+    assert_eq!(package.name, "Flask_SQLAlchemy", "the name as WRITTEN");
+    assert_eq!(
+        package
+            .aliases
+            .iter()
+            .map(|a| a.as_str())
+            .collect::<Vec<_>>(),
+        ["flask-sqlalchemy", "flask_sqlalchemy"],
+        "the normal form and the spelling an import uses, never the name itself"
+    );
+
+    // A name already in the normal form answers to itself alone.
+    let e = read(
+        "pyproject.toml",
+        "[project]\nname = \"flask\"\nversion = \"1.0\"\n",
+        &[],
+    );
+    assert!(e.packages[0].aliases.is_empty());
 }

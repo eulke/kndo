@@ -88,7 +88,9 @@ impl bindings::Guest for RudeProbe {
             packages: Vec::new(),
             dependencies: Vec::new(),
             mentions: Vec::new(),
+            aliases: Vec::new(),
             roots: Vec::new(),
+            ignores: Vec::new(),
             members: Vec::new(),
             diagnostics: Vec::new(),
         }

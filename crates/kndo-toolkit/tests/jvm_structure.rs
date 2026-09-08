@@ -117,7 +117,7 @@ fn a_module_names_itself_its_dependencies_and_nothing_it_merely_contains() {
          guava's real source root lives in an inherited parent"
     );
     assert_eq!(
-        unit.depends_on,
+        depends_on(unit),
         vec!["guava", "junit"],
         "the dependency section only: not dependencyManagement's versions, \
          not a build plugin, not a comment"
@@ -159,9 +159,9 @@ fn a_module_is_two_units_and_its_test_set_is_a_friend_that_compiles_against_main
         (test.name.as_str(), test.kind),
         ("core:test", UnitKind::Test)
     );
-    assert_eq!(test.roots, ["core/src/test/java", "core/src/test/kotlin"]);
-    assert_eq!(test.depends_on, ["core", "util"]);
-    assert_eq!(test.friend_of, ["core"]);
+    assert_eq!(roots(test), ["core/src/test/java", "core/src/test/kotlin"]);
+    assert_eq!(depends_on(test), ["core", "util"]);
+    assert_eq!(friends(test), ["core"]);
     assert!(!test.is_published());
 
     // A pom that spells its test directory is read at its word; the main
@@ -178,7 +178,7 @@ fn a_module_is_two_units_and_its_test_set_is_a_friend_that_compiles_against_main
 </project>"#,
     );
     assert!(ev.units[0].roots.is_empty());
-    assert_eq!(ev.units[1].roots, ["guava-tests/test"]);
+    assert_eq!(roots(&ev.units[1]), ["guava-tests/test"]);
 }
 
 #[test]
@@ -213,7 +213,7 @@ fn the_test_directory_is_inherited_along_parent_and_the_build_helper_adds_to_it(
 </project>"#;
     let ev = read_among("guava-tests/pom.xml", module, &[("pom.xml", root)]);
     assert_eq!(
-        ev.units[1].roots,
+        roots(&ev.units[1]),
         ["guava-tests/benchmark", "guava-tests/test"]
     );
 
@@ -240,7 +240,7 @@ fn the_test_directory_is_inherited_along_parent_and_the_build_helper_adds_to_it(
             ("build/pom.xml", grandparent),
         ],
     );
-    assert_eq!(ev.units[1].roots, ["build/mid/leaf/tests"]);
+    assert_eq!(roots(&ev.units[1]), ["build/mid/leaf/tests"]);
 
     // No parent in the checkout: the default layout, not a guess.
     let orphan = r#"<project>
@@ -249,7 +249,26 @@ fn the_test_directory_is_inherited_along_parent_and_the_build_helper_adds_to_it(
 </project>"#;
     let ev = read_among("alone/pom.xml", orphan, &[]);
     assert_eq!(
-        ev.units[1].roots,
+        roots(&ev.units[1]),
         ["alone/src/test/java", "alone/src/test/kotlin"]
     );
+}
+
+/// The directories a unit compiles, as the assertions above spell them.
+fn roots(unit: &kndo_contract::manifest::Unit) -> Vec<&str> {
+    unit.roots.iter().map(|r| r.path.as_str()).collect()
+}
+
+/// Every unit it compiles against, friendships included.
+fn depends_on(unit: &kndo_contract::manifest::Unit) -> Vec<&str> {
+    unit.depends_on.iter().map(|d| d.unit.as_str()).collect()
+}
+
+/// The half of those the build system marked FRIEND.
+fn friends(unit: &kndo_contract::manifest::Unit) -> Vec<&str> {
+    unit.depends_on
+        .iter()
+        .filter(|d| d.friend)
+        .map(|d| d.unit.as_str())
+        .collect()
 }

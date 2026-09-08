@@ -533,7 +533,10 @@ fn a_guest_states_a_whole_unit_across_the_abi() {
         unit.entries.iter().map(|e| e.as_str()).collect::<Vec<_>>(),
         ["lib.kmini"]
     );
-    assert_eq!(unit.depends_on, ["probe-framework"]);
+    assert_eq!(
+        unit.depends_on,
+        [kndo_contract::manifest::UnitDep::on("probe-framework")]
+    );
     assert_eq!(
         unit.publication,
         kndo_contract::manifest::Publication::Unstated
