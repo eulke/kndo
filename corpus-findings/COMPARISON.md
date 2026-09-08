@@ -2259,3 +2259,43 @@ module-private and public, so `internal-only` never speaks for it), so unlike
 Swift the receiver opens no advisory branch. What it buys is attribution — a
 qualified use lands on the member it names instead of on every member of that
 name — and that is precision the next measurement will read, not this one.
+
+### The `_x` rung, re-measured — and the keeper that makes the narrow one honest (2026-09-08)
+
+| repo | before | after | what moved |
+|---|---|---|---|
+| flask | 18 | 20 | +2 `unused`, both true positives the wide rung was swallowing |
+| every other repository | — | — | byte-identical |
+
+The 2026-09-05 decision put Python's `_x` at `Unit{0}` — the whole distribution
+— on the reasoning that `mod._x()` from a sibling module is legal and common.
+That reasoning was sound in its own context and is not in this one, so it was
+measured again with `Nesting::ByPath` in place.
+
+**The candidates, on flask, counted by the underscore accusations each keeps:**
+
+| rung | flask | `_x` accused |
+|---|---|---|
+| `Namespace{0}` — the module | 20 | `_make_timedelta`, `_path_is_ancestor`, `_has_encoding` — 3 |
+| `Unit{0}` — the distribution (was) | 18 | `_has_encoding` — 1 |
+| `Namespace{1}` — the package | 17 | 0 |
+
+All three are true positives, hand-checked: `app.py`'s `_make_timedelta` is a
+leftover of the sansio split, `cli.py`'s `_path_is_ancestor` is named nowhere in
+flask, and `_has_encoding` was already reported. Wider rungs lose them to name
+collision and to the surface-import keeper; none of the three is a false
+accusation at the narrow rung.
+
+**What changed the context is a keeper, and it was missing.** The design's list
+carries a QUALIFIED reference — a file that imports this module under a local
+name and then writes `local.name` — and the engine had no such rule: only
+`internal_only` ever read `Reference::on`. Without it, `Namespace{0}` really
+would accuse a `_x` that a sibling reaches as `mod._x()`, which is exactly
+what the original decision feared. `Keeper::Qualified` now closes it: the
+qualifier names the module out loud, so the use counts wherever it is written,
+and a bounded reach bounds who may name a declaration WITHOUT a qualifier —
+never who may import it and say which module they mean.
+
+The `underscore-namespace-access` fixture is what found the gap and what pins
+it: `inner._qualified()` from a sibling keeps it alive; `_alone`, which nobody
+qualifies, stays accused.

@@ -49,7 +49,7 @@ impl PythonAdapter {
             // 3: the generated banner is reported, never concluded.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:python",
-                8,
+                9,
                 &["py"],
                 &[
                     "**/pyproject.toml",
@@ -73,6 +73,11 @@ impl PythonAdapter {
                 kndo_contract::evidence::EvidenceStream::Relations,
                 kndo_contract::evidence::EvidenceStream::Qualifiers,
             ]))
+            // A Python module's namespace IS its dotted path under the
+            // distribution's source root, and the source root is the
+            // manifest's to say — so the engine derives it. Everything the
+            // package holds is one node, and `pkg/__init__.py` IS `pkg`.
+            .nesting(kndo_contract::extension::Nesting::ByPath)
             .ignores(&["**/site-packages/**"])
             // The runners' own discovery, where no manifest said what a file
             // is: pytest and unittest COLLECT `test_*.py` and `*_test.py` by

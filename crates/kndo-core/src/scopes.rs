@@ -102,6 +102,15 @@ impl Scopes {
                     Compilation::Tree(SmolStr::new(graph.files[*root].path.as_str())),
                     segments.clone(),
                 )
+            } else if let Some(segments) = by_path(graph, i, capabilities) {
+                // The language says its namespaces are shaped by PATH, so the
+                // engine derives them: extraction never sees a source root,
+                // and the manifest is the only thing that knows one.
+                let compilation = match f.unit {
+                    Some(u) => Compilation::Unit(u),
+                    None => Compilation::Root(SmolStr::new("")),
+                };
+                (compilation, segments)
             } else if f.evidence.namespace.is_empty() {
                 // Its own node, named by nothing another file can spell.
                 (
@@ -561,6 +570,44 @@ fn span_nodes(
 /// It is the shape a build UNIT will replace, and the reason a test set does
 /// not yet pool with the main set it exercises: friendship is a manifest's
 /// statement, and none has been read.
+/// The namespace segments a `Nesting::ByPath` language's file lands in: its
+/// path under the innermost source root of the unit that compiles it, without
+/// the suffix, and without a package-initializer filename — `src/app/views.py`
+/// under root `src` is `app.views`, and `src/app/__init__.py` is `app`.
+/// `None` for every other language, which keeps their nodes exactly as the
+/// clause they emit spells them.
+fn by_path(
+    graph: &Graph,
+    file: usize,
+    capabilities: &[(SmolStr, DeclaredCapabilities)],
+) -> Option<Vec<SmolStr>> {
+    let f = &graph.files[file];
+    let caps = capabilities.iter().find(|(c, _)| *c == f.adapter)?;
+    if caps.1.nesting != kndo_contract::extension::Nesting::ByPath {
+        return None;
+    }
+    let path = f.path.as_str();
+    let under = f
+        .unit
+        .map(|u| &graph.project.units[u as usize])
+        .into_iter()
+        .flat_map(|u| u.roots.iter())
+        .map(|r| r.as_str())
+        .filter(|r| !r.is_empty() && path.starts_with(r) && path.as_bytes()[r.len()] == b'/')
+        // The innermost root wins: a unit rooted at both `.` and `src` puts
+        // `src/app/views.py` in `app.views`, never `src.app.views`.
+        .max_by_key(|r| r.len())
+        .map(|r| &path[r.len() + 1..])
+        .unwrap_or(path);
+    let stem = under.rsplit_once('.').map_or(under, |(s, _)| s);
+    let mut segments: Vec<SmolStr> = stem.split('/').map(SmolStr::new).collect();
+    // A package initializer IS its package, not a module inside it.
+    if segments.last().is_some_and(|s| s == "__init__") {
+        segments.pop();
+    }
+    Some(segments)
+}
+
 fn source_root(f: &crate::graph::GraphFile) -> SmolStr {
     let dir = f.path.as_str().rsplit_once('/').map_or("", |(d, _)| d);
     let mut suffix = String::new();

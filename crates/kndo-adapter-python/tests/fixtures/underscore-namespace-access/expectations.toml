@@ -1,0 +1,15 @@
+# underscore-namespace-access: a leading underscore reaches the MODULE, and a sibling
+# that wants one says so out loud — `inner._qualified()` names the module and then the
+# name. That qualified form is what makes the narrow rung safe: the reference carries
+# its receiver, so it keeps the declaration without the rung having to be widened to
+# the whole distribution. The function nobody qualifies stays accused.
+
+[[alive]]
+subject = "src/pkg/inner.py#_qualified"
+category = "unused"
+why = "reached as `inner._qualified()` from `caller.py` — a qualified reference whose receiver resolves to this module"
+
+[[dead]]
+subject = "src/pkg/inner.py#_alone"
+category = "unused"
+why = "module-private and named by nothing, in this module or any other: the accusation a distribution-wide rung would have swallowed"

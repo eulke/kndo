@@ -5947,3 +5947,42 @@ Fixture `string-annotations` added, pinning both directions.
 
 Still owed on this adapter: `Nesting::ByPath{roots}` — the last item of its
 design row.
+
+## 2026-09-08 — `Nesting::ByPath`, and the `_x` rung re-decided on new evidence
+
+Two changes that only make sense together, and the second REVISES the owner's
+decision of 2026-09-05 rather than inheriting it. Decisions are answers to a
+context; this context has units, a keeper list, and `Reference::on`, none of
+which existed then.
+
+**`Nesting` becomes a spec capability the ENGINE consumes** — `PerFile` by
+default, so every other adapter is byte-identical, and `ByPath` for python,
+where the namespace is the file's dotted path under its unit's source root
+(`src/app/views.py` under root `src` is `app.views`, `src/app/__init__.py` IS
+`app`). The engine derives it because extraction never sees a source root and
+the manifest is the only thing that knows one. The design also names `Flat`,
+`ByDirectory` and `Mounted`; none is built, and this is the disposition rather
+than a silent cut: each is already achieved from the other side — java and
+kotlin emit the `package` clause, go emits its clause and reads `internal/` as
+`Directory{up}`, rust declares `ImportShape::Mount` — so an engine-side variant
+nothing reads would be vocabulary without a caller. Corpus: byte-identical.
+
+**`_x` moves from `Unit{0}` to `Namespace{0}`, the module.** Measured on flask,
+counting the underscore accusations each rung keeps: the module rung 3
+(`_make_timedelta`, `_path_is_ancestor`, `_has_encoding`), the distribution rung
+1, the package rung 0. All three are hand-checked true positives; the wider
+rungs lose them to name collision across the distribution and to the
+surface-import keeper, not to any use.
+
+**And the thing that made the old reasoning right is now built.** The
+2026-09-05 rationale was "`mod._x()` from a sibling is legal and common, so
+never accuse it". The design's keeper list carries exactly that case — a
+qualified reference resolved to this file — and the engine had NO such rule:
+`Reference::on` was read only by `internal_only`. `Keeper::Qualified` closes it:
+a file that imports this module under a local name and writes `local.name` keeps
+the declaration, whatever the reach, because the qualifier names the module out
+loud. A bounded reach bounds who may name a declaration WITHOUT a qualifier.
+
+The `underscore-namespace-access` fixture found the gap — it was written to pin
+the decision and instead reported the used function dead — and now pins both
+directions. flask 18 → 20; everything else byte-identical.

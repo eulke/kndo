@@ -19,6 +19,27 @@ use smol_str::SmolStr;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 
+/// How this language SHAPES its namespace nodes — what the engine builds the
+/// scope forest's middle layer from.
+///
+/// Only the two forms with a consumer are here. The design also names `Flat`,
+/// `ByDirectory` and `Mounted`; each is already achieved from the other side —
+/// the adapter emits the clause its language writes (`package com.a`,
+/// `package http`) or the mounts it declares (`mod x;`) — so an engine-side
+/// variant nothing reads would be vocabulary without a caller.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default)]
+pub enum Nesting {
+    /// The file IS its namespace: nothing is visible without an import. The
+    /// default, and what every adapter that emits its own clause leaves alone.
+    #[default]
+    PerFile,
+    /// The namespace is the file's PATH under the unit's source roots, dotted:
+    /// `src/app/views.py` in a unit rooted at `src` is `app.views`, and
+    /// `src/app/__init__.py` is `app`. The engine derives it, because the
+    /// source root is the manifest's to say and extraction never sees one.
+    ByPath,
+}
+
 /// One machine-checkable activation predicate — cheap, evaluated against what the
 /// run already discovered, never by running extension code.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -932,6 +953,7 @@ pub struct ExtensionSpec {
     ladder: Ladder,
     namespace_span: NamespaceSpan,
     unnamed_unit: UnnamedUnit,
+    nesting: Nesting,
     file_roles: Vec<FileRole>,
     dispatch: Vec<DispatchRule>,
     claims: Vec<SmolStr>,
@@ -975,6 +997,7 @@ impl ExtensionSpec {
                 ladder: Ladder::default(),
                 namespace_span: NamespaceSpan::Unit,
                 unnamed_unit: UnnamedUnit::Unbounded,
+                nesting: Nesting::PerFile,
                 file_roles: Vec::new(),
                 dispatch: Vec::new(),
                 claims: Vec::new(),
@@ -1055,6 +1078,11 @@ impl ExtensionSpec {
 
     /// See [`DispatchRule`]; the engine's dispatch is the consumer, and an
     /// empty list (the default) derives nothing — markers stay evidence.
+    /// See [`Nesting`]. Omitted ⇒ `PerFile` — the default-compatibility rule.
+    pub fn nesting(&self) -> Nesting {
+        self.nesting
+    }
+
     pub fn dispatch_rules(&self) -> &[DispatchRule] {
         &self.dispatch
     }
@@ -1221,6 +1249,9 @@ impl From<ExtensionSpecParts> for ExtensionSpec {
             ladder: parts.ladder,
             namespace_span: parts.namespace_span,
             unnamed_unit: parts.unnamed_unit,
+            // The wire carries no `nesting` yet: a loaded component's
+            // namespaces are the ones it emits, which is `PerFile`.
+            nesting: Nesting::PerFile,
             file_roles: parts.file_roles,
             dispatch: parts.dispatch,
             claims: parts.claims,
@@ -1354,6 +1385,14 @@ impl ExtensionSpecBuilder {
     /// default-compatibility rule: markers are carried as evidence and derive
     /// nothing. Appends, so rules a shared builder already declared stand
     /// alongside the language's own.
+    /// Declare how this language shapes its namespace nodes (see [`Nesting`]).
+    /// Omitted ⇒ `PerFile`: the file is its own namespace, which is what an
+    /// adapter that emits its own clause wants left alone.
+    pub fn nesting(mut self, nesting: Nesting) -> Self {
+        self.spec.nesting = nesting;
+        self
+    }
+
     pub fn dispatch(mut self, rules: Vec<DispatchRule>) -> Self {
         self.spec.dispatch.extend(rules);
         self

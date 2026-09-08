@@ -74,6 +74,9 @@ pub struct Index {
     /// Per target file: importers that take its whole surface (namespace /
     /// side-effect / glob — shapes the engine cannot see through).
     surface_importers: Vec<Vec<Site>>,
+    /// (file, name) → the sites that wrote `local.name` where `local` is a
+    /// namespace import of that file. Built once, like `bound`.
+    qualified: BTreeMap<(u32, SmolStr), Vec<Site>>,
     /// Reverse of `sees`: reachable viewers only, ascending.
     included_by: Vec<Vec<u32>>,
     reachable: Vec<bool>,
@@ -122,6 +125,12 @@ pub enum Keeper {
     Reference { site: Site },
     /// An import binding the module-system name (or its exported alias).
     Binding { site: Site },
+    /// A QUALIFIED reference from outside: a file imported this one under a
+    /// local name and then wrote `local.name`. The qualifier names the module
+    /// out loud, so the use counts wherever it is written — a bounded reach
+    /// bounds who may name a declaration WITHOUT one, never who may import it
+    /// and say which module they mean.
+    Qualified { site: Site },
     /// A root anchoring the declaration itself (or its owner).
     Root { kind: RootKind },
     /// A root the engine's dispatch derived from a marker on the declaration
@@ -156,6 +165,7 @@ impl Index {
         let mut sites_by_name: BTreeMap<SmolStr, Vec<Site>> = BTreeMap::new();
         let mut bound: BTreeMap<(u32, SmolStr), Vec<Site>> = BTreeMap::new();
         let mut surface_importers: Vec<Vec<Site>> = vec![Vec::new(); n];
+        let mut qualified: BTreeMap<(u32, SmolStr), Vec<Site>> = BTreeMap::new();
         let mut included_by: Vec<Vec<u32>> = vec![Vec::new(); n];
         for (i, f) in graph.files.iter().enumerate() {
             if !reachable[i] {
@@ -190,6 +200,23 @@ impl Index {
                         ImportShape::Mount { .. } | ImportShape::Include => {}
                         _ => surface_importers[t as usize].push(site),
                     }
+                    // `import inner` / `from . import inner` then
+                    // `inner.name`: the reference names the module and then
+                    // the member, so it reaches into `t` however narrow the
+                    // declaration's own reach is.
+                    if let ImportShape::Namespace { local } = &import.shape {
+                        for r in f.evidence.references.iter() {
+                            if r.on.as_deref() == Some(local.as_str()) {
+                                qualified
+                                    .entry((t, r.name.clone()))
+                                    .or_default()
+                                    .push(Site {
+                                        file: i as u32,
+                                        span: r.span,
+                                    });
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -219,6 +246,7 @@ impl Index {
             sites_by_name,
             bound,
             surface_importers,
+            qualified,
             included_by,
             reachable,
             members_of,
@@ -375,6 +403,14 @@ impl Index {
     /// Reachable viewers of a file (the reverse of `sees`), ascending.
     pub fn included_by(&self, file: usize) -> &[u32] {
         &self.included_by[file]
+    }
+
+    /// The sites that wrote `local.name`, where `local` is a namespace import
+    /// of `file` — see [`Keeper::Qualified`].
+    pub fn qualified_sites(&self, file: u32, name: &str) -> &[Site] {
+        self.qualified
+            .get(&(file, SmolStr::new(name)))
+            .map_or(&[][..], |v| v.as_slice())
     }
 
     pub fn surface_importers(&self, file: usize) -> &[Site] {
@@ -650,6 +686,14 @@ pub fn keepers(
                     r.binary_search(&site.file).is_ok() && index.reachable(site.file)
                 });
             if in_pool && kept.push(Keeper::Reference { site }) {
+                return kept.out;
+            }
+        }
+        // A qualified reference from outside, whatever the reach: the writer
+        // named the module and then the name, so nothing about the pool has to
+        // hold them.
+        for &site in index.qualified_sites(file as u32, d.name.as_str()) {
+            if kept.push(Keeper::Qualified { site }) {
                 return kept.out;
             }
         }

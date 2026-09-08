@@ -30,17 +30,21 @@ def _module_helper():
     );
     assert_eq!(declaration_named(&e, "MAX").kind, SymbolKind::Constant);
     assert_eq!(declaration_named(&e, "MAX").reach, Reach::Exported);
-    // PEP 8's "internal use" reaches the distribution's root package, not the
-    // file: `mod._cache` from a sibling module is legal and common.
-    assert_eq!(declaration_named(&e, "_cache").reach, Reach::Unit { up: 0 });
+    // PEP 8's "internal use" reaches the MODULE, which is what a Python
+    // namespace is. A sibling that names it does so explicitly, and its own
+    // binding or qualifier is what keeps the declaration.
+    assert_eq!(
+        declaration_named(&e, "_cache").reach,
+        Reach::Namespace { up: 0 }
+    );
     assert_eq!(declaration_named(&e, "Widget").reach, Reach::Exported);
     assert_eq!(
         declaration_named(&e, "_hidden").reach,
-        Reach::Unit { up: 0 }
+        Reach::Namespace { up: 0 }
     );
     assert_eq!(
         declaration_named(&e, "_module_helper").reach,
-        Reach::Unit { up: 0 }
+        Reach::Namespace { up: 0 }
     );
     let widget = e
         .declarations_with_ids()

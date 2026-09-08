@@ -723,6 +723,7 @@ impl Session {
                         ladder: s.ladder().clone(),
                         namespace_span: s.namespace_span(),
                         unnamed_unit: s.unnamed_unit(),
+                        nesting: s.nesting(),
                     },
                 )
             })

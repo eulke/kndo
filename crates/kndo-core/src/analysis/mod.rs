@@ -361,6 +361,9 @@ pub struct DeclaredCapabilities {
     /// What bounds a unit-wide reach where no manifest named the unit — see
     /// [`kndo_contract::extension::UnnamedUnit`].
     pub unnamed_unit: kndo_contract::extension::UnnamedUnit,
+    /// How this language shapes its namespace nodes — see
+    /// [`kndo_contract::extension::Nesting`].
+    pub nesting: kndo_contract::extension::Nesting,
 }
 
 pub fn run_all(

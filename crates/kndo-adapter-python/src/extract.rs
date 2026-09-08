@@ -429,11 +429,13 @@ fn all_strings_as_refs(list: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
 /// hiding).
 fn reach_of(name: &str) -> Reach {
     if name.starts_with('_') && !is_dunder(name) {
-        // PEP 8's "internal use", and the owner's decision (DECISIONS
-        // 2026-09-05): `mod._x()` from a sibling module of the same
-        // distribution is legal and common, so an `_x` is never accused for
-        // being named across the package — only for being named nowhere in it.
-        Reach::Unit { up: 0 }
+        // PEP 8's "internal use": the MODULE, which is what a Python namespace
+        // is. A sibling module that names it does so explicitly — `from .mod
+        // import _x` binds it, `mod._x()` qualifies it — and both keep the
+        // declaration through their own keeper, so the rung does not have to
+        // be widened to cover them. In `__init__.py` the module node IS the
+        // package, so a package-private helper pools over the package.
+        Reach::Namespace { up: 0 }
     } else {
         Reach::Exported
     }

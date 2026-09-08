@@ -709,6 +709,7 @@ fn edge_ref(cx: &QueryContext<'_>, keeper: &Keeper) -> EdgeRef {
         Keeper::Published { .. } => (SmolStr::new_static("published"), None),
         Keeper::SurfaceImport { site } => (SmolStr::new_static("surface-import"), Some(*site)),
         Keeper::OwnerBinding { site } => (SmolStr::new_static("owner-binding"), Some(*site)),
+        Keeper::Qualified { site } => (SmolStr::new_static("qualified"), Some(*site)),
     };
     EdgeRef {
         kind,
@@ -1069,6 +1070,7 @@ fn keeper_site(keeper: &Keeper) -> Option<navigate::Site> {
     match keeper {
         Keeper::Reference { site }
         | Keeper::Binding { site }
+        | Keeper::Qualified { site }
         | Keeper::SurfaceImport { site }
         | Keeper::OwnerBinding { site } => Some(*site),
         Keeper::Root { .. }
