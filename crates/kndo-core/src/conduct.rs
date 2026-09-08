@@ -122,7 +122,7 @@ pub enum ActivationReason {
 pub fn activate(
     extensions: &[Box<dyn Extension>],
     discovered: &[crate::discover::DiscoveredFile],
-    manifest_dependencies: &BTreeSet<SmolStr>,
+    declared_dependencies: &BTreeSet<SmolStr>,
 ) -> Vec<(usize, ActivationReason)> {
     let mut active: Vec<(usize, ActivationReason)> = Vec::new();
     let mut is_active = vec![false; extensions.len()];
@@ -134,7 +134,7 @@ pub fn activate(
             Activation::Always => Some(ActivationReason::AlwaysOn),
             Activation::AnyRule(rules) => rules
                 .iter()
-                .find(|rule| rule_matches(rule, discovered, manifest_dependencies))
+                .find(|rule| rule_matches(rule, discovered, declared_dependencies))
                 .map(|rule| ActivationReason::RuleMatched(rule.clone())),
         };
         if let Some(reason) = reason {
@@ -177,14 +177,14 @@ pub fn activate(
 fn rule_matches(
     rule: &ActivationRule,
     discovered: &[crate::discover::DiscoveredFile],
-    manifest_dependencies: &BTreeSet<SmolStr>,
+    declared_dependencies: &BTreeSet<SmolStr>,
 ) -> bool {
     match rule {
         ActivationRule::FileExists(glob) => globset::Glob::new(glob)
             .ok()
             .map(|g| g.compile_matcher())
             .is_some_and(|m| discovered.iter().any(|f| m.is_match(f.path.as_str()))),
-        ActivationRule::ManifestDependency(pattern) => manifest_dependencies
+        ActivationRule::ManifestDependency(pattern) => declared_dependencies
             .iter()
             .any(|name| kndo_contract::extension::matches_pattern(pattern, name)),
         // Before any file is parsed there is no import stream to ask, so the

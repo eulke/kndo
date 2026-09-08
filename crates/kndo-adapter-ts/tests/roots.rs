@@ -234,7 +234,7 @@ fn built_entries_map_to_their_source() {
 }
 
 #[test]
-fn manifest_dependencies_report_every_section() {
+fn declared_dependencies_report_every_section() {
     let json = r#"{
         "name": "demo",
         "dependencies": { "express": "^4", "lodash": "*" },
@@ -274,7 +274,7 @@ fn manifest_dependencies_report_every_section() {
 }
 
 #[test]
-fn manifest_mentions_are_what_it_spells_outside_declarations_and_prose() {
+fn mentions_are_what_it_spells_outside_declarations_and_prose() {
     let json = r#"{
         "name": "demo",
         "description": "an express server with lodash helpers",

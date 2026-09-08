@@ -528,7 +528,7 @@ impl Session {
         // per-file evidence is plugin-independent.
         let discovered_paths: BTreeSet<ProjectPath> =
             files.iter().map(|f| f.path.clone()).collect();
-        let mut manifest_dependencies: BTreeSet<SmolStr> = BTreeSet::new();
+        let mut declared_dependencies: BTreeSet<SmolStr> = BTreeSet::new();
         let mut project_ignores: Vec<SmolStr> = Vec::new();
         {
             let cx = kndo_contract::adapter::ResolveContext::new(&discovered_paths);
@@ -536,7 +536,7 @@ impl Session {
                 let mut sink = kndo_contract::manifest::ManifestSink::new();
                 extension.extract_manifest(&manifest, &cx, &mut sink);
                 let read = sink.finish();
-                manifest_dependencies.extend(read.dependencies.into_iter().map(|d| d.name));
+                declared_dependencies.extend(read.dependencies.into_iter().map(|d| d.name));
                 project_ignores.extend(read.ignores);
             });
         }
@@ -549,7 +549,7 @@ impl Session {
             claims = extract::claim(&files, &self.extensions, &project_ignores);
         });
 
-        let active = crate::conduct::activate(&self.extensions, &files, &manifest_dependencies);
+        let active = crate::conduct::activate(&self.extensions, &files, &declared_dependencies);
         let plugins_mutate = active
             .iter()
             .any(|(ix, _)| self.extensions[*ix].spec().mutates_graph());

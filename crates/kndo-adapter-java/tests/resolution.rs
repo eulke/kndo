@@ -105,7 +105,7 @@ fn third_party_packages_stay_unresolved() {
 }
 
 #[test]
-fn manifest_dependencies_carry_both_spellings() {
+fn declared_dependencies_carry_both_spellings() {
     // A JVM coordinate is `group:artifact`, and code imports neither — so both
     // spellings are declared and a usage judgment abstains on both rather than
     // picking one to be wrong about.

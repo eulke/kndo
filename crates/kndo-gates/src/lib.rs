@@ -102,6 +102,10 @@ pub const GATES: &[Gate] = &[
         name: "every_relative_markdown_link_resolves",
         invariant: "a relative Markdown link names a path that exists",
     },
+    Gate {
+        name: "a_retired_mechanism_stays_retired",
+        invariant: "no name the design replaced is back in the tree, under any spelling",
+    },
 ];
 
 /// Repo-relative location of the generated workflow.

@@ -6179,3 +6179,56 @@ file no manifest covers and a namespace nothing declares both get.
 additive, and until each adapter's row consumes it nothing resolves
 differently. `GRAPH_SEMANTICS_VERSION` did not move, and neither did the
 fingerprint — no evidence changed and no graph assembled differently.
+
+## 2026-09-08 — what the design does not name does not exist
+
+The owner's rule, after the fourth time an old mechanism decided a verdict
+while its replacement sat beside it unused: **the design is the only thing that
+exists.** Two ways to answer one question is not a safety net — whichever runs
+first wins, and it is always the old one, because the old one is what
+everything already calls.
+
+A gate now carries it. `a_retired_mechanism_stays_retired` holds a table of
+every name the design replaced beside what replaced it, and fails if any is
+back in the tree. It is deliberately a TEXT scan and not a type check: the
+point is that the name is gone, so a reader grepping for it finds nothing and
+cannot reach for it — a type-level check would pass on a hand-rolled second
+copy under the same name, which is exactly how the first one came back. Beside
+it, one assertion of shape: `Extension` has the design's seven hooks and no
+eighth, which is how the four manifest hooks stay dead without scanning for
+three words as ordinary as `roots`, `packages` and `mentions`.
+
+A row lands in the table the moment its replacement is PROVEN, never before:
+the gate records what is already true so it can never quietly become false.
+A row whose replacement is still owed belongs in its milestone.
+
+**What the audit found, and it is the point.** Every name already retired is
+genuinely gone from the tree — `Reach::Scoped`, `Reach::Private`,
+`ImportShape::TypeOnly`, `sees`, `seen_from`, `scoped_regions`,
+`narrowable_scopes`, `export_narrowing`, `root_for_attrs`, `generated_marked`
+and the four manifest hooks. But `manifest_dependencies` was alive as ENGINE
+VOCABULARY in four files: the hook was deleted and its name kept walking, so a
+reader grepping it found something live. Renamed to `declared_dependencies` —
+what it is. Two adapter tests carried the dead hooks in their own names and
+were renamed; `project.rs` still documented a compatibility bridge that no
+longer exists ("still read and merged" — false since M8.c); a doc-link in
+`graph.rs` pointed at a trait method that is gone.
+
+**And the number the audit produced, which is the real work:**
+
+| adapter | dispatch rules | hand-written roots |
+|---|---|---|
+| rust | 5 | 1 |
+| go | 4 | 1 |
+| java | 3 | 1 |
+| kotlin | 0 | 3 |
+| swift | 0 | 4 |
+| python | 0 | 5 |
+| ts | 0 | 3 |
+
+The design says `DispatchRule` replaces the root code of every adapter. Four
+adapters declare not one rule and hold their roots in the extractor —
+swift emits `@main` as a marker and then concludes the root itself from the
+same attribute, two lines apart. That is the coexistence, exactly. Each row
+retires its own, python first (its row is the open one), and each lands its
+names in the gate's table as it closes.

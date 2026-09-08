@@ -247,8 +247,9 @@ pub struct ManifestDeclarations {
     /// modules, never a dependency to declare.
     pub builtins: kndo_contract::extension::DependencyBuiltins,
     /// Names the manifest spells outside its declarations, sorted and
-    /// deduplicated ([`Extension::manifest_mentions`]): a dependency it names
-    /// is in use without any import; a package it names is not undeclared.
+    /// deduplicated ([`kndo_contract::manifest::ManifestEvidence::mentions`]):
+    /// a dependency it names is in use without any import; a package it names
+    /// is not undeclared.
     pub mentions: Vec<SmolStr>,
     /// The package this manifest declares, as an index into `Graph::packages`;
     /// `None` for a manifest that declares none, which owns by directory.
@@ -524,12 +525,10 @@ pub fn assemble(
     let index = crate::project::ProjectIndex::build(
         &project,
         &reads,
-        claims.iter().zip(evidence.iter()).map(|(c, ev)| {
-            (
-                files[c.file_index].path.clone(),
-                ev.namespace.to_vec(),
-            )
-        }),
+        claims
+            .iter()
+            .zip(evidence.iter())
+            .map(|(c, ev)| (files[c.file_index].path.clone(), ev.namespace.to_vec())),
     );
     let view = index.view();
     let cx = ResolveContext::with_project(&known, &packages, &view);
@@ -657,7 +656,7 @@ fn collect_packages(
 }
 
 /// One entry per manifest, path-sorted, declarations name-sorted — the
-/// deterministic projection of every adapter's `manifest_dependencies`.
+/// deterministic projection of every manifest's declared dependencies.
 fn collect_manifest_declarations(
     reads: &[crate::project::ManifestRead],
 ) -> Vec<ManifestDeclarations> {
@@ -1195,12 +1194,9 @@ pub fn patch(
     let index = crate::project::ProjectIndex::build(
         &prev.project,
         &reads,
-        prev.files.iter().map(|g| {
-            (
-                g.path.clone(),
-                g.evidence.namespace.to_vec(),
-            )
-        }),
+        prev.files
+            .iter()
+            .map(|g| (g.path.clone(), g.evidence.namespace.to_vec())),
     );
     let view = index.view();
     let cx = ResolveContext::with_project(&known, &packages, &view);

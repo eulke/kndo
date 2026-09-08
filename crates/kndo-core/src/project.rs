@@ -10,9 +10,8 @@
 //! a file, which files a unit is entered through, and — through
 //! [`UnitKind::color`] — what color those entries anchor.
 //!
-//! The four hooks this replaces (`roots`, `packages`, `manifest_dependencies`,
-//! `manifest_mentions`) are still read and merged, so an adapter migrates on
-//! its own schedule and the bridge retires by deletion, not by a flag.
+//! It replaced four hooks, and replacing means they are gone: one door, one
+//! evidence type, and no second way to tell the engine what a manifest says.
 
 use crate::discover::DiscoveredFile;
 use kndo_contract::adapter::{ResolveContext, SourceFile};

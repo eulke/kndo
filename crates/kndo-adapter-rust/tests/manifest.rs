@@ -285,7 +285,7 @@ fn lib_name_overrides_the_import_name() {
 }
 
 #[test]
-fn manifest_dependencies_report_every_cargo_table() {
+fn declared_dependencies_report_every_cargo_table() {
     let manifest = r#"
 [package]
 name = "demo"

@@ -2084,3 +2084,170 @@ fn every_declared_file_role_names_the_paths_its_language_means() {
         wrong.join("\n")
     );
 }
+
+/// Every mechanism the design REPLACED, and the one that replaced it. A name
+/// here is not deprecated — it is gone, and this gate is what keeps it gone.
+///
+/// The rule the owner set after the fourth time an old mechanism decided a
+/// verdict while its replacement sat beside it unused: what the design does not
+/// name does not exist. Two ways to answer one question is the problem, not the
+/// safety net — whichever runs first wins, and it is always the old one,
+/// because the old one is the one everything already calls.
+///
+/// A row lands the moment its replacement is proven, not before: this gate
+/// records what is ALREADY true, so it can never quietly become false again.
+/// A row whose replacement is still owed belongs in its milestone, not here.
+const RETIRED: &[(&str, &str)] = &[
+    // Reach, before it was a direction in the scope forest.
+    (
+        "Reach::Scoped",
+        "Reach::{Namespace, Unit, Directory, Named} — a reach is a direction, not a token",
+    ),
+    ("Reach::Private", "Reach::File"),
+    ("scoped_regions", "Scopes — the forest holds the pools"),
+    // Co-visibility, before it came off the namespace.
+    (
+        "fn sees(",
+        "the namespace node: files of one namespace see each other's names",
+    ),
+    ("sees_of", "Scopes::build"),
+    ("seen_by", "Scopes::pool_at"),
+    ("seen_from", "Reach + the effective-reach cap"),
+    ("regions_of", "Scopes::build"),
+    ("unit_mates", "Scopes::unit_pool"),
+    ("package_region", "the namespace node"),
+    ("module_region", "the namespace node"),
+    // Visibility advice, before the ladder.
+    (
+        "narrowable_scopes",
+        "VisibilityLadder — one capability, ordered rungs",
+    ),
+    ("export_narrowing", "VisibilityLadder"),
+    // The four manifest hooks, before extract_manifest — see `HOOKS` below,
+    // which pins the trait's shape rather than scanning for four common words.
+    (
+        "manifest_dependencies",
+        "Extension::extract_manifest + ManifestSink::dependency",
+    ),
+    (
+        "manifest_mentions",
+        "Extension::extract_manifest + ManifestSink::mention",
+    ),
+    // Roots and generated files, before markers and dispatch rules.
+    ("root_for_attrs", "EvidenceSink::marker + DispatchRule"),
+    ("generated_marked", "a file marker + Effect::Generated"),
+    // Import shapes the vocabulary folded.
+    (
+        "ImportShape::TypeOnly",
+        "ImportShape::Bindings with Timing::Erased",
+    ),
+    // Attachment, before it was evidence.
+    ("InFiles", "Attachment::TestOnly on the file that states it"),
+    (
+        "Covisibility",
+        "the namespace node — co-visibility is unconditional",
+    ),
+];
+
+/// Every hook the design gives `Extension`, and nothing else. The four manifest
+/// hooks `extract_manifest` replaced were named `roots`, `packages`,
+/// `manifest_dependencies` and `manifest_mentions` — three of those words are
+/// too ordinary to scan for (a `Graph` has roots, a `ResolveContext` has
+/// packages), so the trait's SHAPE is what pins them dead.
+const HOOKS: &[&str] = &[
+    "spec",
+    "extract",
+    "resolve",
+    "extract_manifest",
+    "contribute_roots",
+    "report_findings",
+    "ingest",
+];
+
+/// Nothing the design replaced is back in the tree.
+///
+/// Deliberately a text scan and not a type check: the point is that the NAME is
+/// gone, so a reader grepping for it finds nothing and cannot reach for it. A
+/// type-level check would pass on a hand-rolled second copy under the same
+/// name, which is exactly how the first one came back.
+#[test]
+fn a_retired_mechanism_stays_retired() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("the workspace root");
+    let mut sources = Vec::new();
+    rust_and_wit_sources(&root, &mut sources);
+    assert!(
+        sources
+            .iter()
+            .any(|s| s.ends_with("kndo-core/src/scopes.rs")),
+        "the engine is part of the tree this gate reads"
+    );
+    let mut found = Vec::new();
+    for source in &sources {
+        // This file spells every retired name in its own table.
+        if source.ends_with("kndo-gates/tests/gates.rs") {
+            continue;
+        }
+        let text = std::fs::read_to_string(source).expect("readable source");
+        for (line, number) in text.lines().zip(1..) {
+            for (name, replacement) in RETIRED {
+                if line.contains(name) {
+                    found.push(format!(
+                        "{}:{number}: `{name}` is retired — the design says {replacement}",
+                        source.strip_prefix(&root).unwrap_or(source).display()
+                    ));
+                }
+            }
+        }
+    }
+    assert!(
+        found.is_empty(),
+        "a retired mechanism is back in the tree:\n{}",
+        found.join("\n")
+    );
+
+    // The one door an extension speaks through, pinned by its shape: a fifth
+    // manifest hook cannot be added back beside `extract_manifest` without
+    // this failing, whatever it is called.
+    let trait_text = std::fs::read_to_string(root.join("crates/kndo-contract/src/extension.rs"))
+        .expect("the contract is readable");
+    let block = trait_text
+        .split_once("pub trait Extension")
+        .expect("the trait is declared")
+        .1;
+    let block = &block[..block.find("\n}").expect("the trait closes")];
+    let hooks: Vec<&str> = block
+        .lines()
+        .filter_map(|l| l.trim().strip_prefix("fn "))
+        .filter_map(|l| l.split(['(', '<']).next())
+        .collect();
+    assert_eq!(
+        hooks, HOOKS,
+        "the design gives Extension seven hooks, in this order"
+    );
+}
+
+fn rust_and_wit_sources(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let mut paths: Vec<std::path::PathBuf> = entries.flatten().map(|e| e.path()).collect();
+    paths.sort();
+    for path in paths {
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default();
+        if path.is_dir() {
+            // `target` holds builds and `oracle` holds v1's own output: neither
+            // is this tree's source.
+            if !matches!(name, "target" | ".git" | "oracle" | "corpus-findings") {
+                rust_and_wit_sources(&path, out);
+            }
+        } else if name.ends_with(".rs") || name.ends_with(".wit") {
+            out.push(path);
+        }
+    }
+}
