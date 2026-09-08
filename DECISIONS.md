@@ -5846,3 +5846,41 @@ contract change. Recorded so it is not rediscovered.
 Two fixtures added, none moved: `backtick-names` (both directions of the
 spelling, plus the value of a binding read across files) and — from the
 previous slice — `protocol-requirement-reach`.
+
+## 2026-09-08 — an operator is a name, and a requirement is as visible as its protocol
+
+`kndo:swift` moves to 12 and closes the rest of its row. Four grammar-level
+gaps, measured together because each is small and they interact.
+
+- **Operators, both halves or neither.** A `func ==` has no `name` field —
+  tree-sitter leaves the operator an anonymous token — so the declaration was
+  dropped whole, and `a == b` spends no named node, so the use was invisible
+  too. Two silences that cancel: 10 declarations across Alamofire and vapor,
+  0 findings before and 0 after. Shipping only the declaration half would have
+  invented 10 accusations, which is why the reference half (a fixed list of the
+  expression kinds whose operator token is a name a `func` could declare) lands
+  in the same commit. The declarations now reach `describe`, `used-by`, the
+  metrics and `duplicate`.
+- **`protocol_property_declaration` is its own node kind** and was walked past:
+  a protocol's `var v: Int { get }` was never declared.
+- **`Reach::Inherited`.** A protocol requirement is as visible as its protocol,
+  and a `public extension` hands its modifier down to members that spell none.
+  Worth −2 `internal-only` — advisories that would not have compiled.
+- **A `private extension`'s members are the FILE's.** This is the reach the
+  source writes, and it unmasked a TRUE positive: vapor declares `static var
+  space` in two files, and the module-wide pool let the used one keep the
+  unused one alive. +1 `unused`, correct.
+
+Closing that reach also exposed a pre-existing hole, fixed here: `case .space`
+is a PATTERN, every identifier under a pattern was a binder seat, and so
+enum-case dot-shorthand — the pervasive use form in Swift, and the pool-side
+counterpart of never declaring the cases — produced no reference at all. A
+pattern that starts with `.` binds nothing.
+
+Alamofire 468 → 467, vapor 180 → 180 (−1 advisory, +1 true accusation),
+everything else byte-identical. One fixture added, `operators`, pinning a used
+operator alive and a declared-never-written one dead.
+
+Still owed on `kndo:swift`, each with its blocker: the conformer-methods
+`Possible` root and its 78 findings (needs `kndo:xctest` and `kndo:swiftui`,
+M8.e), and ERROR-tolerant traversal (M8.f, where the design puts it).

@@ -166,9 +166,9 @@ fn top_level_item(
         "class_declaration" => class_like(item, source, cx, type_ids, out),
         "protocol_declaration" => protocol(item, source, cx, type_ids, out),
         "function_declaration" => {
-            function(item, source, None, false, cx, out);
+            function(item, source, None, false, None, cx, out);
         }
-        "property_declaration" => property(item, source, None, out),
+        "property_declaration" => property(item, source, None, None, out),
         "typealias_declaration" => {
             if let Some(n) = item.child_by_field_name("name") {
                 out.declaration(
@@ -283,6 +283,12 @@ fn class_like(
             name: &name,
             id: owner_id,
             conforms,
+            // `public extension Foo { func bar() }` makes `bar` public; the
+            // engine caps the effective reach by Foo's own, so stating the
+            // extension's modifier here is both simpler and correct.
+            inherits: (decl_kind == "extension")
+                .then(|| declared_reach(item, source))
+                .flatten(),
         };
         for m in members {
             member(m, source, &owner, cx, type_ids, out);
@@ -317,6 +323,7 @@ fn protocol(
             name: &name,
             id: Some(owner_id),
             conforms: false,
+            inherits: Some(Reach::Inherited),
         };
         for m in members {
             member(m, source, &owner, cx, type_ids, out);
@@ -331,6 +338,12 @@ struct Owner<'a> {
     name: &'a str,
     id: Option<kndo_contract::evidence::DeclarationId>,
     conforms: bool,
+    /// What a member with NO visibility modifier of its own reaches. A
+    /// protocol REQUIREMENT is exactly as visible as its protocol — there is
+    /// no narrower thing for it to be — and `Inherited` is that sentence; a
+    /// `public extension` likewise hands its own modifier down. Everywhere
+    /// else the member takes the language default, which is the module.
+    inherits: Option<Reach>,
 }
 
 fn member(
@@ -343,12 +356,40 @@ fn member(
 ) {
     match m.kind() {
         "function_declaration" | "protocol_function_declaration" => {
-            let id = function(m, source, Some(owner.name), owner.conforms, cx, out);
+            let id = function(
+                m,
+                source,
+                Some(owner.name),
+                owner.conforms,
+                owner.inherits.clone(),
+                cx,
+                out,
+            );
             if let (Some(id), Some(owner)) = (id, owner.id) {
                 out.member_of(id, owner);
             }
         }
-        "property_declaration" => property(m, source, owner.id, out),
+        "property_declaration" => property(m, source, owner.id, owner.inherits.clone(), out),
+        // A protocol's `var v: Int { get }` is its own node kind. Its name sits
+        // under the same `pattern`, and it was never declared at all.
+        "protocol_property_declaration" => {
+            let Some(pattern) = tk::child_of_kind(m, "pattern") else {
+                return;
+            };
+            let Some(ident) = tk::child_of_kind(pattern, "simple_identifier") else {
+                return;
+            };
+            let id = out.declaration(
+                bare(tk::text(ident, source)),
+                SymbolKind::Variable,
+                tk::span(m),
+                Reach::Inherited,
+            );
+            markers_of(m, source, id, out);
+            if let Some(owner) = owner.id {
+                out.member_of(id, owner);
+            }
+        }
         "class_declaration" => class_like(m, source, cx, type_ids, out),
         "protocol_declaration" => protocol(m, source, cx, type_ids, out),
         "typealias_declaration" => {
@@ -357,7 +398,7 @@ fn member(
                     bare(tk::text(n, source)),
                     SymbolKind::Type,
                     tk::span(m),
-                    reach_of(m, source),
+                    member_reach(m, source, owner.inherits.clone()),
                 );
                 if let Some(owner) = owner.id {
                     out.member_of(id, owner);
@@ -375,12 +416,19 @@ fn function(
     source: &[u8],
     owner: Option<&str>,
     owner_conforms: bool,
+    inherits: Option<Reach>,
     cx: &FileCx,
     out: &mut EvidenceSink,
 ) -> Option<kndo_contract::evidence::DeclarationId> {
-    let name_node = item.child_by_field_name("name")?;
-    let reach = reach_of(item, source);
-    let fn_name = tk::text(name_node, source);
+    let reach = member_reach(item, source, inherits);
+    let fn_name = match item.child_by_field_name("name") {
+        Some(n) => tk::text(n, source),
+        // `static func == (l: S, r: S)` has no `name` field at all: the
+        // operator is an anonymous token, and without this the declaration was
+        // dropped whole. It is a name like any other — the call sites spell it
+        // `a == b`, which the reference pass reports.
+        None => operator_name(item, source)?,
+    };
     let kind = if owner.is_some() {
         SymbolKind::Method
     } else {
@@ -438,9 +486,10 @@ fn property(
     item: Node<'_>,
     source: &[u8],
     owner_id: Option<kndo_contract::evidence::DeclarationId>,
+    inherits: Option<Reach>,
     out: &mut EvidenceSink,
 ) {
-    let reach = reach_of(item, source);
+    let reach = member_reach(item, source, inherits);
     let is_let = {
         let mut found = false;
         tk::walk(item, &mut |n| {
@@ -491,34 +540,47 @@ fn property(
 /// manifest made its friend; `package` is the group of targets one package
 /// aggregates; `public`/`open` → Exported.
 fn reach_of(item: Node<'_>, source: &[u8]) -> Reach {
-    let Some(modifiers) = tk::child_of_kind(item, "modifiers") else {
-        return Reach::Unit { up: 0 };
-    };
+    declared_reach(item, source).unwrap_or(Reach::Unit { up: 0 })
+}
+
+/// The same, for a member whose owner hands something down when the source
+/// spells nothing: a protocol requirement, a member of a `public extension`.
+fn member_reach(item: Node<'_>, source: &[u8], inherits: Option<Reach>) -> Reach {
+    declared_reach(item, source)
+        .or(inherits)
+        .unwrap_or(Reach::Unit { up: 0 })
+}
+
+/// What the source SPELLS, or `None` where it spells nothing.
+fn declared_reach(item: Node<'_>, source: &[u8]) -> Option<Reach> {
+    let modifiers = tk::child_of_kind(item, "modifiers")?;
     let mut c = modifiers.walk();
     for m in modifiers.named_children(&mut c) {
         if m.kind() == "visibility_modifier" {
-            return match tk::text(m, source)
-                .split('(')
-                .next()
-                .unwrap_or_default()
-                .trim()
-            {
-                "fileprivate" => Reach::File,
-                "private" => {
-                    if item.parent().is_none_or(|p| p.kind() == "source_file") {
-                        Reach::File
-                    } else {
-                        Reach::Owner
+            return Some(
+                match tk::text(m, source)
+                    .split('(')
+                    .next()
+                    .unwrap_or_default()
+                    .trim()
+                {
+                    "fileprivate" => Reach::File,
+                    "private" => {
+                        if item.parent().is_none_or(|p| p.kind() == "source_file") {
+                            Reach::File
+                        } else {
+                            Reach::Owner
+                        }
                     }
-                }
-                "package" => Reach::Unit { up: 1 },
-                "public" | "open" => Reach::Exported,
-                // `internal`, or a form we do not know — the default rung.
-                _ => Reach::Unit { up: 0 },
-            };
+                    "package" => Reach::Unit { up: 1 },
+                    "public" | "open" => Reach::Exported,
+                    // `internal`, or a form we do not know — the default rung.
+                    _ => Reach::Unit { up: 0 },
+                },
+            );
         }
     }
-    Reach::Unit { up: 0 }
+    None
 }
 
 fn has_modifier(item: Node<'_>, source: &[u8], word: &str) -> bool {
@@ -635,6 +697,16 @@ fn relations_of(item: Node<'_>, source: &[u8], id: DeclarationId, out: &mut Evid
     }
 }
 
+/// The operator a `func` declares, where the grammar leaves it an anonymous
+/// token: the child right after `func`, when nothing named took the name seat.
+fn operator_name<'a>(item: Node<'_>, source: &'a [u8]) -> Option<&'a str> {
+    let mut c = item.walk();
+    let children: Vec<Node<'_>> = item.children(&mut c).collect();
+    let at = children.iter().position(|n| n.kind() == "func")?;
+    let token = children.get(at + 1)?;
+    (!token.is_named() && token.kind() != "(").then(|| tk::text(*token, source))
+}
+
 fn has_conformances(item: Node<'_>) -> bool {
     let mut c = item.walk();
     item.named_children(&mut c)
@@ -642,6 +714,24 @@ fn has_conformances(item: Node<'_>) -> bool {
 }
 
 // ---------------------------------------------------------------- references
+
+/// The expression kinds whose operator token is a NAME a declaration can
+/// match. Not every anonymous token is one: `->`, `?` and `!` are syntax, and
+/// only these seats hold an operator the source could have written a `func`
+/// for.
+const OPERATOR_EXPRESSIONS: &[&str] = &[
+    "additive_expression",
+    "multiplicative_expression",
+    "equality_expression",
+    "comparison_expression",
+    "conjunction_expression",
+    "disjunction_expression",
+    "nil_coalescing_expression",
+    "range_expression",
+    "bitwise_operation",
+    "prefix_expression",
+    "postfix_expression",
+];
 
 /// One flat pass for references and comments: identifiers classify by their
 /// syntactic seat; binder positions (declaration names, parameter names,
@@ -652,6 +742,17 @@ fn references_and_comments(root: Node<'_>, source: &[u8], out: &mut EvidenceSink
     tk::walk_pruned(root, &["import_declaration"], &mut |n| match n.kind() {
         "comment" | "multiline_comment" => {
             tk::comment_evidence(n, source, &COMMENTS, out);
+        }
+        // An operator APPLICATION: `a == b` names `==`, which some type in
+        // the project may declare (`static func == (l:r:)`). The grammar
+        // leaves the operator an anonymous token on both sides — the
+        // declaration and the use — so the two join by the same spelling.
+        k if !k.is_empty()
+            && n.parent()
+                .is_some_and(|p| OPERATOR_EXPRESSIONS.contains(&p.kind()))
+            && !n.is_named() =>
+        {
+            out.reference_on(k, RefKind::Call, None, tk::span(n));
         }
         "simple_identifier" | "type_identifier" => {
             if let Some(parent) = n.parent() {
@@ -697,15 +798,26 @@ fn is_binder_seat(n: Node<'_>, parent: Node<'_>) -> bool {
         // Parameter external/internal names and argument labels.
         "parameter" => true,
         "value_argument" => parent.child_by_field_name("name") == Some(n),
-        // Property binding patterns (`let (a, b)` included). NOT
+        // Property and switch binding patterns (`let (a, b)` included). NOT
         // `property_declaration` itself: its `name` field IS a `pattern`, so
         // every bound name is already covered here, and the only other
         // identifier directly under it is the `value` — `let alpha = beta`
         // reads `beta`, which naming the parent kind used to throw away.
-        "pattern" | "value_binding_pattern" => true,
+        //
+        // A pattern that starts with `.` binds nothing: `case .space` USES an
+        // enum case by dot-shorthand, which is the pervasive form and the
+        // pool-side counterpart of never declaring the cases.
+        "pattern" => !dot_shorthand(n),
+        "value_binding_pattern" => true,
         "type_parameter" => true,
         _ => false,
     }
+}
+
+/// Is this identifier the member half of a leading-dot shorthand — `.space`
+/// in a pattern, where the type is inferred and only the name is written?
+fn dot_shorthand(n: Node<'_>) -> bool {
+    n.prev_sibling().is_some_and(|s| s.kind() == ".")
 }
 
 fn classify(n: Node<'_>, parent: Node<'_>) -> RefKind {

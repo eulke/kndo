@@ -1,0 +1,14 @@
+# operators: an operator is a name. Swift's grammar gives a `func +` no `name` field
+# and an `a + b` no named node, so an adapter that reads only named nodes drops the
+# declaration AND the use — silence in both directions, and no way to tell a used
+# operator from a dead one. Declared and referenced by the same spelling, they join.
+
+[[alive]]
+subject = "Sources/App/Vector.swift#Vector.+"
+category = "unused"
+why = "`sum` writes `a + b`, which is a use of this declaration and of nothing else"
+
+[[dead]]
+subject = "Sources/App/Vector.swift#Vector.*"
+category = "unused"
+why = "the same shape, declared and never written — the accusation the reference half must leave standing"

@@ -70,7 +70,7 @@
   },
   "health": {
     "implicated": 24,
-    "subjects": 3716,
+    "subjects": 3728,
     "by_category": [
       {
         "category": "unused",
@@ -82,7 +82,7 @@
         "name": "",
         "manifest": "",
         "implicated": 24,
-        "subjects": 3716
+        "subjects": 3728
       }
     ]
   },
@@ -6554,29 +6554,6 @@
       "lines": {
         "start": 36,
         "end": 36
-      },
-      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
-    },
-    {
-      "id": "kndo-98ca89330fb1",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "Tests/AuthenticationInterceptorTests.swift",
-        "selector": {
-          "owner": "TestCredential",
-          "name": "requiresRefresh"
-        },
-        "span": {
-          "start": 1553,
-          "end": 1578
-        }
-      },
-      "lines": {
-        "start": 38,
-        "end": 38
       },
       "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },

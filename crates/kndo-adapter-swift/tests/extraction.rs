@@ -385,3 +385,41 @@ let picked = held.`default`
     // A bare name is read from nothing, and says so.
     assert!(on.contains(&("beta", None)), "{on:?}");
 }
+
+#[test]
+fn an_operator_is_a_name_and_a_requirement_inherits_its_protocol() {
+    let e = ev(
+        "Sources/App/Ops.swift",
+        r#"
+protocol Shape {
+    func area() -> Int
+    var sides: Int { get }
+}
+
+public extension Shape {
+    func described() -> String { "" }
+}
+
+struct Point {
+    static func == (l: Point, r: Point) -> Bool { true }
+}
+
+let same = Point() == Point()
+"#,
+    );
+    // The grammar leaves an operator anonymous on BOTH sides, so declaration
+    // and use join by the same spelling — and without the declaration the
+    // whole `func` was dropped.
+    assert_eq!(declaration_named(&e, "==").kind, SymbolKind::Method);
+    let calls: Vec<&str> = e.references.iter().map(|r| r.name.as_str()).collect();
+    assert!(calls.contains(&"=="), "{calls:?}");
+    // A protocol requirement is exactly as visible as its protocol: there is
+    // nothing narrower for it to be, and `Inherited` says so instead of
+    // guessing the module default.
+    assert_eq!(declaration_named(&e, "area").reach, Reach::Inherited);
+    // Its PROPERTY requirement is its own node kind — one this adapter used to
+    // walk past entirely.
+    assert_eq!(declaration_named(&e, "sides").reach, Reach::Inherited);
+    // A `public extension` hands its own modifier down.
+    assert_eq!(declaration_named(&e, "described").reach, Reach::Exported);
+}

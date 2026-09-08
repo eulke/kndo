@@ -2142,3 +2142,46 @@ and it needs a kind filter on `Trigger::MemberOf` (the synthesis reads stored
 properties, not methods) that the contract does not have. Seven findings is not
 a contract change; it is a measured entry, and the rule lands if a bigger
 population appears.
+
+### An operator is a name, and a requirement is as visible as its protocol (2026-09-08)
+
+| repo | before | after | what moved |
+|---|---|---|---|
+| Alamofire | 468 | 467 | −1 `internal-only` |
+| vapor | 180 | 180 | −1 `internal-only`, +1 `unused` |
+| every other repository | — | — | byte-identical |
+
+Four gaps closed, and the corpus barely moves — which is the point of measuring
+them rather than assuming.
+
+**Operators: 0 findings, 10 declarations.** `static func == (l:r:)` has no
+`name` field at all — the operator is an anonymous token — so every such
+declaration was dropped whole (4 in Alamofire, 6 in vapor), and `a == b` spends
+no named node either, so the uses were invisible too. Silence on both sides
+nets to zero findings, which is exactly why this was never visible as a bug.
+Both halves land together: the declarations enter the graph, `describe`,
+`used-by`, the metrics and `duplicate`, and none is accused because their uses
+are now reported. The `operators` fixture pins both directions.
+
+**A protocol's PROPERTY requirement was never declared at all.**
+`protocol_property_declaration` is its own node kind and the adapter walked
+past it.
+
+**`Reach::Inherited` for what a member does not spell.** A protocol requirement
+is exactly as visible as its protocol — there is nothing narrower for it to be
+— and a `public extension` hands its own modifier down. Worth −2
+`internal-only`: `TestCredential.requiresRefresh` and
+`CustomServer.listeningAddress` were being advised down to a reach the
+compiler would reject.
+
+**And the +1 `unused` is a true positive that file-scoping unmasked.** A
+`private extension`'s members are the FILE's, not the module's. Vapor declares
+`static var space` twice, in `DotEnv.swift` (used there) and in
+`HTTPFields+Directive.swift` (used nowhere in the repository). Under a
+module-wide reach the first one's use kept the second alive; under the reach
+the source actually writes, the dead one is reported.
+
+Closing that reach also exposed a pre-existing hole and it is fixed here: `case
+.space` in a switch is a PATTERN, and every identifier under a pattern was
+treated as a binder — so enum-case dot-shorthand, the pervasive use form in
+Swift, produced no reference. A pattern that starts with `.` binds nothing.

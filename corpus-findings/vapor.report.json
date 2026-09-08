@@ -42,20 +42,20 @@
     ]
   },
   "health": {
-    "implicated": 37,
-    "subjects": 3152,
+    "implicated": 38,
+    "subjects": 3187,
     "by_category": [
       {
         "category": "unused",
-        "findings": 37
+        "findings": 38
       }
     ],
     "by_package": [
       {
         "name": "",
         "manifest": "",
-        "implicated": 37,
-        "subjects": 3152
+        "implicated": 38,
+        "subjects": 3187
       }
     ]
   },
@@ -375,6 +375,28 @@
       "lines": {
         "start": 109,
         "end": 121
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-bdb833db042b",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/Vapor/HTTP/Headers/HTTPFields+Directive.swift",
+        "selector": {
+          "name": "space"
+        },
+        "span": {
+          "start": 9233,
+          "end": 9282
+        }
+      },
+      "lines": {
+        "start": 264,
+        "end": 266
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -3840,29 +3862,6 @@
       "lines": {
         "start": 1447,
         "end": 1447
-      },
-      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
-    },
-    {
-      "id": "kndo-823844d5285c",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "Tests/VaporTests/ServerTests.swift",
-        "selector": {
-          "owner": "CustomServer",
-          "name": "listeningAddress"
-        },
-        "span": {
-          "start": 88750,
-          "end": 88907
-        }
-      },
-      "lines": {
-        "start": 1464,
-        "end": 1468
       },
       "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
