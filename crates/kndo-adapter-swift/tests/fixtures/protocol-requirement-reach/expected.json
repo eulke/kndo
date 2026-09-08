@@ -157,6 +157,29 @@
         "end": 17
       },
       "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
+    },
+    {
+      "id": "kndo-fd4ef9a768c2",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/App/Shape.swift",
+        "selector": {
+          "owner": "Cube",
+          "name": "volume"
+        },
+        "span": {
+          "start": 604,
+          "end": 631
+        }
+      },
+      "lines": {
+        "start": 23,
+        "end": 23
+      },
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this method"
     }
   ],
   "fixed": [],

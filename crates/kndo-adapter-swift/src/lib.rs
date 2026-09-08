@@ -47,13 +47,52 @@ pub struct SwiftAdapter {
     spec: ExtensionSpec,
 }
 
+/// What SWIFT ITSELF dispatches on, as data. The line the design draws: a
+/// language's own stdlib facts are the adapter's `dispatch_rules`, and a
+/// framework's are its pack's. `@main` is Swift; XCTest's `test*` collection,
+/// swift-testing's `@Test`, SwiftUI's `View` and UIKit's `@UIApplicationMain`
+/// are libraries you import, and their rules are `kndo:xctest`,
+/// `kndo:swift-testing`, `kndo:swiftui` and `kndo:uikit` (M8.e).
+fn dispatch_rules() -> Vec<kndo_contract::extension::DispatchRule> {
+    use kndo_contract::evidence::RootKind;
+    use kndo_contract::extension::{DispatchRule, Effect, Trigger};
+    use kndo_contract::vocab::Confidence;
+    vec![
+        // `@main` — the language's own entry attribute. SwiftPM resolves the
+        // attributed type's `static main()` as the executable's entry, so the
+        // type is what the toolchain names.
+        DispatchRule {
+            when: Trigger::Marker {
+                path: "main".into(),
+                arg: None,
+                target: Some(kndo_contract::evidence::SymbolKind::Type),
+            },
+            then: Effect::Root(RootKind::Production),
+            confidence: Confidence::Certain,
+        },
+        // `override` — invoked through the superclass, a call the source never
+        // spells. A member that answers a promise its type made is a WITNESS:
+        // alive while the type is, and of no colour, because nothing outside
+        // is ENTERED through it.
+        DispatchRule {
+            when: Trigger::Marker {
+                path: "override".into(),
+                arg: None,
+                target: None,
+            },
+            then: Effect::Witness,
+            confidence: Confidence::Certain,
+        },
+    ]
+}
+
 impl SwiftAdapter {
     pub fn new() -> Self {
         SwiftAdapter {
             // 4: the generated banner is reported, never concluded.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:swift",
-                12,
+                13,
                 &["swift"],
                 &["**/Package.swift"],
                 // Files in a module compile as one unit; cross-references are
@@ -95,6 +134,7 @@ impl SwiftAdapter {
                 FileRole::probable("**/*Test.swift", RootKind::Test),
                 FileRole::probable("**/*Tests.swift", RootKind::Test),
             ])
+            .dispatch(dispatch_rules())
             .build(),
         }
     }

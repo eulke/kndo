@@ -1,9 +1,7 @@
 use kndo_adapter_swift::SwiftAdapter;
 use kndo_contract::evidence::{
-    Attachment, FileEvidence, ImportShape, ImportTarget, MarkerTarget, Reach, RefKind, RootTarget,
-    SymbolKind,
+    Attachment, FileEvidence, ImportShape, ImportTarget, MarkerTarget, Reach, RefKind, SymbolKind,
 };
-use kndo_contract::vocab::Confidence;
 use kndo_testkit::{declaration_named, extract_evidence};
 
 fn ev(path: &str, src: &str) -> FileEvidence {
@@ -102,7 +100,7 @@ fn initializers_deinit_and_enum_cases_are_never_declared() {
 }
 
 #[test]
-fn dispatch_the_source_never_names_roots_probable_and_possible() {
+fn dispatch_the_source_never_names_is_reported_not_concluded() {
     let e = ev(
         "Sources/App/D.swift",
         "class Impl: Base {\n\
@@ -112,33 +110,32 @@ fn dispatch_the_source_never_names_roots_probable_and_possible() {
          }\n\
          class Plain {\n    func ordinary() {}\n}\n",
     );
-    let rooted: Vec<(usize, Confidence)> = e
-        .roots
-        .iter()
-        .filter_map(|r| match &r.target {
-            RootTarget::Declaration(id) => Some((id.index(), r.confidence)),
-            _ => None,
-        })
-        .collect();
-    let ix = |name: &str| {
-        e.declarations_with_ids()
+    assert!(
+        e.roots.is_empty(),
+        "the extractor concludes no root of its own: {:#?}",
+        e.roots
+    );
+    // `override` is stated as the modifier it is, and one rule reads it. What
+    // used to sit beside it — a blanket `Possible` keep on every non-private
+    // method of a type that conforms to ANYTHING — is gone: no protocol is
+    // named, no requirement is named, and a keep that names nothing is not a
+    // rule but a silence with a confidence attached. `Trigger::ExternalWitness`
+    // is the shape that says this honestly, and it needs the protocol's name.
+    let marked = |name: &str| {
+        let ix = e
+            .declarations_with_ids()
             .find(|(_, d)| d.name == name)
             .map(|(id, _)| id.index())
-            .unwrap()
+            .unwrap();
+        e.markers.iter().any(|m| {
+            m.path == "override"
+                && matches!(m.on, MarkerTarget::Declaration(id) if id.index() == ix)
+        })
     };
-    assert!(
-        rooted.contains(&(ix("refresh"), Confidence::Probable)),
-        "override"
-    );
-    assert!(
-        rooted.contains(&(ix("maybeWitness"), Confidence::Possible)),
-        "a conforming type's non-private methods may witness external protocols"
-    );
-    assert!(rooted.iter().all(|(i, _)| *i != ix("neverWitness")));
-    assert!(
-        rooted.iter().all(|(i, _)| *i != ix("ordinary")),
-        "no conformances, no witness keep"
-    );
+    assert!(marked("refresh"));
+    for quiet in ["maybeWitness", "neverWitness", "ordinary"] {
+        assert!(!marked(quiet), "{quiet} carries no modifier and no marker");
+    }
 }
 
 #[test]

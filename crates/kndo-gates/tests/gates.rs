@@ -867,19 +867,42 @@ fn builtin_conduct_proofs() {
     assert_eq!(
         gone,
         [
+            "internal-only DetailViewController.refresh",
             "internal-only DetailViewController.request",
             "internal-only MasterViewController.detailViewController",
             "internal-only MasterViewController.titleImageView",
-            "unused ExtensionDelegate",
-            "unused HostingController",
+            "unused File { path: ProjectPath(\"watchOS Example/watchOS Example WatchKit Extension/ContentView.swift\") }",
+            "unused File { path: ProjectPath(\"watchOS Example/watchOS Example WatchKit Extension/ExtensionDelegate.swift\") }",
+            "unused File { path: ProjectPath(\"watchOS Example/watchOS Example WatchKit Extension/HostingController.swift\") }",
             "unused MasterViewController",
         ],
         "the artifacts' names, and only those, stop being dead:\nbefore {before:#?}\nafter {after:#?}"
     );
-    assert!(
-        after.iter().all(|l| before.contains(l)),
-        "a root can only keep something alive, never accuse: {after:#?}"
-    );
+    // A root can only keep something alive, never accuse — but a FILE-level
+    // finding subsumes its members, so clearing the file surfaces declarations
+    // that were dead all along and had nowhere to be reported. The invariant
+    // holds at that level: nothing appears whose own file was not already
+    // accused whole.
+    let accused_whole: Vec<&str> = before
+        .iter()
+        .filter_map(|l| l.strip_prefix("unused File { path: ProjectPath(\""))
+        .filter_map(|l| l.split('"').next())
+        .collect();
+    for label_of in &after {
+        let subsumed = with
+            .findings
+            .iter()
+            .find(|f| &label(f) == label_of)
+            .is_some_and(|f| {
+                accused_whole
+                    .iter()
+                    .any(|p| f.subject.path().as_str() == *p)
+            });
+        assert!(
+            before.contains(label_of) || subsumed,
+            "a root can only keep something alive, never accuse: {label_of}"
+        );
+    }
     assert!(
         after.contains(&"unused ContentView_Previews".to_string()),
         "unrelated dead code stays reported: {after:#?}"
@@ -2179,7 +2202,6 @@ const ROOTS_STILL_IN_THE_EXTRACTOR: &[(&str, &str)] = &[
         "the module's entries (go 3/3 left it named)",
     ),
     ("kndo-adapter-rust", "the language rules of its row"),
-    ("kndo-adapter-swift", "the language rules of its row"),
     // A `#!` line is FILE CONTENT, not a convention: the file says it is run.
     ("kndo-adapter-ts", "the js-ts row"),
 ];

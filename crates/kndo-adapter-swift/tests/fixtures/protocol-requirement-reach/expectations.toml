@@ -13,9 +13,7 @@ subject = "Sources/App/Shape.swift#Square.perimeter"
 category = "internal-only"
 why = "nothing overrides it and nothing outside this file names it — the advice the relation must NOT suppress"
 
-[[known_gap]]
+[[dead]]
 subject = "Sources/App/Shape.swift#Cube.volume"
-expect = "dead"
 category = "internal-only"
-why = "a conforming type's OTHER members promise nothing and should be advised, but every non-private method of a type that declares any conformance still carries the `Possible` root swift roots by hand — the heuristic the relation stream replaces"
-fix = "M8.c swift: the conformer-methods Possible root retires for witnesses derived from relations, with the xctest/swiftui packs stating the requirements of bases outside the project"
+why = "a conforming type's OTHER members promise nothing and are advisable like any other. This was a known gap while every non-private method of a type declaring ANY conformance carried a blanket `Possible` root; that root named no protocol and no requirement, so it was a silence with a confidence attached rather than a rule, and it is gone. What replaces it is `Trigger::ExternalWitness`, which says the same thing honestly because it has to name the base"

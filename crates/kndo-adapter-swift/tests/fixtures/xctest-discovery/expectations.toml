@@ -1,0 +1,31 @@
+# xctest-discovery: what the adapter must NOT know, and the debt that leaves.
+#
+# XCTest collects `test*` methods of an `XCTestCase` subclass by name. That is a
+# LIBRARY's dispatch — you import XCTest, and a package that does not is not
+# collected by it — so it is `kndo:xctest`'s rule to state, gated by the
+# dependency that proves the framework is there. The adapter used to root
+# `test*` in any `Tests/` target by hand, which made the answer right for the
+# common case and unstateable everywhere else.
+#
+# Until the pack lands, every XCTest method in the corpus is accused: 965 of
+# Alamofire's findings and 540 of vapor's. This fixture is that debt at one
+# file, so it fails the day the pack closes it rather than being rediscovered.
+
+[[known_gap]]
+subject = "Tests/AppTests/CalcTests.swift#CalcTests.testAdd"
+expect = "alive"
+category = "unused"
+why = "XCTest's runner names this method and no source line does — a fact about the framework, not about Swift"
+fix = "M8.e kndo:xctest"
+
+[[known_gap]]
+subject = "Tests/AppTests/CalcTests.swift#CalcTests"
+expect = "alive"
+category = "unused"
+why = "the class the runner instantiates, alive for the same reason and by the same pack"
+fix = "M8.e kndo:xctest"
+
+[[dead]]
+subject = "Tests/AppTests/CalcTests.swift#CalcTests.helper"
+category = "unused"
+why = "the control that must stay dead once the pack lands: private, named by nothing, and no runner collects it — a pack that rooted this too would be a blanket keep wearing a framework's name"

@@ -1,0 +1,206 @@
+{
+  "run": {
+    "schema": "kndo-v2/m6",
+    "mode": "full",
+    "files_discovered": 3,
+    "files_claimed": 3,
+    "extensions": [
+      {
+        "id": "kndo:swift",
+        "files": 3,
+        "published_surface": "exports",
+        "import_cycles": "tolerated",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "underivable",
+        "ladder": [
+          {
+            "rung": "owner",
+            "word": "private"
+          },
+          {
+            "rung": "file",
+            "word": "fileprivate"
+          },
+          {
+            "rung": "unit",
+            "word": "internal"
+          },
+          {
+            "rung": "exported",
+            "word": "public"
+          }
+        ]
+      }
+    ]
+  },
+  "health": {
+    "implicated": 3,
+    "subjects": 8,
+    "by_category": [
+      {
+        "category": "unused",
+        "findings": 3
+      }
+    ],
+    "by_package": [
+      {
+        "name": "",
+        "manifest": "",
+        "implicated": 3,
+        "subjects": 8
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "kndo-360251405698",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/AppTests/CalcTests.swift",
+        "selector": {
+          "owner": "CalcTests",
+          "name": "helper"
+        },
+        "span": {
+          "start": 148,
+          "end": 182
+        }
+      },
+      "lines": {
+        "start": 9,
+        "end": 9
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-64e06b644f05",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/AppTests/CalcTests.swift",
+        "selector": {
+          "name": "CalcTests"
+        },
+        "span": {
+          "start": 36,
+          "end": 184
+        }
+      },
+      "lines": {
+        "start": 4,
+        "end": 10
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-9bd1321dcba0",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/AppTests/CalcTests.swift",
+        "selector": {
+          "owner": "CalcTests",
+          "name": "testAdd"
+        },
+        "span": {
+          "start": 76,
+          "end": 142
+        }
+      },
+      "lines": {
+        "start": 5,
+        "end": 7
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-42a7374078e7",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "Sources/App/Calc.swift"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    }
+  ],
+  "fixed": [],
+  "baselined": 0,
+  "abstained": [
+    {
+      "category": "unused",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 1
+        }
+      }
+    },
+    {
+      "category": "test-only",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 1
+        }
+      }
+    },
+    {
+      "category": "undeclared",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 1
+        }
+      }
+    },
+    {
+      "category": "crap",
+      "reason": "no-coverage-ingested",
+      "scope": "whole-run"
+    }
+  ],
+  "suppressed": {
+    "total": 0,
+    "by_category": []
+  },
+  "plugins": [
+    {
+      "coordinate": "kndo:coverage-lcov",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-cobertura",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-jacoco",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-go",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    }
+  ],
+  "diagnostics": []
+}

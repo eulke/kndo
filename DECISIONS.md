@@ -6493,3 +6493,55 @@ commit owed.
 `kndo:java` 19 → 20 and `kndo:kotlin` 14 → 15: the same source, different
 evidence (a marker where a root used to be, and modifiers reported at all).
 Neither the graph semantics nor the fingerprint moved.
+
+## 2026-09-08 — swift: a framework's dispatch is not the language's, and the bill for saying so
+
+Swift's row leaves `ROOTS_STILL_IN_THE_EXTRACTOR`. Four hand-written roots are
+gone, and the corpus paid **+1553 findings** for it: Alamofire 446 → 1448,
+vapor 178 → 729. Every other repository is byte-identical.
+
+**1505 of those 1553 are XCTest methods inside `Tests/` trees.** The adapter
+rooted `test*` in any `Tests/` target by hand, `Certain`. The design's own
+sentence decides where that belongs: "the stdlib packs of each language are not
+packs — they are the adapter's `dispatch_rules`, because they are facts about
+the LANGUAGE." XCTest is not Swift. It is a library you import, a package that
+does not import it is not collected by it, and its collection rule is
+`kndo:xctest`'s, gated by the dependency that proves it is there. Same for
+`@Test` and `kndo:swift-testing`.
+
+So the number is not a regression discovered; it is a debt that was being paid
+by a convention in an extractor and is now on the books with its owner named.
+`xctest-discovery` pins it as two `[[known_gap]]` entries plus a control that
+must stay dead once the pack lands — it fails the day the pack closes it.
+
+**The blanket conformer keep is the deletion worth arguing for on its own.**
+Every non-private method of a type declaring ANY conformance carried a
+`Possible` root: no protocol named, no requirement named. That is not a rule,
+it is a silence with a confidence attached, and the vocabulary already has the
+honest version — `Trigger::ExternalWitness` has to name the base and its
+members. `protocol-requirement-reach` had written this down as a
+`[[known_gap]]` on `Cube.volume`; the gap closed the moment the keep went, and
+the entry is promoted here.
+
+**`@main` and `override` moved without moving anything.** `@main` is Swift's
+own entry attribute, so it stays an adapter rule — a `Trigger::Marker` on a
+type, production, Certain. `override` is a witness: invoked through the
+superclass, alive while its type is, of no colour. The extractor already
+reported both as markers; only the roots beside them were the problem, which is
+the whole shape of this milestone in one adapter.
+
+**What the deletion exposed.** `FileCx` and its `in_test_target` field,
+`owner_conforms` threaded through four functions, `scoped_or_wider`,
+`has_modifier`, `has_attribute`, `has_conformances` — all had exactly one
+reader, and it was a root. The conformance FACT survives where it belongs: the
+relation stream, which a rule reads.
+
+**The apple-bundles proof changed shape and got more honest.** Without the
+plugins the watchOS files are accused WHOLE — nothing reaches them once the
+conformer keep is gone. With the plugins the storyboard and plist roots land,
+the files become reachable, and the members that were dead all along behind the
+file-level finding surface. The invariant "a root can only keep something
+alive, never accuse" is restated at the level where it is true: nothing appears
+whose own file was not already accused whole.
+
+`kndo:swift` 12 → 13. Neither the graph semantics nor the fingerprint moved.

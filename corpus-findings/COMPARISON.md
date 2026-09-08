@@ -2619,3 +2619,48 @@ and the two interfaces they implemented are gone.
 alongside `deep-import`, and only `deep-import` was written down. Same cause:
 an alias whose target is a bare specifier's subpath no longer resolves through
 the directory mirror. The gate caught the omission, which is what it is for.
+
+### swift: the framework's dispatch leaves the language's adapter (2026-09-08)
+
+The largest delta this milestone, and it is a debt made visible rather than a
+regression discovered.
+
+| repo | before | after | delta |
+|---|---|---|---|
+| Alamofire | 446 | 1448 | +1002 (0 withdrawn) |
+| vapor | 178 | 729 | +551 (0 withdrawn) |
+| every other repository | — | — | byte-identical |
+
+**965 of Alamofire's 1002 and 540 of vapor's 551 are inside `Tests/` trees.**
+They are XCTest methods, and the adapter used to root them by hand: `test*` in
+a `Tests/` target, `Certain`. XCTest is a LIBRARY — you import it, and a
+package that does not import it is not collected by it — so under the design's
+own sentence ("the stdlib packs of each language are not packs: they are the
+adapter's `dispatch_rules`, because they are facts about the language") its
+collection rule belongs to `kndo:xctest`, and `@Test`'s to
+`kndo:swift-testing`. Both are M8.e.
+
+The remaining ~37 and ~11 are the other two deletions:
+
+- **The conformer-methods keep.** Every non-private method of a type that
+  declared ANY conformance carried a `Possible` root. It named no protocol and
+  no requirement — a silence with a confidence attached rather than a rule. The
+  `protocol-requirement-reach` fixture had predicted this exactly: its
+  `[[known_gap]]` on `Cube.volume` closed the moment the keep went, and is
+  promoted to `[[dead]]` in this commit.
+- **`@main` and `override` became rules instead of roots**, changing nothing on
+  their own — `@main` is still a production root (Certain), and `override` is
+  now a witness, which is what an override is.
+
+**The apple-bundles proof changed shape, and the new shape is the more honest
+one.** Without the plugins, the watchOS files are now accused WHOLE rather than
+by their types: nothing reaches them at all once the blanket conformer keep is
+gone. With the plugins, the storyboard and plist roots land and the files
+become reachable, which surfaces the members that were dead all along behind
+the file-level finding. The proof's invariant is restated where it holds:
+nothing appears in the `after` set whose own file was not already accused
+whole.
+
+`xctest-discovery` is the debt as a fixture — two `[[known_gap]]` entries owed
+to `kndo:xctest` and one control that must stay dead once the pack lands. It
+fails the day the pack closes it.

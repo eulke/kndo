@@ -8,8 +8,7 @@
 //! name); their bodies still contribute references.
 
 use kndo_contract::evidence::{
-    Attachment, DeclarationId, EvidenceSink, MarkerTarget, Reach, RefKind, RelationKind, RootKind,
-    RootTarget, SymbolKind,
+    Attachment, DeclarationId, EvidenceSink, MarkerTarget, Reach, RefKind, RelationKind, SymbolKind,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use kndo_toolkit as tk;
@@ -100,12 +99,11 @@ pub fn extract(
     // attach its members to Foo's id (a cross-file extension's members stay
     // ownerless — the method pool is name-global either way).
     let mut type_ids = TypeIds::new();
-    let cx = FileCx { in_test_target };
     for item in &children {
         if matches!(item.kind(), "class_declaration" | "protocol_declaration")
             && !is_extension(*item, source)
         {
-            top_level_item(*item, source, &cx, &mut type_ids, out);
+            top_level_item(*item, source, &mut type_ids, out);
         }
     }
     for item in children {
@@ -114,7 +112,7 @@ pub fn extract(
         {
             continue;
         }
-        top_level_item(item, source, &cx, &mut type_ids, out);
+        top_level_item(item, source, &mut type_ids, out);
     }
 
     references_and_comments(root, source, out);
@@ -137,27 +135,13 @@ fn is_extension(item: Node<'_>, source: &[u8]) -> bool {
             .is_some_and(|k| tk::text(k, source) == "extension")
 }
 
-/// Per-file facts every declaration handler needs.
-#[derive(Clone, Copy)]
-struct FileCx {
-    /// Under `Tests/`: the toolchain's own runners (XCTest by `test*` name,
-    /// swift-testing by `@Test`) dispatch on declarations no source line names.
-    in_test_target: bool,
-}
-
-fn top_level_item(
-    item: Node<'_>,
-    source: &[u8],
-    cx: &FileCx,
-    type_ids: &mut TypeIds,
-    out: &mut EvidenceSink,
-) {
+fn top_level_item(item: Node<'_>, source: &[u8], type_ids: &mut TypeIds, out: &mut EvidenceSink) {
     match item.kind() {
         "import_declaration" => import(item, source, out),
-        "class_declaration" => class_like(item, source, cx, type_ids, out),
-        "protocol_declaration" => protocol(item, source, cx, type_ids, out),
+        "class_declaration" => class_like(item, source, type_ids, out),
+        "protocol_declaration" => protocol(item, source, type_ids, out),
         "function_declaration" => {
-            function(item, source, None, false, None, cx, out);
+            function(item, source, None, None, out);
         }
         "property_declaration" => property(item, source, None, None, out),
         "typealias_declaration" => {
@@ -202,13 +186,7 @@ fn import(item: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
 /// class / struct / enum / actor / extension — one grammar node, told apart by
 /// `declaration_kind`. An extension declares nothing; everything else is a
 /// Type. Bodies dispatch members with the owner's bare name.
-fn class_like(
-    item: Node<'_>,
-    source: &[u8],
-    cx: &FileCx,
-    type_ids: &mut TypeIds,
-    out: &mut EvidenceSink,
-) {
+fn class_like(item: Node<'_>, source: &[u8], type_ids: &mut TypeIds, out: &mut EvidenceSink) {
     let Some(kind_node) = item.child_by_field_name("declaration_kind") else {
         return;
     };
@@ -231,8 +209,6 @@ fn class_like(
     } else {
         SmolStr::new(bare(tk::text(name_node, source)))
     };
-
-    let conforms = has_conformances(item);
     let owner_id = if decl_kind == "extension" {
         // A same-file extension attaches its members to the extended type.
         let existing = type_ids.get(&name).copied();
@@ -252,15 +228,6 @@ fn class_like(
         );
         markers_of(item, source, id, out);
         relations_of(item, source, id, out);
-        // `@main` — SwiftPM resolves the attributed type's `static main()` as
-        // the executable entry; the type itself is the anchor we can name.
-        if has_attribute(item, source, "main") {
-            out.root(
-                RootTarget::Declaration(id),
-                RootKind::Production,
-                Confidence::Certain,
-            );
-        }
         type_ids.insert(name.clone(), id);
         Some(id)
     };
@@ -273,7 +240,6 @@ fn class_like(
         let owner = Owner {
             name: &name,
             id: owner_id,
-            conforms,
             // `public extension Foo { func bar() }` makes `bar` public; the
             // engine caps the effective reach by Foo's own, so stating the
             // extension's modifier here is both simpler and correct.
@@ -282,18 +248,12 @@ fn class_like(
                 .flatten(),
         };
         for m in members {
-            member(m, source, &owner, cx, type_ids, out);
+            member(m, source, &owner, type_ids, out);
         }
     }
 }
 
-fn protocol(
-    item: Node<'_>,
-    source: &[u8],
-    cx: &FileCx,
-    type_ids: &mut TypeIds,
-    out: &mut EvidenceSink,
-) {
+fn protocol(item: Node<'_>, source: &[u8], type_ids: &mut TypeIds, out: &mut EvidenceSink) {
     let Some(name_node) = item.child_by_field_name("name") else {
         return;
     };
@@ -313,22 +273,29 @@ fn protocol(
         let owner = Owner {
             name: &name,
             id: Some(owner_id),
-            conforms: false,
             inherits: Some(Reach::Inherited),
         };
         for m in members {
-            member(m, source, &owner, cx, type_ids, out);
+            member(m, source, &owner, type_ids, out);
         }
     }
 }
 
 /// The enclosing type as its members see it: the bare name, the id when it
 /// was declared in THIS file (a cross-file extension's members stay
+/// The operator a `func` declares, where the grammar leaves it an anonymous
+/// token: the child right after `func`, when nothing named took the name seat.
+fn operator_name<'a>(item: Node<'_>, source: &'a [u8]) -> Option<&'a str> {
+    let mut c = item.walk();
+    let children: Vec<Node<'_>> = item.children(&mut c).collect();
+    let at = children.iter().position(|n| n.kind() == "func")?;
+    let token = children.get(at + 1)?;
+    (!token.is_named() && token.kind() != "(").then(|| tk::text(*token, source))
+}
 /// ownerless), and whether it declares conformances.
 struct Owner<'a> {
     name: &'a str,
     id: Option<kndo_contract::evidence::DeclarationId>,
-    conforms: bool,
     /// What a member with NO visibility modifier of its own reaches. A
     /// protocol REQUIREMENT is exactly as visible as its protocol — there is
     /// no narrower thing for it to be — and `Inherited` is that sentence; a
@@ -341,21 +308,12 @@ fn member(
     m: Node<'_>,
     source: &[u8],
     owner: &Owner<'_>,
-    cx: &FileCx,
     type_ids: &mut TypeIds,
     out: &mut EvidenceSink,
 ) {
     match m.kind() {
         "function_declaration" | "protocol_function_declaration" => {
-            let id = function(
-                m,
-                source,
-                Some(owner.name),
-                owner.conforms,
-                owner.inherits.clone(),
-                cx,
-                out,
-            );
+            let id = function(m, source, Some(owner.name), owner.inherits.clone(), out);
             if let (Some(id), Some(owner)) = (id, owner.id) {
                 out.member_of(id, owner);
             }
@@ -381,8 +339,8 @@ fn member(
                 out.member_of(id, owner);
             }
         }
-        "class_declaration" => class_like(m, source, cx, type_ids, out),
-        "protocol_declaration" => protocol(m, source, cx, type_ids, out),
+        "class_declaration" => class_like(m, source, type_ids, out),
+        "protocol_declaration" => protocol(m, source, type_ids, out),
         "typealias_declaration" => {
             if let Some(n) = m.child_by_field_name("name") {
                 let id = out.declaration(
@@ -406,9 +364,7 @@ fn function(
     item: Node<'_>,
     source: &[u8],
     owner: Option<&str>,
-    owner_conforms: bool,
     inherits: Option<Reach>,
-    cx: &FileCx,
     out: &mut EvidenceSink,
 ) -> Option<kndo_contract::evidence::DeclarationId> {
     let reach = member_reach(item, source, inherits);
@@ -425,43 +381,8 @@ fn function(
     } else {
         SymbolKind::Function
     };
-    let scoped_or_wider = !matches!(reach, Reach::Owner | Reach::File);
     let id = out.declaration(bare(fn_name), kind, tk::span(item), reach);
     markers_of(item, source, id, out);
-
-    // The toolchain's own test runners dispatch on declarations no source line
-    // names: XCTest finds `test*` methods by name, swift-testing anything
-    // carrying `@Test`. Both are toolchain-enforced in a Tests/ target —
-    // Certain, the same tier as the layout root itself.
-    if cx.in_test_target && (fn_name.starts_with("test") || has_attribute(item, source, "Test")) {
-        out.root(
-            RootTarget::Declaration(id),
-            RootKind::Test,
-            Confidence::Certain,
-        );
-    }
-
-    // `override`: invoked through the superclass — the source never names the
-    // call. Probable, the dispatch tier.
-    if has_modifier(item, source, "override") {
-        out.root(
-            RootTarget::Declaration(id),
-            RootKind::Production,
-            Confidence::Probable,
-        );
-    }
-    // A conforming type's non-private methods may witness protocol
-    // requirements invoked entirely outside the repo (Codable synthesis,
-    // delegate protocols) — requirements of external protocols are not
-    // statically enumerable, so the keep is Possible: degrading toward
-    // silence on exactly the fact we cannot enumerate.
-    if owner_conforms && scoped_or_wider {
-        out.root(
-            RootTarget::Declaration(id),
-            RootKind::Production,
-            Confidence::Possible,
-        );
-    }
 
     if let Some(body) = item.child_by_field_name("body") {
         out.metrics(id, tk::function_metrics(item, &METRICS, source));
@@ -540,66 +461,6 @@ fn member_reach(item: Node<'_>, source: &[u8], inherits: Option<Reach>) -> Reach
     declared_reach(item, source)
         .or(inherits)
         .unwrap_or(Reach::Unit { up: 0 })
-}
-
-/// What the source SPELLS, or `None` where it spells nothing.
-fn declared_reach(item: Node<'_>, source: &[u8]) -> Option<Reach> {
-    let modifiers = tk::child_of_kind(item, "modifiers")?;
-    let mut c = modifiers.walk();
-    for m in modifiers.named_children(&mut c) {
-        if m.kind() == "visibility_modifier" {
-            return Some(
-                match tk::text(m, source)
-                    .split('(')
-                    .next()
-                    .unwrap_or_default()
-                    .trim()
-                {
-                    "fileprivate" => Reach::File,
-                    "private" => {
-                        if item.parent().is_none_or(|p| p.kind() == "source_file") {
-                            Reach::File
-                        } else {
-                            Reach::Owner
-                        }
-                    }
-                    "package" => Reach::Unit { up: 1 },
-                    "public" | "open" => Reach::Exported,
-                    // `internal`, or a form we do not know — the default rung.
-                    _ => Reach::Unit { up: 0 },
-                },
-            );
-        }
-    }
-    None
-}
-
-fn has_modifier(item: Node<'_>, source: &[u8], word: &str) -> bool {
-    let Some(modifiers) = tk::child_of_kind(item, "modifiers") else {
-        return false;
-    };
-    let mut found = false;
-    tk::walk(modifiers, &mut |n| {
-        if n.child_count() == 0 && tk::text(n, source) == word {
-            found = true;
-        }
-    });
-    found
-}
-
-fn has_attribute(item: Node<'_>, source: &[u8], name: &str) -> bool {
-    let Some(modifiers) = tk::child_of_kind(item, "modifiers") else {
-        return false;
-    };
-    let mut c = modifiers.walk();
-    modifiers
-        .named_children(&mut c)
-        .filter(|n| n.kind() == "attribute")
-        .any(|attr| {
-            let mut ac = attr.walk();
-            attr.named_children(&mut ac)
-                .any(|n| n.kind() == "user_type" && tk::text(n, source) == name)
-        })
 }
 
 /// Every attribute a declaration carries, as a MARKER: its path as written
@@ -689,19 +550,36 @@ fn relations_of(item: Node<'_>, source: &[u8], id: DeclarationId, out: &mut Evid
 }
 
 /// The operator a `func` declares, where the grammar leaves it an anonymous
-/// token: the child right after `func`, when nothing named took the name seat.
-fn operator_name<'a>(item: Node<'_>, source: &'a [u8]) -> Option<&'a str> {
-    let mut c = item.walk();
-    let children: Vec<Node<'_>> = item.children(&mut c).collect();
-    let at = children.iter().position(|n| n.kind() == "func")?;
-    let token = children.get(at + 1)?;
-    (!token.is_named() && token.kind() != "(").then(|| tk::text(*token, source))
-}
-
-fn has_conformances(item: Node<'_>) -> bool {
-    let mut c = item.walk();
-    item.named_children(&mut c)
-        .any(|ch| ch.kind() == "inheritance_specifier")
+/// What the source SPELLS, or `None` where it spells nothing.
+fn declared_reach(item: Node<'_>, source: &[u8]) -> Option<Reach> {
+    let modifiers = tk::child_of_kind(item, "modifiers")?;
+    let mut c = modifiers.walk();
+    for m in modifiers.named_children(&mut c) {
+        if m.kind() == "visibility_modifier" {
+            return Some(
+                match tk::text(m, source)
+                    .split('(')
+                    .next()
+                    .unwrap_or_default()
+                    .trim()
+                {
+                    "fileprivate" => Reach::File,
+                    "private" => {
+                        if item.parent().is_none_or(|p| p.kind() == "source_file") {
+                            Reach::File
+                        } else {
+                            Reach::Owner
+                        }
+                    }
+                    "package" => Reach::Unit { up: 1 },
+                    "public" | "open" => Reach::Exported,
+                    // `internal`, or a form we do not know — the default rung.
+                    _ => Reach::Unit { up: 0 },
+                },
+            );
+        }
+    }
+    None
 }
 
 // ---------------------------------------------------------------- references
