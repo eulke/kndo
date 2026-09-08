@@ -965,6 +965,7 @@ dependencies = [
  "kndo-core",
  "kndo-coverage",
  "kndo-host-wasm",
+ "kndo-rules",
  "kndo-testkit",
 ]
 
@@ -1179,6 +1180,13 @@ dependencies = [
  "thiserror 2.0.20",
  "wasmtime",
  "wit-component 0.219.2",
+]
+
+[[package]]
+name = "kndo-rules"
+version = "0.0.0"
+dependencies = [
+ "kndo-contract",
 ]
 
 [[package]]

@@ -5636,3 +5636,56 @@ call), and the compat matrix drives the pinned components to a real verdict.
 
 `anchor_manifest_roots` loses two parameters it no longer needs; nothing in the
 engine consults an adapter about a manifest except through the one door.
+
+## 2026-09-08 — a rule pack is an extension that claims nothing and declares rules
+
+What a FRAMEWORK means is no language's to own, and it is not core's either.
+A rule pack is an `Extension` with no suffixes and nothing in its spec but
+`DispatchRule`s; `dispatch_files` applies every pack's rules beside the
+claiming adapter's, in composition order, for every file.
+
+No activation, deliberately. `Activation` exists for conduct extensions, which
+RUN; a declarative rule is gated by its own trigger — a `@RestController` no
+file carries fires nowhere — so a pack needs no manifest to read, no cache key
+to widen, and it works unchanged in the surgical patch path.
+
+Two packs ship, each with its corpus number in its own module doc:
+`kndo:spring` (stereotypes root, handlers witness — 6 findings on Exposed) and
+`kndo:swiftui` (the runtime's entry protocols root, their requirements witness
+— 2 on Alamofire, which stay unreachable until swift emits relations).
+
+## 2026-09-08 — measured: eight of the ten planned packs have no corpus population
+
+The corpus was instrumented for all ten before any was written. Whole
+addressable population: ~16 findings — 13 Spring, 2 SwiftUI, 1 JUnit. `testng`,
+`lombok`, `rstest`, `pytest`, `storybook` and `vitest` are **zero** on the
+pinned nine repositories. They are not written, and this is the entry that says
+so: the corpus covers languages, not frameworks, and shipping a pack against
+zero would be a rule whose first run was against our own fixtures.
+
+## 2026-09-08 — the rule-pack machinery was unreachable for six of nine languages
+
+Of the nine adapters, only `kndo:java` emits markers AND relations; rust and go
+emit markers alone; kotlin, swift, python and js-ts emitted NEITHER. The
+`DispatchRule` vocabulary landed in M8.a with one producer, which is why the
+packs fired on nothing when first composed.
+
+`kndo:kotlin` moves to 14 and closes its half: annotations as markers,
+supertypes as relations (a constructor call is the superclass, a bare name an
+interface — the compiler's own rule and the only signal one file carries), and
+the receiver a member access was read from.
+
+Measured on Exposed, 972 → 966: −6 `unused` (spring), −4 `internal-only`
+(`protected` members of abstract bases whose subtypes are in other files — the
+heirs pool is real now), +3 `untested` (the beans are production-reachable and
+no test reaches them), and **+2 `internal-only` that are wrong**, on
+`SqlTypeProvider`'s two members, decomposed in `corpus-findings/COMPARISON.md`
+with the minimal reproduction that does NOT reproduce them. Shipped with the
+defect named and counted rather than held: the net is six true silences and
+four withdrawn advisories against two wrong ones, and the wrong two now have a
+written account for whoever fixes `internal_only`'s member branch.
+
+One conformance fixture is added and none moved: `spring-beans`
+(`kndo-adapter-kotlin`) pins a `@RestController` alive with its `@GetMapping`
+handler and an identical unannotated class dead beside it — the trigger is the
+gate, and a pack silences only what it means.

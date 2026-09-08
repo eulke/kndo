@@ -33,8 +33,9 @@ pub struct KotlinAdapter {
 impl KotlinAdapter {
     pub fn new() -> Self {
         KotlinAdapter {
-            // 7: the generated banner is reported, never concluded.
-            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:kotlin", 13, &["kt"])
+            // 14: the annotations a declaration carries and the supertypes it
+            // promises are evidence; what one MEANS is a dispatch rule's.
+            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:kotlin", 14, &["kt"])
                 // The conventions as data; the library-mode root's replacement
                 // is the engine's published surface, read from the unit.
                 .file_roles(&[
@@ -51,6 +52,15 @@ impl KotlinAdapter {
                 // are the same namespace, and the test set's build holds the
                 // main set it compiles against.
                 .namespace_span(kndo_contract::extension::NamespaceSpan::Compilation)
+                // What this adapter WRITES, so an absence stays typed: the
+                // annotations a declaration carries, the supertypes it
+                // promises, and a function's shape. A stream it does not
+                // declare is dropped at the sink rather than silently missing.
+                .emits(kndo_contract::evidence::EvidenceStreams::of(&[
+                    kndo_contract::evidence::EvidenceStream::Markers,
+                    kndo_contract::evidence::EvidenceStream::Relations,
+                    kndo_contract::evidence::EvidenceStream::Qualifiers,
+                ]))
                 .ladder(&[
                     Step::for_members(Rung::Owner, "private"),
                     Step::for_free(Rung::File, "private"),

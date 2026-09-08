@@ -13,7 +13,7 @@ use kndo_contract::adapter::{PackageEntry, Resolution, ResolveContext, SourceFil
 use kndo_contract::evidence::{
     Attachment, FileEvidence, ImportShape, ImportTarget, Reach, Root, RootKind, RootTarget,
 };
-use kndo_contract::extension::{Extension, ExtensionSpec, PublishedSurface};
+use kndo_contract::extension::{DispatchRule, Extension, ExtensionSpec, PublishedSurface};
 use kndo_contract::manifest::UnitKind;
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use serde::{Deserialize, Serialize};
@@ -806,9 +806,34 @@ fn mount_and_own(files: &mut [GraphFile], project: &crate::project::Project) {
 /// It recomputes from evidence alone, so a patched graph and a full build
 /// agree to the byte.
 fn dispatch_files(files: &mut [GraphFile], adapters: &[Box<dyn Extension>]) {
+    // A RULE PACK is an extension that claims no files and declares rules:
+    // what a FRAMEWORK means, which is no language's to own — a JUnit
+    // `@Test`, a Spring `@RestController`, a SwiftUI `PreviewProvider`. Its
+    // rules ride beside the claiming adapter's, and its TRIGGER is its gate:
+    // a marker no file carries fires nowhere, so a project without the
+    // framework is untouched without anything having to decide that.
+    let packs: Vec<DispatchRule> = adapters
+        .iter()
+        .filter(|a| a.spec().suffixes().is_empty())
+        .flat_map(|a| a.spec().dispatch_rules().iter().cloned())
+        .collect();
+    // One combined list per claiming adapter, built once: the adapter's own
+    // rules first, in composition order, so the applied set is a pure function
+    // of the composition and not of the file order.
+    let combined: BTreeMap<SmolStr, Vec<DispatchRule>> = adapters
+        .iter()
+        .filter(|a| !a.spec().suffixes().is_empty())
+        .map(|a| {
+            let spec = a.spec();
+            let mut rules = spec.dispatch_rules().to_vec();
+            rules.extend(packs.iter().cloned());
+            (SmolStr::new(spec.coordinate()), rules)
+        })
+        .collect();
+    let none: Vec<DispatchRule> = Vec::new();
     let supertypes = crate::dispatch::supertype_edges(files.iter().map(|f| &f.evidence));
     for f in files.iter_mut() {
-        let rules = adapter_by_id(adapters, &f.adapter).spec().dispatch_rules();
+        let rules = combined.get(&f.adapter).unwrap_or(&none).as_slice();
         let mut d = crate::dispatch::apply(&f.evidence, &supertypes, rules);
         let (roots, witnesses) =
             crate::dispatch::declaration_effects(&f.evidence, f.compiled_into, &supertypes, rules);

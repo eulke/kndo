@@ -76,19 +76,19 @@
     ]
   },
   "health": {
-    "implicated": 29,
+    "implicated": 23,
     "subjects": 25399,
     "by_category": [
       {
         "category": "unused",
-        "findings": 29
+        "findings": 23
       }
     ],
     "by_package": [
       {
         "name": "",
         "manifest": "",
-        "implicated": 18,
+        "implicated": 12,
         "subjects": 13391
       },
       {
@@ -657,61 +657,6 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
-      "id": "kndo-f8de22112f9f",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "samples/springboot3-exposed-r2dbc/src/main/kotlin/com/example/config/ExposedConfig.kt"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-1cded8849d52",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "samples/springboot3-exposed-r2dbc/src/main/kotlin/com/example/controller/HelloController.kt"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-1db8662b4674",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "samples/springboot3-exposed-r2dbc/src/main/kotlin/com/example/controller/UserController.kt"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-75ed82cb28ca",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "samples/springboot3-exposed-r2dbc/src/main/kotlin/com/example/dao/impl/UserDaoImpl.kt",
-        "selector": {
-          "name": "UserDaoImpl"
-        },
-        "span": {
-          "start": 751,
-          "end": 2918
-        }
-      },
-      "lines": {
-        "start": 20,
-        "end": 74
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
       "id": "kndo-db277e9ba2cc",
       "category": "unused",
       "severity": "warning",
@@ -730,50 +675,6 @@
       "lines": {
         "start": 13,
         "end": 33
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-7c99530511eb",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "samples/springboot3-exposed-r2dbc/src/main/kotlin/com/example/service/impl/UserServiceImpl.kt",
-        "selector": {
-          "name": "UserServiceImpl"
-        },
-        "span": {
-          "start": 290,
-          "end": 1120
-        }
-      },
-      "lines": {
-        "start": 10,
-        "end": 34
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-5478509d007b",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "samples/springboot3-exposed-r2dbc/src/main/kotlin/com/example/support/SchemaInitializer.kt",
-        "selector": {
-          "name": "SchemaInitializer"
-        },
-        "span": {
-          "start": 349,
-          "end": 1359
-        }
-      },
-      "lines": {
-        "start": 11,
-        "end": 30
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -19561,29 +19462,6 @@
       "message": "declared `internal`, but every use is within its own file — `private` would suffice for this type"
     },
     {
-      "id": "kndo-476b70693ad5",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-gradle-plugin/src/test/kotlin/org/jetbrains/exposed/v1/gradle/plugin/integrations/IntegrationTestBase.kt",
-        "selector": {
-          "owner": "IntegrationTestBase",
-          "name": "buildFile"
-        },
-        "span": {
-          "start": 616,
-          "end": 690
-        }
-      },
-      "lines": {
-        "start": 18,
-        "end": 18
-      },
-      "message": "declared `protected`, but every use is within `IntegrationTestBase` — `private` would suffice for this declaration"
-    },
-    {
       "id": "kndo-5fbf7d765095",
       "category": "internal-only",
       "severity": "info",
@@ -19648,52 +19526,6 @@
         "end": 36
       },
       "message": "declared `internal`, but every use is within its own file — `private` would suffice for this type"
-    },
-    {
-      "id": "kndo-d4d2c2c72395",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/MergeBaseTest.kt",
-        "selector": {
-          "owner": "MergeBaseTest",
-          "name": "defaultExcludeSettings"
-        },
-        "span": {
-          "start": 861,
-          "end": 933
-        }
-      },
-      "lines": {
-        "start": 21,
-        "end": 21
-      },
-      "message": "declared `protected`, but every use is within `MergeBaseTest` — `private` would suffice for this declaration"
-    },
-    {
-      "id": "kndo-dd5a0bda5ed8",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/MergeBaseTest.kt",
-        "selector": {
-          "owner": "MergeBaseTest",
-          "name": "withMergeTestTables"
-        },
-        "span": {
-          "start": 939,
-          "end": 1260
-        }
-      },
-      "lines": {
-        "start": 23,
-        "end": 30
-      },
-      "message": "declared `protected`, but every use is within `MergeBaseTest` — `private` would suffice for this method"
     },
     {
       "id": "kndo-9968cb7bcfac",
@@ -19982,6 +19814,52 @@
       "message": "declared `internal`, but every use is within its own file — `private` would suffice for this type"
     },
     {
+      "id": "kndo-24a0be94c14d",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/metadata/SqlTypeProvider.kt",
+        "selector": {
+          "owner": "SqlTypeProvider",
+          "name": "appendDataPrecisions"
+        },
+        "span": {
+          "start": 8192,
+          "end": 8546
+        }
+      },
+      "lines": {
+        "start": 215,
+        "end": 223
+      },
+      "message": "declared `internal`, but every use is within `SqlTypeProvider` and its subtypes — `protected` would suffice for this method"
+    },
+    {
+      "id": "kndo-47d8d91808ca",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/vendors/metadata/SqlTypeProvider.kt",
+        "selector": {
+          "owner": "SqlTypeProvider",
+          "name": "appendDataTypes"
+        },
+        "span": {
+          "start": 7597,
+          "end": 7938
+        }
+      },
+      "lines": {
+        "start": 201,
+        "end": 209
+      },
+      "message": "declared `internal`, but every use is within `SqlTypeProvider` and its subtypes — `protected` would suffice for this method"
+    },
+    {
       "id": "kndo-225d530e4f72",
       "category": "internal-only",
       "severity": "info",
@@ -20002,52 +19880,6 @@
         "end": 33
       },
       "message": "declared `internal`, but every use is within its own file — `private` would suffice for this type"
-    },
-    {
-      "id": "kndo-8a628287261a",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/MergeBaseTest.kt",
-        "selector": {
-          "owner": "MergeBaseTest",
-          "name": "withMergeTestTables"
-        },
-        "span": {
-          "start": 806,
-          "end": 1118
-        }
-      },
-      "lines": {
-        "start": 20,
-        "end": 27
-      },
-      "message": "declared `protected`, but every use is within `MergeBaseTest` — `private` would suffice for this method"
-    },
-    {
-      "id": "kndo-a7f928314c00",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/MergeBaseTest.kt",
-        "selector": {
-          "owner": "MergeBaseTest",
-          "name": "defaultExcludeSettings"
-        },
-        "span": {
-          "start": 712,
-          "end": 800
-        }
-      },
-      "lines": {
-        "start": 18,
-        "end": 18
-      },
-      "message": "declared `protected`, but every use is within `MergeBaseTest` — `private` would suffice for this declaration"
     },
     {
       "id": "kndo-700be17714f9",
@@ -21227,6 +21059,39 @@
       "subject": {
         "kind": "file",
         "path": "samples/exposed-spring/src/main/kotlin/support/SchemaInitialize.kt"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-807d3065260f",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "samples/springboot3-exposed-r2dbc/src/main/kotlin/com/example/config/ExposedConfig.kt"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-bb0b91c2499d",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "samples/springboot3-exposed-r2dbc/src/main/kotlin/com/example/controller/HelloController.kt"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-28ece9fc1c4d",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "samples/springboot3-exposed-r2dbc/src/main/kotlin/com/example/controller/UserController.kt"
       },
       "message": "production-reachable, but no test reaches this file"
     },

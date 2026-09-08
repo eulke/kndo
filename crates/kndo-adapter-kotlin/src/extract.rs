@@ -21,8 +21,8 @@
 //!   `Widget.factory()` is how real code addresses them.
 
 use kndo_contract::evidence::{
-    Attachment, DeclarationId, EvidenceSink, ImportBinding, ImportShape, ImportTarget, Reach,
-    RefKind, RootKind, RootTarget, SymbolKind,
+    Attachment, DeclarationId, EvidenceSink, ImportBinding, ImportShape, ImportTarget,
+    MarkerTarget, Reach, RefKind, RelationKind, RootKind, RootTarget, SymbolKind,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use kndo_toolkit as tk;
@@ -183,6 +183,84 @@ fn declaration(item: Node<'_>, source: &[u8], ctx: &Ctx, out: &mut EvidenceSink)
     }
 }
 
+/// Every annotation on a declaration, as marker evidence: the name as written
+/// (`Test`, `org.junit.Test`) and its arguments split at the top-level commas.
+/// Kotlin writes an argument-less annotation as a bare `user_type` under
+/// `annotation` and one with arguments as a `constructor_invocation`, which is
+/// the only difference between the two shapes. What a marker MEANS is a
+/// dispatch rule's — a language reports that the annotation is there.
+fn markers_of(item: Node<'_>, source: &[u8], id: DeclarationId, out: &mut EvidenceSink) {
+    let Some(modifiers) = tk::child_of_kind(item, "modifiers") else {
+        return;
+    };
+    let mut c = modifiers.walk();
+    for child in modifiers.children(&mut c) {
+        if child.kind() != "annotation" {
+            continue;
+        }
+        let invocation = tk::child_of_kind(child, "constructor_invocation");
+        let Some(name) = invocation
+            .and_then(|i| tk::child_of_kind(i, "user_type"))
+            .or_else(|| tk::child_of_kind(child, "user_type"))
+        else {
+            continue;
+        };
+        let path: String = tk::text(name, source)
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .collect();
+        let args = invocation
+            .and_then(|i| tk::child_of_kind(i, "value_arguments"))
+            .map(|list| {
+                let text = tk::text(list, source);
+                let inner = text
+                    .strip_prefix('(')
+                    .and_then(|t| t.strip_suffix(')'))
+                    .unwrap_or(text);
+                tk::split_arguments(inner)
+            })
+            .unwrap_or_default();
+        out.marker(
+            MarkerTarget::Declaration(id),
+            path,
+            args.into_iter().map(SmolStr::from).collect(),
+            tk::span(child),
+        );
+    }
+}
+
+/// The types this one promises to be. Kotlin tells a superCLASS from an
+/// interface by the syntax alone: a supertype written with a constructor call
+/// (`: Base()`) is the class this one extends, and a bare name (`: Api`) is a
+/// surface it implements — the compiler's own rule, and the only signal a
+/// single file carries.
+fn relations_of(item: Node<'_>, source: &[u8], id: DeclarationId, out: &mut EvidenceSink) {
+    let Some(specifiers) = tk::child_of_kind(item, "delegation_specifiers") else {
+        return;
+    };
+    let mut c = specifiers.walk();
+    for spec in specifiers.named_children(&mut c) {
+        if spec.kind() != "delegation_specifier" {
+            continue;
+        }
+        let invocation = tk::child_of_kind(spec, "constructor_invocation");
+        let kind = if invocation.is_some() {
+            RelationKind::Extends
+        } else {
+            RelationKind::Implements
+        };
+        // `by` delegation names the surface it forwards, which is a promise
+        // the same way an interface list is.
+        let holder = invocation
+            .or_else(|| tk::child_of_kind(spec, "explicit_delegation"))
+            .unwrap_or(spec);
+        let Some(name) = tk::child_of_kind(holder, "user_type") else {
+            continue;
+        };
+        out.relation(id, kind, tk::text(name, source), tk::span(spec));
+    }
+}
+
 fn handle_type(item: Node<'_>, source: &[u8], ctx: &Ctx, out: &mut EvidenceSink) {
     let Some(name_node) = item.child_by_field_name("name") else {
         return;
@@ -193,6 +271,8 @@ fn handle_type(item: Node<'_>, source: &[u8], ctx: &Ctx, out: &mut EvidenceSink)
         tk::span(item),
         reach_of(item),
     );
+    markers_of(item, source, id, out);
+    relations_of(item, source, id, out);
     if let Some(owner) = ctx.owner {
         out.member_of(id, owner);
     }
@@ -260,6 +340,8 @@ fn handle_object(item: Node<'_>, source: &[u8], ctx: &Ctx, out: &mut EvidenceSin
         tk::span(item),
         reach_of(item),
     );
+    markers_of(item, source, id, out);
+    relations_of(item, source, id, out);
     if let Some(owner) = ctx.owner {
         out.member_of(id, owner);
     }
@@ -287,6 +369,7 @@ fn handle_function(item: Node<'_>, source: &[u8], ctx: &Ctx, out: &mut EvidenceS
         SymbolKind::Function
     };
     let id = out.declaration(name, kind, tk::span(item), reach_of(item));
+    markers_of(item, source, id, out);
     if let Some(owner) = ctx.owner {
         out.member_of(id, owner);
     }
@@ -425,7 +508,12 @@ fn references_and_comments(root: Node<'_>, source: &[u8], out: &mut EvidenceSink
         if !is_use(n, parent) {
             return;
         }
-        out.reference(tk::text(n, source), classify(n, parent), tk::span(n));
+        out.reference_on(
+            tk::text(n, source),
+            classify(n, parent),
+            written_on(n, parent, source),
+            tk::span(n),
+        );
     });
 }
 
@@ -504,6 +592,22 @@ fn first_identifier(parent: Node<'_>) -> Option<usize> {
         .children(&mut c)
         .find(|ch| ch.kind() == "identifier")
         .map(|ch| ch.id())
+}
+
+/// What a member access was read FROM: the receiver of the navigation whose
+/// LAST child this identifier is (`provider.append(x)` → `provider`). A bare
+/// name has no receiver, which is the difference `internal-only` reads to tell
+/// one owner's member from another's.
+fn written_on(n: Node<'_>, parent: Node<'_>, source: &[u8]) -> Option<SmolStr> {
+    if parent.kind() != "navigation_expression" {
+        return None;
+    }
+    let last = parent.child(parent.child_count().saturating_sub(1))?;
+    if last.id() != n.id() {
+        return None;
+    }
+    let receiver = parent.child(0)?;
+    Some(SmolStr::new(tk::text(receiver, source)))
 }
 
 fn classify(n: Node<'_>, parent: Node<'_>) -> RefKind {

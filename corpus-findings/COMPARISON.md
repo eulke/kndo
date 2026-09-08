@@ -1966,3 +1966,63 @@ mapping on the corpus (`"@fallback/*"`) has no import site at all.
 v1 read `package.json` for entry roots and dependency names and never read
 `tsconfig.json`, so all six files are questions v1 never asked rather than ones
 it answered differently.
+
+### Rule packs, and the evidence a pack needs (2026-09-08)
+
+| repo | before | after | what moved |
+|---|---|---|---|
+| Exposed | 972 | 966 | −6 `unused`, −4 `internal-only`, +3 `untested`, +2 `internal-only` (a defect, named below) |
+| every other repository | — | — | byte-identical |
+
+A RULE PACK is an extension that claims no files and declares nothing but
+dispatch rules: what a FRAMEWORK means, which is no language's to own. Its
+rules ride beside the claiming adapter's, and its TRIGGER is its gate — a
+marker no file carries fires nowhere, so a project without the framework is
+untouched without anything having to decide that.
+
+**The first measurement killed the plan's own ordering.** Ten packs were
+scoped; the corpus was instrumented for all ten before any was written, and the
+whole addressable population is ~16 findings: 13 in one Spring Boot sample
+module in Exposed, 2 SwiftUI previews in Alamofire, 1 JUnit method. `testng`,
+`lombok`, `rstest`, `pytest`, `storybook` and `vitest` have **zero** — the
+corpus is nine repositories chosen for language coverage, not framework
+coverage, and a pack shipped against zero is a promise, not a capability.
+
+**And the packs fired on nothing, because the evidence was not there.** Of nine
+adapters, only java emits both markers and relations; rust and go emit markers
+alone; kotlin, swift, python and js-ts emit NEITHER. The rule-pack machinery
+landed in M8.a and has been unreachable for six languages since. So this slice
+is the seam plus the evidence for one of them: `kndo:kotlin` now reports the
+annotations a declaration carries, the supertypes it promises (a constructor
+call is the superclass, a bare name an interface — Kotlin's own rule), and what
+a member access was read from.
+
+**−6 `unused`, the spring pack.** Three `@Configuration`/`@RestController`
+files and three `@Service`/`@Repository`/`@Component` classes in
+`samples/springboot3-exposed-r2dbc`, every one of them constructed by a
+component scan and named by nothing in the project. Three come back as
+`untested`, which is the true verdict now that they are production-reachable.
+
+**−4 `internal-only`, the relations.** `MergeBaseTest.withMergeTestTables` and
+its neighbours are `protected` members of abstract test bases whose subtypes
+live in other files. Without relation evidence the heirs pool was empty and the
+advice said `private`; with it the pool is real and the analysis correctly says
+nothing.
+
+**+2 `internal-only`, a defect this slice introduces and does not fix.**
+`SqlTypeProvider.appendDataPrecisions` and `appendDataTypes` are `internal`
+members of an `internal abstract class`, called as
+`typeProvider.appendDataTypes(…)` from five other files of the same unit, and
+`used-by` lists all five — yet the advisory fires. It appears only once kotlin
+declares the streams and survives declaring `Qualifiers` and emitting the
+receiver, so the qualifier gate is not what is missing. A minimal reproduction
+of the shape — an abstract class, an internal member, a subclass in a second
+file, a qualified call from a third — does NOT reproduce it, which is the
+useful clue: something in the real hierarchy (`MetadataProvider` HOLDS a
+`SqlTypeProvider` rather than extending it) is the difference, and the fix
+belongs to whoever narrows `internal_only`'s member branch with that case in
+hand.
+
+v1 read Spring through a reflection-dispatch plugin of its own and reported
+these files alive; the difference is not the verdict but where the knowledge
+lives — a rule pack states what a marker MEANS and parses nothing.

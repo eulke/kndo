@@ -17,6 +17,7 @@ kndo-adapter-swift = { path = "../kndo-adapter-swift" }
 kndo-adapter-rust = { path = "../kndo-adapter-rust" }
 kndo-adapter-ts = { path = "../kndo-adapter-ts" }
 kndo-apple = { path = "../kndo-apple" }
+kndo-rules = { path = "../kndo-rules" }
 kndo-contract = { path = "../kndo-contract" }
 kndo-core = { path = "../kndo-core" }
 kndo-coverage = { path = "../kndo-coverage" }
