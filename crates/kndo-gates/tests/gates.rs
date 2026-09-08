@@ -2147,6 +2147,21 @@ const RETIRED: &[(&str, &str)] = &[
         "Covisibility",
         "the namespace node — co-visibility is unconditional",
     ),
+    // Resolution by the DIRECTORY MIRROR a compiler uses to find sources on
+    // disk. What an import names is a package, a module or a namespace, and
+    // the manifests say where those live — a path's tail says nothing.
+    (
+        "nearest_suffix_match",
+        "the namespace, and the roots a manifest declared",
+    ),
+    (
+        "package_dir_files",
+        "files_in_namespace, scoped to the compilation",
+    ),
+    (
+        "split_bare",
+        "package.json exports, condition by condition (M8.d)",
+    ),
 ];
 
 /// The adapters that still conclude a root in their own extractor, and what

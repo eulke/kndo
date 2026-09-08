@@ -27,14 +27,19 @@
     ]
   },
   "health": {
-    "implicated": 0,
+    "implicated": 1,
     "subjects": 8,
-    "by_category": [],
+    "by_category": [
+      {
+        "category": "unused",
+        "findings": 1
+      }
+    ],
     "by_package": [
       {
         "name": "@org/ui",
         "manifest": "packages/ui/package.json",
-        "implicated": 0,
+        "implicated": 1,
         "subjects": 5
       },
       {
@@ -45,7 +50,19 @@
       }
     ]
   },
-  "findings": [],
+  "findings": [
+    {
+      "id": "kndo-bf55bdbf0b7a",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "packages/ui/secret.ts"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    }
+  ],
   "fixed": [],
   "baselined": 0,
   "abstained": [

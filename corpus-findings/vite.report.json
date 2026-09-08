@@ -43,7 +43,7 @@
     ]
   },
   "health": {
-    "implicated": 483,
+    "implicated": 495,
     "subjects": 5702,
     "by_category": [
       {
@@ -56,7 +56,7 @@
       },
       {
         "category": "unused",
-        "findings": 435
+        "findings": 447
       }
     ],
     "by_package": [
@@ -69,7 +69,7 @@
       {
         "name": "#",
         "manifest": "playground/resolve-tsconfig-paths/tsconfig.json",
-        "implicated": 4,
+        "implicated": 7,
         "subjects": 10
       },
       {
@@ -291,7 +291,7 @@
       {
         "name": "@vitejs/test-dep-css-require",
         "manifest": "playground/optimize-deps/dep-css-require/package.json",
-        "implicated": 0,
+        "implicated": 2,
         "subjects": 5
       },
       {
@@ -339,7 +339,7 @@
       {
         "name": "@vitejs/test-dep-lodash",
         "manifest": "playground/optimize-deps/dep-lodash/package.json",
-        "implicated": 0,
+        "implicated": 1,
         "subjects": 3
       },
       {
@@ -387,7 +387,7 @@
       {
         "name": "@vitejs/test-dep-relative-to-main",
         "manifest": "playground/optimize-deps/dep-relative-to-main/package.json",
-        "implicated": 0,
+        "implicated": 1,
         "subjects": 2
       },
       {
@@ -615,7 +615,7 @@
       {
         "name": "@vitejs/test-package-c",
         "manifest": "playground/nested-deps/test-package-c/package.json",
-        "implicated": 0,
+        "implicated": 1,
         "subjects": 3
       },
       {
@@ -687,7 +687,7 @@
       {
         "name": "@vitejs/test-resolve-browser-field",
         "manifest": "playground/resolve/browser-field/package.json",
-        "implicated": 3,
+        "implicated": 7,
         "subjects": 12
       },
       {
@@ -5758,6 +5758,17 @@
       "message": "declared as a production dependency, but no file imports it and the manifest never names it"
     },
     {
+      "id": "kndo-a3b8917f52c4",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/nested-deps/test-package-c/side.js"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
       "id": "kndo-561d682a3a98",
       "category": "unused",
       "severity": "warning",
@@ -5780,6 +5791,28 @@
       "message": "no root anchors this file and no reachable file imports it"
     },
     {
+      "id": "kndo-4963f069d999",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/optimize-deps/dep-css-require/mod.cjs"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-9e514ba18d67",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/optimize-deps/dep-css-require/mod.module.css"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
       "id": "kndo-e8c6ebbffc29",
       "category": "unused",
       "severity": "warning",
@@ -5787,6 +5820,17 @@
       "subject": {
         "kind": "file",
         "path": "playground/optimize-deps/dep-incompatible/sub.js"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-b60a82007249",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/optimize-deps/dep-lodash/cloneDeep.js"
       },
       "message": "no root anchors this file and no reachable file imports it"
     },
@@ -5875,6 +5919,17 @@
       "subject": {
         "kind": "file",
         "path": "playground/optimize-deps/dep-optimize-with-glob/named.js"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-536be1449e58",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/optimize-deps/dep-relative-to-main/entry.js"
       },
       "message": "no root anchors this file and no reachable file imports it"
     },
@@ -6077,6 +6132,17 @@
       "message": "no root anchors this file and no reachable file imports it"
     },
     {
+      "id": "kndo-8bd6f34f8c68",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/resolve-tsconfig-paths/src/imported.js"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
       "id": "kndo-3df567971ef5",
       "category": "unused",
       "severity": "warning",
@@ -6099,6 +6165,28 @@
       "message": "no root anchors this file and no reachable file imports it"
     },
     {
+      "id": "kndo-3c6b81d143e6",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/resolve-tsconfig-paths/src/style.css"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-7ce0ee099a9d",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/resolve-tsconfig-paths/src/style.scss"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
       "id": "kndo-bd1aec28a718",
       "category": "unused",
       "severity": "warning",
@@ -6110,48 +6198,59 @@
       "message": "no root anchors this file and no reachable file imports it"
     },
     {
-      "id": "kndo-0970d6efcc31",
+      "id": "kndo-f36148f4277a",
       "category": "unused",
       "severity": "warning",
       "confidence": "certain",
       "subject": {
-        "kind": "symbol",
-        "path": "playground/resolve/browser-field/multiple.dot.path.js",
-        "selector": {
-          "name": "fs"
-        },
-        "span": {
-          "start": 6,
-          "end": 29
-        }
+        "kind": "file",
+        "path": "playground/resolve/browser-field/bare-import.js"
       },
-      "lines": {
-        "start": 1,
-        "end": 1
-      },
-      "message": "nothing references, roots, or imports this declaration"
+      "message": "no root anchors this file and no reachable file imports it"
     },
     {
-      "id": "kndo-0c5022e35ecf",
+      "id": "kndo-62feb98e29e0",
       "category": "unused",
       "severity": "warning",
       "confidence": "certain",
       "subject": {
-        "kind": "symbol",
-        "path": "playground/resolve/browser-field/not-browser.js",
-        "selector": {
-          "name": "fs"
-        },
-        "span": {
-          "start": 6,
-          "end": 29
-        }
+        "kind": "file",
+        "path": "playground/resolve/browser-field/multiple.dot.path.js"
       },
-      "lines": {
-        "start": 1,
-        "end": 1
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-e6ca5d501797",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/resolve/browser-field/no-ext-index/index.js"
       },
-      "message": "nothing references, roots, or imports this declaration"
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-4087d41420bc",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/resolve/browser-field/no-ext.js"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-1b585697eb4e",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/resolve/browser-field/not-browser.js"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
     },
     {
       "id": "kndo-ce16507ca310",
@@ -6161,6 +6260,17 @@
       "subject": {
         "kind": "file",
         "path": "playground/resolve/browser-field/out/esm.browser.js"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-887edc1b0d65",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/resolve/browser-field/relative.js"
       },
       "message": "no root anchors this file and no reachable file imports it"
     },
@@ -10031,17 +10141,6 @@
       "subject": {
         "kind": "file",
         "path": "playground/optimize-deps/dep-lodash-es/camelCase.js"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-3ceb8ec20137",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "playground/optimize-deps/dep-lodash/cloneDeep.js"
       },
       "message": "production-reachable, but no test reaches this file"
     },

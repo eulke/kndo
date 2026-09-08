@@ -100,9 +100,15 @@ fn workspace_bare_specifiers_link_to_their_package() {
         adapter.resolve(&from, "@demo/core", &cx),
         file("packages/core/src/index.ts")
     );
+    // A SUBPATH inside a declared package is what `package.json`'s `exports`
+    // map answers — `./src/*` may map anywhere, may be absent, and may differ
+    // by condition. Splitting the name off and mirroring the subpath onto the
+    // package directory agreed with that map only when the package had none.
+    // Until the manifest half reads `exports`, a subpath is external: unresolved
+    // is keep-alive, and keep-alive is the safe direction to be wrong in.
     assert_eq!(
         adapter.resolve(&from, "@demo/core/src/util", &cx),
-        file("packages/core/src/util.ts")
+        Resolution::Unresolved
     );
     assert_eq!(adapter.resolve(&from, "react", &cx), Resolution::Unresolved);
 }

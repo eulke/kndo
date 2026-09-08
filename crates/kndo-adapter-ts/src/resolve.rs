@@ -30,7 +30,7 @@ pub fn resolve(
     // 42 real edges were dying as unresolved behind their suffixes.
     let specifier = specifier.split(['?', '#']).next().unwrap_or(specifier);
     if !specifier.starts_with('.') {
-        return resolve_bare(specifier, cx, exts);
+        return resolve_bare(specifier, cx);
     }
     let dir = kndo_toolkit::parent_dir(from.as_str());
     match resolve_in_dir(dir, specifier, cx, exts) {
@@ -43,7 +43,7 @@ pub fn resolve(
 /// declares the package (a workspace sibling): the exact name resolves to the
 /// declared entry; a subpath resolves against the package directory when the layout
 /// matches. Everything else is an external package — `Unresolved`, keep-alive.
-fn resolve_bare(specifier: &str, cx: &ResolveContext<'_>, exts: &[String]) -> Resolution {
+fn resolve_bare(specifier: &str, cx: &ResolveContext<'_>) -> Resolution {
     // The WHOLE specifier first: an npm package name is a scope and a name and
     // stops there, so a declared name that spells more than that is a tsconfig
     // alias (`"vite/module-runner"`), and the alias is what the compiler picks
@@ -53,49 +53,15 @@ fn resolve_bare(specifier: &str, cx: &ResolveContext<'_>, exts: &[String]) -> Re
     {
         return Resolution::File(entry.clone());
     }
-    let (name, subpath) = split_bare(specifier);
-    let Some(pkg) = cx.package(name) else {
-        return Resolution::Unresolved;
-    };
-    match subpath {
-        None => match &pkg.entry {
-            Some(entry) => Resolution::File(entry.clone()),
-            None => Resolution::Unresolved,
-        },
-        Some(sub) => match resolve_in_dir(&pkg.dir, sub, cx, exts) {
-            Some(path) => Resolution::File(path),
-            None => Resolution::Unresolved,
-        },
-    }
-}
-
-/// `@scope/name/sub/path` → (`@scope/name`, `sub/path`); `name/sub` → (`name`, `sub`).
-/// A scope needs a name after it, so `@/x` is not one — it is the sigil a
-/// tsconfig alias conventionally takes, and `@` is the whole of its name.
-fn split_bare(specifier: &str) -> (&str, Option<&str>) {
-    let name_segments = if specifier.starts_with("@/") {
-        1
-    } else if specifier.starts_with('@') {
-        2
-    } else {
-        1
-    };
-    let mut boundary = 0;
-    let mut seen = 0;
-    for (i, c) in specifier.char_indices() {
-        if c == '/' {
-            seen += 1;
-            if seen == name_segments {
-                boundary = i;
-                break;
-            }
-        }
-    }
-    if boundary == 0 {
-        (specifier, None)
-    } else {
-        (&specifier[..boundary], Some(&specifier[boundary + 1..]))
-    }
+    // A SUBPATH inside a declared package — `pkg/sub/thing` — is what
+    // `package.json`'s `exports` map answers, condition by condition, and no
+    // other reading of it is the truth: `./sub/*` may map anywhere, may be
+    // absent (the package exports nothing but its root), and may differ by
+    // `import` vs `require`. Splitting the name off and hoping the directory
+    // mirrors the subpath agreed with that map only when the package had no
+    // map at all. Until the manifest half reads `exports`, a subpath is an
+    // external specifier: keep-alive, never an accusation.
+    Resolution::Unresolved
 }
 
 /// The shared candidate machinery, without the leading-dot requirement — manifest

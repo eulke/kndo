@@ -63,7 +63,7 @@ fn specifiers<'a>(statement: Node<'a>, source: &'a [u8]) -> Vec<&'a str> {
 
 fn collect<'a>(node: Node<'a>, source: &'a [u8], out: &mut Vec<&'a str>) {
     match node.kind() {
-        "string_value" => out.push(unquote(tk::text(node, source))),
+        "string_value" => out.push(quoted_content(node, source)),
         "parenthesized_value" => {}
         "call_expression" => {
             if call_name(node, source) == Some("url")
@@ -73,7 +73,7 @@ fn collect<'a>(node: Node<'a>, source: &'a [u8], out: &mut Vec<&'a str>) {
                         .find(|a| matches!(a.kind(), "string_value" | "plain_value"))
                 })
             {
-                out.push(unquote(tk::text(argument, source)));
+                out.push(quoted_content(argument, source));
             }
         }
         _ => {
@@ -85,12 +85,26 @@ fn collect<'a>(node: Node<'a>, source: &'a [u8], out: &mut Vec<&'a str>) {
     }
 }
 
-fn call_name<'a>(call: Node<'a>, source: &'a [u8]) -> Option<&'a str> {
-    tk::child_of_kind(call, "function_name").map(|n| tk::text(n, source))
+/// What a quoted value HOLDS, read off the parse. The grammar spells the
+/// delimiters as this node's own first and last children, so the content is the
+/// span between them and nothing has to decide which characters were quotes: a
+/// `plain_value` — `url(x)`, unquoted — has no such children and is its own
+/// text, which is the same rule arriving at the same answer.
+fn quoted_content<'a>(node: Node<'a>, source: &'a [u8]) -> &'a str {
+    let quote = |n: Option<Node<'a>>| n.filter(|n| matches!(tk::text(*n, source), "\"" | "'"));
+    match (
+        quote(node.child(0)),
+        quote(node.child(node.child_count().saturating_sub(1))),
+    ) {
+        (Some(open), Some(close)) if close.start_byte() > open.end_byte() => {
+            std::str::from_utf8(&source[open.end_byte()..close.start_byte()]).unwrap_or_default()
+        }
+        _ => tk::text(node, source),
+    }
 }
 
-fn unquote(s: &str) -> &str {
-    s.trim().trim_matches(|c| c == '"' || c == '\'')
+fn call_name<'a>(call: Node<'a>, source: &'a [u8]) -> Option<&'a str> {
+    tk::child_of_kind(call, "function_name").map(|n| tk::text(n, source))
 }
 
 /// What a specifier names: a file by path, or a package by name. A scheme or

@@ -1,14 +1,22 @@
-# deep-import: main.ts imports @org/ui/secret past the sibling's declared exports surface — the dependency is declared, so undeclared has nothing to say; the deep-import analysis itself is deferred (DECISIONS 2026-08-31), so no finding is pinned here.
+# deep-import: main.ts imports `@org/ui/secret` past the sibling's declared
+# exports surface — the boundary the sibling drew. The dependency itself is
+# declared, so `undeclared` has nothing to say, and the deep-import analysis is
+# deferred (DECISIONS 2026-08-31).
+#
+# What this fixture now pins is the resolution posture: a bare SUBPATH is
+# whatever `package.json`'s `exports` map says, and mirroring it onto the
+# package's directory agreed with that map only when the package had none. Here
+# there is one, and it says no.
 
 [[alive]]
 subject = "dep:package.json:@org/ui"
 category = "undeclared"
 why = "the dependency itself is declared, so this is deep-import's finding alone, not undeclared's"
 
-[[alive]]
+[[dead]]
 subject = "packages/ui/secret.ts"
 category = "unused"
-why = "reached by main.ts's deep import `@org/ui/secret`"
+why = "`@org/ui`'s exports map is `{ \".\": \"./index.ts\" }` — it publishes its root and nothing else, so `@org/ui/secret` is a path the package refuses and no permitted entry reaches this file. Today it is unresolved for the broader reason that EVERY subpath is (the map is unread until M8.d), and the two reasons agree here; where they would disagree is a package whose map DOES publish the subpath, and that case is M8.d's to make resolve"
 
 [[alive]]
 subject = "packages/ui/lib.ts#publicFn"

@@ -27,24 +27,35 @@
     ]
   },
   "health": {
-    "implicated": 1,
+    "implicated": 2,
     "subjects": 8,
     "by_category": [
       {
         "category": "unused",
-        "findings": 1
+        "findings": 2
       }
     ],
     "by_package": [
       {
         "name": "@",
         "manifest": "tsconfig.json",
-        "implicated": 1,
+        "implicated": 2,
         "subjects": 8
       }
     ]
   },
   "findings": [
+    {
+      "id": "kndo-e64efbf6f393",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "src/nested/probe.ts"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
     {
       "id": "kndo-bf500c882332",
       "category": "unused",
