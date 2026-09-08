@@ -43,7 +43,7 @@
     ]
   },
   "health": {
-    "implicated": 484,
+    "implicated": 478,
     "subjects": 5674,
     "by_category": [
       {
@@ -56,15 +56,27 @@
       },
       {
         "category": "unused",
-        "findings": 436
+        "findings": 430
       }
     ],
     "by_package": [
       {
         "name": "",
         "manifest": "",
-        "implicated": 342,
-        "subjects": 2124
+        "implicated": 3,
+        "subjects": 77
+      },
+      {
+        "name": "#",
+        "manifest": "playground/resolve-tsconfig-paths/tsconfig.json",
+        "implicated": 4,
+        "subjects": 10
+      },
+      {
+        "name": "@imported",
+        "manifest": "playground/resolve-tsconfig-paths/src/nested/tsconfig.a.json",
+        "implicated": 1,
+        "subjects": 7
       },
       {
         "name": "@vite/test-config-entry",
@@ -827,6 +839,12 @@
         "manifest": "packages/vite/package.json",
         "implicated": 77,
         "subjects": 2717
+      },
+      {
+        "name": "~utils",
+        "manifest": "playground/package.json",
+        "implicated": 328,
+        "subjects": 2030
       }
     ]
   },
@@ -6004,28 +6022,6 @@
       "message": "no root anchors this file and no reachable file imports it"
     },
     {
-      "id": "kndo-8bd6f34f8c68",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "playground/resolve-tsconfig-paths/src/imported.js"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-5ddb860c1eae",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "playground/resolve-tsconfig-paths/src/nested/a-imported.ts"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
       "id": "kndo-3df567971ef5",
       "category": "unused",
       "severity": "warning",
@@ -6044,28 +6040,6 @@
       "subject": {
         "kind": "file",
         "path": "playground/resolve-tsconfig-paths/src/scss-imported.scss"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-3c6b81d143e6",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "playground/resolve-tsconfig-paths/src/style.css"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-7ce0ee099a9d",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "playground/resolve-tsconfig-paths/src/style.scss"
       },
       "message": "no root anchors this file and no reachable file imports it"
     },
@@ -7007,17 +6981,6 @@
       "message": "declared as a production dependency, but no file imports it and the manifest never names it"
     },
     {
-      "id": "kndo-e231709d4b0f",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "playground/test-utils.ts"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
       "id": "kndo-4a92644547f4",
       "category": "unused",
       "severity": "warning",
@@ -7124,17 +7087,6 @@
       "subject": {
         "kind": "file",
         "path": "playground/vitestGlobalSetup.ts"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-aa2aca585e47",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "playground/vitestSetup.ts"
       },
       "message": "no root anchors this file and no reachable file imports it"
     },
@@ -9412,6 +9364,28 @@
       "message": "only tests reach this file — no production or tooling root does"
     },
     {
+      "id": "kndo-f4ea2e153584",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "playground/test-utils.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
+      "id": "kndo-c85dcd9dec94",
+      "category": "test-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "playground/vitestSetup.ts"
+      },
+      "message": "only tests reach this file — no production or tooling root does"
+    },
+    {
       "id": "kndo-d014c3a6e8ac",
       "category": "untested",
       "severity": "info",
@@ -10182,7 +10156,7 @@
       "reason": "nothing-reaches-owned-files",
       "scope": {
         "manifests": {
-          "unjudged": 44
+          "unjudged": 58
         }
       }
     },
@@ -10204,7 +10178,7 @@
       },
       "scope": {
         "manifests": {
-          "unjudged": 15
+          "unjudged": 24
         }
       }
     },
@@ -10213,7 +10187,7 @@
       "reason": "owned-files-are-tests",
       "scope": {
         "manifests": {
-          "unjudged": 27
+          "unjudged": 28
         }
       }
     },
@@ -10222,7 +10196,7 @@
       "reason": "nothing-reaches-owned-files",
       "scope": {
         "manifests": {
-          "unjudged": 44
+          "unjudged": 58
         }
       }
     },
@@ -10244,7 +10218,7 @@
       },
       "scope": {
         "manifests": {
-          "unjudged": 15
+          "unjudged": 24
         }
       }
     },
@@ -10253,7 +10227,7 @@
       "reason": "owned-files-are-tests",
       "scope": {
         "manifests": {
-          "unjudged": 27
+          "unjudged": 28
         }
       }
     },
@@ -10277,7 +10251,7 @@
       "reason": "nothing-reaches-owned-files",
       "scope": {
         "manifests": {
-          "unjudged": 44
+          "unjudged": 58
         }
       }
     },
@@ -10299,7 +10273,7 @@
       },
       "scope": {
         "manifests": {
-          "unjudged": 15
+          "unjudged": 24
         }
       }
     },
@@ -10308,7 +10282,7 @@
       "reason": "owned-files-are-tests",
       "scope": {
         "manifests": {
-          "unjudged": 27
+          "unjudged": 28
         }
       }
     },

@@ -1,23 +1,192 @@
-//! Roots and packages from `package.json`: the entry fields (`main`, `module`,
-//! `browser`, `bin`, every string leaf under `exports` and under `imports` — the
-//! `#alias` map — plus source files named in `scripts`), resolved dir-relative
-//! through the same candidate machinery imports use. The launchers GitHub
-//! Actions runs are read for roots the same way: a workflow's or composite
-//! action's `run:` steps hand files to runtimes exactly as npm scripts do, and
-//! a JavaScript action's `main`/`pre`/`post` are its entries. Everything that
-//! fails — unparseable JSON, an entry naming a file that is not in the project
-//! (a built `dist/`) — degrades to absence: a root that anchors nothing accuses
-//! nothing.
+//! What a JavaScript project's manifests STATE, through the one door.
+//!
+//! `package.json` states a unit — the npm package, entered through its entry
+//! fields (`main`, `module`, `browser`, `bin`, every string leaf under
+//! `exports` and under `imports`, the `#alias` map included), published unless
+//! it says `"private": true`, compiled against the dependencies it declares.
+//! Source files named in `scripts` are run by a tool rather than entered by
+//! the package, so they are the manifest's own roots at the tooling colour.
+//!
+//! `tsconfig.json` states the names that are not packages: a
+//! `compilerOptions.paths` alias is a NAME resolving to a file, which is what
+//! a package entry is, so an alias whose target exists in the project is
+//! emitted as one. Nothing else in a tsconfig is read — `references`,
+//! `include`/`exclude` and `extends` are measured in `DECISIONS.md` and cost
+//! nothing on the corpus.
+//!
+//! The launchers GitHub Actions runs state roots and nothing else: a
+//! workflow's or composite action's `run:` steps hand files to runtimes
+//! exactly as npm scripts do, and a JavaScript action's `main`/`pre`/`post`
+//! are its entries.
+//!
+//! Everything that fails — unparseable JSON, an entry naming a file that is
+//! not in the project (a built `dist/`) — degrades to absence: structure
+//! nobody stated is structure the engine does not assume.
 
 use crate::resolve::resolve_in_dir;
 use kndo_contract::adapter::{
     DependencyDeclaration, DependencyScope, PackageEntry, ProjectRoot, ResolveContext, SourceFile,
 };
 use kndo_contract::evidence::RootKind;
+use kndo_contract::manifest::{ManifestSink, Publication, Unit, UnitKind};
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use kndo_toolkit::github_actions::{self, Launcher};
 use smol_str::SmolStr;
 use std::collections::BTreeSet;
+
+/// Everything one manifest states, written to the sink that collects it. The
+/// dispatch is by filename because that is what the spec's globs matched.
+pub fn structure(
+    manifest: &SourceFile<'_>,
+    cx: &ResolveContext<'_>,
+    exts: &[String],
+    out: &mut ManifestSink,
+) {
+    let path = manifest.path.as_str();
+    if github_actions::launcher(path).is_some() {
+        for root in roots(manifest, cx, exts) {
+            out.root(root);
+        }
+        return;
+    }
+    let name = path.rsplit_once('/').map_or(path, |(_, f)| f);
+    if name.starts_with("tsconfig") {
+        tsconfig(manifest, cx, exts, out);
+        return;
+    }
+    package(manifest, cx, exts, out);
+}
+
+/// What `package.json` states: the unit npm compiles, the package name a bare
+/// specifier reaches it by, the dependencies it declares, the words it spells
+/// elsewhere, and the files its scripts run.
+fn package(
+    manifest: &SourceFile<'_>,
+    cx: &ResolveContext<'_>,
+    exts: &[String],
+    out: &mut ManifestSink,
+) {
+    let Some(json) = package_json(manifest) else {
+        return;
+    };
+    let dir = kndo_toolkit::parent_dir(manifest.path.as_str());
+    let entries: Vec<ProjectPath> = entry_roots(&json, dir, cx, exts).into_iter().collect();
+    let declared = json.get("name").and_then(|v| v.as_str());
+    let named = declared
+        .or_else(|| dir.rsplit('/').next().filter(|s| !s.is_empty()))
+        .unwrap_or("root");
+    out.unit(Unit {
+        name: SmolStr::new(named),
+        // A package with an entry field is imported; one without is run. Both
+        // enter at production colour — the difference is whether the outside
+        // world consumes its API, which `Publication` then narrows.
+        kind: if entries.is_empty() {
+            UnitKind::Executable
+        } else {
+            UnitKind::Library
+        },
+        // The manifest's own directory, minus nothing: what npm packs is a
+        // publish filter, never a compile one, and a nested workspace member
+        // takes its own files by the longest-prefix rule.
+        roots: Vec::new(),
+        excludes: Vec::new(),
+        entries,
+        depends_on: dependency_declarations(&json)
+            .iter()
+            .map(|d| d.name.clone())
+            .collect(),
+        friend_of: Vec::new(),
+        // `"private": true` is npm's own word for "no consumer outside".
+        publication: match json.get("private").and_then(serde_json::Value::as_bool) {
+            Some(true) => Publication::Unpublished,
+            _ => Publication::Unstated,
+        },
+    });
+    for package in packages(manifest, cx, exts) {
+        out.package(package);
+    }
+    for declaration in dependency_declarations(&json) {
+        out.dependency(declaration);
+    }
+    for word in mentions(manifest) {
+        out.mention(word);
+    }
+    for root in script_roots(&json, dir, cx, exts) {
+        out.root(root);
+    }
+}
+
+/// What `tsconfig.json` states that the engine can use: every
+/// `compilerOptions.paths` alias whose target is a file of this project.
+///
+/// An alias is a NAME that resolves to a FILE, which is exactly a package
+/// entry, so it travels as one — `~utils` is spelled and resolved like a
+/// package with no `node_modules` behind it. A wildcard alias (`"@/*":
+/// ["./src/*"]`) names a DIRECTORY instead, and rides the same entry with its
+/// subpath resolved against that directory. Targets are dir-relative, or
+/// `baseUrl`-relative where the config sets one; an alias whose target is not
+/// in the project (`react` mapped into `node_modules/`) is absent, like every
+/// other dangling entry here.
+fn tsconfig(
+    manifest: &SourceFile<'_>,
+    cx: &ResolveContext<'_>,
+    exts: &[String],
+    out: &mut ManifestSink,
+) {
+    let Some(json) = package_json(manifest) else {
+        return;
+    };
+    let dir = kndo_toolkit::parent_dir(manifest.path.as_str());
+    let options = json.get("compilerOptions");
+    let base = options
+        .and_then(|o| o.get("baseUrl"))
+        .and_then(|v| v.as_str())
+        .and_then(|b| kndo_toolkit::join_relative(dir, b))
+        .unwrap_or_else(|| dir.to_string());
+    let Some(serde_json::Value::Object(paths)) = options.and_then(|o| o.get("paths")) else {
+        return;
+    };
+    for (alias, targets) in paths {
+        // The first target that lands is the alias: TypeScript tries them in
+        // order and takes the first that exists.
+        let Some(target) = targets
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|t| t.as_str())
+            .next()
+        else {
+            continue;
+        };
+        match (alias.strip_suffix("/*"), target.strip_suffix("/*")) {
+            (Some(name), Some(under)) => {
+                let Some(under) = kndo_toolkit::join_relative(&base, under) else {
+                    continue;
+                };
+                // A directory nothing sits under names nothing.
+                if cx.files_with_prefix(&format!("{under}/")).next().is_none() {
+                    continue;
+                }
+                out.package(PackageEntry {
+                    name: SmolStr::new(name),
+                    entry: None,
+                    dir: SmolStr::new(under),
+                });
+            }
+            (None, None) => {
+                if let Some(entry) = resolve_in_dir(&base, target, cx, exts) {
+                    out.package(PackageEntry {
+                        name: SmolStr::new(alias),
+                        entry: Some(entry),
+                        dir: SmolStr::new(&base),
+                    });
+                }
+            }
+            // A wildcard on one side alone is not a mapping TypeScript accepts.
+            _ => {}
+        }
+    }
+}
 
 /// Commands whose first non-flag argument is a source file they run.
 const RUNTIMES: &[&str] = &["node", "tsx", "ts-node", "bun", "deno"];
@@ -28,21 +197,24 @@ fn package_json(manifest: &SourceFile<'_>) -> Option<serde_json::Value> {
     serde_json::from_slice(manifest.content).ok()
 }
 
-pub fn roots(
-    manifest: &SourceFile<'_>,
+/// A launcher's roots: the only place a workflow or action reaches.
+fn roots(manifest: &SourceFile<'_>, cx: &ResolveContext<'_>, exts: &[String]) -> Vec<ProjectRoot> {
+    match github_actions::launcher(manifest.path.as_str()) {
+        Some(launcher) => launcher_roots(manifest, launcher, cx, exts),
+        None => Vec::new(),
+    }
+}
+
+/// The files a package's entry fields name — its unit's entries, which the
+/// engine anchors at the unit's colour.
+fn entry_roots(
+    json: &serde_json::Value,
+    dir: &str,
     cx: &ResolveContext<'_>,
     exts: &[String],
-) -> Vec<ProjectRoot> {
-    if let Some(launcher) = github_actions::launcher(manifest.path.as_str()) {
-        return launcher_roots(manifest, launcher, cx, exts);
-    }
-    let Some(json) = package_json(manifest) else {
-        return Vec::new();
-    };
-    let dir = kndo_toolkit::parent_dir(manifest.path.as_str());
-
+) -> BTreeSet<ProjectPath> {
     let mut anchored: BTreeSet<ProjectPath> = BTreeSet::new();
-    for entry in &entry_fields(&json) {
+    for entry in &entry_fields(json) {
         match entry.split_once('*') {
             // A wildcard entry (`"./types/*"`) declares every file it expands to.
             Some((before, after)) => {
@@ -81,16 +253,18 @@ pub fn roots(
             }
         }
     }
-    let mut out: Vec<ProjectRoot> = anchored
-        .into_iter()
-        .map(|file| ProjectRoot {
-            file,
-            kind: RootKind::Production,
-            confidence: Confidence::Certain,
-        })
-        .collect();
+    anchored
+}
 
-    // Source files named in npm scripts are run by their tool, not imported.
+/// Source files named in npm scripts are run by their tool, not imported —
+/// the manifest's own roots, at the tooling colour and a habit's confidence.
+/// A file that is already an entry is the unit's, not a script's.
+fn script_roots(
+    json: &serde_json::Value,
+    dir: &str,
+    cx: &ResolveContext<'_>,
+    exts: &[String],
+) -> Vec<ProjectRoot> {
     let mut script_files: BTreeSet<ProjectPath> = BTreeSet::new();
     if let Some(serde_json::Value::Object(scripts)) = json.get("scripts") {
         for value in scripts.values() {
@@ -99,18 +273,16 @@ pub fn roots(
             }
         }
     }
-    let production: BTreeSet<&ProjectPath> = out.iter().map(|r| &r.file).collect();
-    let script_roots: Vec<ProjectRoot> = script_files
-        .iter()
-        .filter(|f| !production.contains(f))
+    let entries = entry_roots(json, dir, cx, exts);
+    script_files
+        .into_iter()
+        .filter(|f| !entries.contains(f))
         .map(|file| ProjectRoot {
-            file: file.clone(),
+            file,
             kind: RootKind::Tooling,
             confidence: Confidence::Probable,
         })
-        .collect();
-    out.extend(script_roots);
-    out
+        .collect()
 }
 
 /// The project files a shell command runs, resolved from `dir`. The word a
@@ -235,7 +407,7 @@ fn entry_fields(json: &serde_json::Value) -> Vec<String> {
 
 /// The package this manifest declares, when it has a name and an entry that
 /// resolves — what links a workspace-internal bare import to its source.
-pub fn packages(
+fn packages(
     manifest: &SourceFile<'_>,
     cx: &ResolveContext<'_>,
     exts: &[String],
@@ -262,10 +434,7 @@ pub fn packages(
 
 /// The dependency names this manifest declares, every section npm installs from —
 /// activation evidence for plugin `ManifestDependency` rules, never resolution.
-pub fn dependencies(manifest: &SourceFile<'_>) -> Vec<DependencyDeclaration> {
-    let Some(json) = package_json(manifest) else {
-        return Vec::new();
-    };
+fn dependency_declarations(json: &serde_json::Value) -> Vec<DependencyDeclaration> {
     let mut out = Vec::new();
     for (section, scope) in SECTIONS {
         if let Some(serde_json::Value::Object(map)) = json.get(section) {
@@ -283,7 +452,7 @@ pub fn dependencies(manifest: &SourceFile<'_>) -> Vec<DependencyDeclaration> {
 
 /// The words this manifest spells outside its dependency sections and its
 /// prose, sorted — see [`mentioned_words`].
-pub fn mentions(manifest: &SourceFile<'_>) -> Vec<SmolStr> {
+fn mentions(manifest: &SourceFile<'_>) -> Vec<SmolStr> {
     let Some(json) = package_json(manifest) else {
         return Vec::new();
     };

@@ -5562,3 +5562,43 @@ The narrower rule the measurement points at — a file is reached by a resolved
 reference FROM A REACHABLE FILE — is its own slice with its own number, and the
 three known gaps in `internal-scope/expectations.toml` name it as their fix so
 the day it lands the fixture fails.
+
+## 2026-09-08 — js-ts speaks the one door, and a tsconfig alias is a package
+
+`kndo:js-ts` was the last adapter reading manifests through `roots`, `packages`,
+`manifest_dependencies` and `manifest_mentions`. It now writes `ManifestSink`:
+a `package.json` states the unit npm compiles, its entries, its publication
+(`"private": true` → `Unpublished`) and its declared dependencies; the files its
+`scripts` run stay the manifest's own tooling roots. The corpus is unmoved by
+that half and no conformance fixture moved, which is the equivalence — the
+entries changed door, not colour.
+
+`tsconfig.json` joins the manifests js-ts claims, for one fact: a
+`compilerOptions.paths` alias. An alias is a NAME that resolves to a FILE, which
+is what a `PackageEntry` already is, so it travels as one rather than as a new
+concept — exact aliases carry an entry, wildcard aliases carry the directory
+their subpath resolves against. Two spellings sharpened in `resolve`: the whole
+specifier is tried against the package map before it is split (an npm name is a
+scope and a name and stops there, so a declared name with more segments can only
+be an alias), and `@/` is not a scope.
+
+Measured: vite 691 → 687 findings and 2342 → **2474** import edges; every other
+repository byte-identical. The six `unused` that leave are files nothing could be
+seen to use — `playground/test-utils.ts` has 127 importers spelling `~utils` —
+and two return as `test-only`, the true verdict.
+
+Measured and NOT read, so nobody rebuilds them expecting a number: `references`
+(14 on the corpus, all between configs declaring no unit), `include`/`exclude`
+(kndo claims by suffix; no finding turns on them), `extends` (55 tsconfigs, no
+alias inherited rather than declared). A multi-target wildcard takes the first
+target that lands; the corpus's one such mapping has no import site.
+
+One conformance fixture is added and none moved: `tsconfig-path-aliases`
+(`kndo-adapter-ts`) pins both alias shapes resolving, a target outside the
+project stating nothing, and a file under a wildcard's directory that no
+specifier spells staying dead — an alias makes a name resolvable, never a file
+reachable.
+
+`kndo:js-ts` moves to 13. The four hooks are gone from every built-in adapter;
+they stay on the trait and in the WIT for the WASM guests that still export
+them, and closing that door is M8.d's last row.

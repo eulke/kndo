@@ -1919,3 +1919,50 @@ declines to advise; 5 that are v1 false positives — `TestDbDsl.kt`'s four and
 v1's own resolution missed; and 2 members of `R2dbcDatabaseMetadataImpl.kt`
 named `getBoolean`/`getString`, names many other files spell for unrelated JDBC
 `ResultSet` calls.
+
+### `package.json` and `tsconfig.json` through the one door (2026-09-08)
+
+| repo | before | after | what moved |
+|---|---|---|---|
+| vite | 691 | 687 | −6 `unused`, +2 `test-only`; import edges 2342 → **2474** |
+| every other repository | — | — | byte-identical |
+
+js-ts was the last adapter reading manifests through the four old hooks. It now
+writes to `ManifestSink` like every other: a `package.json` states the UNIT npm
+compiles — entered through its entry fields, `Library` where it has one and
+`Executable` where it does not, `Unpublished` where it says `"private": true`,
+compiled against the dependencies it declares — and the files its `scripts` run
+stay the manifest's own tooling roots, which is what they are. The entries move
+from a hook's `Production, Certain` root to the unit's own, where the colour
+comes from its kind; no fixture moved, which is the equivalence.
+
+`tsconfig.json` is new: js-ts never read it. What it states that the engine can
+use is `compilerOptions.paths`, and the reading is a type rather than a
+mechanism — an alias is a NAME that resolves to a FILE, which is exactly what a
+package entry is, so an alias travels as one. An exact alias (`"~utils":
+["./src/util.ts"]`) is a package with an entry; a wildcard (`"@/*": ["./src/*"]`)
+is a package whose directory the subpath resolves against, which the bare-
+specifier path already did for workspace siblings. Two spellings needed sharpening
+next door: the WHOLE specifier is tried against the package map first (an npm name
+is a scope and a name and stops there, so `"vite/module-runner"` can only be an
+alias), and `@/` is not a scope, because a scope needs a name after it.
+
+**What the 132 new edges buy.** Six files vite could not see a use of:
+`playground/test-utils.ts` (127 files spell `~utils`), `playground/vitestSetup.ts`
+behind it, and four under `playground/resolve-tsconfig-paths/src/` reached by
+`@/*` and `#/*` — two of them a `.css` and a `.scss`, since resolution is the
+IMPORTER's adapter and the alias serves whoever imports through it. Two of the six
+come back as `test-only`, which is the true verdict: only tests reach them.
+
+**What a tsconfig states and this does not read, each with its number on this
+corpus.** `references`: 14, all between configs that declare no unit, so they
+resolve no ambiguity — nothing to gain. `include`/`exclude`: kndo claims by
+suffix, and no finding in the corpus turns on them. `extends`: 55 tsconfigs, and
+no alias here is inherited rather than declared — a child without its own `paths`
+contributes none, which is what TypeScript does anyway when the child overrides.
+A wildcard alias with several targets takes the first that lands; the one such
+mapping on the corpus (`"@fallback/*"`) has no import site at all.
+
+v1 read `package.json` for entry roots and dependency names and never read
+`tsconfig.json`, so all six files are questions v1 never asked rather than ones
+it answered differently.

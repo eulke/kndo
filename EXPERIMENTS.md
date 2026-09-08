@@ -428,6 +428,24 @@ four and `ExposedExtension.kt`'s one ARE used from other files), and 2 are
 members named `getBoolean`/`getString`, names other files spell for unrelated
 JDBC `ResultSet` calls.
 
+### What a `tsconfig.json` states and kndo does not read — measured 2026-09-08
+
+`compilerOptions.paths` earned its reading (132 import edges on vite). The rest
+of the file was measured on the same corpus and read nothing, and the numbers
+are here so nobody rebuilds one expecting a finding.
+
+| stated | on the corpus | why it buys nothing yet |
+|---|---|---|
+| `references` | 14, in 7 of vite's 55 tsconfigs | they point at configs that declare no unit, so they disambiguate no unit name — the job `ManifestEvidence::members` exists for |
+| `include` / `exclude` | every config has them | kndo claims by suffix and discovers by tree; no finding in the corpus turns on either |
+| `extends` | 55 configs, chains 1–2 deep | no alias on the corpus is inherited rather than declared, and a child that declares `paths` overrides its parent's outright |
+| a multi-target wildcard alias | 1 (`"@fallback/*"`) | 0 import sites; the reader takes the first target that lands, as TypeScript does |
+
+The alias populations, for the slice that widens this: 143 import sites behind
+exact aliases, 4 behind wildcards, 35 behind an alias pointing into
+`node_modules/` (absent by design — a target outside the project states
+nothing).
+
 ## The v1 surface ledger (owner directive, 2026-08-31)
 
 v1's shipped surface is a floor: every capability it offers is either present in v2,
@@ -627,12 +645,12 @@ promise.
 
 | mechanism | how much | replaced by | lands in |
 |---|---|---|---|
-| the four manifest hooks | `grep -c "fn roots(\|fn packages(\|fn manifest_dependencies(\|fn manifest_mentions(" crates/kndo-adapter-*/src/lib.rs` — 4 trait impls left, all `kndo-adapter-ts` | `extract_manifest` + the structural parsers | M8.d's last row: `package.json` + `tsconfig` |
+| the four manifest hooks, on the TRAIT and in the WIT | `grep -c "fn roots(\|fn packages(\|fn manifest_dependencies(\|fn manifest_mentions(" crates/kndo-adapter-*/src/lib.rs` — **0**; what remains is the default on `Extension`, the three `export`s in `wit/extension.wit`, the host's forwarding and the engine's bridge in `project.rs`/`graph.rs` | the guest exporting `extract-manifest` instead, with the host folding what it reads | M8.d's last row — an ABI break, so `pin-abi` and the compat matrix come with it |
 
-Deleting these before their parser exists leaves the engine with NO mechanism,
-not a cleaner one: js-ts's `roots` hook alone carries 332 corpus findings
-(`EXPERIMENTS`, the legacy ledger, row 5). They die parser by parser, which is
-what M8.d is — and the row above is the only one left.
+No built-in adapter reads a manifest through the old hooks any more. What holds
+the door open is the WASM side: a guest compiled against the current ABI may
+still export `roots`, `packages` or `manifest-dependencies`, and deleting the
+bridge before the WIT would make the engine stop hearing it silently.
 
 ### Captures owed
 
@@ -657,6 +675,7 @@ a graded one.
 | swift's library-mode root and its silent namespace | swift declares its namespace (the SwiftPM target, path-only), so `publishes()` and the scope forest answer instead |
 | python's library-mode root, and its line-scanned manifests | `pyproject.toml` / `setup.cfg` / `requirements*.txt` parsed into units, entries, packages and dependencies; `publishes()` reads the unit. Ablations: without the parser the deletion cost flask +15, with it nothing |
 | swift's `manifest_dependencies` | `Package.swift` read once, dependencies from the `Package(...)` call's own list |
+| js-ts's four hooks | `package.json` states the unit npm compiles and its entries; `tsconfig.json` joins the manifests for its `paths` aliases, which travel as packages. vite 691 → 687 findings, 2342 → 2474 import edges; no conformance fixture moved, which is the equivalence for the half that only changed door |
 | the pom and Gradle line scanners | `roxmltree` over the pom; a block scanner over a comment-blanked copy of the Gradle scripts, plus the version catalog as TOML. Both graded against the ecosystem's own tool, rows above |
 | kotlin's library-mode Production root | the engine's published surface, read from the Gradle unit. Ablations from both sides: deleting it before the Gradle reader existed cost Exposed +125; with the reader it costs +38, every one decomposed in `corpus-findings/COMPARISON.md` |
 

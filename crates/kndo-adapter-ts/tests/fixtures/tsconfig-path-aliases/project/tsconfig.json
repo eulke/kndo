@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "paths": {
+      "~utils": ["./src/util/index.ts"],
+      "@/*": ["./src/*"],
+      "missing": ["./node_modules/nowhere/index.js"]
+    }
+  }
+}

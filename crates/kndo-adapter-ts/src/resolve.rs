@@ -44,6 +44,15 @@ pub fn resolve(
 /// declared entry; a subpath resolves against the package directory when the layout
 /// matches. Everything else is an external package — `Unresolved`, keep-alive.
 fn resolve_bare(specifier: &str, cx: &ResolveContext<'_>, exts: &[String]) -> Resolution {
+    // The WHOLE specifier first: an npm package name is a scope and a name and
+    // stops there, so a declared name that spells more than that is a tsconfig
+    // alias (`"vite/module-runner"`), and the alias is what the compiler picks
+    // over the package whose subpath it looks like.
+    if let Some(pkg) = cx.package(specifier)
+        && let Some(entry) = &pkg.entry
+    {
+        return Resolution::File(entry.clone());
+    }
     let (name, subpath) = split_bare(specifier);
     let Some(pkg) = cx.package(name) else {
         return Resolution::Unresolved;
@@ -61,8 +70,16 @@ fn resolve_bare(specifier: &str, cx: &ResolveContext<'_>, exts: &[String]) -> Re
 }
 
 /// `@scope/name/sub/path` → (`@scope/name`, `sub/path`); `name/sub` → (`name`, `sub`).
+/// A scope needs a name after it, so `@/x` is not one — it is the sigil a
+/// tsconfig alias conventionally takes, and `@` is the whole of its name.
 fn split_bare(specifier: &str) -> (&str, Option<&str>) {
-    let name_segments = if specifier.starts_with('@') { 2 } else { 1 };
+    let name_segments = if specifier.starts_with("@/") {
+        1
+    } else if specifier.starts_with('@') {
+        2
+    } else {
+        1
+    };
     let mut boundary = 0;
     let mut seen = 0;
     for (i, c) in specifier.char_indices() {

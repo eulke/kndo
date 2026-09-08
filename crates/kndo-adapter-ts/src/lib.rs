@@ -11,9 +11,7 @@ mod extract;
 mod manifest;
 mod resolve;
 
-use kndo_contract::adapter::{
-    DependencyDeclaration, PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile,
-};
+use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{Attachment, EvidenceSink, RootKind, RootTarget};
 use kndo_contract::extension::{Extension, ExtensionSpec, FileRole, PublishedSurface, Rung, Step};
 use kndo_contract::vocab::{Confidence, ProjectPath};
@@ -93,11 +91,14 @@ impl TypeScriptAdapter {
     pub fn new() -> Self {
         let spec = kndo_toolkit::source_adapter_builder(
             "kndo:js-ts",
-            // 12: a path convention is the spec's to declare, and extraction
-            // states the file's own facts alone.
-            12,
+            // 13: `package.json` states a unit and `tsconfig.json` states the
+            // aliases that are not packages, both through the one door.
+            13,
             &["ts", "tsx", "js", "jsx", "mjs", "cjs", "mts", "cts"],
-            &["**/package.json"],
+            // `tsconfig.json` states the names that are not packages — its
+            // `paths` aliases; every other spelling of the file is a variant
+            // of the same config (`tsconfig.app.json`, `tsconfig.base.json`).
+            &["**/package.json", "**/tsconfig.json", "**/tsconfig.*.json"],
             // ESM/CJS initialization order makes cycles bite: TDZ errors and
             // partially-initialized modules at run time.
             kndo_contract::extension::CycleTolerance::Hazard,
@@ -221,20 +222,13 @@ impl Extension for TypeScriptAdapter {
         resolve::resolve(from, specifier, cx, &self.resolution_exts)
     }
 
-    fn roots(&self, manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<ProjectRoot> {
-        manifest::roots(manifest, cx, &self.resolution_exts)
-    }
-
-    fn packages(&self, manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<PackageEntry> {
-        manifest::packages(manifest, cx, &self.resolution_exts)
-    }
-
-    fn manifest_dependencies(&self, manifest: &SourceFile<'_>) -> Vec<DependencyDeclaration> {
-        manifest::dependencies(manifest)
-    }
-
-    fn manifest_mentions(&self, manifest: &SourceFile<'_>) -> Vec<smol_str::SmolStr> {
-        manifest::mentions(manifest)
+    fn extract_manifest(
+        &self,
+        manifest: &SourceFile<'_>,
+        cx: &ResolveContext<'_>,
+        out: &mut kndo_contract::manifest::ManifestSink,
+    ) {
+        manifest::structure(manifest, cx, &self.resolution_exts, out);
     }
 }
 

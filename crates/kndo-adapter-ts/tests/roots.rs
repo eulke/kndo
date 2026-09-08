@@ -1,36 +1,42 @@
-//! The root story: what package.json declares, what the FILE declares (a
-//! shebang, a test runner's membership), and the degradations (built entries
-//! that don't exist, unparseable manifests) that must anchor nothing. What a
-//! path declares is the spec's `file_roles`, gated in `kndo-gates`.
+//! What the manifests STATE: the unit `package.json` declares and the roots it
+//! enters through, the names `tsconfig.json` maps to files, what the FILE
+//! declares (a shebang, a test runner's membership), and the degradations
+//! (built entries that don't exist, unparseable manifests) that must state
+//! nothing. What a path declares is the spec's `file_roles`, gated in
+//! `kndo-gates`.
 
 use kndo_adapter_ts::TypeScriptAdapter;
 use kndo_contract::adapter::DependencyScope;
-use kndo_contract::adapter::{ResolveContext, SourceFile};
+use kndo_contract::adapter::SourceFile;
 use kndo_contract::evidence::{Attachment, EvidenceSink, RootKind, RootTarget};
 use kndo_contract::extension::Extension;
+use kndo_contract::manifest::{ManifestEvidence, Publication, UnitKind};
 use kndo_contract::vocab::ProjectPath;
-use std::collections::BTreeSet;
 
-fn cx_files(files: &[&str]) -> BTreeSet<ProjectPath> {
-    files.iter().map(|f| ProjectPath::new(*f)).collect()
+fn evidence(manifest_path: &str, json: &str, files: &[&str]) -> ManifestEvidence {
+    kndo_testkit::manifest_evidence(&TypeScriptAdapter::new(), manifest_path, json, files)
 }
 
+/// Every root one manifest puts on the graph, the way the engine assembles
+/// them: a unit's entries at the colour its kind gives them, then the
+/// manifest's own roots — files it says are RUN without entering any unit.
 fn manifest_roots(manifest_path: &str, json: &str, files: &[&str]) -> Vec<(String, RootKind)> {
-    let known = cx_files(files);
-    let cx = ResolveContext::new(&known);
-    let path = ProjectPath::new(manifest_path);
-    TypeScriptAdapter::new()
-        .roots(
-            &SourceFile {
-                path: &path,
-                content: json.as_bytes(),
-                region: None,
-            },
-            &cx,
-        )
-        .into_iter()
-        .map(|r| (r.file.as_str().to_string(), r.kind))
-        .collect()
+    let read = evidence(manifest_path, json, files);
+    let mut out: Vec<(String, RootKind)> = read
+        .units
+        .iter()
+        .flat_map(|u| {
+            u.entries
+                .iter()
+                .map(move |e| (e.as_str().to_string(), u.kind.color()))
+        })
+        .collect();
+    out.extend(
+        read.roots
+            .iter()
+            .map(|r| (r.file.as_str().to_string(), r.kind)),
+    );
+    out
 }
 
 #[test]
@@ -105,18 +111,12 @@ fn wildcard_exports_imports_scripts_and_companions_anchor() {
 
 #[test]
 fn manifest_declares_its_package() {
-    use kndo_contract::adapter::ResolveContext;
-    let known = cx_files(&["packages/core/src/index.ts"]);
-    let cx = ResolveContext::new(&known);
-    let path = ProjectPath::new("packages/core/package.json");
-    let pkgs = TypeScriptAdapter::new().packages(
-        &SourceFile {
-            path: &path,
-            content: br#"{ "name": "@demo/core", "main": "src/index.ts" }"#,
-            region: None,
-        },
-        &cx,
-    );
+    let pkgs = evidence(
+        "packages/core/package.json",
+        r#"{ "name": "@demo/core", "main": "src/index.ts" }"#,
+        &["packages/core/src/index.ts"],
+    )
+    .packages;
     assert_eq!(pkgs.len(), 1);
     assert_eq!(pkgs[0].name, "@demo/core");
     assert_eq!(
@@ -235,7 +235,6 @@ fn built_entries_map_to_their_source() {
 
 #[test]
 fn manifest_dependencies_report_every_section() {
-    let path = ProjectPath::new("package.json");
     let json = r#"{
         "name": "demo",
         "dependencies": { "express": "^4", "lodash": "*" },
@@ -244,11 +243,7 @@ fn manifest_dependencies_report_every_section() {
         "optionalDependencies": { "fsevents": "^2" },
         "scripts": { "not-a-dep": "echo" }
     }"#;
-    let mut deps = TypeScriptAdapter::new().manifest_dependencies(&SourceFile {
-        path: &path,
-        content: json.as_bytes(),
-        region: None,
-    });
+    let mut deps = evidence("package.json", json, &[]).dependencies;
     deps.sort_by(|a, b| a.name.cmp(&b.name));
     let brief: Vec<(&str, Option<DependencyScope>, Option<&str>)> = deps
         .iter()
@@ -266,19 +261,14 @@ fn manifest_dependencies_report_every_section() {
         ]
     );
     assert!(
-        TypeScriptAdapter::new()
-            .manifest_dependencies(&SourceFile {
-                path: &path,
-                content: b"not json",
-                region: None,
-            })
+        evidence("package.json", "not json", &[])
+            .dependencies
             .is_empty()
     );
 }
 
 #[test]
 fn manifest_mentions_are_what_it_spells_outside_declarations_and_prose() {
-    let path = ProjectPath::new("package.json");
     let json = r#"{
         "name": "demo",
         "description": "an express server with lodash helpers",
@@ -296,11 +286,7 @@ fn manifest_mentions_are_what_it_spells_outside_declarations_and_prose() {
         },
         "browser": { "jsdom": false, "./node-only.js": "@scope/shim/browser" }
     }"#;
-    let mentions = TypeScriptAdapter::new().manifest_mentions(&SourceFile {
-        path: &path,
-        content: json.as_bytes(),
-        region: None,
-    });
+    let mentions = evidence("package.json", json, &[]).mentions;
     let has = |name: &str| mentions.iter().any(|m| m == name);
     // A scoped name is one word, its own slash included; a `browser` alias names
     // the package it maps to, path and all; a `browser` key disabling a package
@@ -389,4 +375,99 @@ fn a_workflow_or_action_step_hands_a_runtime_an_entry_like_a_script() {
         roots,
         [("action/src/index.ts".to_string(), RootKind::Production)]
     );
+}
+
+#[test]
+fn a_package_states_the_unit_npm_compiles() {
+    let read = evidence(
+        "packages/core/package.json",
+        r#"{
+            "name": "@demo/core",
+            "private": true,
+            "main": "src/index.ts",
+            "dependencies": { "@demo/util": "workspace:*" }
+        }"#,
+        &["packages/core/src/index.ts"],
+    );
+    assert_eq!(read.units.len(), 1);
+    let unit = &read.units[0];
+    assert_eq!(unit.name, "@demo/core");
+    assert_eq!(unit.kind, UnitKind::Library);
+    // `"private": true` is npm's own word for it, so the unit is not published
+    // however the package is otherwise shaped.
+    assert_eq!(unit.publication, Publication::Unpublished);
+    assert!(!unit.is_published());
+    assert_eq!(
+        unit.entries.iter().map(|e| e.as_str()).collect::<Vec<_>>(),
+        ["packages/core/src/index.ts"]
+    );
+    assert_eq!(unit.depends_on, ["@demo/util"]);
+
+    // A manifest with no entry field is run, not imported.
+    let app = evidence("app/package.json", r#"{ "name": "app" }"#, &[]);
+    assert_eq!(app.units[0].kind, UnitKind::Executable);
+    assert_eq!(app.units[0].publication, Publication::Unstated);
+
+    // An unnamed manifest still states its unit, named for the directory it
+    // sits in — identity is (manifest, name), so the derived name is enough.
+    let unnamed = evidence(
+        "tools/package.json",
+        r#"{ "main": "run.js" }"#,
+        &["tools/run.js"],
+    );
+    assert_eq!(unnamed.units[0].name, "tools");
+}
+
+#[test]
+fn a_tsconfig_alias_is_a_package_that_resolves_to_a_file() {
+    let read = evidence(
+        "app/tsconfig.json",
+        r#"{
+            "compilerOptions": {
+                "paths": {
+                    "~utils": ["./src/util.ts"],
+                    "@/*": ["./src/*"],
+                    "dangling": ["./node_modules/nowhere/index.js"],
+                    "half/*": ["./src/one.ts"]
+                }
+            }
+        }"#,
+        &["app/src/util.ts", "app/src/deep/thing.ts", "app/src/one.ts"],
+    );
+    let named: Vec<(&str, Option<&str>, &str)> = read
+        .packages
+        .iter()
+        .map(|p| {
+            (
+                p.name.as_str(),
+                p.entry.as_ref().map(|e| e.as_str()),
+                p.dir.as_str(),
+            )
+        })
+        .collect();
+    // An exact alias names a file; a wildcard names the directory its subpath
+    // resolves against; a target outside the project and a half-wildcard
+    // mapping state nothing.
+    assert_eq!(
+        named,
+        [
+            ("@", None, "app/src"),
+            ("~utils", Some("app/src/util.ts"), "app"),
+        ]
+    );
+
+    // `baseUrl` moves what the targets are relative to.
+    let based = evidence(
+        "tsconfig.json",
+        r##"{ "compilerOptions": { "baseUrl": "./src", "paths": { "#lib": ["./lib.ts"] } } }"##,
+        &["src/lib.ts"],
+    );
+    assert_eq!(
+        based.packages[0].entry.as_ref().map(|e| e.as_str()),
+        Some("src/lib.ts")
+    );
+
+    // A tsconfig states no unit: it configures a compiler, it does not package
+    // anything.
+    assert!(read.units.is_empty() && read.dependencies.is_empty());
 }

@@ -1,0 +1,18 @@
+# tsconfig-path-aliases: a `compilerOptions.paths` alias is a NAME that resolves to a
+# file, which is what a package entry is — so both alias shapes travel as one and the
+# engine draws the edges it always drew for a package.
+
+[[alive]]
+subject = "src/util/index.ts#format"
+category = "unused"
+why = "reached only through the exact alias `~utils`, which the tsconfig maps to this file"
+
+[[alive]]
+subject = "src/nested/probe.ts#probe"
+category = "unused"
+why = "reached only through the wildcard alias `@/*`, whose subpath resolves against `src/`"
+
+[[dead]]
+subject = "src/orphan.ts"
+category = "unused"
+why = "under the wildcard's target directory, but no specifier spells it — an alias makes a name resolvable, never a file reachable"
