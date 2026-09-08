@@ -5884,3 +5884,38 @@ operator alive and a declared-never-written one dead.
 Still owed on `kndo:swift`, each with its blocker: the conformer-methods
 `Possible` root and its 78 findings (needs `kndo:xctest` and `kndo:swiftui`,
 M8.e), and ERROR-tolerant traversal (M8.f, where the design puts it).
+
+## 2026-09-08 — Python: decorators are markers, bases are relations, and `_x` reaches its distribution
+
+`kndo:python` moves to 7 with three of the design's row, measured on flask
+(20 → 18; every other repository byte-identical).
+
+- **Decorators as markers, with the path the source writes** (`pytest.fixture`,
+  `app.route`), which the engine qualifies through the file's own import
+  bindings before any rule compares it — the same protection that stops a JVM
+  rule from speaking about a Swift file. Class bases as relations, one per
+  base: `class C(Base, metaclass=M)` names ONE supertype, because a keyword
+  argument configures a class rather than being one. Additive; no rule reads a
+  Python marker yet, and the blanket `Possible` root on a decorated definition
+  stays until `kndo:pytest`/`django`/`flask` can replace it (M8.e).
+- **`Seats` lands in the toolkit**, on its second consumer as the law requires.
+  Swift's version of this bug was fixed by deleting a word; Python's cannot be
+  — `a: int = D` and `a = D` bind one name and read another under one node, so
+  the seat must name the FIELD. Audit finding P3. Zero corpus movement: flask
+  defaults to imported names that other evidence already kept, and the
+  `default-values` fixture is what pins it.
+- **`_x` → `Unit{0}`**, the owner's decision of 2026-09-05, replacing
+  `Reach::File`. Both lost findings are here and both are true positives:
+  `app.py`'s dead `_make_timedelta` is joined by name to `sansio/app.py`'s live
+  one (the cost every unit-scoped rung pays), and `cli.py`'s
+  `_path_is_ancestor` is kept by an opaque namespace import, because the
+  design's keeper list gives `Unit` reach to a surface-importer. Python's
+  `Unit{0}` means "internal to the distribution", which is not "part of the
+  module's surface" — every other language's rung makes those the same thing.
+  Named, not patched: one finding does not buy a keeper rule that reads a
+  language. The rung still accuses (`_has_encoding` stands), which is the whole
+  point of the decision over `Exported`.
+
+Still owed on this adapter: qualified references (`via: Binding(mod)`), string
+annotations as references, nested and conditional defs, `type X`, and
+`Nesting::ByPath`.

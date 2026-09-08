@@ -49,7 +49,7 @@ impl PythonAdapter {
             // 3: the generated banner is reported, never concluded.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:python",
-                6,
+                7,
                 &["py"],
                 &[
                     "**/pyproject.toml",
@@ -65,6 +65,13 @@ impl PythonAdapter {
             // package can be named `site-packages` — is never the project's
             // source; an environment is found by it, whatever the environment
             // is called, and a hidden `.venv` never enters discovery at all.
+            // What a rule reads about a Python declaration: the decorators
+            // it carries (a decorated def IS handed to them by the language)
+            // and the bases a class promises the surface of.
+            .emits(kndo_contract::evidence::EvidenceStreams::of(&[
+                kndo_contract::evidence::EvidenceStream::Markers,
+                kndo_contract::evidence::EvidenceStream::Relations,
+            ]))
             .ignores(&["**/site-packages/**"])
             // The runners' own discovery, where no manifest said what a file
             // is: pytest and unittest COLLECT `test_*.py` and `*_test.py` by

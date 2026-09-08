@@ -32,7 +32,7 @@
     ]
   },
   "health": {
-    "implicated": 9,
+    "implicated": 7,
     "subjects": 1219,
     "by_category": [
       {
@@ -41,14 +41,14 @@
       },
       {
         "category": "unused",
-        "findings": 6
+        "findings": 4
       }
     ],
     "by_package": [
       {
         "name": "Flask",
         "manifest": "pyproject.toml",
-        "implicated": 6,
+        "implicated": 4,
         "subjects": 1119
       },
       {
@@ -137,50 +137,6 @@
         "path": "examples/tutorial/flaskr/static/style.css"
       },
       "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-4fb60e18262d",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "src/flask/app.py",
-        "selector": {
-          "name": "_make_timedelta"
-        },
-        "span": {
-          "start": 2489,
-          "end": 2672
-        }
-      },
-      "lines": {
-        "start": 74,
-        "end": 78
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-4c1a2a4fda96",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "src/flask/cli.py",
-        "selector": {
-          "name": "_path_is_ancestor"
-        },
-        "span": {
-          "start": 23572,
-          "end": 23868
-        }
-      },
-      "lines": {
-        "start": 691,
-        "end": 695
-      },
-      "message": "nothing references, roots, or imports this declaration"
     },
     {
       "id": "kndo-9ecdece7f844",

@@ -2185,3 +2185,47 @@ Closing that reach also exposed a pre-existing hole and it is fixed here: `case
 .space` in a switch is a PATTERN, and every identifier under a pattern was
 treated as a binder — so enum-case dot-shorthand, the pervasive use form in
 Swift, produced no reference. A pattern that starts with `.` binds nothing.
+
+### Python states what a definition carries, what a class promises, and how far `_x` reaches (2026-09-08)
+
+| repo | before | after | what moved |
+|---|---|---|---|
+| flask | 20 | 18 | −2 `unused` |
+| every other repository | — | — | byte-identical |
+
+Three changes; the two lost findings are both the price of ONE of them, and it
+is the owner's recorded decision.
+
+**Decorators are markers, bases are relations.** Purely additive: no rule of
+the language reads a Python marker yet, and flask's numbers do not move for
+them. What changes is that the blanket `Possible` root a decorated definition
+carries — "whatever the decorator does with it" — now has an alternative: the
+decorator's own path is evidence a rule can read, which is what
+`kndo:pytest`/`kndo:django`/`kndo:flask` will do in M8.e. The root stays until
+they exist.
+
+**P3, the parameter default.** `guard=_clamp` and `typed_guard: object =
+_clamp` each bind one name and READ another under one node, and the binder seat
+was named by parent KIND — so every default was thrown away. This is the second
+consumer of the design's `Seats` ((kind, field) pairs), so it lands in the
+toolkit now rather than as a third copy. Zero corpus movement: flask defaults
+to imported names, which other evidence already kept.
+
+**`_x` reaches the distribution's root package**, the owner's decision of
+2026-09-05, replacing the file. Both lost findings are here, and both are real
+losses:
+
+- `flask/app.py`'s `_make_timedelta` is dead — a leftover of the sansio split —
+  and `flask/sansio/app.py` declares a function of the same name that IS used.
+  A unit-scoped pool joins them by name. This is the same cost Java's
+  package-private and Kotlin's `internal` already pay.
+- `cli.py`'s `_path_is_ancestor` is now kept by a `surface-import`: an opaque
+  namespace import keeps every name of `Unit` reach or wider, per the design's
+  keeper list. Python's `Unit{0}` means "internal to the distribution", which
+  is not the same thing as "part of the module's surface" — the two coincide
+  for every other language on this rung and diverge here. Named rather than
+  patched: one finding does not justify a keeper rule that reads a language.
+
+The rung still accuses (`_has_encoding` stands), which is what the decision
+turned on: the alternative, `Exported`, would have made no `_x` accusable
+inside a published distribution at all.

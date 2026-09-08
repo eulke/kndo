@@ -30,10 +30,18 @@ def _module_helper():
     );
     assert_eq!(declaration_named(&e, "MAX").kind, SymbolKind::Constant);
     assert_eq!(declaration_named(&e, "MAX").reach, Reach::Exported);
-    assert_eq!(declaration_named(&e, "_cache").reach, Reach::File);
+    // PEP 8's "internal use" reaches the distribution's root package, not the
+    // file: `mod._cache` from a sibling module is legal and common.
+    assert_eq!(declaration_named(&e, "_cache").reach, Reach::Unit { up: 0 });
     assert_eq!(declaration_named(&e, "Widget").reach, Reach::Exported);
-    assert_eq!(declaration_named(&e, "_hidden").reach, Reach::File);
-    assert_eq!(declaration_named(&e, "_module_helper").reach, Reach::File);
+    assert_eq!(
+        declaration_named(&e, "_hidden").reach,
+        Reach::Unit { up: 0 }
+    );
+    assert_eq!(
+        declaration_named(&e, "_module_helper").reach,
+        Reach::Unit { up: 0 }
+    );
     let widget = e
         .declarations_with_ids()
         .find(|(_, d)| d.name == "Widget")
@@ -384,4 +392,57 @@ fn what_the_runner_collects_joins_the_package_in_a_test_run_alone() {
         ev("src/app/widget.py", "x = 1\n").attachment,
         Attachment::Regular
     );
+}
+
+#[test]
+fn decorators_are_markers_bases_are_relations_and_a_default_is_a_use() {
+    let e = ev(
+        "app/views.py",
+        r#"
+import pytest
+from base import Model
+
+DEFAULT = 3
+
+@pytest.fixture(scope="module")
+def client():
+    pass
+
+@app.route("/x")
+def index(limit: int = DEFAULT, later: "Model" = None):
+    pass
+
+class Widget(Model, metaclass=Meta):
+    pass
+"#,
+    );
+    let markers: Vec<(&str, &str)> = e
+        .markers
+        .iter()
+        .filter_map(|m| match m.on {
+            MarkerTarget::Declaration(id) => {
+                Some((e.declarations[id.index()].name.as_str(), m.path.as_str()))
+            }
+            _ => None,
+        })
+        .collect();
+    // The path as the source writes it — the engine qualifies it through this
+    // file's own bindings, so `pytest.fixture` is JUnit's problem's twin and
+    // not a bare name any ecosystem could collide with.
+    assert!(
+        markers.contains(&("client", "pytest.fixture")),
+        "{markers:?}"
+    );
+    assert!(markers.contains(&("index", "app.route")), "{markers:?}");
+    let relations: Vec<(&str, &str)> = e
+        .relations
+        .iter()
+        .map(|r| (e.declarations[r.from.index()].name.as_str(), r.to.as_str()))
+        .collect();
+    // One base. `metaclass=Meta` configures the class; it is not a supertype.
+    assert_eq!(relations, [("Widget", "Model")], "{relations:?}");
+    // P3: `limit: int = DEFAULT` binds `limit` and READS `DEFAULT`. Naming the
+    // parent kind a binder seat threw the default away.
+    let names: Vec<&str> = e.references.iter().map(|r| r.name.as_str()).collect();
+    assert!(names.contains(&"DEFAULT"), "{names:?}");
 }

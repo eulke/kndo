@@ -5,7 +5,8 @@
 //! naming its own published names keeps them and records the intent.
 
 use kndo_contract::evidence::{
-    Attachment, EvidenceSink, Reach, RefKind, RootKind, RootTarget, SymbolKind,
+    Attachment, DeclarationId, EvidenceSink, MarkerTarget, Reach, RefKind, RelationKind, RootKind,
+    RootTarget, SymbolKind,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use kndo_toolkit as tk;
@@ -121,7 +122,7 @@ fn has_main_guard(root: Node<'_>, source: &[u8]) -> bool {
 fn top_level_item(item: Node<'_>, source: &[u8], test_file: bool, out: &mut EvidenceSink) {
     match item.kind() {
         "function_definition" => {
-            function(item, source, None, test_file, false, out);
+            function(item, source, None, test_file, None, out);
         }
         "class_definition" => {
             class(item, source, test_file, out);
@@ -130,7 +131,7 @@ fn top_level_item(item: Node<'_>, source: &[u8], test_file: bool, out: &mut Evid
             if let Some(def) = item.child_by_field_name("definition") {
                 match def.kind() {
                     "function_definition" => {
-                        function(def, source, None, test_file, true, out);
+                        function(def, source, None, test_file, Some(item), out);
                     }
                     "class_definition" => {
                         decorated_class(def, item, source, test_file, out);
@@ -147,6 +148,70 @@ fn top_level_item(item: Node<'_>, source: &[u8], test_file: bool, out: &mut Evid
     }
 }
 
+/// Every decorator a definition carries, as a MARKER: the dotted path as the
+/// source writes it (`pytest.fixture`, `app.route`, `staticmethod`), which the
+/// engine qualifies through the file's own import bindings before any rule
+/// compares it. What a decorator MEANS is a rule's to say.
+fn markers_of(decorated: Node<'_>, source: &[u8], id: DeclarationId, out: &mut EvidenceSink) {
+    let mut c = decorated.walk();
+    for d in decorated
+        .named_children(&mut c)
+        .filter(|n| n.kind() == "decorator")
+    {
+        let mut dc = d.walk();
+        let Some(inner) = d.named_children(&mut dc).next() else {
+            continue;
+        };
+        // `@d` and `@d(...)`: the callee of the call, or the path itself.
+        let path_node = match inner.kind() {
+            "call" => inner.child_by_field_name("function"),
+            _ => Some(inner),
+        };
+        let Some(path_node) = path_node else { continue };
+        let args = match inner.kind() {
+            "call" => inner
+                .child_by_field_name("arguments")
+                .map(|a| {
+                    let mut ac = a.walk();
+                    a.named_children(&mut ac)
+                        .map(|n| SmolStr::new(tk::text(n, source).trim_matches(['\'', '"'])))
+                        .collect()
+                })
+                .unwrap_or_default(),
+            _ => Vec::new(),
+        };
+        out.marker(
+            MarkerTarget::Declaration(id),
+            tk::text(path_node, source),
+            args,
+            tk::span(d),
+        );
+    }
+}
+
+/// The bases a class promises the surface of. `class C(Base, metaclass=M)`
+/// names ONE base: a keyword argument configures the class, it is not a
+/// supertype.
+fn relations_of(item: Node<'_>, source: &[u8], id: DeclarationId, out: &mut EvidenceSink) {
+    let Some(bases) = item.child_by_field_name("superclasses") else {
+        return;
+    };
+    let mut c = bases.walk();
+    for b in bases.named_children(&mut c) {
+        if b.kind() == "keyword_argument" {
+            continue;
+        }
+        // `Base` and `pkg.Base` alike: the whole path, which a rule compares
+        // after the engine qualifies it.
+        out.relation(
+            id,
+            RelationKind::Implements,
+            tk::text(b, source),
+            tk::span(b),
+        );
+    }
+}
+
 fn decorated_class(
     def: Node<'_>,
     decorated: Node<'_>,
@@ -157,7 +222,7 @@ fn decorated_class(
     let Some(id) = class(def, source, test_file, out) else {
         return;
     };
-    let _ = decorated;
+    markers_of(decorated, source, id, out);
     // Handed to its decorator by the language itself.
     out.root(
         RootTarget::Declaration(id),
@@ -175,6 +240,7 @@ fn class(
     let name_node = item.child_by_field_name("name")?;
     let name = tk::text(name_node, source);
     let owner_id = out.declaration(name, SymbolKind::Type, tk::span(item), reach_of(name));
+    relations_of(item, source, owner_id, out);
     let Some(body) = item.child_by_field_name("body") else {
         return Some(owner_id);
     };
@@ -184,7 +250,7 @@ fn class(
     for m in members {
         match m.kind() {
             "function_definition" => {
-                if let Some(id) = function(m, source, Some(owner_id), in_test_case, false, out) {
+                if let Some(id) = function(m, source, Some(owner_id), in_test_case, None, out) {
                     let _ = id;
                 }
             }
@@ -192,7 +258,7 @@ fn class(
                 if let Some(def) = m.child_by_field_name("definition")
                     && def.kind() == "function_definition"
                 {
-                    function(def, source, Some(owner_id), in_test_case, true, out);
+                    function(def, source, Some(owner_id), in_test_case, Some(m), out);
                 }
             }
             "expression_statement" => member_assignment(m, source, owner_id, out),
@@ -216,7 +282,7 @@ fn function(
     source: &[u8],
     owner: Option<kndo_contract::evidence::DeclarationId>,
     test_file: bool,
-    decorated: bool,
+    decorated: Option<Node<'_>>,
     out: &mut EvidenceSink,
 ) -> Option<kndo_contract::evidence::DeclarationId> {
     let name_node = item.child_by_field_name("name")?;
@@ -234,6 +300,9 @@ fn function(
         out.member_of(id, owner);
     }
     out.metrics(id, tk::function_metrics(item, &METRICS, source));
+    if let Some(decorated) = decorated {
+        markers_of(decorated, source, id, out);
+    }
 
     // The runners dispatch `test_*` by NAME in test files — Certain, the same
     // tier as the discovery convention that rooted the file.
@@ -256,7 +325,7 @@ fn function(
     // `@d def f` IS `f = d(f)`: the definition is handed to its decorator by
     // the language itself — whatever the decorator registers or wraps, that
     // hand-off is a use beyond static sight.
-    if decorated {
+    if decorated.is_some() {
         out.root(
             RootTarget::Declaration(id),
             RootKind::Production,
@@ -337,7 +406,11 @@ fn all_strings_as_refs(list: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
 /// hiding).
 fn reach_of(name: &str) -> Reach {
     if name.starts_with('_') && !is_dunder(name) {
-        Reach::File
+        // PEP 8's "internal use", and the owner's decision (DECISIONS
+        // 2026-09-05): `mod._x()` from a sibling module of the same
+        // distribution is legal and common, so an `_x` is never accused for
+        // being named across the package — only for being named nowhere in it.
+        Reach::Unit { up: 0 }
     } else {
         Reach::Exported
     }
@@ -523,13 +596,24 @@ fn references_and_comments(root: Node<'_>, source: &[u8], out: &mut EvidenceSink
 /// Identifier seats that BIND a name rather than use one. Assignment targets
 /// stay references deliberately: rebinding an imported name is a use of the
 /// binding, and Python's evidence errs keep-alive.
+/// The seats that hold a NAME beside something else. `a = DEFAULT` and
+/// `a: int = DEFAULT` bind `a` and READ `DEFAULT`, both under one node, so
+/// naming the kind wholesale threw the default away — audit finding P3.
+const SEATS: tk::Seats = tk::Seats(&[
+    ("default_parameter", "name"),
+    ("typed_default_parameter", "name"),
+    ("keyword_argument", "name"),
+    ("function_definition", "name"),
+    ("class_definition", "name"),
+]);
+
 fn is_binder_seat(n: Node<'_>, parent: Node<'_>) -> bool {
     match parent.kind() {
-        "function_definition" | "class_definition" => parent.child_by_field_name("name") == Some(n),
-        "parameters" | "typed_parameter" | "default_parameter" | "lambda_parameters" => true,
-        "keyword_argument" => parent.child_by_field_name("name") == Some(n),
+        // Whole-kind seats: everything a `parameters` list names directly, and
+        // a `global`/`nonlocal` declaration, is a binder and holds no value.
+        "parameters" | "typed_parameter" | "lambda_parameters" => true,
         "global_statement" | "nonlocal_statement" => true,
-        _ => false,
+        _ => SEATS.binds(n),
     }
 }
 

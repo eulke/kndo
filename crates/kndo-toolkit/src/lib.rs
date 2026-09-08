@@ -1466,6 +1466,39 @@ pub fn source_adapter_builder(
         .import_cycles(import_cycles)
 }
 
+/// The (kind, field) pairs whose subtree BINDS a name rather than uses one.
+///
+/// Naming a parent KIND is the coarse form, and it is wrong wherever the node
+/// also holds a value: `a: int = DEFAULT` binds `a` and READS `DEFAULT`, both
+/// under one `typed_default_parameter`. A seat names the field instead, so
+/// everything the grammar did not put in the name position stays a reference.
+pub struct Seats(pub &'static [(&'static str, &'static str)]);
+
+impl Seats {
+    /// Is `n` inside one of these seats — the field child of an ancestor of
+    /// that kind, or anywhere beneath it (a name seat is often a pattern node
+    /// with the identifier under it)?
+    pub fn binds(&self, n: Node<'_>) -> bool {
+        let mut child = n;
+        while let Some(parent) = child.parent() {
+            for (kind, field) in self.0 {
+                if parent.kind() != *kind {
+                    continue;
+                }
+                let mut c = parent.walk();
+                if parent
+                    .children_by_field_name(field, &mut c)
+                    .any(|f| f.id() == child.id())
+                {
+                    return true;
+                }
+            }
+            child = parent;
+        }
+        false
+    }
+}
+
 /// The directory holding `path` (`""` at the project root).
 pub fn parent_dir(path: &str) -> &str {
     match path.rfind('/') {

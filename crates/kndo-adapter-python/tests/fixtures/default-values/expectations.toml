@@ -1,0 +1,15 @@
+# default-values: a parameter default is a USE. `guard=_clamp` and
+# `typed_guard: object = _clamp` each bind one name and hold another beside it, and a
+# binder seat named by parent KIND swallowed the second — audit finding P3. The
+# identical function nothing defaults to stays dead, which is what keeps the fix from
+# being "keep everything".
+
+[[alive]]
+subject = "src/app/views.py#_clamp"
+category = "unused"
+why = "named as the default of two parameters, one typed and one not — the reference the field seat keeps"
+
+[[dead]]
+subject = "src/app/views.py#_unclamped"
+category = "unused"
+why = "the same shape, defaulted by nothing: the accusation the fix must leave standing"
