@@ -1,0 +1,21 @@
+# protocol-requirement-reach: a member that sits on a promised surface cannot be
+# narrowed, and Swift writes that promise in one list its grammar does not separate.
+# The relation stream answers both directions — what a subtype overrides, and what a
+# protocol requires — and must leave everything else advisable.
+
+[[alive]]
+subject = "Sources/App/Shape.swift#Square.area"
+category = "internal-only"
+why = "`Rounded` overrides it, so narrowing it below what the overrider needs is a compile error, not advice — the relation `Rounded: Square` is the whole of that evidence"
+
+[[dead]]
+subject = "Sources/App/Shape.swift#Square.perimeter"
+category = "internal-only"
+why = "nothing overrides it and nothing outside this file names it — the advice the relation must NOT suppress"
+
+[[known_gap]]
+subject = "Sources/App/Shape.swift#Cube.volume"
+expect = "dead"
+category = "internal-only"
+why = "a conforming type's OTHER members promise nothing and should be advised, but every non-private method of a type that declares any conformance still carries the `Possible` root swift roots by hand — the heuristic the relation stream replaces"
+fix = "M8.c swift: the conformer-methods Possible root retires for witnesses derived from relations, with the xctest/swiftui packs stating the requirements of bases outside the project"

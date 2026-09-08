@@ -53,13 +53,20 @@ impl SwiftAdapter {
             // 4: the generated banner is reported, never concluded.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:swift",
-                9,
+                10,
                 &["swift"],
                 &["**/Package.swift"],
                 // Files in a module compile as one unit; cross-references are
                 // routine, and the compiler rejects target-level cycles.
                 kndo_contract::extension::CycleTolerance::Tolerated,
             )
+            // The two streams a rule reads about a Swift declaration: the
+            // attributes and the one modifier it carries, and the types it
+            // promises the surface of.
+            .emits(kndo_contract::evidence::EvidenceStreams::of(&[
+                kndo_contract::evidence::EvidenceStream::Markers,
+                kndo_contract::evidence::EvidenceStream::Relations,
+            ]))
             .ladder(&[
                 Step::new(Rung::Owner, "private"),
                 Step::new(Rung::File, "fileprivate"),

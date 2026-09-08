@@ -1,0 +1,234 @@
+{
+  "run": {
+    "schema": "kndo-v2/m6",
+    "mode": "full",
+    "files_discovered": 3,
+    "files_claimed": 3,
+    "extensions": [
+      {
+        "id": "kndo:swift",
+        "files": 3,
+        "published_surface": "exports",
+        "import_cycles": "tolerated",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "underivable",
+        "ladder": [
+          {
+            "rung": "owner",
+            "word": "private"
+          },
+          {
+            "rung": "file",
+            "word": "fileprivate"
+          },
+          {
+            "rung": "unit",
+            "word": "internal"
+          },
+          {
+            "rung": "exported",
+            "word": "public"
+          }
+        ]
+      }
+    ]
+  },
+  "health": {
+    "implicated": 0,
+    "subjects": 14,
+    "by_category": [],
+    "by_package": [
+      {
+        "name": "",
+        "manifest": "",
+        "implicated": 0,
+        "subjects": 14
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "kndo-0c7a729e0864",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/App/Shape.swift",
+        "selector": {
+          "name": "Cube"
+        },
+        "span": {
+          "start": 490,
+          "end": 633
+        }
+      },
+      "lines": {
+        "start": 19,
+        "end": 24
+      },
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
+    },
+    {
+      "id": "kndo-3a35f55d1460",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/App/Shape.swift",
+        "selector": {
+          "owner": "Square",
+          "name": "perimeter"
+        },
+        "span": {
+          "start": 348,
+          "end": 377
+        }
+      },
+      "lines": {
+        "start": 8,
+        "end": 8
+      },
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this method"
+    },
+    {
+      "id": "kndo-490ce9a4b40d",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/App/Shape.swift",
+        "selector": {
+          "name": "Square"
+        },
+        "span": {
+          "start": 219,
+          "end": 379
+        }
+      },
+      "lines": {
+        "start": 4,
+        "end": 9
+      },
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
+    },
+    {
+      "id": "kndo-9e4163b603a4",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/App/Shape.swift",
+        "selector": {
+          "name": "Rounded"
+        },
+        "span": {
+          "start": 381,
+          "end": 444
+        }
+      },
+      "lines": {
+        "start": 11,
+        "end": 13
+      },
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
+    },
+    {
+      "id": "kndo-dd335571fff0",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/App/Shape.swift",
+        "selector": {
+          "name": "Solid"
+        },
+        "span": {
+          "start": 446,
+          "end": 488
+        }
+      },
+      "lines": {
+        "start": 15,
+        "end": 17
+      },
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
+    }
+  ],
+  "fixed": [],
+  "baselined": 0,
+  "abstained": [
+    {
+      "category": "unused",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 1
+        }
+      }
+    },
+    {
+      "category": "test-only",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    },
+    {
+      "category": "untested",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    },
+    {
+      "category": "undeclared",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 1
+        }
+      }
+    },
+    {
+      "category": "crap",
+      "reason": "no-coverage-ingested",
+      "scope": "whole-run"
+    }
+  ],
+  "suppressed": {
+    "total": 0,
+    "by_category": []
+  },
+  "plugins": [
+    {
+      "coordinate": "kndo:coverage-lcov",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-cobertura",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-jacoco",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-go",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    }
+  ],
+  "diagnostics": []
+}

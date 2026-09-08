@@ -2062,3 +2062,43 @@ rooted, so a witness and a root keep the same set alive); the difference is what
 the pack CLAIMS, and `Probable` is the honest claim — an annotation says a
 container may construct this, and whether the container is ever started is
 outside anything kndo reads.
+
+### Swift states what a type promises (2026-09-08)
+
+| repo | before | after | what moved |
+|---|---|---|---|
+| Alamofire | 426 | 419 | −7 `internal-only` |
+| vapor | 176 | 175 | −1 `internal-only` |
+| every other repository | — | — | byte-identical |
+
+`kndo:swift` reports two streams it never reported: the attributes a
+declaration carries (plus `override`, the one modifier a rule reads) and the
+types it promises the surface of. Purely additive evidence — no rule of the
+language reads a Swift marker yet, and the ablation says so: with `Relations`
+withdrawn from the spec and markers alone flowing, Alamofire measures 426 and
+vapor 176, byte-identical to before. Every one of the eight is the relation
+stream.
+
+All eight are `internal-only` advisories correctly WITHDRAWN. `internal_only`
+asks two questions of the relation graph — does a subtype override this member,
+and does a supertype declare it — and a yes to either means narrowing the member
+is a compile error rather than advice. With no relations both answers were no,
+so Alamofire's protocol witnesses (`AuthenticationInterceptor.refresh`,
+`ResponseSerialization.emptyValue`, `SessionDelegate.didGatherMetricsForTask`
+and four more) were advised down to a reach the compiler would reject.
+
+Swift writes its superclass and its protocols in ONE list its grammar does not
+separate, so one relation kind is emitted for all of them: `Implements`, the
+contract's word for "promises another type's surface", true of a subclass as
+much as a conformer. Nothing in the engine reads the kind — it reaches a
+`Trigger::Relation` and the supertype edges, and both compare names.
+
+**Measured and NOT taken here.** The `Possible` root swift puts on every
+non-private method of a type that declares any conformance — the
+conformer-methods heuristic the design replaces with witnesses — is worth
+Alamofire +63 and vapor +15 if simply deleted. It stays until the witnesses
+that replace it exist: relations resolved inside the project (an override, a
+protocol declared here) plus the packs that state the requirements of bases
+outside it (`XCTestCase`, `View`, `Codable`). Deleting it first would ship 78
+accusations the design already knows how to answer. The
+`protocol-requirement-reach` fixture carries that as a named `known_gap`.

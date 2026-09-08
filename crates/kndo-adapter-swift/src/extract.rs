@@ -8,7 +8,8 @@
 //! name); their bodies still contribute references.
 
 use kndo_contract::evidence::{
-    Attachment, EvidenceSink, Reach, RefKind, RootKind, RootTarget, SymbolKind,
+    Attachment, DeclarationId, EvidenceSink, MarkerTarget, Reach, RefKind, RelationKind, RootKind,
+    RootTarget, SymbolKind,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use kndo_toolkit as tk;
@@ -233,7 +234,14 @@ fn class_like(
     let conforms = has_conformances(item);
     let owner_id = if decl_kind == "extension" {
         // A same-file extension attaches its members to the extended type.
-        type_ids.get(&name).copied()
+        let existing = type_ids.get(&name).copied();
+        // `extension Foo: Codable` is FOO's promise: retroactive conformance
+        // is the idiom, and a rule asking whether `Foo` conforms must see it
+        // wherever it was written.
+        if let Some(owner) = existing {
+            relations_of(item, source, owner, out);
+        }
+        existing
     } else {
         let id = out.declaration(
             name.clone(),
@@ -241,6 +249,8 @@ fn class_like(
             tk::span(item),
             reach_of(item, source),
         );
+        markers_of(item, source, id, out);
+        relations_of(item, source, id, out);
         // `@main` — SwiftPM resolves the attributed type's `static main()` as
         // the executable entry; the type itself is the anchor we can name.
         if has_attribute(item, source, "main") {
@@ -287,6 +297,8 @@ fn protocol(
         tk::span(item),
         reach_of(item, source),
     );
+    markers_of(item, source, owner_id, out);
+    relations_of(item, source, owner_id, out);
     type_ids.insert(name.clone(), owner_id);
     if let Some(body) = tk::child_of_kind(item, "protocol_body") {
         let mut c = body.walk();
@@ -366,6 +378,7 @@ fn function(
     };
     let scoped_or_wider = !matches!(reach, Reach::Owner | Reach::File);
     let id = out.declaration(fn_name, kind, tk::span(item), reach);
+    markers_of(item, source, id, out);
 
     // The toolchain's own test runners dispatch on declarations no source line
     // names: XCTest finds `test*` methods by name, swift-testing anything
@@ -450,6 +463,7 @@ fn property(
                 tk::span(item),
                 reach.clone(),
             );
+            markers_of(item, source, id, out);
             if let Some(owner) = owner_id {
                 out.member_of(id, owner);
             }
@@ -523,6 +537,92 @@ fn has_attribute(item: Node<'_>, source: &[u8], name: &str) -> bool {
             attr.named_children(&mut ac)
                 .any(|n| n.kind() == "user_type" && tk::text(n, source) == name)
         })
+}
+
+/// Every attribute a declaration carries, as a MARKER: its path as written
+/// (`main`, `objc`, `Test`, `IBAction`, `propertyWrapper`) and its arguments.
+/// Structural, never a table of names — what an attribute MEANS is a dispatch
+/// rule's to say, this adapter's job is to report that it is there.
+///
+/// `override` rides here too. The glossary counts a MODIFIER as a marker, and
+/// this is the one Swift modifier a rule reads: an overriding member is
+/// invoked through the superclass, so no source line names it. The rest of
+/// Swift's modifiers are read where they belong — visibility as `Reach` — or
+/// have no consumer, and a marker no rule reads is noise in the evidence.
+fn markers_of(item: Node<'_>, source: &[u8], id: DeclarationId, out: &mut EvidenceSink) {
+    let Some(modifiers) = tk::child_of_kind(item, "modifiers") else {
+        return;
+    };
+    let mut c = modifiers.walk();
+    for m in modifiers.named_children(&mut c) {
+        match m.kind() {
+            "attribute" => {
+                let mut ac = m.walk();
+                let children: Vec<Node<'_>> = m.named_children(&mut ac).collect();
+                let Some(name) = children.iter().find(|n| n.kind() == "user_type") else {
+                    continue;
+                };
+                let args = children
+                    .iter()
+                    .filter(|n| n.kind() == "value_argument")
+                    .map(|n| SmolStr::new(tk::text(*n, source).trim_matches('"')))
+                    .collect();
+                out.marker(
+                    MarkerTarget::Declaration(id),
+                    tk::text(*name, source),
+                    args,
+                    tk::span(m),
+                );
+            }
+            _ if tk::text(m, source) == "override" => {
+                out.marker(
+                    MarkerTarget::Declaration(id),
+                    "override",
+                    Vec::new(),
+                    tk::span(m),
+                );
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Every type this declaration promises the surface of, as a RELATION.
+///
+/// Swift writes one list after the colon and its grammar does not tell a
+/// superclass from a protocol — `class A: B, C` is legal with B a class or a
+/// protocol, and only the whole program knows which. So one kind is emitted,
+/// and it is the true sentence for both: `Implements` is the contract's word
+/// for "promises another type's surface", which a subclass does as much as a
+/// conformer. Nothing in the engine reads the kind — it reaches a
+/// `Trigger::Relation` and the supertype edges, and both compare NAMES.
+fn relations_of(item: Node<'_>, source: &[u8], id: DeclarationId, out: &mut EvidenceSink) {
+    let mut c = item.walk();
+    for spec in item
+        .named_children(&mut c)
+        .filter(|n| n.kind() == "inheritance_specifier")
+    {
+        // `: XCTestCase`, `: Encodable`, `: Collection where …` — the name is
+        // the specifier's own type, and a generic argument list is not it.
+        let mut sc = spec.walk();
+        let named: Vec<Node<'_>> = spec.named_children(&mut sc).collect();
+        let Some(ty) = named
+            .iter()
+            .find(|n| matches!(n.kind(), "user_type" | "type_identifier"))
+        else {
+            continue;
+        };
+        // `Swift.Codable` and `Codable` are the same promise; the last
+        // segment is the name every rule and every supertype edge compares.
+        let mut tc = ty.walk();
+        let name = ty
+            .named_children(&mut tc)
+            .filter(|n| n.kind() == "type_identifier")
+            .last()
+            .map(|n| tk::text(n, source))
+            .unwrap_or_else(|| tk::text(*ty, source));
+        out.relation(id, RelationKind::Implements, name, tk::span(spec));
+    }
 }
 
 fn has_conformances(item: Node<'_>) -> bool {

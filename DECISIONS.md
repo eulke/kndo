@@ -5776,3 +5776,38 @@ reachable now — next slice); `kndo:rstest` and kin (rust, markers only, so the
 name and marker rules are reachable); `kndo:pytest`/`django`/`flask` and
 `kndo:storybook`/`vitest` (python and js-ts emit no markers). The crate is
 `kndo-packs`, the plan's name, not `kndo-rules`.
+
+## 2026-09-08 — Swift's promise is one list, so it is one relation kind
+
+`kndo:swift` moves to 10 and reports markers and relations: every attribute a
+declaration carries with its arguments, plus `override` (the glossary counts a
+MODIFIER as a marker, and it is the one Swift modifier a rule reads), and every
+name in an inheritance list — including a retroactive `extension Foo: Codable`,
+which is FOO's promise and is attributed to Foo.
+
+**One kind, and it is `Implements`.** Swift's grammar does not separate a
+superclass from a protocol: `class A: B, C` is legal with B either, and only
+the whole program knows which. The contract's `Implements` is documented as
+"promises another type's surface", which a subclass does as much as a
+conformer, and nothing in the engine reads the kind — a `Trigger::Relation`
+and the supertype edges both compare NAMES. So the adapter states the sentence
+it can prove instead of guessing which of the plan's four kinds applies. The
+two unused variants of the design's `RelationKind` (`Conforms`, `Overrides`)
+stay unbuilt until an adapter can tell them apart AND a consumer reads them —
+a capability whose consumer cannot be named does not land.
+
+Measured: Alamofire 426 → 419, vapor 176 → 175, everything else
+byte-identical; all eight are `internal-only` advisories withdrawn because the
+member sits on a promised surface. Ablation pins the cause: markers alone,
+relations withheld, reproduces 426/176 exactly.
+
+**The conformer-methods heuristic stays one more slice, with its number.**
+Deleting swift's hand-written `Possible` root on every non-private method of a
+conforming type — which the design replaces with witnesses — measures Alamofire
++63 and vapor +15. Those 78 are answerable by the design (relations resolved in
+the project, plus `kndo:xctest`/`kndo:swiftui` stating the requirements of
+bases outside it) and unanswerable without it, so the deletion lands in the
+same commit as its replacement. `protocol-requirement-reach`
+(`kndo-adapter-swift`) is added and carries it as a `known_gap` naming that
+fix; the fixture pins the half that works today, both directions of it: an
+overridden member cannot narrow, and the member beside it still can.

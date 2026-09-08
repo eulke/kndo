@@ -255,3 +255,99 @@ fn a_test_target_belongs_to_the_package_in_test_builds_alone() {
     let e = ev("Sources/App/LoadTests.swift", "class LoadTests {}\n");
     assert_eq!(e.attachment, Attachment::Regular);
 }
+
+#[test]
+fn attributes_and_the_override_modifier_are_markers() {
+    let e = ev(
+        "Sources/App/Views.swift",
+        r#"
+import SwiftUI
+
+@main
+struct App {
+    static func main() {}
+}
+
+struct Row: View {
+    @State private var count = 0
+    @ViewBuilder func body() -> some View {}
+}
+
+class Base {
+    func draw() {}
+}
+
+class Derived: Base {
+    override func draw() {}
+    @objc @IBAction func tapped(_ sender: Any) {}
+}
+"#,
+    );
+    let markers: Vec<(&str, &str)> = e
+        .markers
+        .iter()
+        .filter_map(|m| match m.on {
+            MarkerTarget::Declaration(id) => {
+                Some((e.declarations[id.index()].name.as_str(), m.path.as_str()))
+            }
+            _ => None,
+        })
+        .collect();
+    // Attributes on a type, a property and a function, and the one modifier a
+    // rule reads. `@State`'s wrapper and `@ViewBuilder`'s builder ride the
+    // same structural path: nothing here is a table of known names.
+    assert!(markers.contains(&("App", "main")), "{markers:?}");
+    assert!(markers.contains(&("count", "State")), "{markers:?}");
+    assert!(markers.contains(&("body", "ViewBuilder")), "{markers:?}");
+    assert!(markers.contains(&("draw", "override")), "{markers:?}");
+    assert!(markers.contains(&("tapped", "objc")), "{markers:?}");
+    assert!(markers.contains(&("tapped", "IBAction")), "{markers:?}");
+    // The base class's own `draw` carries no modifier and no marker.
+    assert_eq!(
+        markers.iter().filter(|(n, _)| *n == "draw").count(),
+        1,
+        "{markers:?}"
+    );
+}
+
+#[test]
+fn the_inheritance_list_is_one_promise_per_name() {
+    let e = ev(
+        "Sources/App/Model.swift",
+        r#"
+import Foundation
+
+protocol Drawable: Equatable {}
+
+struct Point: Drawable, Codable {}
+
+class Controller: NSObject, UITableViewDelegate {}
+
+extension Point: CustomStringConvertible {
+    var description: String { "" }
+}
+"#,
+    );
+    let relations: Vec<(&str, &str)> = e
+        .relations
+        .iter()
+        .map(|r| (e.declarations[r.from.index()].name.as_str(), r.to.as_str()))
+        .collect();
+    // Swift writes superclass and protocols in ONE list its grammar does not
+    // separate, so every name is the same promise; nothing in the engine reads
+    // the kind, and a rule that wants `NSObject` compares the name.
+    assert_eq!(
+        relations,
+        [
+            ("Drawable", "Equatable"),
+            ("Point", "Drawable"),
+            ("Point", "Codable"),
+            ("Controller", "NSObject"),
+            ("Controller", "UITableViewDelegate"),
+            // A retroactive conformance is the EXTENDED type's promise, not
+            // the extension block's — the block declares nothing at all.
+            ("Point", "CustomStringConvertible"),
+        ],
+        "{relations:?}"
+    );
+}
