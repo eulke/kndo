@@ -2336,3 +2336,56 @@ all, and a requirement with no range is never a conflict: `disjoint` answers
 `None`, and the analysis falls back to the text comparison that is all the
 evidence there is. Guessing a range wrong is worse than having none, because a
 comparison silently made against the wrong bounds is a finding nobody can check.
+
+### Three things a language says about itself (2026-09-08)
+
+`ecosystem`, `hidden_opt_in` and the whole `Nesting` enum land as spec data,
+and the wire carries the ENTIRE `ExtensionSpec` for the first time — a WASM
+guest could not previously declare its nesting, its file roles, its namespace
+span, or one word of the dependency vocabulary, and the host filled each with a
+default it invented on the guest's behalf.
+
+| repo | before | after | why |
+|---|---|---|---|
+| vite | 685 | 690 | +5 `unused`, all under `docs/.vitepress` — six files discovery had never entered |
+| every other repository | — | — | byte-identical |
+
+**The shapes were declared, and the numbers did not move.** go now says
+`ByDirectory`, java and kotlin `Flat`, rust `Mounted`, python
+`ByPath { roots }`, and every other adapter `PerFile` — where before the engine
+inferred the shape from which evidence happened to be present (a mount chain
+means Mounted, a `by_path` answer means ByPath, a clause means the fallback).
+Byte-identical output across guava, Exposed, gin, ripgrep, Alamofire and vapor
+is the result: the inference agreed with the declaration everywhere the corpus
+reaches. What changed is who decides — `Scopes::build` reads a capability
+instead of guessing, and `Nesting::Flat` and `ByDirectory` are now different
+answers rather than one accidental one. The kmock proof is the pair: two
+directories of one unit writing one clause, and a namespace-reaching
+declaration in only one of them — accused under `ByDirectory`, alive under
+`Flat`, same tree.
+
+**`ecosystem` moved nothing, in the only direction it can move.** css and html
+declare `kndo:js-ts`, so a bare `@import "tailwindcss"` in a stylesheet is now
+a USE of the npm declaration rather than nothing. No corpus stylesheet spells a
+bare specifier that matches a declared dependency, so no accusation was
+withdrawn — and none could ever be added, because the rule only ever adds
+users.
+
+**`hidden_opt_in` is the one that added findings, and every one is owed to a
+pack.** js-ts declares `.storybook` and `.vitepress`; vite has a VitePress
+docs site, so six files entered the graph and five are accused:
+
+- `docs/.vitepress/config.ts` and `theme/index.ts` are entered by VitePress
+  itself, by exact path. Nothing in the tree imports them, and nothing should:
+  the framework's convention is what roots them, which is `kndo:vitepress`'s
+  rule to state (M8.e). Until it exists these are false accusations, counted
+  here rather than hidden by leaving the directory undiscovered.
+- `theme/styles.css` is imported by `theme/index.ts` and rides its root.
+- `theme/composables/sponsor.ts` and `theme/live/useYoutubePlayer.ts` are
+  imported only from `.vue` components, which no adapter claims — the same
+  blind spot this file has recorded on vite since M2, now visible one
+  directory deeper.
+
+Not discovering a directory is not the same as judging it correctly. The
+mechanism belongs to discovery, the roots belong to a pack, and the honest
+place for the gap in between is a number with its owner named.

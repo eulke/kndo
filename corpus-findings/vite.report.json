@@ -2,12 +2,12 @@
   "run": {
     "schema": "kndo-v2/m6",
     "mode": "full",
-    "files_discovered": 2736,
-    "files_claimed": 1939,
+    "files_discovered": 2763,
+    "files_claimed": 1945,
     "extensions": [
       {
         "id": "kndo:css",
-        "files": 231,
+        "files": 232,
         "published_surface": "exports",
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
@@ -23,7 +23,7 @@
       },
       {
         "id": "kndo:js-ts",
-        "files": 1553,
+        "files": 1558,
         "published_surface": "entries",
         "import_cycles": "hazard",
         "dependency_scoping": "scoped",
@@ -43,8 +43,8 @@
     ]
   },
   "health": {
-    "implicated": 478,
-    "subjects": 5674,
+    "implicated": 483,
+    "subjects": 5702,
     "by_category": [
       {
         "category": "cyclic",
@@ -56,15 +56,15 @@
       },
       {
         "category": "unused",
-        "findings": 430
+        "findings": 435
       }
     ],
     "by_package": [
       {
         "name": "",
         "manifest": "",
-        "implicated": 3,
-        "subjects": 77
+        "implicated": 8,
+        "subjects": 105
       },
       {
         "name": "#",
@@ -2300,6 +2300,61 @@
         "name": "virtual-with-scheme"
       },
       "message": "imported by 1 reached file but declared by no manifest from here up: it resolves only through hoisting or a transitive dependency"
+    },
+    {
+      "id": "kndo-839e4a09711b",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "docs/.vitepress/config.ts"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-48a7df7ed0de",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "docs/.vitepress/theme/composables/sponsor.ts"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-60693e1afbd4",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "docs/.vitepress/theme/index.ts"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-67560d7ed7b0",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "docs/.vitepress/theme/live/useYoutubePlayer.ts"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-3a28b69773c8",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "docs/.vitepress/theme/styles.css"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
     },
     {
       "id": "kndo-3e74b12d252b",
@@ -10129,15 +10184,6 @@
   "abstained": [
     {
       "category": "unused",
-      "reason": "nothing-reaches-owned-files",
-      "scope": {
-        "manifests": {
-          "unjudged": 58
-        }
-      }
-    },
-    {
-      "category": "unused",
       "reason": {
         "unclaimed-importers": {
           "suffixes": [
@@ -10154,7 +10200,16 @@
       },
       "scope": {
         "manifests": {
-          "unjudged": 24
+          "unjudged": 26
+        }
+      }
+    },
+    {
+      "category": "unused",
+      "reason": "nothing-reaches-owned-files",
+      "scope": {
+        "manifests": {
+          "unjudged": 56
         }
       }
     },
@@ -10169,15 +10224,6 @@
     },
     {
       "category": "test-only",
-      "reason": "nothing-reaches-owned-files",
-      "scope": {
-        "manifests": {
-          "unjudged": 58
-        }
-      }
-    },
-    {
-      "category": "test-only",
       "reason": {
         "unclaimed-importers": {
           "suffixes": [
@@ -10194,7 +10240,16 @@
       },
       "scope": {
         "manifests": {
-          "unjudged": 24
+          "unjudged": 26
+        }
+      }
+    },
+    {
+      "category": "test-only",
+      "reason": "nothing-reaches-owned-files",
+      "scope": {
+        "manifests": {
+          "unjudged": 56
         }
       }
     },
@@ -10218,16 +10273,7 @@
       },
       "scope": {
         "files": {
-          "unmeasured": 386
-        }
-      }
-    },
-    {
-      "category": "undeclared",
-      "reason": "nothing-reaches-owned-files",
-      "scope": {
-        "manifests": {
-          "unjudged": 58
+          "unmeasured": 387
         }
       }
     },
@@ -10249,7 +10295,16 @@
       },
       "scope": {
         "manifests": {
-          "unjudged": 24
+          "unjudged": 26
+        }
+      }
+    },
+    {
+      "category": "undeclared",
+      "reason": "nothing-reaches-owned-files",
+      "scope": {
+        "manifests": {
+          "unjudged": 56
         }
       }
     },
@@ -10303,6 +10358,11 @@
     }
   ],
   "diagnostics": [
+    {
+      "path": "docs/.vitepress/theme/styles.css",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
     {
       "path": "packages/vite/src/node/__tests__/runnerImport.spec.ts",
       "level": "info",

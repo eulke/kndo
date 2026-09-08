@@ -27,17 +27,33 @@ use std::collections::{BTreeMap, BTreeSet};
 /// the adapter emits the clause its language writes (`package com.a`,
 /// `package http`) or the mounts it declares (`mod x;`) — so an engine-side
 /// variant nothing reads would be vocabulary without a caller.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Default)]
 pub enum Nesting {
-    /// The file IS its namespace: nothing is visible without an import. The
-    /// default, and what every adapter that emits its own clause leaves alone.
+    /// The file IS its namespace: what it declares is visible to nothing
+    /// without an import, and a clause it emits names the node it stands
+    /// alone in. The default, and Swift's and js-ts's answer.
     #[default]
     PerFile,
+    /// The CLAUSE is the whole key: every file writing `package com.google.io`
+    /// stands in one namespace, wherever in the tree it sits. Java's answer,
+    /// and why a package that does not match its directory is not a defect.
+    Flat,
+    /// The clause is keyed by the DIRECTORY that holds it: two directories
+    /// writing `package foo` are two namespaces, because the directory is
+    /// what the compiler compiles together. Go's answer.
+    ByDirectory,
     /// The namespace is the file's PATH under the unit's source roots, dotted:
     /// `src/app/views.py` in a unit rooted at `src` is `app.views`, and
     /// `src/app/__init__.py` is `app`. The engine derives it, because the
     /// source root is the manifest's to say and extraction never sees one.
-    ByPath,
+    /// `roots` are source roots the LANGUAGE knows without a manifest —
+    /// empty (the usual answer) leaves the unit's own roots to say it.
+    ByPath { roots: Vec<SmolStr> },
+    /// The namespaces NEST, and the nesting is spelled by the files
+    /// themselves: `mod x;` mounts one namespace inside another, so the
+    /// forest is read off the mount edges rather than off any path. Rust's
+    /// answer.
+    Mounted,
 }
 
 /// One machine-checkable activation predicate — cheap, evaluated against what the
@@ -964,6 +980,8 @@ pub struct ExtensionSpec {
     manifests: Vec<SmolStr>,
     launchers: Vec<SmolStr>,
     ignores: Vec<SmolStr>,
+    ecosystem: Option<SmolStr>,
+    hidden_opt_in: Vec<SmolStr>,
     // -- conduct --
     /// Whether this spec went through the conduct stage at all. Data, not
     /// inference: an empty-but-conducting spec (an always-on ingester before its
@@ -1008,6 +1026,8 @@ impl ExtensionSpec {
                 manifests: Vec::new(),
                 launchers: Vec::new(),
                 ignores: Vec::new(),
+                ecosystem: None,
+                hidden_opt_in: Vec::new(),
                 // Inert neutrals for an extraction-only extension: activation
                 // gates only conduct and ingestion, and with no conduct declared
                 // there is nothing for these to gate.
@@ -1082,8 +1102,8 @@ impl ExtensionSpec {
     /// See [`DispatchRule`]; the engine's dispatch is the consumer, and an
     /// empty list (the default) derives nothing — markers stay evidence.
     /// See [`Nesting`]. Omitted ⇒ `PerFile` — the default-compatibility rule.
-    pub fn nesting(&self) -> Nesting {
-        self.nesting
+    pub fn nesting(&self) -> &Nesting {
+        &self.nesting
     }
 
     pub fn dispatch_rules(&self) -> &[DispatchRule] {
@@ -1140,6 +1160,23 @@ impl ExtensionSpec {
         &self.ignores
     }
 
+    /// Whose dependencies this language's bare specifiers name — see
+    /// [`ExtensionSpecBuilder::ecosystem`]. `None` (the default) means its
+    /// own: a bare specifier is judged against the manifests this extension
+    /// itself claims.
+    pub fn ecosystem(&self) -> Option<&SmolStr> {
+        self.ecosystem.as_ref()
+    }
+
+    /// Dot-named directories this language's tooling lives in — see
+    /// [`ExtensionSpecBuilder::hidden_opt_in`]. Discovery is the consumer,
+    /// and it already admits the dot-named segments of every declared
+    /// manifest and launcher glob; this is what a language knows BESIDE
+    /// those.
+    pub fn hidden_opt_in(&self) -> &[SmolStr] {
+        &self.hidden_opt_in
+    }
+
     /// Whether this spec declares conduct or ingestion at all — the engine's
     /// round runs over exactly the extensions for which this is true, and only
     /// those appear as contributions in the report.
@@ -1188,25 +1225,18 @@ pub struct ExtensionSpecParts {
     /// `Exports` (silence for the Exported rung) unless the component says
     /// its ecosystem publishes through entries.
     pub published_surface: PublishedSurface,
-    /// Wire components cannot declare `Unscoped` yet; defaults to `Scoped`, under
-    /// which an unscoped declaration is never a usage claim — silence.
     pub dependency_scoping: DependencyScoping,
-    /// Wire components cannot declare a spelling yet; defaults to `Underivable`,
-    /// under which every dependency-usage judgment abstains — silence.
     pub dependency_identity: DependencyIdentity,
-    /// Wire components cannot declare importer suffixes yet; defaults to none.
     pub dependency_importers: Vec<SmolStr>,
-    /// Wire components cannot declare builtins yet; defaults to none.
     pub dependency_builtins: DependencyBuiltins,
     pub import_cycles: CycleTolerance,
     /// Empty unless the component states its ladder, under which
     /// `internal-only` stays silent — the same absence every other undeclared
     /// capability degrades to.
     pub ladder: Ladder,
-    /// Wire components cannot declare a span yet; defaults to `Unit`, the
-    /// narrower answer.
     pub namespace_span: NamespaceSpan,
     pub unnamed_unit: UnnamedUnit,
+    pub nesting: Nesting,
     pub file_roles: Vec<FileRole>,
     pub dispatch: Vec<DispatchRule>,
     pub claims: Vec<SmolStr>,
@@ -1214,6 +1244,8 @@ pub struct ExtensionSpecParts {
     pub manifests: Vec<SmolStr>,
     pub launchers: Vec<SmolStr>,
     pub ignores: Vec<SmolStr>,
+    pub ecosystem: Option<SmolStr>,
+    pub hidden_opt_in: Vec<SmolStr>,
     pub conducts: bool,
     pub activation: Activation,
     pub mutates_graph: bool,
@@ -1252,15 +1284,15 @@ impl From<ExtensionSpecParts> for ExtensionSpec {
             ladder: parts.ladder,
             namespace_span: parts.namespace_span,
             unnamed_unit: parts.unnamed_unit,
-            // The wire carries no `nesting` yet: a loaded component's
-            // namespaces are the ones it emits, which is `PerFile`.
-            nesting: Nesting::PerFile,
+            nesting: parts.nesting,
             file_roles: parts.file_roles,
             dispatch: parts.dispatch,
             claims: parts.claims,
             emits: parts.emits,
             manifests: parts.manifests,
             launchers: parts.launchers,
+            ecosystem: parts.ecosystem,
+            hidden_opt_in: parts.hidden_opt_in,
             ignores: parts.ignores,
             conducts: parts.conducts,
             activation: parts.activation,
@@ -1444,6 +1476,33 @@ impl ExtensionSpecBuilder {
     /// about output directories a package might be named after. Omitted ⇒ none.
     pub fn ignores(mut self, globs: &[&'static str]) -> Self {
         self.spec.ignores = globs.iter().map(|g| SmolStr::new_static(g)).collect();
+        self
+    }
+
+    /// Declare that this language's BARE specifiers name another ecosystem's
+    /// dependencies. A `.css` sheet's `@import "tailwindcss"` and a page's
+    /// `<script src="lodash">` name npm packages, not packages of some
+    /// stylesheet or markup registry — so css and html point at `kndo:js-ts`
+    /// and the dependency judgment reads their specifiers as that ecosystem's
+    /// manifests' users. Omitted ⇒ its own: a bare specifier is judged against
+    /// the manifests this extension itself claims.
+    ///
+    /// This is the other half of `dependency_importers`, from the other side:
+    /// that one names SUFFIXES a manifest's ecosystem may be imported from and
+    /// casts doubt when nothing claims them; this one is the claiming
+    /// extension saying out loud which ecosystem it is speaking.
+    pub fn ecosystem(mut self, coordinate: &'static str) -> Self {
+        self.spec.ecosystem = Some(SmolStr::new_static(coordinate));
+        self
+    }
+
+    /// Declare dot-named directories discovery must ENTER for this language —
+    /// js-ts's `.storybook` and `.vitepress`, which hold real source and are
+    /// hidden only by convention. Discovery already admits the dot-named
+    /// segments of every declared manifest and launcher glob (`.github`), so
+    /// this is for the directories no glob names. Omitted ⇒ none beyond those.
+    pub fn hidden_opt_in(mut self, names: &[&'static str]) -> Self {
+        self.spec.hidden_opt_in = names.iter().map(|n| SmolStr::new_static(n)).collect();
         self
     }
 

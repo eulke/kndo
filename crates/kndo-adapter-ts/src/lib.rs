@@ -106,6 +106,11 @@ impl TypeScriptAdapter {
         // npm's installed dependencies are never the project's own source,
         // committed or not.
         .ignores(&["**/node_modules/**"])
+        // Two dot-named directories the ecosystem puts real source in: a
+        // Storybook config with its stories, a VitePress site with its theme.
+        // Hidden by convention, never by intent, and no manifest glob names
+        // them, so discovery is told out loud.
+        .hidden_opt_in(&[".storybook", ".vitepress"])
         // GitHub Actions steps hand files to the same runtimes npm scripts do.
         .launchers(&[
             "**/.github/workflows/*.yml",

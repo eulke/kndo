@@ -43,6 +43,11 @@ impl HtmlAdapter {
                 .suffixes(&["html", "htm"])
                 // A page inside npm's installed dependencies is a dependency's.
                 .ignores(&["**/node_modules/**"])
+                // A bare specifier in a stylesheet or a page names an npm
+                // package: there is no registry of its own to judge it
+                // against, and js-ts is the extension that claims the
+                // manifests declaring it.
+                .ecosystem("kndo:js-ts")
                 // A document is an entry point — that is what a page IS, true
                 // of every one of them, so it is `Certain` and it is a path
                 // fact, not a claim over a manifest that named the file. The

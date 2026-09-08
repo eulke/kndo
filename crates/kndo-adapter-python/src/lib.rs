@@ -77,7 +77,10 @@ impl PythonAdapter {
             // distribution's source root, and the source root is the
             // manifest's to say — so the engine derives it. Everything the
             // package holds is one node, and `pkg/__init__.py` IS `pkg`.
-            .nesting(kndo_contract::extension::Nesting::ByPath)
+            // Every source root a Python distribution has is a manifest's to
+            // state (`package-dir`, `packages.find.where`, the `src` layout the
+            // tree itself shows setuptools) — the language knows none of its own.
+            .nesting(kndo_contract::extension::Nesting::ByPath { roots: Vec::new() })
             .ignores(&["**/site-packages/**"])
             // The runners' own discovery, where no manifest said what a file
             // is: pytest and unittest COLLECT `test_*.py` and `*_test.py` by

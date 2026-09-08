@@ -52,6 +52,9 @@ impl KotlinAdapter {
                 // are the same namespace, and the test set's build holds the
                 // main set it compiles against.
                 .namespace_span(kndo_contract::extension::NamespaceSpan::Compilation)
+                // Kotlin's `package` clause is as free of the directory as
+                // Java's, and more often takes the freedom.
+                .nesting(kndo_contract::extension::Nesting::Flat)
                 // What this adapter WRITES, so an absence stays typed: the
                 // annotations a declaration carries, the supertypes it
                 // promises, and a function's shape. A stream it does not

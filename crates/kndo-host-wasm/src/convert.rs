@@ -15,8 +15,9 @@ use kndo_contract::evidence::{
 };
 use kndo_contract::extension::{
     Activation, ActivationRule, Bearer, ConductSeverity, ConductTarget, CycleTolerance,
-    DeclaredSymbol, DispatchRule, Effect, ExtensionSpec, ExtensionSpecParts, Ladder,
-    PublishedSurface, RuleDescriptor, Rung, Step, Trigger,
+    DeclaredSymbol, DependencyBuiltins, DependencyIdentity, DependencyScoping, DispatchRule,
+    Effect, ExtensionSpec, ExtensionSpecParts, FileRole, Ladder, NamespaceSpan, Nesting,
+    PublishedSurface, RuleDescriptor, Rung, Step, Trigger, UnnamedUnit,
 };
 use kndo_contract::manifest::UnitKind;
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
@@ -80,15 +81,56 @@ pub(crate) fn extension_spec(spec: awire::ExtensionSpec) -> ExtensionSpec {
             .into_iter()
             .filter_map(dispatch_rule)
             .collect(),
-        namespace_span: Default::default(),
-        unnamed_unit: Default::default(),
-        file_roles: Vec::new(),
-        // The wire world speaks no dependency vocabulary yet; absence
-        // defaults to silence, like every other undeclared capability.
-        dependency_scoping: Default::default(),
-        dependency_identity: Default::default(),
-        dependency_importers: Vec::new(),
-        dependency_builtins: Default::default(),
+        namespace_span: match spec.namespace_span {
+            awire::NamespaceSpan::Unit => NamespaceSpan::Unit,
+            awire::NamespaceSpan::Compilation => NamespaceSpan::Compilation,
+        },
+        unnamed_unit: match spec.unnamed_unit {
+            awire::UnnamedUnit::Unbounded => UnnamedUnit::Unbounded,
+            awire::UnnamedUnit::Namespace => UnnamedUnit::Namespace,
+        },
+        nesting: match spec.nesting {
+            awire::Nesting::PerFile => Nesting::PerFile,
+            awire::Nesting::Flat => Nesting::Flat,
+            awire::Nesting::ByDirectory => Nesting::ByDirectory,
+            awire::Nesting::ByPath(roots) => Nesting::ByPath {
+                roots: roots.into_iter().map(SmolStr::new).collect(),
+            },
+            awire::Nesting::Mounted => Nesting::Mounted,
+        },
+        file_roles: spec
+            .file_roles
+            .into_iter()
+            .map(|r| FileRole {
+                glob: SmolStr::new(r.glob),
+                kind: root_kind(r.kind),
+                confidence: confidence(r.confidence),
+            })
+            .collect(),
+        dependency_scoping: match spec.dependency_scoping {
+            awire::DependencyScoping::Scoped => DependencyScoping::Scoped,
+            awire::DependencyScoping::Unscoped => DependencyScoping::Unscoped,
+        },
+        dependency_identity: match spec.dependency_identity {
+            awire::DependencyIdentity::Underivable => DependencyIdentity::Underivable,
+            awire::DependencyIdentity::PackageName => DependencyIdentity::PackageName,
+            awire::DependencyIdentity::ModulePath => DependencyIdentity::ModulePath,
+            awire::DependencyIdentity::CrateRoot => DependencyIdentity::CrateRoot,
+        },
+        dependency_importers: spec
+            .dependency_importers
+            .into_iter()
+            .map(SmolStr::new)
+            .collect(),
+        dependency_builtins: match spec.dependency_builtins {
+            awire::DependencyBuiltins::None => DependencyBuiltins::None,
+            awire::DependencyBuiltins::Named(names) => {
+                DependencyBuiltins::Named(names.into_iter().map(SmolStr::new).collect())
+            }
+            awire::DependencyBuiltins::UndottedFirstSegment => {
+                DependencyBuiltins::UndottedFirstSegment
+            }
+        },
         emits: EvidenceStreams::of(
             &spec
                 .emits
@@ -105,6 +147,8 @@ pub(crate) fn extension_spec(spec: awire::ExtensionSpec) -> ExtensionSpec {
         manifests: spec.manifests.into_iter().map(SmolStr::new).collect(),
         launchers: spec.launchers.into_iter().map(SmolStr::new).collect(),
         ignores: spec.ignores.into_iter().map(SmolStr::new).collect(),
+        ecosystem: spec.ecosystem.map(SmolStr::new),
+        hidden_opt_in: spec.hidden_opt_in.into_iter().map(SmolStr::new).collect(),
         conducts: spec.conducts,
         activation: match spec.activation {
             awire::Activation::Always => Activation::Always,

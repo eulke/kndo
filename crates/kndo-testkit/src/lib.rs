@@ -36,6 +36,7 @@
 //! call x.name          a Call reference to `name` read from `x`
 //! import ./x           side-effect import of x.kmock in the same directory
 //! import ./x { a, b }  binding import
+//! import name { a }    a PACKAGE import: a specifier naming no path
 //! root name            production root anchored on the declaration `name`
 //! root-file            whole-file production root
 //! test-file            whole-file test root: this file IS a test
@@ -53,6 +54,9 @@
 //! unit name kind roots=a,b excludes=c entries=x.kmock,y.kmock needs=other friends=other publish=no
 //! member sub/kmock.pkg              a manifest this one aggregates
 //! run path.kmock                    a file this manifest runs (tooling)
+//! dep name                          a dependency this manifest declares
+//! ignore glob                       a path THIS project excludes
+//! alias prefix dir [dir…]           a specifier prefix the build rewrites
 //! ```
 //!
 //! `kind` is one of library, executable, test, bench, example, tooling — the
@@ -230,6 +234,26 @@ impl MockExtension {
     /// ladder, both.
     pub fn with(declare: impl FnOnce(ExtensionSpecBuilder) -> ExtensionSpecBuilder) -> Self {
         MockExtension::speaking(declare(kmock_spec()).build())
+    }
+
+    /// A SECOND kmock-speaking language under its own coordinate and suffix —
+    /// what a test of a capability naming another extension speaks, since a
+    /// composition holds one extension per coordinate.
+    pub fn beside(
+        coordinate: &'static str,
+        suffix: &'static str,
+        declare: impl FnOnce(ExtensionSpecBuilder) -> ExtensionSpecBuilder,
+    ) -> Self {
+        let spec = ExtensionSpec::builder(coordinate, 1)
+            .suffixes(&[suffix])
+            .emits(EvidenceStreams::of(&[
+                EvidenceStream::Comments,
+                EvidenceStream::Markers,
+                EvidenceStream::Relations,
+                EvidenceStream::Qualifiers,
+            ]))
+            .published_surface(PublishedSurface::Entries);
+        MockExtension::speaking(declare(spec).build())
     }
 
     fn speaking(spec: ExtensionSpec) -> Self {
@@ -486,13 +510,14 @@ impl Extension for MockExtension {
                     }
                     None => (rest.trim(), ImportShape::SideEffect),
                 };
-                out.import_at(
-                    timing,
-                    ImportTarget::Relative(specifier.into()),
-                    shape,
-                    span,
-                    Confidence::Certain,
-                );
+                // A specifier that names no path names a PACKAGE — npm's rule,
+                // and the one that lets a kmock file import a declared
+                // dependency rather than a sibling.
+                let target = match specifier.starts_with("./") || specifier.starts_with("../") {
+                    true => ImportTarget::Relative(specifier.into()),
+                    false => ImportTarget::Package(specifier.into()),
+                };
+                out.import_at(timing, target, shape, span, Confidence::Certain);
             } else if let Some(t) = line.strip_prefix("# ") {
                 let text_start = span.start + (line.len() - t.len()) as u32;
                 out.comment(span, Span::new(text_start, span.end));
@@ -525,6 +550,12 @@ impl Extension for MockExtension {
             }
             if let Some(rest) = line.strip_prefix("ignore ") {
                 out.ignore(rest.trim());
+                continue;
+            }
+            if let Some(rest) = line.strip_prefix("dep ") {
+                out.dependency(kndo_contract::adapter::DependencyDeclaration::name_only(
+                    rest.trim().into(),
+                ));
                 continue;
             }
             if let Some(rest) = line.strip_prefix("alias ") {

@@ -24,7 +24,11 @@ pub struct HiddenOptIn(BTreeSet<String>);
 
 impl HiddenOptIn {
     /// Every dot-named LITERAL segment of the globs (`.github`; never a
-    /// pattern such as `.*`).
+    /// pattern such as `.*`), plus the names a language DECLARES it keeps
+    /// source in ([`ExtensionSpec::hidden_opt_in`]) — the ones no manifest or
+    /// launcher glob happens to spell.
+    ///
+    /// [`ExtensionSpec::hidden_opt_in`]: kndo_contract::extension::ExtensionSpec::hidden_opt_in
     pub fn from_manifest_globs<'a>(globs: impl Iterator<Item = &'a str>) -> Self {
         let mut names = BTreeSet::new();
         for glob in globs {
@@ -38,6 +42,12 @@ impl HiddenOptIn {
             }
         }
         HiddenOptIn(names)
+    }
+
+    /// The names a language declares outright, added to what its globs implied.
+    pub fn and_declared<'a>(mut self, names: impl Iterator<Item = &'a str>) -> Self {
+        self.0.extend(names.map(str::to_string));
+        self
     }
 
     fn admits(&self, name: &str) -> bool {

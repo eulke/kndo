@@ -16,7 +16,7 @@
 
 use crate::analysis::DeclaredCapabilities;
 use crate::graph::Graph;
-use kndo_contract::extension::{NamespaceSpan, UnnamedUnit};
+use kndo_contract::extension::{NamespaceSpan, Nesting, UnnamedUnit};
 use smol_str::SmolStr;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -90,6 +90,14 @@ impl Scopes {
         // MOUNTS its namespaces, the chain of segments the mounts spell,
         // inside the tree they are rooted at.
         let chains = mount_chains(graph);
+        // Every file's language, once — the forest's shape is declared, never
+        // inferred from which evidence happens to be present.
+        let nesting_of = |f: &crate::graph::GraphFile| -> Nesting {
+            capabilities
+                .iter()
+                .find(|(c, _)| *c == f.adapter)
+                .map_or(Nesting::PerFile, |(_, caps)| caps.nesting.clone())
+        };
         let mut nodes: BTreeMap<(Compilation, Vec<SmolStr>), u32> = BTreeMap::new();
         let mut of_file: Vec<u32> = Vec::with_capacity(graph.files.len());
         let mut compilation_of: Vec<Compilation> = Vec::with_capacity(graph.files.len());
@@ -97,32 +105,76 @@ impl Scopes {
         let mut unit_of_node: Vec<Option<u32>> = Vec::new();
         let mut segments_of_node: Vec<Vec<SmolStr>> = Vec::new();
         for (i, f) in graph.files.iter().enumerate() {
-            let key = if let Some((root, segments)) = &chains[i] {
-                (
-                    Compilation::Tree(SmolStr::new(graph.files[*root].path.as_str())),
-                    segments.clone(),
-                )
-            } else if let Some(segments) = by_path(graph, i, capabilities) {
-                // The language says its namespaces are shaped by PATH, so the
-                // engine derives them: extraction never sees a source root,
-                // and the manifest is the only thing that knows one.
-                let compilation = match f.unit {
-                    Some(u) => Compilation::Unit(u),
-                    None => Compilation::Root(SmolStr::new("")),
-                };
-                (compilation, segments)
-            } else if f.evidence.namespace.is_empty() {
-                // Its own node, named by nothing another file can spell.
+            // A file standing alone: named by nothing another file can spell.
+            // What a language with no clause to key on gets, whatever its
+            // nesting says about the files that do have one.
+            let alone = || {
                 (
                     Compilation::Alone(SmolStr::new(f.path.as_str())),
                     Vec::new(),
                 )
-            } else {
-                let compilation = match f.unit {
-                    Some(u) => Compilation::Unit(u),
-                    None => Compilation::Root(source_root(f)),
-                };
-                (compilation, f.evidence.namespace.clone())
+            };
+            // The clause, inside the unit that compiles it — the answer for
+            // every language whose files NAME their namespace.
+            let by_clause = || match f.evidence.namespace.is_empty() {
+                true => alone(),
+                false => {
+                    let compilation = match f.unit {
+                        Some(u) => Compilation::Unit(u),
+                        None => Compilation::Root(source_root(f)),
+                    };
+                    (compilation, f.evidence.namespace.clone())
+                }
+            };
+            let key = match nesting_of(f) {
+                Nesting::Mounted => match &chains[i] {
+                    Some((root, segments)) => (
+                        Compilation::Tree(SmolStr::new(graph.files[*root].path.as_str())),
+                        segments.clone(),
+                    ),
+                    // A file no mount reaches is not in the forest at all: it
+                    // stands where its own clause puts it.
+                    None => by_clause(),
+                },
+                // The language says its namespaces are shaped by PATH, so the
+                // engine derives them: extraction never sees a source root,
+                // and the manifest is the only thing that knows one — except
+                // for the roots the LANGUAGE itself states.
+                Nesting::ByPath { roots } => match by_path(graph, i, &roots) {
+                    Some(segments) => {
+                        let compilation = match f.unit {
+                            Some(u) => Compilation::Unit(u),
+                            None => Compilation::Root(SmolStr::new("")),
+                        };
+                        (compilation, segments)
+                    }
+                    None => alone(),
+                },
+                // The DIRECTORY is what compiles together, so it is the key:
+                // two directories writing one clause are two namespaces, and
+                // the unit holding them both changes nothing about that.
+                Nesting::ByDirectory => match f.evidence.namespace.is_empty() {
+                    true => alone(),
+                    false => (
+                        Compilation::Directory(SmolStr::new(
+                            f.path.as_str().rsplit_once('/').map_or("", |(d, _)| d),
+                        )),
+                        f.evidence.namespace.clone(),
+                    ),
+                },
+                // The CLAUSE is the whole key: a package that does not match
+                // its directory is not a defect, it is Java.
+                Nesting::Flat => match f.evidence.namespace.is_empty() {
+                    true => alone(),
+                    false => {
+                        let compilation = match f.unit {
+                            Some(u) => Compilation::Unit(u),
+                            None => Compilation::Root(SmolStr::new("")),
+                        };
+                        (compilation, f.evidence.namespace.clone())
+                    }
+                },
+                Nesting::PerFile => by_clause(),
             };
             let node = *nodes.entry(key.clone()).or_insert_with(|| {
                 files.push(Vec::new());
@@ -467,6 +519,10 @@ enum Compilation {
     Unit(u32),
     Root(SmolStr),
     Alone(SmolStr),
+    /// One directory, where the language says the DIRECTORY is what compiles
+    /// together — a Go package, whose clause names it and whose identity is
+    /// the path holding it, so two directories writing one clause are two.
+    Directory(SmolStr),
     /// One mount forest, named by the file its tree is rooted at — a Rust
     /// crate, whose namespaces are its `mod` chain and nothing a path spells.
     Tree(SmolStr),
@@ -576,22 +632,18 @@ fn span_nodes(
 /// under root `src` is `app.views`, and `src/app/__init__.py` is `app`.
 /// `None` for every other language, which keeps their nodes exactly as the
 /// clause they emit spells them.
-fn by_path(
-    graph: &Graph,
-    file: usize,
-    capabilities: &[(SmolStr, DeclaredCapabilities)],
-) -> Option<Vec<SmolStr>> {
+fn by_path(graph: &Graph, file: usize, language_roots: &[SmolStr]) -> Option<Vec<SmolStr>> {
     let f = &graph.files[file];
-    let caps = capabilities.iter().find(|(c, _)| *c == f.adapter)?;
-    if caps.1.nesting != kndo_contract::extension::Nesting::ByPath {
-        return None;
-    }
     let path = f.path.as_str();
     let unit = f.unit.map(|u| &graph.project.units[u as usize]);
     let under = unit
         .into_iter()
         .flat_map(|u| u.roots.iter())
         .map(|r| r.path.as_str())
+        // A root the LANGUAGE states stands beside the unit's, never over
+        // them: the manifest speaks first, and this is what a language knows
+        // when no manifest said anything.
+        .chain(language_roots.iter().map(SmolStr::as_str))
         .filter(|r| !r.is_empty() && path.starts_with(r) && path.as_bytes()[r.len()] == b'/')
         // The innermost root wins: a unit rooted at both `.` and `src` puts
         // `src/app/views.py` in `app.views`, never `src.app.views`.
@@ -928,7 +980,7 @@ mod tests {
         vec![(
             SmolStr::new_static("test"),
             DeclaredCapabilities {
-                nesting: kndo_contract::extension::Nesting::ByPath,
+                nesting: kndo_contract::extension::Nesting::ByPath { roots: Vec::new() },
                 ..Default::default()
             },
         )]

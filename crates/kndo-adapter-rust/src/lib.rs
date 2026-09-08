@@ -127,6 +127,9 @@ impl RustAdapter {
                 EvidenceStream::Markers,
             ]))
             .dispatch(dispatch_rules())
+            // `mod x;` MOUNTS one namespace inside another: the forest is read
+            // off those edges, and nothing a path spells names a Rust module.
+            .nesting(kndo_contract::extension::Nesting::Mounted)
             // `serde_json::Value` names `serde-json`: the crate root segment,
             // hyphens spelled as underscores.
             .dependency_identity(kndo_contract::extension::DependencyIdentity::CrateRoot)

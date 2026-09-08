@@ -125,6 +125,10 @@ impl JavaAdapter {
                 // other's package-private members, which is how a test module
                 // exercises the library it is compiled against.
                 .namespace_span(kndo_contract::extension::NamespaceSpan::Compilation)
+                // The `package` clause is the namespace, whole: javac reads it
+                // from the file, and a package whose directory does not match
+                // is unusual, not a different package.
+                .nesting(kndo_contract::extension::Nesting::Flat)
                 .emits(kndo_contract::evidence::EvidenceStreams::of(&[
                     kndo_contract::evidence::EvidenceStream::Comments,
                     kndo_contract::evidence::EvidenceStream::Metrics,

@@ -507,7 +507,12 @@ impl Session {
                         .iter()
                         .chain(spec.launchers())
                         .map(|g| g.as_str())
-                }));
+                }))
+                .and_declared(
+                    self.extensions
+                        .iter()
+                        .flat_map(|e| e.spec().hidden_opt_in().iter().map(|n| n.as_str())),
+                );
             files = discover::discover(&self.root, &hidden);
         });
 
@@ -730,7 +735,7 @@ impl Session {
                         ladder: s.ladder().clone(),
                         namespace_span: s.namespace_span(),
                         unnamed_unit: s.unnamed_unit(),
-                        nesting: s.nesting(),
+                        nesting: s.nesting().clone(),
                     },
                 )
             })

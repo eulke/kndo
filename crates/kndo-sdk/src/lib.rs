@@ -20,8 +20,9 @@ use kndo_contract::evidence::{
 };
 use kndo_contract::extension::{
     Activation, ActivationRule, Bearer, ConductSeverity, ConductSink, ConductTarget, ContentAccess,
-    CycleTolerance, DeclaredSymbol, DispatchRule, Effect, Extension, ExtensionSpec, GraphAccess,
-    PublishedSurface, Rung, Step, Trigger,
+    CycleTolerance, DeclaredSymbol, DependencyBuiltins, DependencyIdentity, DependencyScoping,
+    DispatchRule, Effect, Extension, ExtensionSpec, GraphAccess, NamespaceSpan, Nesting,
+    PublishedSurface, Rung, Step, Trigger, UnnamedUnit,
 };
 use kndo_contract::manifest::UnitKind;
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
@@ -75,6 +76,66 @@ pub fn spec_to_wire(spec: &ExtensionSpec) -> wire::ExtensionSpec {
         manifests: spec.manifests().iter().map(|s| s.to_string()).collect(),
         launchers: spec.launchers().iter().map(|s| s.to_string()).collect(),
         ignores: spec.ignores().iter().map(|s| s.to_string()).collect(),
+        // A variant this SDK build predates has no honest spelling, so it
+        // degrades to the DEFAULT rather than to a neighbour: the same posture
+        // `dispatch_rule_to_wire` takes, and the same one the whole contract
+        // takes toward an undeclared capability.
+        namespace_span: match spec.namespace_span() {
+            NamespaceSpan::Compilation => wire::NamespaceSpan::Compilation,
+            _ => wire::NamespaceSpan::Unit,
+        },
+        unnamed_unit: match spec.unnamed_unit() {
+            UnnamedUnit::Namespace => wire::UnnamedUnit::Namespace,
+            _ => wire::UnnamedUnit::Unbounded,
+        },
+        nesting: match spec.nesting() {
+            Nesting::PerFile => wire::Nesting::PerFile,
+            Nesting::Flat => wire::Nesting::Flat,
+            Nesting::ByDirectory => wire::Nesting::ByDirectory,
+            Nesting::ByPath { roots } => {
+                wire::Nesting::ByPath(roots.iter().map(SmolStr::to_string).collect())
+            }
+            Nesting::Mounted => wire::Nesting::Mounted,
+        },
+        file_roles: spec
+            .file_roles()
+            .iter()
+            .map(|r| wire::FileRole {
+                glob: r.glob.to_string(),
+                kind: root_kind_to_wire(r.kind),
+                confidence: confidence_to_wire(r.confidence),
+            })
+            .collect(),
+        dependency_scoping: match spec.dependency_scoping() {
+            DependencyScoping::Scoped => wire::DependencyScoping::Scoped,
+            DependencyScoping::Unscoped => wire::DependencyScoping::Unscoped,
+        },
+        dependency_identity: match spec.dependency_identity() {
+            DependencyIdentity::Underivable => wire::DependencyIdentity::Underivable,
+            DependencyIdentity::PackageName => wire::DependencyIdentity::PackageName,
+            DependencyIdentity::ModulePath => wire::DependencyIdentity::ModulePath,
+            DependencyIdentity::CrateRoot => wire::DependencyIdentity::CrateRoot,
+        },
+        dependency_importers: spec
+            .dependency_importers()
+            .iter()
+            .map(SmolStr::to_string)
+            .collect(),
+        dependency_builtins: match spec.dependency_builtins() {
+            DependencyBuiltins::None => wire::DependencyBuiltins::None,
+            DependencyBuiltins::Named(names) => {
+                wire::DependencyBuiltins::Named(names.iter().map(SmolStr::to_string).collect())
+            }
+            DependencyBuiltins::UndottedFirstSegment => {
+                wire::DependencyBuiltins::UndottedFirstSegment
+            }
+        },
+        ecosystem: spec.ecosystem().map(SmolStr::to_string),
+        hidden_opt_in: spec
+            .hidden_opt_in()
+            .iter()
+            .map(SmolStr::to_string)
+            .collect(),
         conducts: spec.declares_conduct(),
         activation: activation_to_wire(spec.activation()),
         mutates_graph: spec.mutates_graph(),

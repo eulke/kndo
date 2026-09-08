@@ -23,7 +23,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Bump when the SAME evidence assembles into a DIFFERENT graph — resolution
 /// candidate changes, reachability semantics, new assembled fields. Folded into the
 /// graph cache key beside the contract fingerprint and the adapter set.
-pub const GRAPH_SEMANTICS_VERSION: u32 = 36;
+pub const GRAPH_SEMANTICS_VERSION: u32 = 37;
 
 #[derive(Serialize, Deserialize)]
 pub struct GraphFile {
@@ -412,8 +412,12 @@ impl Graph {
                 .filter(|&i| ownership.owns(self.files[i].path.as_str(), owners[i]))
                 .map(|i| i as u32)
                 .collect();
-            // This adapter's own files, then every claimed file whose suffix it
-            // declares as an importer of its ecosystem.
+            // This adapter's own files; every claimed file whose suffix it
+            // declares as an importer of its ecosystem; and every extension
+            // that DECLARES this one's ecosystem as its own — a stylesheet's
+            // `@import "tailwindcss"` and a page's bare `<script src>` name
+            // npm packages, and the extension claiming them says so rather
+            // than this one guessing from a suffix.
             let read_from: Vec<&BTreeMap<&str, Vec<u32>>> = specifiers
                 .get(coordinate.as_str())
                 .into_iter()
@@ -423,6 +427,12 @@ impl Graph {
                         .dependency_importers()
                         .iter()
                         .filter_map(|s| by_suffix.get(&s.to_ascii_lowercase())),
+                )
+                .chain(
+                    adapters
+                        .iter()
+                        .filter(|a| a.spec().ecosystem() == Some(coordinate))
+                        .filter_map(|a| specifiers.get(a.spec().coordinate())),
                 )
                 .collect();
             let users: Vec<Vec<u32>> = md

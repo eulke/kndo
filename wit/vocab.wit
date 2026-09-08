@@ -419,6 +419,67 @@ interface types {
     /// conduct-stage bit: with it false, the activation/mutates-graph/rules half
     /// is inert and the component never appears in the round; a hand-rolled guest
     /// is forced by the record's shape to state every gate either way.
+    /// Mirrors `NamespaceSpan` — whether a namespace stops at the unit that
+    /// compiles it (`unit`, the narrower default) or is a name units
+    /// contribute to (`compilation`).
+    enum namespace-span {
+        unit,
+        compilation,
+    }
+
+    /// Mirrors `UnnamedUnit` — what bounds a unit-wide reach where no manifest
+    /// named the unit. `unbounded` is the default and the wider answer.
+    enum unnamed-unit {
+        unbounded,
+        namespace,
+    }
+
+    /// Mirrors `Nesting` — how the language shapes its namespace forest.
+    /// `per-file` is the default: the file stands alone in the node its own
+    /// clause names.
+    variant nesting {
+        per-file,
+        flat,
+        by-directory,
+        /// Source roots the LANGUAGE knows without a manifest; empty leaves
+        /// the unit's own roots to say it.
+        by-path(list<string>),
+        mounted,
+    }
+
+    /// Mirrors `FileRole` — what a file IS by the convention of its language's
+    /// own tooling, where no manifest says otherwise.
+    record file-role {
+        glob: string,
+        kind: root-kind,
+        confidence: confidence,
+    }
+
+    /// Mirrors `DependencyScoping` — whether an unscoped declaration is a
+    /// usage claim.
+    enum dependency-scoping {
+        scoped,
+        unscoped,
+    }
+
+    /// Mirrors `DependencyIdentity` — how an import specifier names a declared
+    /// dependency. `underivable` (the default) abstains from every usage
+    /// judgment and says so.
+    enum dependency-identity {
+        underivable,
+        package-name,
+        module-path,
+        crate-root,
+    }
+
+    /// Mirrors `DependencyBuiltins` — which specifiers name the platform's own
+    /// modules rather than a dependency.
+    variant dependency-builtins {
+        none,
+        named(list<string>),
+        undotted-first-segment,
+    }
+
     record extension-spec {
         coordinate: string,
         version: u32,
@@ -441,6 +502,27 @@ interface types {
         /// Paths the language's own tool never compiles: discovered, never
         /// claimed by this extension.
         ignores: list<string>,
+        /// How far a namespace reaches, what bounds a unit-wide reach with no
+        /// manifest, and how the namespace forest is shaped.
+        namespace-span: namespace-span,
+        unnamed-unit: unnamed-unit,
+        nesting: nesting,
+        /// Conventions that rule only where no unit declares the role.
+        file-roles: list<file-role>,
+        /// The dependency vocabulary: how declarations are scoped, how a
+        /// specifier names one, which suffixes carry this ecosystem's imports
+        /// from files another extension claims, and what the platform itself
+        /// provides.
+        dependency-scoping: dependency-scoping,
+        dependency-identity: dependency-identity,
+        dependency-importers: list<string>,
+        dependency-builtins: dependency-builtins,
+        /// Whose dependencies this language's BARE specifiers name; absent
+        /// means its own.
+        ecosystem: option<string>,
+        /// Dot-named directories discovery must enter for this language,
+        /// beside the ones its manifest and launcher globs already name.
+        hidden-opt-in: list<string>,
         conducts: bool,
         activation: activation,
         mutates-graph: bool,

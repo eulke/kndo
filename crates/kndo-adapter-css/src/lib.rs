@@ -41,6 +41,11 @@ impl CssAdapter {
                 .dispatch(vec![kndo_toolkit::generated_rule()])
                 // A sheet inside npm's installed dependencies is a dependency's.
                 .ignores(&["**/node_modules/**"])
+                // A bare specifier in a stylesheet or a page names an npm
+                // package: there is no registry of its own to judge it
+                // against, and js-ts is the extension that claims the
+                // manifests declaring it.
+                .ecosystem("kndo:js-ts")
                 .build(),
         }
     }

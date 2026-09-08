@@ -6088,3 +6088,53 @@ file content, which is the whole reason it takes the other knob.
 `abi/compat/*.wasm` are re-pinned against `kndo:vocab` with `unit-root`,
 `unit-dep`, `version`, `version-req`, `path-alias`, and `manifest-evidence`'s
 `aliases` and `ignores`.
+
+## 2026-09-08 — three things a language says about itself, and the spec crosses whole
+
+The spec half of the contract-v3 audit: `ecosystem`, `hidden_opt_in`, and the
+`Nesting` enum the design writes, plus the wire gap those three exposed.
+
+- **`ecosystem: Option<coordinate>`** — whose dependencies this language's BARE
+  specifiers name. css and html declare `kndo:js-ts`: a stylesheet's
+  `@import "tailwindcss"` and a page's bare `<script src>` name npm packages,
+  and there is no registry of their own to judge them against. The dependency
+  judgment reads it as the other half of `dependency_importers` — that one
+  names suffixes a manifest's ecosystem MAY be imported from and casts doubt
+  when nothing claims them; this one is the claiming extension saying out loud
+  which ecosystem it speaks. The rule only ever ADDS users, so it can withdraw
+  an accusation and never make one.
+- **`hidden_opt_in: Vec<name>`** — dot-named directories discovery must ENTER,
+  beside the ones a language's manifest and launcher globs already imply.
+  js-ts declares `.storybook` and `.vitepress`.
+- **`Nesting::{PerFile, Flat, ByDirectory, ByPath { roots }, Mounted}`** — the
+  shape of the namespace forest, declared. `Scopes::build` dispatched on
+  evidence PRESENCE before (a mount chain means Mounted, a path answer means
+  ByPath, a clause means the fallback); now it dispatches on the capability,
+  and `Flat` (the clause is the whole key — Java) and `ByDirectory` (the
+  directory keys the clause — Go) are two answers rather than one accidental
+  one. go, java, kotlin, rust and python each declare their own.
+
+**The wire carried half a spec.** Adding these three meant looking at
+`ExtensionSpecParts`, where six capabilities were filled with host-invented
+defaults and three comments said so: a WASM guest could declare no nesting, no
+file roles, no namespace span, and not one word of the dependency vocabulary.
+`extension-spec` now carries all of it, and `ExtensionSpecParts::nesting` is a
+field rather than a hard-coded `PerFile`. Old guests break on the added fields
+— an ABI break, taken deliberately, with `abi/compat/*.wasm` re-pinned.
+
+**Measurement.** Every repository byte-identical except vite: 685 → 690.
+Declaring the four non-default nestings changed nothing anywhere — the
+inference agreed with the declaration everywhere the corpus reaches, which is
+the result, not the absence of one. `ecosystem` withdrew nothing because no
+corpus stylesheet spells a bare specifier a manifest declares. The five are
+vite's `.vitepress` docs site, entering the graph for the first time: two are
+VitePress's own conventional entries and are owed to the `kndo:vitepress` pack
+(M8.e), two are reachable only through `.vue` components no adapter claims —
+the blind spot this corpus has recorded since M2 — and one rides the theme
+entry's root. Decomposed in `corpus-findings/COMPARISON.md`; not discovering a
+directory was never the same as judging it correctly.
+
+`GRAPH_SEMANTICS_VERSION` 36 → 37: the same evidence assembles into a different
+graph (the forest's shape is declared, discovery enters more, and a bare
+specifier can name another ecosystem's declaration). The contract fingerprint
+is unmoved — none of this is file evidence.

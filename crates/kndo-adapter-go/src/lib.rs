@@ -23,7 +23,7 @@ use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::EvidenceSink;
 use kndo_contract::evidence::RootKind;
 use kndo_contract::extension::{
-    DispatchRule, Effect, Extension, ExtensionSpec, FileRole, Rung, Step, Trigger,
+    DispatchRule, Effect, Extension, ExtensionSpec, FileRole, Nesting, Rung, Step, Trigger,
 };
 use kndo_contract::manifest::ManifestSink;
 use kndo_contract::vocab::ProjectPath;
@@ -93,6 +93,10 @@ impl GoAdapter {
             // `go build ./app` on a package importing `example.com/m/_scratch`
             // succeeds under go1.24.7 — so they are discovered and judged.
             .ignores(&["**/vendor/**", "**/_*.go"])
+            // A Go package IS a directory: `go build` compiles the files of one
+            // directory together, and two directories writing `package util`
+            // are two packages however short the name they share.
+            .nesting(Nesting::ByDirectory)
             // `go test` compiles exactly the `_test.go` files of a package and
             // runs nothing else — the toolchain's own rule, not a habit, and
             // the adapter's whole statement about what such a file IS.
