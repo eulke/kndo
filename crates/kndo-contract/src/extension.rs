@@ -6,9 +6,7 @@
 //! is gated. Phase discipline lives in the signatures: an extraction hook cannot
 //! name the graph because no parameter provides one.
 
-use crate::adapter::{
-    DependencyDeclaration, PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile,
-};
+use crate::adapter::{Resolution, ResolveContext, SourceFile};
 use crate::evidence::{
     CoverageRecords, Declaration, DeclarationId, EvidenceSink, EvidenceStreams, ImportShape,
     Marker, RelationKind, RootKind, SymbolKind,
@@ -1727,11 +1725,8 @@ pub trait Extension: Send + Sync {
     /// dangling entries degrade to absence: structure nobody stated is
     /// structure the engine does not assume.
     ///
-    /// The four hooks below (`roots`, `packages`, `manifest_dependencies`,
-    /// `manifest_mentions`) are what this one replaces. Until every adapter
-    /// has moved, the engine reads BOTH and merges — an adapter has one or the
-    /// other populated, never both, so the merge is a union of disjoint sets
-    /// and the bridge retires by deletion.
+    /// The ONE door: units, packages, dependencies, mentions, roots and
+    /// members all arrive through [`ManifestSink`], native and WASM alike.
     fn extract_manifest(
         &self,
         manifest: &SourceFile<'_>,
@@ -1739,41 +1734,6 @@ pub trait Extension: Send + Sync {
         out: &mut ManifestSink,
     ) {
         let _ = (manifest, cx, out);
-    }
-
-    /// The roots one manifest declares — transcription of a project FACT, which
-    /// is why claims gate it and activation does not. Called for every discovered
-    /// file matching the spec's manifest globs. Unparseable or dangling entries
-    /// degrade to absence: a root that anchors nothing accuses nothing.
-    fn roots(&self, manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<ProjectRoot> {
-        let _ = (manifest, cx);
-        Vec::new()
-    }
-
-    /// The packages one manifest declares, fed back to every extension's
-    /// `resolve` through [`ResolveContext::package`].
-    fn packages(&self, manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<PackageEntry> {
-        let _ = (manifest, cx);
-        Vec::new()
-    }
-
-    /// The dependency declarations one manifest states, every section alike —
-    /// activation's `ManifestDependency` rules evaluate against the names, and
-    /// the dependency analyses (version-skew today) read scope and requirement —
-    /// through the same discovered-manifest pipeline `roots` and `packages` ride.
-    fn manifest_dependencies(&self, manifest: &SourceFile<'_>) -> Vec<DependencyDeclaration> {
-        let _ = manifest;
-        Vec::new()
-    }
-
-    /// Names this manifest spells outside its dependency declarations — a
-    /// `scripts` entry invoking a binary, a `browser`/`exports` alias, a tool
-    /// config listing a plugin — so a dependency it names is in use without any
-    /// import, and a package it names is not undeclared. The default names
-    /// nothing.
-    fn manifest_mentions(&self, manifest: &SourceFile<'_>) -> Vec<SmolStr> {
-        let _ = manifest;
-        Vec::new()
     }
 
     // ---- conduct: post-graph, once; gated by activation ----

@@ -509,6 +509,86 @@ pub fn package_entry_to_wire(entry: &PackageEntry) -> wire::PackageEntry {
     }
 }
 
+/// Everything one manifest stated, to the wire. A unit kind this SDK build
+/// predates has no honest spelling, so the unit carrying it is dropped rather
+/// than recoloured — the same posture `dispatch_rule_to_wire` takes.
+pub fn manifest_evidence_to_wire(
+    read: &kndo_contract::manifest::ManifestEvidence,
+) -> wire::ManifestEvidence {
+    wire::ManifestEvidence {
+        units: read
+            .units
+            .iter()
+            .filter_map(|u| {
+                Some(wire::Unit {
+                    name: u.name.to_string(),
+                    kind: unit_kind_to_wire(u.kind)?,
+                    roots: u.roots.iter().map(|r| r.to_string()).collect(),
+                    excludes: u.excludes.iter().map(|e| e.to_string()).collect(),
+                    entries: u.entries.iter().map(|e| e.as_str().to_string()).collect(),
+                    depends_on: u.depends_on.iter().map(|d| d.to_string()).collect(),
+                    friend_of: u.friend_of.iter().map(|f| f.to_string()).collect(),
+                    publication: match u.publication {
+                        kndo_contract::manifest::Publication::Published => {
+                            wire::Publication::Published
+                        }
+                        kndo_contract::manifest::Publication::Unpublished => {
+                            wire::Publication::Unpublished
+                        }
+                        kndo_contract::manifest::Publication::Unstated => {
+                            wire::Publication::Unstated
+                        }
+                    },
+                })
+            })
+            .collect(),
+        packages: read.packages.iter().map(package_entry_to_wire).collect(),
+        dependencies: read
+            .dependencies
+            .iter()
+            .map(|d| wire::DependencyDeclaration {
+                name: d.name.to_string(),
+                scope: d.scope.map(dependency_scope_to_wire),
+                version_req: d.version_req.as_ref().map(|v| v.to_string()),
+            })
+            .collect(),
+        mentions: read.mentions.iter().map(|m| m.to_string()).collect(),
+        roots: read.roots.iter().map(project_root_to_wire).collect(),
+        members: read
+            .members
+            .iter()
+            .map(|m| m.as_str().to_string())
+            .collect(),
+        diagnostics: read
+            .diagnostics
+            .iter()
+            .map(|d| wire::Diagnostic {
+                level: match d.level {
+                    ev::DiagnosticLevel::Info => wire::DiagnosticLevel::Info,
+                    ev::DiagnosticLevel::Warn => wire::DiagnosticLevel::Warn,
+                    ev::DiagnosticLevel::Error => wire::DiagnosticLevel::Error,
+                },
+                message: d.message.clone(),
+                span: d.span.map(span_to_wire),
+            })
+            .collect(),
+    }
+}
+
+fn dependency_scope_to_wire(
+    scope: kndo_contract::adapter::DependencyScope,
+) -> wire::DependencyScope {
+    use kndo_contract::adapter::DependencyScope as S;
+    match scope {
+        S::Prod => wire::DependencyScope::Prod,
+        S::Dev => wire::DependencyScope::Dev,
+        S::Build => wire::DependencyScope::Build,
+        S::Optional => wire::DependencyScope::Optional,
+        S::Peer => wire::DependencyScope::Peer,
+        S::Transitive => wire::DependencyScope::Transitive,
+    }
+}
+
 fn package_entry_from_wire(entry: wire::PackageEntry) -> PackageEntry {
     PackageEntry {
         name: SmolStr::new(entry.name),
@@ -723,48 +803,16 @@ impl<E: Extension + Default> bindings::Guest for ExportedExtension<E> {
         resolution_to_wire(E::default().resolve(&from, &specifier, &resolve_context()))
     }
 
-    fn roots(manifest_path: String, content: Vec<u8>) -> Vec<wire::ProjectRoot> {
+    fn extract_manifest(manifest_path: String, content: Vec<u8>) -> wire::ManifestEvidence {
         let path = ProjectPath::new(manifest_path);
         let manifest = SourceFile {
             path: &path,
             content: &content,
             region: None,
         };
-        E::default()
-            .roots(&manifest, &resolve_context())
-            .iter()
-            .map(project_root_to_wire)
-            .collect()
-    }
-
-    fn packages(manifest_path: String, content: Vec<u8>) -> Vec<wire::PackageEntry> {
-        let path = ProjectPath::new(manifest_path);
-        let manifest = SourceFile {
-            path: &path,
-            content: &content,
-            region: None,
-        };
-        E::default()
-            .packages(&manifest, &resolve_context())
-            .iter()
-            .map(package_entry_to_wire)
-            .collect()
-    }
-
-    fn manifest_dependencies(manifest_path: String, content: Vec<u8>) -> Vec<String> {
-        let path = ProjectPath::new(manifest_path);
-        let manifest = SourceFile {
-            path: &path,
-            content: &content,
-            region: None,
-        };
-        // The ABI speaks names only; a guest's scope/requirement stay guest-side
-        // until a versioned world carries them.
-        E::default()
-            .manifest_dependencies(&manifest)
-            .iter()
-            .map(|d| d.name.to_string())
-            .collect()
+        let mut sink = kndo_contract::manifest::ManifestSink::new();
+        E::default().extract_manifest(&manifest, &resolve_context(), &mut sink);
+        manifest_evidence_to_wire(&sink.finish())
     }
 
     fn contribute_roots() -> Vec<wire::ContributedRoot> {

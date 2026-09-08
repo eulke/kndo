@@ -508,14 +508,18 @@ impl Session {
         let discovered_paths: BTreeSet<ProjectPath> =
             files.iter().map(|f| f.path.clone()).collect();
         let mut manifest_dependencies: BTreeSet<SmolStr> = BTreeSet::new();
-        crate::graph::for_each_manifest(&files, &self.extensions, |extension, manifest| {
-            manifest_dependencies.extend(
-                extension
-                    .manifest_dependencies(&manifest)
-                    .into_iter()
-                    .map(|d| d.name),
-            );
-        });
+        {
+            // The same door the graph pass reads, asked earlier and for one
+            // field: activation needs the NAMES a manifest declares, and a
+            // manifest states them beside everything else.
+            let cx = kndo_contract::adapter::ResolveContext::new(&discovered_paths);
+            crate::graph::for_each_manifest(&files, &self.extensions, |extension, manifest| {
+                let mut sink = kndo_contract::manifest::ManifestSink::new();
+                extension.extract_manifest(&manifest, &cx, &mut sink);
+                manifest_dependencies
+                    .extend(sink.finish().dependencies.into_iter().map(|d| d.name));
+            });
+        }
         let active =
             crate::conduct::activate(&self.extensions, &discovered_paths, &manifest_dependencies);
         let plugins_mutate = active

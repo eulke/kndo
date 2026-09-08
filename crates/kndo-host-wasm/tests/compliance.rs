@@ -465,32 +465,87 @@ fn a_project_enumeration_during_extraction_traps_the_same_way() {
 }
 
 #[test]
-fn the_manifest_hook_gets_bytes_and_no_project_surface() {
-    // `manifest-dependencies` is bytes-in names-out. Before the manifest phase
-    // existed it ran under a bare project store, where `known-files` PASSED the
-    // gate and read an empty snapshot — silently wrong data. Now it traps as a
-    // named violation, and the engine degrades to no names (activation stays
-    // off), never to a lie.
+fn a_conduct_import_during_a_manifest_read_traps_with_a_named_violation() {
+    // A manifest read runs in the PROJECT phase: it resolves the entries a
+    // manifest names, so the project enumerations answer. The conduct imports
+    // do not — reaching for the assembled graph while the graph is being built
+    // traps, and the engine degrades to a manifest that stated nothing.
     let p = TempProject::new();
     p.file("app.rude", "anything\n");
-    p.file("manifest.rude", "files\n");
+    p.file("manifest.rude", "graph\n");
 
     let rude = WasmExtension::load(&component("rude_probe")).expect("rude probe loads");
-    // The rude spec declares no manifests, so drive the hook directly: the
+    // The rude spec declares no manifests, so drive the door directly: the
     // phase gate is the subject, not the engine's manifest routing.
-    let names = kndo_core::Extension::manifest_dependencies(
+    let known = std::collections::BTreeSet::new();
+    let cx = kndo_contract::adapter::ResolveContext::new(&known);
+    let mut sink = kndo_contract::manifest::ManifestSink::new();
+    kndo_core::Extension::extract_manifest(
         &rude,
         &kndo_contract::adapter::SourceFile {
             path: &kndo_contract::vocab::ProjectPath::new("manifest.rude"),
-            content: b"files\n",
+            content: b"graph\n",
             region: None,
         },
-    )
-    .into_iter()
-    .map(|d| d.name)
-    .collect::<Vec<_>>();
+        &cx,
+        &mut sink,
+    );
+    let read = sink.finish();
     assert!(
-        names.is_empty(),
-        "a trapped manifest read degrades to no names, never to data"
+        read.units.is_empty()
+            && read.packages.is_empty()
+            && read.dependencies.is_empty()
+            && read.roots.is_empty(),
+        "a trapped manifest read states nothing, never data"
+    );
+}
+
+#[test]
+fn a_guest_states_a_whole_unit_across_the_abi() {
+    // The one door carries the whole of what a manifest states, not the three
+    // lists the retired exports could. A guest's unit — its kind, the entries
+    // the build enters it through, what it compiles against, and what its
+    // manifest says about consumers outside — arrives shaped, and the host
+    // replays it through the real `ManifestSink` like a native adapter's.
+    let kmini = WasmExtension::load(&component("kmini_adapter")).expect("kmini adapter loads");
+    let known: std::collections::BTreeSet<kndo_contract::vocab::ProjectPath> = ["lib.kmini"]
+        .iter()
+        .map(|p| kndo_contract::vocab::ProjectPath::new(*p))
+        .collect();
+    let cx = kndo_contract::adapter::ResolveContext::new(&known);
+    let mut sink = kndo_contract::manifest::ManifestSink::new();
+    kndo_core::Extension::extract_manifest(
+        &kmini,
+        &kndo_contract::adapter::SourceFile {
+            path: &kndo_contract::vocab::ProjectPath::new("kmini.pkg"),
+            content: b"name kit\nentry lib.kmini\ndep probe-framework\n",
+            region: None,
+        },
+        &cx,
+        &mut sink,
+    );
+    let read = sink.finish();
+    assert_eq!(read.units.len(), 1, "{:?}", read.units);
+    let unit = &read.units[0];
+    assert_eq!(unit.name, "kit");
+    assert_eq!(unit.kind, kndo_contract::manifest::UnitKind::Library);
+    assert_eq!(
+        unit.entries.iter().map(|e| e.as_str()).collect::<Vec<_>>(),
+        ["lib.kmini"]
+    );
+    assert_eq!(unit.depends_on, ["probe-framework"]);
+    assert_eq!(
+        unit.publication,
+        kndo_contract::manifest::Publication::Unstated
+    );
+    // The other lists ride the same read, in one call rather than three.
+    assert_eq!(read.packages.len(), 1);
+    assert_eq!(read.packages[0].name, "kit");
+    assert_eq!(
+        read.dependencies
+            .iter()
+            .map(|d| d.name.as_str())
+            .collect::<Vec<_>>(),
+        ["probe-framework"]
     );
 }

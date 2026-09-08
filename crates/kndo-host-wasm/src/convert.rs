@@ -254,6 +254,71 @@ pub(crate) fn project_root(root: awire::ProjectRoot) -> ProjectRoot {
     }
 }
 
+/// Everything a guest said one manifest states, replayed through the real
+/// `ManifestSink` — the same validation a native adapter's writes go through,
+/// so a guest cannot assemble evidence the engine would not accept.
+pub(crate) fn manifest_evidence(
+    read: awire::ManifestEvidence,
+    out: &mut kndo_contract::manifest::ManifestSink,
+) {
+    use kndo_contract::manifest::{Publication, Unit};
+    for unit in read.units {
+        out.unit(Unit {
+            name: SmolStr::new(unit.name),
+            kind: unit_kind(unit.kind),
+            roots: unit.roots.into_iter().map(SmolStr::new).collect(),
+            excludes: unit.excludes.into_iter().map(SmolStr::new).collect(),
+            entries: unit.entries.into_iter().map(ProjectPath::new).collect(),
+            depends_on: unit.depends_on.into_iter().map(SmolStr::new).collect(),
+            friend_of: unit.friend_of.into_iter().map(SmolStr::new).collect(),
+            publication: match unit.publication {
+                awire::Publication::Published => Publication::Published,
+                awire::Publication::Unpublished => Publication::Unpublished,
+                awire::Publication::Unstated => Publication::Unstated,
+            },
+        });
+    }
+    for entry in read.packages {
+        out.package(package_entry(entry));
+    }
+    for declaration in read.dependencies {
+        out.dependency(kndo_contract::adapter::DependencyDeclaration {
+            name: SmolStr::new(declaration.name),
+            scope: declaration.scope.map(dependency_scope),
+            version_req: declaration.version_req.map(SmolStr::new),
+        });
+    }
+    for name in read.mentions {
+        out.mention(name);
+    }
+    for root in read.roots {
+        out.root(project_root(root));
+    }
+    for member in read.members {
+        out.member(ProjectPath::new(member));
+    }
+    for d in read.diagnostics {
+        let level = match d.level {
+            awire::DiagnosticLevel::Info => DiagnosticLevel::Info,
+            awire::DiagnosticLevel::Warn => DiagnosticLevel::Warn,
+            awire::DiagnosticLevel::Error => DiagnosticLevel::Error,
+        };
+        out.diagnostic(level, d.message);
+    }
+}
+
+fn dependency_scope(scope: awire::DependencyScope) -> kndo_contract::adapter::DependencyScope {
+    use kndo_contract::adapter::DependencyScope as S;
+    match scope {
+        awire::DependencyScope::Prod => S::Prod,
+        awire::DependencyScope::Dev => S::Dev,
+        awire::DependencyScope::Build => S::Build,
+        awire::DependencyScope::Optional => S::Optional,
+        awire::DependencyScope::Peer => S::Peer,
+        awire::DependencyScope::Transitive => S::Transitive,
+    }
+}
+
 pub(crate) fn conduct_target(target: awire::ConductTarget) -> ConductTarget {
     match target {
         awire::ConductTarget::File(path) => ConductTarget::File(ProjectPath::new(path)),

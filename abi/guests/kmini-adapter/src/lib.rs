@@ -213,47 +213,57 @@ impl Extension for KminiAdapter {
         }
     }
 
-    fn roots(&self, manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<ProjectRoot> {
-        manifest_lines(manifest.content)
-            .filter(|(k, _)| *k == "entry")
-            .map(|(_, v)| ProjectPath::new(v))
-            .filter(|p| cx.contains(p))
-            .map(|file| ProjectRoot {
-                file,
-                kind: RootKind::Production,
-                confidence: Confidence::Certain,
-            })
-            .collect()
-    }
-
-    fn packages(&self, manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<PackageEntry> {
+    fn extract_manifest(
+        &self,
+        manifest: &SourceFile<'_>,
+        cx: &ResolveContext<'_>,
+        out: &mut kndo_contract::manifest::ManifestSink,
+    ) {
         let dir = match manifest.path.as_str().rfind('/') {
             Some(i) => &manifest.path.as_str()[..i],
             None => "",
         };
-        let name = manifest_lines(manifest.content).find(|(k, _)| *k == "name");
-        let entry = manifest_lines(manifest.content)
-            .find(|(k, _)| *k == "entry")
+        let entries: Vec<ProjectPath> = manifest_lines(manifest.content)
+            .filter(|(k, _)| *k == "entry")
             .map(|(_, v)| ProjectPath::new(v))
-            .filter(|p| cx.contains(p));
-        match name {
-            Some((_, name)) => vec![PackageEntry {
-                name: SmolStr::new(name),
-                entry,
-                dir: SmolStr::new(dir),
-            }],
-            None => Vec::new(),
-        }
-    }
-
-    fn manifest_dependencies(
-        &self,
-        manifest: &SourceFile<'_>,
-    ) -> Vec<kndo_contract::adapter::DependencyDeclaration> {
-        manifest_lines(manifest.content)
+            .filter(|p| cx.contains(p))
+            .collect();
+        let deps: Vec<SmolStr> = manifest_lines(manifest.content)
             .filter(|(k, _)| *k == "dep")
-            .map(|(_, v)| kndo_contract::adapter::DependencyDeclaration::name_only(SmolStr::new(v)))
-            .collect()
+            .map(|(_, v)| SmolStr::new(v))
+            .collect();
+        if let Some((_, name)) = manifest_lines(manifest.content).find(|(k, _)| *k == "name") {
+            out.package(PackageEntry {
+                name: SmolStr::new(name),
+                entry: entries.first().cloned(),
+                dir: SmolStr::new(dir),
+            });
+            out.unit(kndo_contract::manifest::Unit {
+                name: SmolStr::new(name),
+                kind: kndo_contract::manifest::UnitKind::Library,
+                roots: Vec::new(),
+                excludes: Vec::new(),
+                entries,
+                depends_on: deps.clone(),
+                friend_of: Vec::new(),
+                publication: kndo_contract::manifest::Publication::Unstated,
+            });
+        } else {
+            // No name, so no unit to own them: the entries are the manifest's
+            // own roots, which is what `ManifestEvidence::roots` is for.
+            for file in entries {
+                out.root(ProjectRoot {
+                    file,
+                    kind: RootKind::Production,
+                    confidence: Confidence::Certain,
+                });
+            }
+        }
+        for name in deps {
+            out.dependency(kndo_contract::adapter::DependencyDeclaration::name_only(
+                name,
+            ));
+        }
     }
 }
 

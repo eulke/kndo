@@ -643,14 +643,7 @@ promise.
 
 ### Still here, with the mechanism that replaces each
 
-| mechanism | how much | replaced by | lands in |
-|---|---|---|---|
-| the four manifest hooks, on the TRAIT and in the WIT | `grep -c "fn roots(\|fn packages(\|fn manifest_dependencies(\|fn manifest_mentions(" crates/kndo-adapter-*/src/lib.rs` — **0**; what remains is the default on `Extension`, the three `export`s in `wit/extension.wit`, the host's forwarding and the engine's bridge in `project.rs`/`graph.rs` | the guest exporting `extract-manifest` instead, with the host folding what it reads | M8.d's last row — an ABI break, so `pin-abi` and the compat matrix come with it |
-
-No built-in adapter reads a manifest through the old hooks any more. What holds
-the door open is the WASM side: a guest compiled against the current ABI may
-still export `roots`, `packages` or `manifest-dependencies`, and deleting the
-bridge before the WIT would make the engine stop hearing it silently.
+Nothing. Every mechanism this section tracked is closed; the rows are below.
 
 ### Captures owed
 
@@ -676,6 +669,7 @@ a graded one.
 | python's library-mode root, and its line-scanned manifests | `pyproject.toml` / `setup.cfg` / `requirements*.txt` parsed into units, entries, packages and dependencies; `publishes()` reads the unit. Ablations: without the parser the deletion cost flask +15, with it nothing |
 | swift's `manifest_dependencies` | `Package.swift` read once, dependencies from the `Package(...)` call's own list |
 | js-ts's four hooks | `package.json` states the unit npm compiles and its entries; `tsconfig.json` joins the manifests for its `paths` aliases, which travel as packages. vite 691 → 687 findings, 2342 → 2474 import edges; no conformance fixture moved, which is the equivalence for the half that only changed door |
+| the four hooks on the TRAIT, and the three in the WIT | `extract-manifest` on both sides — `grep -c "fn roots(\|fn packages(\|fn manifest_dependencies(\|fn manifest_mentions(" crates/kndo-*/src/*.rs` is **0**, and the WIT exports one manifest function. The ABI grew what the old exports could not carry (`unit` with its publication and friendships, `dependency-declaration` with scope and requirement, `members`, `diagnostics`); `Phase::Manifest` retires with them, since a manifest read resolves entries and so runs in the project phase. Corpus byte-identical across all nine repositories |
 | the pom and Gradle line scanners | `roxmltree` over the pom; a block scanner over a comment-blanked copy of the Gradle scripts, plus the version catalog as TOML. Both graded against the ecosystem's own tool, rows above |
 | kotlin's library-mode Production root | the engine's published surface, read from the Gradle unit. Ablations from both sides: deleting it before the Gradle reader existed cost Exposed +125; with the reader it costs +38, every one decomposed in `corpus-findings/COMPARISON.md` |
 

@@ -192,16 +192,6 @@ pub fn read_manifests(
         union(&mut merged.packages, read.packages);
         union(&mut merged.dependencies, read.dependencies);
         union(&mut merged.mentions, read.mentions);
-        // The bridge, until every adapter speaks the one hook: what the four
-        // hooks this replaces return joins the same evidence, so every
-        // consumer reads ONE value and the bridge retires by deleting these
-        // four lines with the hooks. An adapter populates one side or the
-        // other, never both, so the union is disjoint.
-        merged.packages.extend(adapter.packages(&file, &cx));
-        merged
-            .dependencies
-            .extend(adapter.manifest_dependencies(&file));
-        merged.mentions.extend(adapter.manifest_mentions(&file));
     };
     crate::graph::for_each_matching(files, adapters, ExtensionSpec::manifests, |a, f| {
         read(a, f, true)

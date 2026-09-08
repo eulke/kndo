@@ -75,22 +75,23 @@ impl bindings::Guest for RudeProbe {
         wire::Resolution::Unresolved
     }
 
-    fn roots(_manifest_path: String, _content: Vec<u8>) -> Vec<wire::ProjectRoot> {
-        Vec::new()
-    }
-
-    fn packages(_manifest_path: String, _content: Vec<u8>) -> Vec<wire::PackageEntry> {
-        Vec::new()
-    }
-
-    fn manifest_dependencies(_manifest_path: String, content: Vec<u8>) -> Vec<String> {
-        // Same discipline for the manifest hook: bytes in, names out — reaching
-        // for the file set here must trap as a named violation, never read an
-        // empty snapshot as if it were the project.
-        if content.starts_with(b"files") {
-            let _ = bindings::known_files();
+    fn extract_manifest(_manifest_path: String, content: Vec<u8>) -> wire::ManifestEvidence {
+        // A manifest read runs in the PROJECT phase — it resolves entries, so
+        // the project enumerations are its own. The conduct imports are not:
+        // reaching for the assembled graph here must trap as a named
+        // violation, never answer with an empty snapshot as if it were one.
+        if content.starts_with(b"graph") {
+            let _ = bindings::graph_paths();
         }
-        Vec::new()
+        wire::ManifestEvidence {
+            units: Vec::new(),
+            packages: Vec::new(),
+            dependencies: Vec::new(),
+            mentions: Vec::new(),
+            roots: Vec::new(),
+            members: Vec::new(),
+            diagnostics: Vec::new(),
+        }
     }
 
     fn contribute_roots() -> Vec<wire::ContributedRoot> {

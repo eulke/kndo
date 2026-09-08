@@ -15,7 +15,7 @@ use crate::bindings::kndo::vocab::types as wire;
 use crate::bindings::{Extension as GuestWorld, ExtensionImports};
 use crate::convert;
 use crate::engine::{budgeted_store, guest_limits, shared_engine};
-use kndo_contract::adapter::{PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile};
+use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{CoverageRecords, DiagnosticLevel, EvidenceSink};
 use kndo_contract::extension::is_reserved_coordinate;
 use kndo_contract::extension::{ConductSink, ContentAccess, Extension, ExtensionSpec, GraphAccess};
@@ -27,8 +27,6 @@ use wasmtime::component::{Component, Linker};
 /// Which phase a store was built for — the authority every import checks.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Phase {
-    /// Manifest-dependency reads: bytes in, names out, no project surface.
-    Manifest,
     Spec,
     Extract,
     Project,
@@ -40,7 +38,6 @@ impl Phase {
     fn describe(self) -> &'static str {
         match self {
             Phase::Spec => "spec load",
-            Phase::Manifest => "the manifest read",
             Phase::Extract => "extraction",
             Phase::Project => "project queries",
             Phase::Conduct => "the conduct round",
@@ -271,45 +268,20 @@ impl Extension for WasmExtension {
         .unwrap_or(Resolution::Unresolved)
     }
 
-    fn roots(&self, manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<ProjectRoot> {
-        self.call(StoreData::project(cx), |guest, store| {
-            guest.call_roots(store, manifest.path.as_str(), manifest.content)
-        })
-        .map(|roots| roots.into_iter().map(convert::project_root).collect())
-        .unwrap_or_default()
-    }
-
-    fn packages(&self, manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<PackageEntry> {
-        self.call(StoreData::project(cx), |guest, store| {
-            guest.call_packages(store, manifest.path.as_str(), manifest.content)
-        })
-        .map(|entries| entries.into_iter().map(convert::package_entry).collect())
-        .unwrap_or_default()
-    }
-
-    fn manifest_dependencies(
+    fn extract_manifest(
         &self,
         manifest: &SourceFile<'_>,
-    ) -> Vec<kndo_contract::adapter::DependencyDeclaration> {
-        // The manifest hook gets bytes and NOTHING else — its own phase, so a
-        // guest reaching for `known-files` here trips a named violation instead
-        // of silently reading an empty snapshot. The ABI speaks names only;
-        // scope and requirement are honestly absent, so version-skew never
-        // judges a guest-declared dependency it cannot compare.
-        self.call(StoreData::bare(Phase::Manifest), |guest, store| {
-            guest.call_manifest_dependencies(store, manifest.path.as_str(), manifest.content)
-        })
-        .map(|names| {
-            names
-                .into_iter()
-                .map(|name| kndo_contract::adapter::DependencyDeclaration {
-                    name: smol_str::SmolStr::new(name),
-                    scope: None,
-                    version_req: None,
-                })
-                .collect()
-        })
-        .unwrap_or_default()
+        cx: &ResolveContext<'_>,
+        out: &mut kndo_contract::manifest::ManifestSink,
+    ) {
+        // A manifest states entries it has to resolve, so this reads the
+        // project enumerations like `resolve` does — one phase, one door.
+        let Ok(read) = self.call(StoreData::project(cx), |guest, store| {
+            guest.call_extract_manifest(store, manifest.path.as_str(), manifest.content)
+        }) else {
+            return;
+        };
+        convert::manifest_evidence(read, out);
     }
 
     fn contribute_roots(

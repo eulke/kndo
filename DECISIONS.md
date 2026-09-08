@@ -5602,3 +5602,37 @@ reachable.
 `kndo:js-ts` moves to 13. The four hooks are gone from every built-in adapter;
 they stay on the trait and in the WIT for the WASM guests that still export
 them, and closing that door is M8.d's last row.
+
+## 2026-09-08 — the manifest door closes: four hooks and three ABI exports retire
+
+`roots`, `packages`, `manifest_dependencies` and `manifest_mentions` are gone
+from the `Extension` trait, and `roots`, `packages` and `manifest-dependencies`
+from `wit/extension.wit`. `extract-manifest` takes their place on both sides:
+one export, one `ManifestSink`, the same validation for a WASM guest's writes as
+for a native adapter's, because the host replays them through the real sink.
+
+The ABI can now carry what the old exports could not, which is why this is a
+replacement rather than a rename: `unit` (with its kind, roots, excludes,
+entries, `depends-on`, `friend-of` and `publication`), `dependency-declaration`
+with its scope and version requirement — the SDK's "until a versioned world
+carries them" is spent — plus `members` and `diagnostics`. The compat pins are
+rebuilt in this commit, which is the reviewable record of the break.
+
+One phase retires with them. `Phase::Manifest` existed only for the bytes-in
+names-out `manifest-dependencies`; a manifest read resolves the entries it
+names, so `extract-manifest` runs in the PROJECT phase like `resolve`, and the
+rude-probe's gate test is re-aimed at what is still illegal there — reaching for
+the assembled graph while the graph is being built.
+
+Activation reads the same door: it needs the dependency NAMES a manifest
+declares, and a manifest states them beside everything else, so the pre-graph
+pass calls `extract_manifest` over the discovered paths instead of a second hook.
+
+The corpus is byte-identical across all nine repositories — the door changed,
+not a verdict. What proves the new surface is exercised rather than merely
+declared: the compliance suite drives a guest's whole unit across the ABI
+(kind, entries, `depends_on`, publication, packages and dependencies in one
+call), and the compat matrix drives the pinned components to a real verdict.
+
+`anchor_manifest_roots` loses two parameters it no longer needs; nothing in the
+engine consults an adapter about a manifest except through the one door.

@@ -435,6 +435,62 @@ interface types {
         dir: string,
     }
 
+    /// Mirrors `Publication` — what a manifest says about a unit's consumers
+    /// outside the project. `unstated` is the silence under which a library is
+    /// published and everything else is not.
+    enum publication {
+        published,
+        unpublished,
+        unstated,
+    }
+
+    /// Mirrors `Unit` — one thing the build system compiles as one artifact.
+    /// `roots` empty means the declaring manifest's own directory; a file
+    /// belongs to the unit whose root is the LONGEST prefix of its path.
+    record unit {
+        name: string,
+        kind: unit-kind,
+        roots: list<string>,
+        excludes: list<string>,
+        entries: list<string>,
+        depends-on: list<string>,
+        friend-of: list<string>,
+        publication: publication,
+    }
+
+    /// Mirrors `DependencyScope` — the manifest section a declaration sits in.
+    enum dependency-scope {
+        prod,
+        dev,
+        build,
+        optional,
+        peer,
+        transitive,
+    }
+
+    /// Mirrors `DependencyDeclaration`. `scope` absent means the ecosystem has
+    /// no sections; `version-req` absent means the manifest states no
+    /// comparable requirement.
+    record dependency-declaration {
+        name: string,
+        scope: option<dependency-scope>,
+        version-req: option<string>,
+    }
+
+    /// Mirrors `ManifestEvidence` — everything ONE manifest states about the
+    /// project's structure. `roots` are files the manifest says are RUN
+    /// without entering any unit; a unit's own entries carry their colour from
+    /// its kind.
+    record manifest-evidence {
+        units: list<unit>,
+        packages: list<package-entry>,
+        dependencies: list<dependency-declaration>,
+        mentions: list<string>,
+        roots: list<project-root>,
+        members: list<string>,
+        diagnostics: list<diagnostic>,
+    }
+
     /// Mirrors `Resolution`.
     variant resolution {
         file(string),

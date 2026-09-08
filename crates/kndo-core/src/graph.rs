@@ -566,7 +566,7 @@ pub fn assemble(
         );
     }
     mount_and_own(&mut graph_files, &project);
-    anchor_manifest_roots(files, adapters, &cx, &project, &reads, &mut graph_files);
+    anchor_manifest_roots(adapters, &project, &reads, &mut graph_files);
     dispatch_files(&mut graph_files, adapters);
     publish_surfaces(&mut graph_files, adapters, &project);
 
@@ -1177,14 +1177,13 @@ pub(crate) fn for_each_matching(
     }
 }
 
-/// The manifest pass: every discovered file matching an adapter's declared manifest
-/// globs is handed to that adapter's `roots`, and each returned entry that names a
-/// file in the graph anchors a whole-file root there. Manifests are consulted in path
-/// order and the anchors are sorted, so the result is a pure function of the tree.
+/// The manifest pass: what the project's manifests STATED, anchored onto the
+/// files they name — a unit's entries at its kind's colour, a unit's kind over
+/// its own files, a language's declared file roles where no unit spoke, and
+/// each manifest's own roots. Everything is read from `project` and `reads`,
+/// both assembled in path order, so the result is a pure function of the tree.
 fn anchor_manifest_roots(
-    files: &[DiscoveredFile],
     adapters: &[Box<dyn Extension>],
-    cx: &ResolveContext<'_>,
     project: &crate::project::Project,
     reads: &[crate::project::ManifestRead],
     graph_files: &mut [GraphFile],
@@ -1255,18 +1254,6 @@ fn anchor_manifest_roots(
             anchor(&root.file, root.kind, root.confidence);
         }
     }
-    // The bridge: the hook `extract_manifest` replaces. Launchers reach this
-    // pass and no other — they declare roots, never a package
-    // ([`ExtensionSpecBuilder::launchers`]).
-    //
-    // [`ExtensionSpecBuilder::launchers`]: kndo_contract::extension::ExtensionSpecBuilder::launchers
-    let mut legacy = |adapter: &dyn Extension, declaring: SourceFile<'_>| {
-        for root in adapter.roots(&declaring, cx) {
-            anchor(&root.file, root.kind, root.confidence);
-        }
-    };
-    for_each_manifest(files, adapters, &mut legacy);
-    for_each_matching(files, adapters, |spec| spec.launchers(), &mut legacy);
     for (ix, root) in anchors {
         graph_files[ix].anchored.push(root);
     }
