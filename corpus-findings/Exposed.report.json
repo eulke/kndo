@@ -657,26 +657,15 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
-      "id": "kndo-db277e9ba2cc",
+      "id": "kndo-b537f8c917d0",
       "category": "unused",
       "severity": "warning",
       "confidence": "certain",
       "subject": {
-        "kind": "symbol",
-        "path": "samples/springboot3-exposed-r2dbc/src/main/kotlin/com/example/processor/EmailEnvironmentPostProcessor.kt",
-        "selector": {
-          "name": "EmailEnvironmentPostProcessor"
-        },
-        "span": {
-          "start": 474,
-          "end": 1357
-        }
+        "kind": "file",
+        "path": "samples/springboot3-exposed-r2dbc/src/main/kotlin/com/example/processor/EmailEnvironmentPostProcessor.kt"
       },
-      "lines": {
-        "start": 13,
-        "end": 33
-      },
-      "message": "nothing references, roots, or imports this declaration"
+      "message": "no root anchors this file and no reachable file imports it"
     },
     {
       "id": "kndo-2e066dc38915",
@@ -21114,17 +21103,6 @@
       "subject": {
         "kind": "file",
         "path": "samples/springboot3-exposed-r2dbc/src/main/kotlin/com/example/dao/impl/UserDaoImpl.kt"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-c6b0e76f0cf6",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "samples/springboot3-exposed-r2dbc/src/main/kotlin/com/example/processor/EmailEnvironmentPostProcessor.kt"
       },
       "message": "production-reachable, but no test reaches this file"
     },

@@ -3,7 +3,7 @@
 
 use kndo_adapter_java::JavaAdapter;
 use kndo_contract::evidence::{
-    Attachment, ImportShape, ImportTarget, MarkerTarget, Reach, RelationKind, RootTarget,
+    Attachment, ImportShape, ImportTarget, MarkerTarget, Reach, RelationKind,
 };
 use kndo_contract::extension::Extension;
 use kndo_testkit::{declaration_named, extract_evidence, import_named};
@@ -68,7 +68,7 @@ fn interface_members_are_implicitly_public_and_members_are_owned() {
 }
 
 #[test]
-fn the_only_root_left_is_the_jvm_entry() {
+fn dispatch_the_source_never_names_is_reported_not_concluded() {
     let ev = ev(
         "src/main/java/com/foo/App.java",
         "package com.foo;\n\
@@ -78,31 +78,25 @@ fn the_only_root_left_is_the_jvm_entry() {
            private void readObject(java.io.ObjectInputStream in) {}\n\
          }\n",
     );
-    let rooted: Vec<usize> = ev
-        .roots
-        .iter()
-        .filter_map(|r| match r.target {
-            RootTarget::Declaration(id) => Some(id.index()),
-            _ => None,
-        })
-        .collect();
-    // The JVM entry is a modifier fact as much as a name one, and this pass
-    // is where `static` and `public` are visible.
-    let main = ev
-        .declarations
-        .iter()
-        .position(|d| d.name == "main")
-        .unwrap();
-    assert!(rooted.contains(&main), "{:#?}", ev.roots);
+    assert!(
+        ev.roots.is_empty(),
+        "the extractor concludes no root of its own: {:#?}",
+        ev.roots
+    );
+    // The JLS launcher signature is a MODIFIER and SIGNATURE fact as much as a
+    // name one, and this pass is where `static`, `public`, `void` and
+    // `(String[])` are all visible — so the adapter reports the shape and a
+    // rule says what it means.
+    assert_eq!(
+        markers_on(&ev, "main"),
+        [("main(String[])", vec![])],
+        "the launcher shape is reported, never concluded"
+    );
 
     // Everything else a Java name means is the spec's data. `@Override` is
     // stated as a marker; `readObject` is stated as a member of a type that
     // says `implements Serializable`, and what the pair MEANS is one rule.
     assert_eq!(markers_on(&ev, "toString"), [("Override", vec![])]);
-    for name in ["toString", "readObject"] {
-        let ix = ev.declarations.iter().position(|d| d.name == name).unwrap();
-        assert!(!rooted.contains(&ix), "{name} is no longer rooted here");
-    }
     assert!(
         ev.relations
             .iter()

@@ -2,7 +2,9 @@
 //! properties, dispatch roots, import shapes, and the never-declare postures.
 
 use kndo_adapter_kotlin::KotlinAdapter;
-use kndo_contract::evidence::{Attachment, ImportShape, ImportTarget, Reach, RefKind, RootTarget};
+use kndo_contract::evidence::{
+    Attachment, ImportShape, ImportTarget, MarkerTarget, Reach, RefKind,
+};
 use kndo_testkit::{declaration_named, extract_evidence, import_named};
 
 fn ev(path: &str, source: &str) -> kndo_contract::evidence::FileEvidence {
@@ -72,7 +74,11 @@ fn members_and_promoted_constructor_properties_carry_their_owner() {
 }
 
 #[test]
-fn override_operator_and_top_level_main_are_rooted() {
+fn dispatch_the_source_never_names_is_reported_not_concluded() {
+    // `override`, `operator` and a top-level `main` are all dispatch no call
+    // site spells. The extractor states the FACTS — the modifier is there, the
+    // declaration is owner-less and called `main` — and the adapter's rules
+    // say what each means. Nothing here concludes a root.
     let ev = ev(
         "src/main/kotlin/com/foo/App.kt",
         "package com.foo\n\
@@ -82,22 +88,23 @@ fn override_operator_and_top_level_main_are_rooted() {
            operator fun invoke() {}\n\
          }\n",
     );
-    let rooted: Vec<usize> = ev
-        .roots
-        .iter()
-        .filter_map(|r| match r.target {
-            RootTarget::Declaration(id) => Some(id.index()),
-            _ => None,
+    assert!(
+        ev.roots.is_empty(),
+        "the extractor concludes no root of its own: {:#?}",
+        ev.roots
+    );
+    let marked = |keyword: &str, on: &str| {
+        let ix = ev.declarations.iter().position(|d| d.name == on).unwrap();
+        ev.markers.iter().any(|m| {
+            m.path == keyword && matches!(m.on, MarkerTarget::Declaration(id) if id.index() == ix)
         })
-        .collect();
-    for name in ["main", "toString", "invoke"] {
-        let ix = ev.declarations.iter().position(|d| d.name == name).unwrap();
-        assert!(
-            rooted.contains(&ix),
-            "{name} must be rooted: {:#?}",
-            ev.roots
-        );
-    }
+    };
+    assert!(marked("override", "toString"), "{:#?}", ev.markers);
+    assert!(marked("operator", "invoke"), "{:#?}", ev.markers);
+    // `main` carries no modifier: what makes it an entry is that it is
+    // top-level, and a declaration with no owner IS that fact.
+    let main = ev.declarations.iter().find(|d| d.name == "main").unwrap();
+    assert!(main.owner.is_none());
 }
 
 #[test]

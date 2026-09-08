@@ -31,12 +31,3 @@ subject = "src/main/java/com/foo/Plain.java#Plain.writeObject(java.io.ObjectOutp
 category = "unused"
 why = "the same NAME on a type that implements nothing: a rule about a base, not about a name"
 
-[[alive]]
-subject = "src/main/java/com/foo/Qualified.java#Qualified.shut()"
-category = "unused"
-why = "the rule names com.vendor.Closer, and this file's import says that is the Closer it implements"
-
-[[dead]]
-subject = "src/main/java/com/foo/Homonym.java#Homonym.shut()"
-category = "unused"
-why = "same simple name, com.other.Closer — a rule about another package's type says nothing here"

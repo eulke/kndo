@@ -30,12 +30,54 @@ pub struct KotlinAdapter {
     spec: ExtensionSpec,
 }
 
+/// What Kotlin's own language dispatches on, as data. Frameworks are NOT here:
+/// JUnit's `@Test`, Spring's stereotypes and Compose's `@Composable` are their
+/// packs' rules to state, gated by the dependency that proves the framework is
+/// installed.
+fn dispatch_rules() -> Vec<kndo_contract::extension::DispatchRule> {
+    use kndo_contract::evidence::RootKind;
+    use kndo_contract::evidence::SymbolKind;
+    use kndo_contract::extension::{DispatchRule, Effect, Trigger};
+    use kndo_contract::vocab::Confidence;
+
+    // `override` and `operator` are reported as markers by the extractor —
+    // both are dispatch the call site never spells. A member that implements a
+    // promise its owner made is a WITNESS: alive while the owner is, and of no
+    // colour, because nothing outside is ENTERED through it.
+    let witness_modifier = |keyword: &'static str| DispatchRule {
+        when: Trigger::Marker {
+            path: keyword.into(),
+            arg: None,
+            target: None,
+        },
+        then: Effect::Witness,
+        confidence: Confidence::Certain,
+    };
+    vec![
+        witness_modifier("override"),
+        witness_modifier("operator"),
+        // A TOP-LEVEL `fun main` is the JVM launcher's entry — `Trigger::Name`
+        // fires on owner-less declarations only, which is that rule exactly.
+        // Probable rather than Certain because Kotlin's launcher accepts
+        // several signatures and the name alone is what this trigger sees.
+        DispatchRule {
+            when: Trigger::Name {
+                pattern: "main".into(),
+                kind: Some(SymbolKind::Function),
+                in_unit: None,
+            },
+            then: Effect::Root(RootKind::Production),
+            confidence: Confidence::Probable,
+        },
+    ]
+}
+
 impl KotlinAdapter {
     pub fn new() -> Self {
         KotlinAdapter {
             // 14: the annotations a declaration carries and the supertypes it
             // promises are evidence; what one MEANS is a dispatch rule's.
-            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:kotlin", 14, &["kt"])
+            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:kotlin", 15, &["kt"])
                 // The conventions as data; the library-mode root's replacement
                 // is the engine's published surface, read from the unit.
                 .file_roles(&[
@@ -71,6 +113,7 @@ impl KotlinAdapter {
                     Step::new(Rung::Unit, "internal"),
                     Step::new(Rung::Exported, "public"),
                 ])
+                .dispatch(dispatch_rules())
                 .build(),
         }
     }

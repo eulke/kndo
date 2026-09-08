@@ -11,7 +11,7 @@ declines to judge rather than accuse everything.
 | repo | discovered | claimed | decls | refs | import edges | unresolved | findings | abstentions | diagnostics |
 |---|---|---|---|---|---|---|---|---|---|
 | Alamofire | 561 | 444 | 3284 | 90378 | 2324 | 0 | 467 | 5 | 11 |
-| Exposed | 5485 | 5150 | 20249 | 345849 | 82818 | 0 | 966 | 5 | 64 |
+| Exposed | 5485 | 5150 | 20249 | 345849 | 82818 | 0 | 965 | 5 | 64 |
 | flask | 226 | 105 | 1123 | 18898 | 197 | 162 | 19 | 5 | 3 |
 | gin | 127 | 99 | 1271 | 38999 | 230 | 0 | 109 | 1 | 1 |
 | guava | 3359 | 3278 | 66904 | 890153 | 608255 | 0 | 8271 | 5 | 15 |

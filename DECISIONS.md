@@ -6438,3 +6438,58 @@ the subpath — is M8.d's to make resolve.
 `nearest_suffix_match`, `package_dir_files` and `split_bare` cannot come back
 under any spelling. A deletion that is not gated is a deletion that gets
 rediscovered.
+
+## 2026-09-08 — java and kotlin: four roots become rules, and `override` is a witness
+
+Both rows leave `ROOTS_STILL_IN_THE_EXTRACTOR`. What is left on that list is
+go's `func main` (a unit fact go.mod cannot state), rust, swift and ts.
+
+**Kotlin's `override` and `operator` were roots and are now witnesses.** The
+plan says so, and the reason is the vocabulary's own: a root is an ENTRY —
+something outside comes in here — while an override says "this member is alive
+while its type is", which is `Effect::Witness` exactly. The extractor now
+reports both as MARKERS, because the design's word for a marker covers "an
+attribute, annotation, decorator, **modifier** or directive over a
+declaration", and two rules say what they mean.
+
+**Exposed 966 → 965, and the one file is the argument.**
+`EmailEnvironmentPostProcessor.kt` overrides Spring's
+`EnvironmentPostProcessor`, and that override was the only thing anchoring the
+file. Two findings became one, moved from the member to the file: nothing in
+the project reaches this class, which is the truer sentence about it. It stays
+a false positive until `kndo:spring` reads `META-INF/spring.factories` (M8.e),
+and it is now one instead of two.
+
+**Java's `main` is a marker plus a rule, guava byte-identical.** Four facts
+make the JLS launcher — the name, `static`, `public`, `void`, `(String[])` —
+and no trigger spells a modifier or a signature. So the adapter recognizes the
+SHAPE, which is grammar knowledge and belongs there, and reports it as the
+marker `main(String[])`; the rule says it is a production root, Certain,
+because the shape is matched whole. The same split python's `__main__` guard
+takes, and the reason a signature coordinate was not added to `Trigger`: the
+fact is the adapter's, the meaning is the rule's, and the existing vocabulary
+already carries both.
+
+**`com.vendor.Closer` is out of java's shipped rule table.** It was a
+fabricated vendor type living in the language's own witness list so that one
+fixture could prove qualification distinguishes two same-simple-name types.
+The contract already proves that where the trigger lives — `spells` against
+`com.vendor.Closer` and `com.other.Closer` in `extension.rs`'s own test — so
+this was a second proof paid for with invented data shipped to users. Gone,
+with the two fixture classes and the two interfaces they implemented —
+`kndo-adapter-java/runtime-required-members` loses four files and two claims,
+keeping the two that turn on a base rather than on a name.
+
+Test data in a production table is the same defect as a convention in an
+extractor: something that decides real answers, put there to make a test pass.
+
+**A correction the gate extracted.** `contract_changes_are_loud` refused this
+commit until `kndo-adapter-ts/tsconfig-path-aliases` was named: the `split_bare`
+commit moved it alongside `deep-import` and only `deep-import` was written
+down. Same cause — an alias whose target is a subpath of a bare specifier no
+longer resolves through the directory mirror. Naming it here is the entry that
+commit owed.
+
+`kndo:java` 19 → 20 and `kndo:kotlin` 14 → 15: the same source, different
+evidence (a marker where a root used to be, and modifiers reported at all).
+Neither the graph semantics nor the fingerprint moved.

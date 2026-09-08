@@ -22,7 +22,7 @@
 
 use kndo_contract::evidence::{
     Attachment, DeclarationId, EvidenceSink, ImportBinding, ImportShape, ImportTarget,
-    MarkerTarget, Reach, RefKind, RelationKind, RootKind, RootTarget, SymbolKind,
+    MarkerTarget, Reach, RefKind, RelationKind, SymbolKind,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use kndo_toolkit as tk;
@@ -139,6 +139,12 @@ fn top_level(item: Node<'_>) -> bool {
     item.parent().is_none_or(|p| p.kind() == "source_file")
 }
 
+/// The modifiers Kotlin DISPATCHES on, reported as markers so a rule decides
+/// what they mean: `override` is invoked through a supertype the call site
+/// never names, and `operator` through syntax that spells no name at all
+/// (`invoke` is called as `obj()`, `get` as `obj[i]`).
+const DISPATCHING_MODIFIERS: &[&str] = &["override", "operator"];
+
 fn has_modifier(item: Node<'_>, keyword: &str) -> bool {
     let Some(modifiers) = tk::child_of_kind(item, "modifiers") else {
         return false;
@@ -193,6 +199,20 @@ fn markers_of(item: Node<'_>, source: &[u8], id: DeclarationId, out: &mut Eviden
     let Some(modifiers) = tk::child_of_kind(item, "modifiers") else {
         return;
     };
+    // A MODIFIER is a marker: the design's word covers "an attribute,
+    // annotation, decorator, modifier or directive over a declaration". These
+    // two are the ones the language dispatches on, and what they MEAN is a
+    // rule's to say — the extractor reports that the keyword is there.
+    for keyword in DISPATCHING_MODIFIERS {
+        if has_modifier(item, keyword) {
+            out.marker(
+                MarkerTarget::Declaration(id),
+                *keyword,
+                Vec::new(),
+                tk::span(modifiers),
+            );
+        }
+    }
     let mut c = modifiers.walk();
     for child in modifiers.children(&mut c) {
         if child.kind() != "annotation" {
@@ -376,25 +396,6 @@ fn handle_function(item: Node<'_>, source: &[u8], ctx: &Ctx, out: &mut EvidenceS
     if tk::child_of_kind(item, "function_body").is_some() {
         out.metrics(id, function_metrics(item, source));
     }
-
-    // Top-level `fun main` — the canonical Kotlin JVM entry point.
-    if ctx.owner.is_none() && name == "main" {
-        out.root(
-            RootTarget::Declaration(id),
-            RootKind::Production,
-            Confidence::Probable,
-        );
-    }
-    // `override` dispatch: invoked through a supertype the call site never
-    // names; `operator` likewise (`invoke` is called as `obj()`, `get` as
-    // `obj[i]` — no source line spells the name).
-    if has_modifier(item, "override") || has_modifier(item, "operator") {
-        out.root(
-            RootTarget::Declaration(id),
-            RootKind::Production,
-            Confidence::Probable,
-        );
-    }
 }
 
 fn handle_property(item: Node<'_>, source: &[u8], ctx: &Ctx, out: &mut EvidenceSink) {
@@ -415,14 +416,7 @@ fn handle_property(item: Node<'_>, source: &[u8], ctx: &Ctx, out: &mut EvidenceS
     if let Some(owner) = ctx.owner {
         out.member_of(id, owner);
     }
-    // `override val` is dispatch machinery exactly like `override fun`.
-    if has_modifier(item, "override") {
-        out.root(
-            RootTarget::Declaration(id),
-            RootKind::Production,
-            Confidence::Probable,
-        );
-    }
+    markers_of(item, source, id, out);
 }
 
 /// `import a.b.C` / `import a.b.C as D` / `import a.b.*`. Platform prefixes

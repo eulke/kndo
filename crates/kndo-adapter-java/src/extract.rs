@@ -27,7 +27,7 @@
 
 use kndo_contract::evidence::{
     Attachment, DeclarationId, EvidenceSink, ImportBinding, ImportShape, ImportTarget,
-    MarkerTarget, Reach, RefKind, RelationKind, RootKind, RootTarget, SymbolKind,
+    MarkerTarget, Reach, RefKind, RelationKind, SymbolKind,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use kndo_toolkit as tk;
@@ -335,21 +335,22 @@ fn handle_method(item: Node<'_>, source: &[u8], ctx: &Ctx, out: &mut EvidenceSin
         out.metrics(id, function_metrics(item, source));
     }
 
-    // The JVM entry point, any class. The one root left in this pass, and it
-    // is a MODIFIER and SIGNATURE fact as much as a name one — a member-shaped
-    // name trigger spells none of the three yet. Matched whole, it is the
-    // JLS's own rule and nothing less, so it is Certain: the launcher names
-    // this method, and through it the class that holds it.
+    // The JLS's launcher signature, reported as the marker it is. Four facts
+    // make it — the name, `static`, `public`, `void`, `(String[])` — and no
+    // trigger spells a modifier or a signature, so the ADAPTER recognizes the
+    // shape (that is grammar knowledge, and it belongs here) while the rule
+    // says what it means. The same split python's `__main__` guard takes.
     if name == "main"
         && has_modifier(item, "static")
         && reach_of(item, ctx) == Reach::Exported
         && returns_void(item, source)
         && signature_of(item, source) == "(String[])"
     {
-        out.root(
-            RootTarget::Declaration(id),
-            RootKind::Production,
-            Confidence::Certain,
+        out.marker(
+            MarkerTarget::Declaration(id),
+            crate::LAUNCHER,
+            Vec::new(),
+            tk::span(item),
         );
     }
     markers_of(item, source, id, out);

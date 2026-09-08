@@ -2570,3 +2570,52 @@ directory mirror had been quietly resolving past the boundary the sibling drew.
 
 One mechanism, two directions of error, and the fixture that proves the
 deletion sits next to the corpus number that prices it.
+
+### java and kotlin: what the language dispatches on, as data (2026-09-08)
+
+Both rows leave `ROOTS_STILL_IN_THE_EXTRACTOR`. Four hand-written roots become
+rules, and one of them changes an answer.
+
+| repo | before | after | delta |
+|---|---|---|---|
+| Exposed | 966 | 965 | −1 (2 withdrawn, 1 new) |
+| guava | 8271 | 8271 | byte-identical |
+| every other repository | — | — | byte-identical |
+
+**Kotlin's `override` and `operator` stop being roots and become WITNESSES,
+which is what the plan says and what they are.** A root is an entry: something
+outside enters here. An override is not that — it says "this member is alive
+while its type is", which is exactly `Effect::Witness`. Rooting it made every
+overriding member an entry point, and an entry point keeps its whole file
+reachable.
+
+The one file where that mattered is
+`samples/springboot3-exposed-r2dbc/.../EmailEnvironmentPostProcessor.kt`. Its
+class overrides Spring's `EnvironmentPostProcessor`, and that override was the
+only thing anchoring the file. Before: two findings (the class `unused`, the
+file `untested`). After: one, on the file — nothing in the project reaches this
+class at all, which is the truer sentence. It stays a false positive until
+`kndo:spring` reads `META-INF/spring.factories` (M8.e), and it is now one false
+positive instead of two, filed against the file rather than the member.
+
+**guava byte-identical is the java half's result.** `public static void
+main(String[])` moved from a hand-written root to a marker plus a rule, and the
+JLS shape is matched exactly as before — the adapter still recognizes
+`static`, `public`, `void` and `(String[])`, because a signature is grammar
+knowledge and belongs in the adapter. What moved is the VERDICT: the extractor
+reports the launcher shape, the rule says it is a production root.
+
+**One entry deleted from java's shipped rule table: `com.vendor.Closer`.** It
+was a fabricated vendor type carried in the language's own witness list so one
+fixture could prove that qualification distinguishes two same-simple-name
+types. The contract already proves that where the trigger lives
+(`cx.spells("com.vendor.Closer", "Closer")` beside
+`!cx.spells("com.other.Closer", "Closer")`), so the entry was a second proof
+paid for with invented data in production. The entry, its two fixture classes
+and the two interfaces they implemented are gone.
+
+**Naming a fixture the previous commit moved and did not name.**
+`kndo-adapter-ts/tsconfig-path-aliases` changed in the `split_bare` commit
+alongside `deep-import`, and only `deep-import` was written down. Same cause:
+an alias whose target is a bare specifier's subpath no longer resolves through
+the directory mirror. The gate caught the omission, which is what it is for.

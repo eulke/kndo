@@ -2178,8 +2178,6 @@ const ROOTS_STILL_IN_THE_EXTRACTOR: &[(&str, &str)] = &[
         "kndo-adapter-go",
         "the module's entries (go 3/3 left it named)",
     ),
-    ("kndo-adapter-java", "the language rules of its row"),
-    ("kndo-adapter-kotlin", "the language rules of its row"),
     ("kndo-adapter-rust", "the language rules of its row"),
     ("kndo-adapter-swift", "the language rules of its row"),
     // A `#!` line is FILE CONTENT, not a convention: the file says it is run.

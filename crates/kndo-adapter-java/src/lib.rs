@@ -40,6 +40,10 @@ pub struct JavaAdapter {
 ///
 /// `@SuppressWarnings("unused")` exempts: the author answered this analysis's
 /// question before it was asked (the owner's 2026-09-05 decision).
+/// The marker the extractor reports a JLS launcher signature as — a name this
+/// crate owns, so the fact and the rule that reads it cannot drift apart.
+pub(crate) const LAUNCHER: &str = "main(String[])";
+
 fn dispatch_rules() -> Vec<kndo_contract::extension::DispatchRule> {
     use kndo_contract::extension::{DispatchRule, Effect, Trigger};
     use kndo_contract::vocab::Confidence;
@@ -49,6 +53,19 @@ fn dispatch_rules() -> Vec<kndo_contract::extension::DispatchRule> {
         confidence: Confidence::Certain,
     };
     let mut rules = vec![
+        // `public static void main(String[])` — the JLS's own rule for what
+        // the launcher enters, reported by the extractor as a marker because
+        // no trigger spells a modifier or a signature. Matched WHOLE, so it is
+        // the rule and nothing less: Certain.
+        DispatchRule {
+            when: Trigger::Marker {
+                path: crate::LAUNCHER.into(),
+                arg: None,
+                target: Some(kndo_contract::evidence::SymbolKind::Method),
+            },
+            then: Effect::Root(kndo_contract::evidence::RootKind::Production),
+            confidence: Confidence::Certain,
+        },
         // Only a method can override one: the annotation the compiler allows
         // nowhere else is still a rule's to narrow, not a grammar's.
         witness(Trigger::marker_on(
@@ -68,10 +85,6 @@ fn dispatch_rules() -> Vec<kndo_contract::extension::DispatchRule> {
             ("AutoCloseable", &["close"]),
             ("Closeable", &["close"]),
             ("Cloneable", &["clone"]),
-            // Written with the FULL name, which the engine reaches by
-            // qualifying `implements Closer` through this file's imports —
-            // the same simple name from another package is another type.
-            ("com.vendor.Closer", &["shut"]),
             (
                 "Serializable",
                 &[
@@ -94,7 +107,7 @@ impl JavaAdapter {
         JavaAdapter {
             // 14: `@Override` states a witness on a METHOD, and the bases
             // are named as the source writes them, qualified by its imports.
-            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:java", 19, &["java"])
+            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:java", 20, &["java"])
                 // The conventions, as DATA the engine applies where no unit
                 // spoke for the file — never a root an adapter concluded. The
                 // library-mode "every non-test class is importable surface"
