@@ -6343,3 +6343,50 @@ already were); `nearest_suffix_match` has no python caller left. The adapter's
 version moved 10 → 11 — the same source, different manifest evidence and
 different resolutions, which is one adapter's behaviour and therefore one knob.
 Neither the graph semantics nor the fingerprint moved.
+
+## 2026-09-08 — a JVM import names a package, and a package is a name inside a compilation
+
+The owner's instruction, and it governs this entry: what the plan does not
+detail is deleted, whatever still consumes it, and whatever breaks is the
+reminder of what the plan still owes. `nearest_suffix_match` was the last
+resolution-by-convention mechanism in the tree. It is gone from the toolkit,
+and both its callers went with it.
+
+**What replaced it is the plan's own word.** Kotlin's row says "resolución por
+`files_in_namespace`"; java's deletion column names `package_dir_files` and
+the layout mirrors; kotlin's adds the directory fallback. A Java or Kotlin
+import names a PACKAGE, a package is a clause every file in it declares
+(`Nesting::Flat`), and the import's binding picks the type among that
+package's files. The mechanism sits in the toolkit as `resolve_in_namespace`
+because it holds for a grammar it has never seen — nothing in it reads a path,
+a suffix or a directory — and because two implementations of one question are
+two answers to it.
+
+**Then guava said the question was under-specified.** Answering with every
+file that wrote a clause merged packages that never share a classpath:
+`guava-gwt/src-super/com/google/common/base/super/.../Platform.java` declares
+`com.google.common.base` and REPLACES the real class under the GWT compiler.
+A namespace is a name inside a COMPILATION, so resolution filters the
+namespace to the importer's own unit and the units it compiles against.
+`Project::compiles_against` already held that closure, transitive and sorted;
+`UnitView` now carries it rather than the contract re-deriving a graph walk.
+
+**guava 8247 → 8271: 26 withdrawn, 50 new, everything else byte-identical.**
+Eight `internal-only` findings moved from the GWT copy to the file that ships
+— nearest-suffix had been attributing the use to whichever copy sat closer in
+the directory tree. Thirty-nine of the new findings are `untested` on
+`guava-gwt/src-super/` and `futures/failureaccess/`: the tests that appeared
+to reach them were suffix matches, and an invented edge invents coverage as
+readily as it invents accusations.
+
+**The tests that died with the mechanism were the mechanism's own.** Four java
+cases pinned the directory convention and the nearest-module tie-break; they
+are replaced by cases stating the clause, including two the old resolver could
+not have passed — a package no directory mirrors, and a Kotlin file whose
+directory contradicts its package, which is ordinary Kotlin outside
+`src/main/kotlin`. Both files are table-driven now, because the dogfood gate
+caught the second one as a structural clone of the first and it was right.
+
+`kndo-testkit` gains `resolve_in_namespaces`: a language whose imports name a
+namespace cannot be tested by a file list alone, so the helper takes each
+file's clause and builds the index the engine builds.

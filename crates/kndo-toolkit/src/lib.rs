@@ -1376,38 +1376,41 @@ pub mod jvm_manifest {
     }
 }
 
-/// The suffix-matching file closest to the importer: longest shared path
-/// prefix, then path order — the shared mechanics of convention-directory
-/// resolution (sibling modules holding the same package resolve toward the
-/// importer's own tree). The suffix is the adapter's: it encodes the
-/// language's file-layout convention.
-pub fn nearest_suffix_match(
-    suffix: &str,
+/// Resolution by the NAMESPACE a dotted specifier names, for the languages
+/// whose imports name one rather than a file — `import com.foo.Bar;`,
+/// `import a.b.Foo`. The package is a clause its files declare
+/// ([`kndo_contract::extension::Nesting::Flat`]), so the files that answer are
+/// the files that wrote it, and the import's binding picks the name among
+/// them.
+///
+/// Which prefix of the dotted name IS the package cannot be read off the
+/// spelling — `com.foo.Bar` names a type in `com.foo`, `com.foo.*` names the
+/// package, `com.foo.Bar.Baz` is a nested type in the same package as its
+/// outer — so the longest DECLARED prefix wins: the package that exists is the
+/// package that was meant. A name no file in the project declares stays
+/// unresolved, which for the JVM is every third-party import: no reliable
+/// package-to-coordinate mapping exists without resolving a classpath.
+///
+/// Shared because it holds for a grammar it has never seen: nothing here reads
+/// a path, a suffix or a directory layout.
+pub fn resolve_in_namespace(
     from: &kndo_contract::vocab::ProjectPath,
+    specifier: &str,
     cx: &kndo_contract::adapter::ResolveContext<'_>,
-) -> Option<kndo_contract::vocab::ProjectPath> {
-    let mut best: Option<(usize, &kndo_contract::vocab::ProjectPath)> = None;
-    for candidate in cx.known_files() {
-        let c = candidate.as_str();
-        if !(c.ends_with(suffix)
-            && (c.len() == suffix.len() || c.as_bytes()[c.len() - suffix.len() - 1] == b'/'))
-        {
-            continue;
-        }
-        let score = c
-            .bytes()
-            .zip(from.as_str().bytes())
-            .take_while(|(x, y)| x == y)
-            .count();
-        let better = match &best {
-            None => true,
-            Some((s, b)) => score > *s || (score == *s && c < b.as_str()),
-        };
-        if better {
-            best = Some((score, candidate));
+) -> kndo_contract::adapter::Resolution {
+    use kndo_contract::adapter::Resolution;
+    let Some(project) = cx.project() else {
+        return Resolution::Unresolved;
+    };
+    let segments: Vec<smol_str::SmolStr> =
+        specifier.split('.').map(smol_str::SmolStr::new).collect();
+    for take in (1..=segments.len()).rev() {
+        let files = project.files_in_namespace(from, &segments[..take]);
+        if !files.is_empty() {
+            return Resolution::Files(files);
         }
     }
-    best.map(|(_, p)| p.clone())
+    Resolution::Unresolved
 }
 
 /// Winnowing parameters — one concept: core pools fingerprint sets across the

@@ -106,6 +106,11 @@ pub struct UnitView {
     pub namespace_root: Option<SmolStr>,
     /// See [`crate::manifest::Unit::is_published`], read once.
     pub published: bool,
+    /// Every unit of this project this one compiles against, transitively,
+    /// as indices into the view's unit list, ascending. A namespace two units
+    /// both declare is two namespaces unless one of them can see the other,
+    /// and this is the engine's already-resolved answer to which can.
+    pub compiles_against: Vec<u32>,
 }
 
 /// What the project's MANIFESTS declared and its files' own clauses say, as
@@ -221,8 +226,32 @@ impl<'a> ProjectView<'a> {
     /// Every file declaring exactly this namespace, in path order — how a
     /// language whose imports name a namespace rather than a file (Kotlin's
     /// `com.example.Thing`) finds what to resolve to.
-    pub fn files_in_namespace(&self, segments: &[SmolStr]) -> &'a [ProjectPath] {
-        self.in_namespace.get(segments).map_or(&[], Vec::as_slice)
+    pub fn files_in_namespace(&self, from: &ProjectPath, segments: &[SmolStr]) -> Vec<ProjectPath> {
+        let all = self
+            .in_namespace
+            .get(segments)
+            .map_or(&[][..], Vec::as_slice);
+        // A namespace is a name inside a COMPILATION. Two units writing one
+        // package clause are two packages when neither compiles against the
+        // other — a GWT super-source tree replacing a class, a shaded copy, an
+        // Android variant — and answering with both would let a name in one
+        // stand in for a name the other never sees.
+        let Some(&owner) = self.unit_of.get(from) else {
+            return all.to_vec();
+        };
+        all.iter()
+            .filter(|p| match self.unit_of.get(*p) {
+                None => true,
+                Some(&u) => {
+                    u == owner
+                        || self.units[owner as usize]
+                            .compiles_against
+                            .binary_search(&u)
+                            .is_ok()
+                }
+            })
+            .cloned()
+            .collect()
     }
 }
 
@@ -386,6 +415,7 @@ mod tests {
                 roots: vec![UnitRoot::from("src")],
                 namespace_root: Some("app".into()),
                 published: true,
+                compiles_against: Vec::new(),
             }],
             unit_of: [(ProjectPath::new("src/a.ts"), 0)].into_iter().collect(),
             aliases: vec![
@@ -482,12 +512,15 @@ mod tests {
             [SmolStr::new("com")]
         );
         assert_eq!(
-            view.files_in_namespace(&[SmolStr::new("com")]),
+            view.files_in_namespace(&ProjectPath::new("src/a.ts"), &[SmolStr::new("com")]),
             [ProjectPath::new("src/a.ts"), ProjectPath::new("src/b.ts")]
         );
         // A language whose files declare no namespace answers with none, and a
         // namespace nothing declares holds no files.
         assert!(view.namespace_of(&ProjectPath::new("src/c.ts")).is_empty());
-        assert!(view.files_in_namespace(&[SmolStr::new("org")]).is_empty());
+        assert!(
+            view.files_in_namespace(&ProjectPath::new("src/a.ts"), &[SmolStr::new("org")])
+                .is_empty()
+        );
     }
 }

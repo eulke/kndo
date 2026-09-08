@@ -63,12 +63,12 @@
     ]
   },
   "health": {
-    "implicated": 936,
+    "implicated": 938,
     "subjects": 70182,
     "by_category": [
       {
         "category": "unused",
-        "findings": 936
+        "findings": 938
       }
     ],
     "by_package": [
@@ -99,7 +99,7 @@
       {
         "name": "guava-gwt",
         "manifest": "guava-gwt/pom.xml",
-        "implicated": 24,
+        "implicated": 26,
         "subjects": 822
       },
       {
@@ -10971,26 +10971,37 @@
       "message": "no root anchors this file and no reachable file imports it"
     },
     {
-      "id": "kndo-b159bab049f6",
+      "id": "kndo-9c8d923fff9a",
       "category": "unused",
       "severity": "warning",
       "confidence": "certain",
       "subject": {
-        "kind": "symbol",
-        "path": "guava-gwt/src-super/com/google/common/cache/super/com/google/common/cache/LongAddables.java",
-        "selector": {
-          "name": "LongAddables"
-        },
-        "span": {
-          "start": 709,
-          "end": 1069
-        }
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/cache/super/com/google/common/cache/CapacityEnforcingMap.java"
       },
-      "lines": {
-        "start": 24,
-        "end": 44
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-8b5c815de6b1",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/cache/super/com/google/common/cache/LocalCache.java"
       },
-      "message": "nothing references, roots, or imports this declaration"
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-fee486222e04",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/cache/super/com/google/common/cache/LongAddables.java"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
     },
     {
       "id": "kndo-cbcf1de70bb1",
@@ -137239,52 +137250,6 @@
       "message": "declared `package-private`, but every use is within `IteratorTesterTest` — `private` would suffice for this declaration"
     },
     {
-      "id": "kndo-41ecb9d05eaa",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "android/guava-testlib/test/com/google/common/collect/testing/features/FeatureUtilTest.java",
-        "selector": {
-          "owner": "ExampleFeature",
-          "name": "NotTesterAnnotation"
-        },
-        "span": {
-          "start": 3451,
-          "end": 3616
-        }
-      },
-      "lines": {
-        "start": 83,
-        "end": 89
-      },
-      "message": "declared `package-private`, but every use is within `FeatureUtilTest` — `private` would suffice for this type"
-    },
-    {
-      "id": "kndo-970450d7ca25",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "android/guava-testlib/test/com/google/common/collect/testing/features/FeatureUtilTest.java",
-        "selector": {
-          "owner": "ExampleFeature",
-          "name": "Require"
-        },
-        "span": {
-          "start": 3270,
-          "end": 3445
-        }
-      },
-      "lines": {
-        "start": 74,
-        "end": 81
-      },
-      "message": "declared `package-private`, but every use is within `FeatureUtilTest` — `private` would suffice for this type"
-    },
-    {
       "id": "kndo-9a830000c03e",
       "category": "internal-only",
       "severity": "info",
@@ -140036,30 +140001,6 @@
         "end": 43
       },
       "message": "declared `package-private`, but every use is within `BigIntegerMathRoundingBenchmark` — `private` would suffice for this declaration"
-    },
-    {
-      "id": "kndo-b0ba93b6350d",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "android/guava-tests/benchmark/com/google/common/math/DoubleMathBenchmark.java",
-        "selector": {
-          "owner": "DoubleMathBenchmark",
-          "name": "isMathematicalInteger",
-          "signature": "(int)"
-        },
-        "span": {
-          "start": 2158,
-          "end": 2399
-        }
-      },
-      "lines": {
-        "start": 69,
-        "end": 79
-      },
-      "message": "declared `package-private`, but every use is within `DoubleMathBenchmark` — `private` would suffice for this method"
     },
     {
       "id": "kndo-3391a773214b",
@@ -152182,30 +152123,6 @@
       "message": "declared `package-private`, but every use is within `MapMakerInternalMap` — `private` would suffice for this declaration"
     },
     {
-      "id": "kndo-355f097e986e",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "android/guava/src/com/google/common/collect/MapMakerInternalMap.java",
-        "selector": {
-          "owner": "HashIterator",
-          "name": "advance",
-          "signature": "()"
-        },
-        "span": {
-          "start": 82522,
-          "end": 82998
-        }
-      },
-      "lines": {
-        "start": 2548,
-        "end": 2569
-      },
-      "message": "declared `package-private`, but every use is within `MapMakerInternalMap` — `private` would suffice for this method"
-    },
-    {
       "id": "kndo-357b47a7abd7",
       "category": "internal-only",
       "severity": "info",
@@ -156757,239 +156674,6 @@
       "message": "declared `package-private`, but every use is within `Platform` — `private` would suffice for this method"
     },
     {
-      "id": "kndo-0ab813fbede0",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "guava-gwt/src-super/com/google/common/cache/super/com/google/common/cache/LocalCache.java",
-        "selector": {
-          "owner": "LocalCache",
-          "name": "KeyIterator"
-        },
-        "span": {
-          "start": 16970,
-          "end": 17369
-        }
-      },
-      "lines": {
-        "start": 606,
-        "end": 627
-      },
-      "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this type"
-    },
-    {
-      "id": "kndo-3076f6448e64",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "guava-gwt/src-super/com/google/common/cache/super/com/google/common/cache/LocalCache.java",
-        "selector": {
-          "owner": "Timestamped",
-          "name": "getAccessTimestamp",
-          "signature": "()"
-        },
-        "span": {
-          "start": 11406,
-          "end": 11469
-        }
-      },
-      "lines": {
-        "start": 382,
-        "end": 384
-      },
-      "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this method"
-    },
-    {
-      "id": "kndo-484ad3953f8c",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "guava-gwt/src-super/com/google/common/cache/super/com/google/common/cache/LocalCache.java",
-        "selector": {
-          "owner": "LocalCache",
-          "name": "keySet"
-        },
-        "span": {
-          "start": 17847,
-          "end": 17860
-        }
-      },
-      "lines": {
-        "start": 653,
-        "end": 653
-      },
-      "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this declaration"
-    },
-    {
-      "id": "kndo-5eb801262cd4",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "guava-gwt/src-super/com/google/common/cache/super/com/google/common/cache/LocalCache.java",
-        "selector": {
-          "owner": "Timestamped",
-          "name": "getWriteTimestamp",
-          "signature": "()"
-        },
-        "span": {
-          "start": 11475,
-          "end": 11536
-        }
-      },
-      "lines": {
-        "start": 386,
-        "end": 388
-      },
-      "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this method"
-    },
-    {
-      "id": "kndo-6d7c4c332ba8",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "guava-gwt/src-super/com/google/common/cache/super/com/google/common/cache/LocalCache.java",
-        "selector": {
-          "owner": "LocalCache",
-          "name": "entrySet"
-        },
-        "span": {
-          "start": 18284,
-          "end": 18299
-        }
-      },
-      "lines": {
-        "start": 671,
-        "end": 671
-      },
-      "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this declaration"
-    },
-    {
-      "id": "kndo-7765f36c6dc6",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "guava-gwt/src-super/com/google/common/cache/super/com/google/common/cache/LocalCache.java",
-        "selector": {
-          "owner": "LocalCache",
-          "name": "values"
-        },
-        "span": {
-          "start": 18057,
-          "end": 18070
-        }
-      },
-      "lines": {
-        "start": 662,
-        "end": 662
-      },
-      "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this declaration"
-    },
-    {
-      "id": "kndo-7c4dd9f1a720",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "guava-gwt/src-super/com/google/common/cache/super/com/google/common/cache/LocalCache.java",
-        "selector": {
-          "owner": "LocalManualCache",
-          "name": "localCache"
-        },
-        "span": {
-          "start": 11985,
-          "end": 11995
-        }
-      },
-      "lines": {
-        "start": 408,
-        "end": 408
-      },
-      "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this declaration"
-    },
-    {
-      "id": "kndo-80cbcf8b55a3",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "guava-gwt/src-super/com/google/common/cache/super/com/google/common/cache/LocalCache.java",
-        "selector": {
-          "owner": "LocalCache",
-          "name": "AbstractCacheSet"
-        },
-        "span": {
-          "start": 19849,
-          "end": 20240
-        }
-      },
-      "lines": {
-        "start": 733,
-        "end": 754
-      },
-      "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this type"
-    },
-    {
-      "id": "kndo-87c4aab82424",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "guava-gwt/src-super/com/google/common/cache/super/com/google/common/cache/LocalCache.java",
-        "selector": {
-          "owner": "LocalCache",
-          "name": "ValueIterator"
-        },
-        "span": {
-          "start": 17427,
-          "end": 17826
-        }
-      },
-      "lines": {
-        "start": 630,
-        "end": 651
-      },
-      "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this type"
-    },
-    {
-      "id": "kndo-eb21b67b3bb2",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "guava-gwt/src-super/com/google/common/cache/super/com/google/common/cache/LocalCache.java",
-        "selector": {
-          "owner": "Timestamped",
-          "name": "updateTimestamp",
-          "signature": "()"
-        },
-        "span": {
-          "start": 11331,
-          "end": 11400
-        }
-      },
-      "lines": {
-        "start": 378,
-        "end": 380
-      },
-      "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this method"
-    },
-    {
       "id": "kndo-adb360cfa897",
       "category": "internal-only",
       "severity": "info",
@@ -159243,52 +158927,6 @@
       "lines": {
         "start": 50,
         "end": 90
-      },
-      "message": "declared `package-private`, but every use is within `FeatureUtilTest` — `private` would suffice for this type"
-    },
-    {
-      "id": "kndo-65b17774a4e9",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "guava-testlib/test/com/google/common/collect/testing/features/FeatureUtilTest.java",
-        "selector": {
-          "owner": "ExampleFeature",
-          "name": "NotTesterAnnotation"
-        },
-        "span": {
-          "start": 3451,
-          "end": 3616
-        }
-      },
-      "lines": {
-        "start": 83,
-        "end": 89
-      },
-      "message": "declared `package-private`, but every use is within `FeatureUtilTest` — `private` would suffice for this type"
-    },
-    {
-      "id": "kndo-e8b4e03586d2",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "guava-testlib/test/com/google/common/collect/testing/features/FeatureUtilTest.java",
-        "selector": {
-          "owner": "ExampleFeature",
-          "name": "Require"
-        },
-        "span": {
-          "start": 3270,
-          "end": 3445
-        }
-      },
-      "lines": {
-        "start": 74,
-        "end": 81
       },
       "message": "declared `package-private`, but every use is within `FeatureUtilTest` — `private` would suffice for this type"
     },
@@ -163012,30 +162650,6 @@
         "end": 43
       },
       "message": "declared `package-private`, but every use is within `BigIntegerMathRoundingBenchmark` — `private` would suffice for this declaration"
-    },
-    {
-      "id": "kndo-3f1bbdd2b7c9",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "guava-tests/benchmark/com/google/common/math/DoubleMathBenchmark.java",
-        "selector": {
-          "owner": "DoubleMathBenchmark",
-          "name": "isMathematicalInteger",
-          "signature": "(int)"
-        },
-        "span": {
-          "start": 2158,
-          "end": 2399
-        }
-      },
-      "lines": {
-        "start": 69,
-        "end": 79
-      },
-      "message": "declared `package-private`, but every use is within `DoubleMathBenchmark` — `private` would suffice for this method"
     },
     {
       "id": "kndo-317219667909",
@@ -171367,6 +170981,29 @@
       "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this method"
     },
     {
+      "id": "kndo-214bf9f6f80a",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava/src/com/google/common/cache/LocalCache.java",
+        "selector": {
+          "owner": "LocalCache",
+          "name": "EntrySet"
+        },
+        "span": {
+          "start": 142462,
+          "end": 143476
+        }
+      },
+      "lines": {
+        "start": 4634,
+        "end": 4671
+      },
+      "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this type"
+    },
+    {
       "id": "kndo-279ba5b84414",
       "category": "internal-only",
       "severity": "info",
@@ -171510,6 +171147,29 @@
       "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this method"
     },
     {
+      "id": "kndo-356cf26c97a8",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava/src/com/google/common/cache/LocalCache.java",
+        "selector": {
+          "owner": "LocalCache",
+          "name": "EntryIterator"
+        },
+        "span": {
+          "start": 140508,
+          "end": 140652
+        }
+      },
+      "lines": {
+        "start": 4541,
+        "end": 4547
+      },
+      "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this type"
+    },
+    {
       "id": "kndo-37ca19d4bf39",
       "category": "internal-only",
       "severity": "info",
@@ -171557,6 +171217,52 @@
       "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this declaration"
     },
     {
+      "id": "kndo-3b8dbcef6cbc",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava/src/com/google/common/cache/LocalCache.java",
+        "selector": {
+          "owner": "LocalCache",
+          "name": "Values"
+        },
+        "span": {
+          "start": 141771,
+          "end": 142458
+        }
+      },
+      "lines": {
+        "start": 4601,
+        "end": 4632
+      },
+      "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this type"
+    },
+    {
+      "id": "kndo-41e3f333bace",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava/src/com/google/common/cache/LocalCache.java",
+        "selector": {
+          "owner": "LocalCache",
+          "name": "AbstractCacheSet"
+        },
+        "span": {
+          "start": 140656,
+          "end": 140970
+        }
+      },
+      "lines": {
+        "start": 4549,
+        "end": 4564
+      },
+      "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this type"
+    },
+    {
       "id": "kndo-42c5c26df45f",
       "category": "internal-only",
       "severity": "info",
@@ -171602,6 +171308,29 @@
         "end": 2520
       },
       "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this method"
+    },
+    {
+      "id": "kndo-44df71be11d1",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava/src/com/google/common/cache/LocalCache.java",
+        "selector": {
+          "owner": "LocalCache",
+          "name": "KeySet"
+        },
+        "span": {
+          "start": 141393,
+          "end": 141767
+        }
+      },
+      "lines": {
+        "start": 4583,
+        "end": 4599
+      },
+      "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this type"
     },
     {
       "id": "kndo-4ee9ba2e1a9e",
@@ -171699,29 +171428,6 @@
       "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this declaration"
     },
     {
-      "id": "kndo-54550dcef81a",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "guava/src/com/google/common/cache/LocalCache.java",
-        "selector": {
-          "owner": "LocalCache",
-          "name": "DRAIN_THRESHOLD"
-        },
-        "span": {
-          "start": 7493,
-          "end": 7515
-        }
-      },
-      "lines": {
-        "start": 160,
-        "end": 160
-      },
-      "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this declaration"
-    },
-    {
       "id": "kndo-55f3c0ef57ad",
       "category": "internal-only",
       "severity": "info",
@@ -171767,29 +171473,6 @@
         "end": 2331
       },
       "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this method"
-    },
-    {
-      "id": "kndo-578c2a1c6ca6",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "guava/src/com/google/common/cache/LocalCache.java",
-        "selector": {
-          "owner": "LocalCache",
-          "name": "DISCARDING_QUEUE"
-        },
-        "span": {
-          "start": 31283,
-          "end": 31821
-        }
-      },
-      "lines": {
-        "start": 929,
-        "end": 955
-      },
-      "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this declaration"
     },
     {
       "id": "kndo-5b11bbd1d2bd",
@@ -171838,6 +171521,29 @@
         "end": 2687
       },
       "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this method"
+    },
+    {
+      "id": "kndo-5d8f9f3b8538",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava/src/com/google/common/cache/LocalCache.java",
+        "selector": {
+          "owner": "LocalCache",
+          "name": "KeyIterator"
+        },
+        "span": {
+          "start": 139057,
+          "end": 139188
+        }
+      },
+      "lines": {
+        "start": 4473,
+        "end": 4479
+      },
+      "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this type"
     },
     {
       "id": "kndo-5ebe7691620f",
@@ -172050,30 +171756,6 @@
       "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this declaration"
     },
     {
-      "id": "kndo-82a708faa07c",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "guava/src/com/google/common/cache/LocalCache.java",
-        "selector": {
-          "owner": "LocalCache",
-          "name": "nullEntry",
-          "signature": "()"
-        },
-        "span": {
-          "start": 31057,
-          "end": 31257
-        }
-      },
-      "lines": {
-        "start": 924,
-        "end": 927
-      },
-      "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this method"
-    },
-    {
       "id": "kndo-845bc7baa116",
       "category": "internal-only",
       "severity": "info",
@@ -172095,30 +171777,6 @@
         "end": 3503
       },
       "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this declaration"
-    },
-    {
-      "id": "kndo-84dfdb0255b8",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "guava/src/com/google/common/cache/LocalCache.java",
-        "selector": {
-          "owner": "LocalCache",
-          "name": "unset",
-          "signature": "()"
-        },
-        "span": {
-          "start": 27081,
-          "end": 27264
-        }
-      },
-      "lines": {
-        "start": 757,
-        "end": 760
-      },
-      "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this method"
     },
     {
       "id": "kndo-86ac68317b41",
@@ -172288,6 +171946,29 @@
       "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this declaration"
     },
     {
+      "id": "kndo-91fcd2c9671b",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava/src/com/google/common/cache/LocalCache.java",
+        "selector": {
+          "owner": "LocalCache",
+          "name": "WriteThroughEntry"
+        },
+        "span": {
+          "start": 139454,
+          "end": 140504
+        }
+      },
+      "lines": {
+        "start": 4493,
+        "end": 4539
+      },
+      "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this type"
+    },
+    {
       "id": "kndo-93d65725e666",
       "category": "internal-only",
       "severity": "info",
@@ -172334,6 +172015,29 @@
         "end": 2510
       },
       "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this method"
+    },
+    {
+      "id": "kndo-9f92e22c5386",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava/src/com/google/common/cache/LocalCache.java",
+        "selector": {
+          "owner": "LocalCache",
+          "name": "ValueIterator"
+        },
+        "span": {
+          "start": 139192,
+          "end": 139327
+        }
+      },
+      "lines": {
+        "start": 4481,
+        "end": 4487
+      },
+      "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this type"
     },
     {
       "id": "kndo-9fcf9e27a001",
@@ -175838,30 +175542,6 @@
       "lines": {
         "start": 1988,
         "end": 1992
-      },
-      "message": "declared `package-private`, but every use is within `MapMakerInternalMap` — `private` would suffice for this method"
-    },
-    {
-      "id": "kndo-9a75875b40d6",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "guava/src/com/google/common/collect/MapMakerInternalMap.java",
-        "selector": {
-          "owner": "HashIterator",
-          "name": "advance",
-          "signature": "()"
-        },
-        "span": {
-          "start": 82522,
-          "end": 82998
-        }
-      },
-      "lines": {
-        "start": 2548,
-        "end": 2569
       },
       "message": "declared `package-private`, but every use is within `MapMakerInternalMap` — `private` would suffice for this method"
     },
@@ -179566,37 +179246,26 @@
       "message": "declared `package-private`, but every use is within `PublicSuffixType` — `private` would suffice for this method"
     },
     {
-      "id": "kndo-eb0ccdc3a5df",
-      "category": "test-only",
+      "id": "kndo-22d341b80bfd",
+      "category": "untested",
       "severity": "info",
       "confidence": "probable",
       "subject": {
         "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/cache/super/com/google/common/cache/CapacityEnforcingMap.java"
+        "path": "futures/failureaccess/src/com/google/common/util/concurrent/internal/InternalFutureFailureAccess.java"
       },
-      "message": "only tests reach this file — no production or tooling root does"
+      "message": "production-reachable, but no test reaches this file"
     },
     {
-      "id": "kndo-7f8a8c7e00a9",
-      "category": "test-only",
+      "id": "kndo-05e25483ec0f",
+      "category": "untested",
       "severity": "info",
       "confidence": "probable",
       "subject": {
         "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/cache/super/com/google/common/cache/LocalCache.java"
+        "path": "futures/failureaccess/src/com/google/common/util/concurrent/internal/InternalFutures.java"
       },
-      "message": "only tests reach this file — no production or tooling root does"
-    },
-    {
-      "id": "kndo-dfdc171ea5e9",
-      "category": "test-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/cache/super/com/google/common/cache/LongAddables.java"
-      },
-      "message": "only tests reach this file — no production or tooling root does"
+      "message": "production-reachable, but no test reaches this file"
     },
     {
       "id": "kndo-5e3ea9698bfe",
@@ -179628,6 +179297,314 @@
       "subject": {
         "kind": "file",
         "path": "guava-gwt/src-super/com/google/common/base/super/com/google/common/base/Platform.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-834b1bb67f36",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/AbstractSortedMultiset.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-fd129b75ef5c",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/DescendingMultiset.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-a5ea92359b01",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/EnumMultiset.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-a543d9303b80",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/ForwardingImmutableCollection.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-dde4236df7f9",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/ForwardingImmutableList.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-78fd007faad2",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/ForwardingImmutableMap.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-eb3b331c4765",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/ForwardingImmutableSet.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-0c82feac2fac",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/ForwardingSortedMultiset.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-41437a742a0c",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/ImmutableBiMap.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-6dd7686d27a6",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/ImmutableCollection.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-07e51cc0cf09",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/ImmutableEnumMap.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-77541bd05395",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/ImmutableEnumSet.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-343612a0d921",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/ImmutableList.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-b6e3be74e8f7",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/ImmutableMap.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-e20d9c63e751",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/ImmutableSet.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-40637af6d998",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/ImmutableSortedMap.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-1b53e97069cf",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/ImmutableSortedSet.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-8545cd838d11",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/MapMaker.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-8043222ef558",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/Platform.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-b43b2a98bcf9",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/RegularImmutableBiMap.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-00532b2ed35e",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/RegularImmutableList.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-4091cdfa29b8",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/RegularImmutableMultiset.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-975b479a20b9",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/RegularImmutableSortedSet.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-6162a36ec322",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/SingletonImmutableBiMap.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-cb1a9d81c0c3",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/SingletonImmutableList.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-0f2fabab4ef1",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/SingletonImmutableSet.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-8bf26fb83444",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/SortedMultiset.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-d6d40c1585db",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/UnmodifiableSortedMultiset.java"
       },
       "message": "production-reachable, but no test reaches this file"
     },
@@ -179676,6 +179653,94 @@
       "message": "production-reachable, but no test reaches this file"
     },
     {
+      "id": "kndo-cad8431e1698",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/util/concurrent/super/com/google/common/util/concurrent/AbstractFutureState.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-7056e6cc9d27",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/util/concurrent/super/com/google/common/util/concurrent/AggregateFutureState.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-92a5b0aa1162",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/util/concurrent/super/com/google/common/util/concurrent/GwtFluentFutureCatchingSpecialization.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-6af923d51b0e",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/util/concurrent/super/com/google/common/util/concurrent/GwtFuturesCatchingSpecialization.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-349112d92130",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/util/concurrent/super/com/google/common/util/concurrent/InterruptibleTask.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-5f4f20fe35e6",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/util/concurrent/super/com/google/common/util/concurrent/ListenableFuture.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-421f09c7e42b",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/util/concurrent/super/com/google/common/util/concurrent/Platform.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-6837b0b55b2e",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/src-super/com/google/common/util/concurrent/super/com/google/common/util/concurrent/Uninterruptibles.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
       "id": "kndo-229fd55c1821",
       "category": "untested",
       "severity": "info",
@@ -179683,6 +179748,17 @@
       "subject": {
         "kind": "file",
         "path": "guava-gwt/test-super/com/google/common/primitives/super/com/google/common/primitives/TestPlatform.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-23524f014d1d",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "guava-gwt/test-super/com/google/common/util/concurrent/super/com/google/common/util/concurrent/TestPlatform.java"
       },
       "message": "production-reachable, but no test reaches this file"
     }

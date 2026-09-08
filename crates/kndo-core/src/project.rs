@@ -429,6 +429,7 @@ impl ProjectIndex {
                 roots: u.roots.clone(),
                 namespace_root: u.namespace_root.clone(),
                 published: u.published,
+                compiles_against: u.compiles_against.clone(),
             })
             .collect();
         let mut aliases: Vec<(SmolStr, kndo_contract::manifest::PathAlias)> = reads

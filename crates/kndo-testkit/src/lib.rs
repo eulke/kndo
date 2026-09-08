@@ -955,6 +955,61 @@ pub fn resolve_in(
     adapter.resolve(&ProjectPath::new(from), specifier, &cx)
 }
 
+/// One namespace-resolution case: what it demonstrates, the tree as (path,
+/// package clause) pairs, the specifier, and the files the clause makes answer.
+/// Named because two adapters spell the same four things and a bare tuple of
+/// them reads as noise at every call site.
+pub type NamespaceCase<'a> = (&'a str, &'a [(&'a str, &'a str)], &'a str, &'a [&'a str]);
+
+/// Resolution in a project whose files DECLARED namespaces — what a language
+/// whose imports name a namespace rather than a file needs to be tested at all.
+/// Each entry is a path and its namespace as dotted segments (`""` for a file
+/// in the unnamed one), which is the same fact the adapter's own extraction
+/// emits and the engine indexes.
+pub fn resolve_in_namespaces(
+    adapter: &dyn Extension,
+    files: &[(&str, &str)],
+    from: &str,
+    specifier: &str,
+) -> Resolution {
+    let known: std::collections::BTreeSet<ProjectPath> =
+        files.iter().map(|(p, _)| ProjectPath::new(*p)).collect();
+    let namespaces: std::collections::BTreeMap<ProjectPath, Vec<smol_str::SmolStr>> = files
+        .iter()
+        .map(|(p, ns)| {
+            let segments = match ns.is_empty() {
+                true => Vec::new(),
+                false => ns.split('.').map(smol_str::SmolStr::new).collect(),
+            };
+            (ProjectPath::new(*p), segments)
+        })
+        .collect();
+    let mut in_namespace: std::collections::BTreeMap<Vec<smol_str::SmolStr>, Vec<ProjectPath>> =
+        std::collections::BTreeMap::new();
+    for (path, segments) in &namespaces {
+        in_namespace
+            .entry(segments.clone())
+            .or_default()
+            .push(path.clone());
+    }
+    let units: Vec<kndo_contract::adapter::UnitView> = Vec::new();
+    let unit_of: std::collections::BTreeMap<ProjectPath, u32> = std::collections::BTreeMap::new();
+    let aliases: Vec<(smol_str::SmolStr, kndo_contract::manifest::PathAlias)> = Vec::new();
+    let view = kndo_contract::adapter::ProjectView::new(
+        &units,
+        &unit_of,
+        &aliases,
+        &namespaces,
+        &in_namespace,
+    );
+    let packages: std::collections::BTreeMap<
+        smol_str::SmolStr,
+        kndo_contract::adapter::PackageEntry,
+    > = std::collections::BTreeMap::new();
+    let cx = ResolveContext::with_project(&known, &packages, &view);
+    adapter.resolve(&ProjectPath::new(from), specifier, &cx)
+}
+
 /// The first import whose specifier matches, or a panic that prints every import —
 /// the assertion failure an extraction test wants to read.
 pub fn import_named<'e>(

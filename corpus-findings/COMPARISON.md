@@ -2480,3 +2480,48 @@ export surface, so `unused` on public API is a question v2 can only ask of a
 distribution that says it does not upload. `_x` remains the class of dead code
 python reports everywhere else, which is what the `_x → Unit{0}` decision was
 weighed against and why re-measuring it changed nothing.
+
+### JVM resolution is the package clause, not the directory (2026-09-08)
+
+Java and Kotlin resolved by PATH SUFFIX: `com.foo.Bar` found the file whose
+path ends in `com/foo/Bar.java`, with a "nearest module" tie-break among equal
+matches, plus a package-DIRECTORY listing for wildcards. Both are the mirror
+javac uses to FIND sources on disk, not the rule for what a name MEANS — and
+the plan's deletion column names all of it (`package_dir_files`, layout
+mirrors, Kotlin's directory fallback). What a JVM import names is a package,
+and a package is a clause its files declare. `cx.project().files_in_namespace`
+is now the one reader of that fact; `nearest_suffix_match` is gone from the
+toolkit with its last caller.
+
+**A namespace is a name inside a COMPILATION, and guava is why.** Answering
+with every file that wrote a clause merges packages that never share a
+classpath: `guava-gwt/src-super/.../Platform.java` declares
+`com.google.common.base` and REPLACES the real one under the GWT compiler.
+Resolution now filters the namespace to the importer's unit and the units it
+compiles against — the closure `Project::compiles_against` already held,
+surfaced on `UnitView` rather than re-derived.
+
+| repo | before | after | delta |
+|---|---|---|---|
+| guava | 8247 | 8271 | +24 (50 new, 26 withdrawn) |
+| every other repository | — | — | byte-identical |
+
+**26 withdrawn, 50 new, and the interesting half is neither.** Eight
+`internal-only` findings MOVED: they sat on
+`guava-gwt/src-super/.../LocalCache.java` and now sit on
+`guava/src/.../LocalCache.java` — the same eight members, named on the file
+that ships instead of on the GWT copy that shadows it. Nearest-suffix had
+been attributing a use to whichever copy was closer to the importer, which is
+a fact about directory depth and about nothing else.
+
+**39 of the 50 new findings are `untested`, and they are the phantom edge
+withdrawing.** `guava-gwt/src-super/` and `futures/failureaccess/` used to be
+reached by tests whose imports suffix-matched into them. They are not:
+guava's Java test suite compiles against `guava`, and the GWT super-source is
+compiled by the GWT compiler instead of it. Nothing tests those files, which
+is what the run now says. An invented edge does not only invent accusations —
+it invents coverage, and that is the quieter half of the same defect.
+
+Exposed is byte-identical: Kotlin's corpus repository is one module tree whose
+clauses and directories agree everywhere, so the two mechanisms had nothing to
+disagree about. That is the result, not the absence of one.

@@ -34,6 +34,7 @@ impl Declared {
             roots: roots.iter().map(|r| UnitRoot::from(*r)).collect(),
             namespace_root: namespace_root.map(Into::into),
             published: true,
+            compiles_against: Vec::new(),
         };
         let unit_of = files
             .iter()
