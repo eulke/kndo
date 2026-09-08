@@ -5,8 +5,7 @@
 //! naming its own published names keeps them and records the intent.
 
 use kndo_contract::evidence::{
-    Attachment, DeclarationId, EvidenceSink, MarkerTarget, Reach, RefKind, RelationKind, RootKind,
-    RootTarget, SymbolKind,
+    Attachment, DeclarationId, EvidenceSink, MarkerTarget, Reach, RefKind, RelationKind, SymbolKind,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use kndo_toolkit as tk;
@@ -69,20 +68,22 @@ pub fn extract(
     // package in a test run and in no other. WHICH files those are is the
     // spec's `file_roles` to say — the discovery convention is a path fact,
     // and only the membership is this file's.
-    let test_file = file_name.starts_with("test_") && file_name.ends_with(".py")
+    if file_name.starts_with("test_") && file_name.ends_with(".py")
         || file_name.ends_with("_test.py")
-        || file_name == "conftest.py";
-    if test_file {
+        || file_name == "conftest.py"
+    {
         out.attachment(Attachment::TestOnly);
     }
 
     let root = tree.root_node();
-    // `if __name__ == "__main__":` — the language's own entry idiom.
+    // `if __name__ == "__main__":` — the language's own entry idiom, reported
+    // as the file marker it is. What it MEANS is a dispatch rule's to say.
     if has_main_guard(root, source) {
-        out.root(
-            RootTarget::WholeFile,
-            RootKind::Production,
-            Confidence::Certain,
+        out.marker(
+            MarkerTarget::File,
+            crate::MAIN_GUARD,
+            Vec::new(),
+            kndo_contract::vocab::Span::new(0, 0),
         );
     }
 
@@ -102,7 +103,7 @@ pub fn extract(
     let mut c = root.walk();
     let items: Vec<Node<'_>> = root.named_children(&mut c).collect();
     for item in items {
-        top_level_item(item, source, test_file, out);
+        top_level_item(item, source, out);
     }
 
     references_and_comments(root, source, out);
@@ -119,22 +120,22 @@ fn has_main_guard(root: Node<'_>, source: &[u8]) -> bool {
     })
 }
 
-fn top_level_item(item: Node<'_>, source: &[u8], test_file: bool, out: &mut EvidenceSink) {
+fn top_level_item(item: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
     match item.kind() {
         "function_definition" => {
-            function(item, source, None, test_file, None, out);
+            function(item, source, None, None, out);
         }
         "class_definition" => {
-            class(item, source, test_file, out);
+            class(item, source, out);
         }
         "decorated_definition" => {
             if let Some(def) = item.child_by_field_name("definition") {
                 match def.kind() {
                     "function_definition" => {
-                        function(def, source, None, test_file, Some(item), out);
+                        function(def, source, None, Some(item), out);
                     }
                     "class_definition" => {
-                        decorated_class(def, item, source, test_file, out);
+                        decorated_class(def, item, source, out);
                     }
                     _ => {}
                 }
@@ -163,7 +164,7 @@ fn top_level_item(item: Node<'_>, source: &[u8], test_file: bool, out: &mut Evid
                 let mut bc = block.walk();
                 let inner: Vec<Node<'_>> = block.named_children(&mut bc).collect();
                 for stmt in inner {
-                    top_level_item(stmt, source, test_file, out);
+                    top_level_item(stmt, source, out);
                 }
             }
         }
@@ -235,29 +236,16 @@ fn relations_of(item: Node<'_>, source: &[u8], id: DeclarationId, out: &mut Evid
     }
 }
 
-fn decorated_class(
-    def: Node<'_>,
-    decorated: Node<'_>,
-    source: &[u8],
-    test_file: bool,
-    out: &mut EvidenceSink,
-) {
-    let Some(id) = class(def, source, test_file, out) else {
+fn decorated_class(def: Node<'_>, decorated: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
+    let Some(id) = class(def, source, out) else {
         return;
     };
     markers_of(decorated, source, id, out);
-    // Handed to its decorator by the language itself.
-    out.root(
-        RootTarget::Declaration(id),
-        RootKind::Production,
-        Confidence::Possible,
-    );
 }
 
 fn class(
     item: Node<'_>,
     source: &[u8],
-    test_file: bool,
     out: &mut EvidenceSink,
 ) -> Option<kndo_contract::evidence::DeclarationId> {
     let name_node = item.child_by_field_name("name")?;
@@ -267,13 +255,12 @@ fn class(
     let Some(body) = item.child_by_field_name("body") else {
         return Some(owner_id);
     };
-    let in_test_case = test_file;
     let mut c = body.walk();
     let members: Vec<Node<'_>> = body.named_children(&mut c).collect();
     for m in members {
         match m.kind() {
             "function_definition" => {
-                if let Some(id) = function(m, source, Some(owner_id), in_test_case, None, out) {
+                if let Some(id) = function(m, source, Some(owner_id), None, out) {
                     let _ = id;
                 }
             }
@@ -281,7 +268,7 @@ fn class(
                 if let Some(def) = m.child_by_field_name("definition")
                     && def.kind() == "function_definition"
                 {
-                    function(def, source, Some(owner_id), in_test_case, Some(m), out);
+                    function(def, source, Some(owner_id), Some(m), out);
                 }
             }
             "expression_statement" => member_assignment(m, source, owner_id, out),
@@ -304,7 +291,6 @@ fn function(
     item: Node<'_>,
     source: &[u8],
     owner: Option<kndo_contract::evidence::DeclarationId>,
-    test_file: bool,
     decorated: Option<Node<'_>>,
     out: &mut EvidenceSink,
 ) -> Option<kndo_contract::evidence::DeclarationId> {
@@ -327,34 +313,9 @@ fn function(
         markers_of(decorated, source, id, out);
     }
 
-    // The runners dispatch `test_*` by NAME in test files — Certain, the same
-    // tier as the discovery convention that rooted the file.
-    if test_file && name.starts_with("test") {
-        out.root(
-            RootTarget::Declaration(id),
-            RootKind::Test,
-            Confidence::Certain,
-        );
-    }
-    // The runtime protocol invokes dunders (`str(x)` → `__str__`): dispatch
-    // the source never names.
-    if is_dunder(name) {
-        out.root(
-            RootTarget::Declaration(id),
-            RootKind::Production,
-            Confidence::Possible,
-        );
-    }
-    // `@d def f` IS `f = d(f)`: the definition is handed to its decorator by
-    // the language itself — whatever the decorator registers or wraps, that
-    // hand-off is a use beyond static sight.
-    if decorated.is_some() {
-        out.root(
-            RootTarget::Declaration(id),
-            RootKind::Production,
-            Confidence::Possible,
-        );
-    }
+    // `test_*` by name, a dunder the runtime invokes, a definition handed to
+    // its decorator: three facts this file already reported, and three rules
+    // in the spec that say what they mean. Nothing is concluded here.
     Some(id)
 }
 

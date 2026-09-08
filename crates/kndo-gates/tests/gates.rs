@@ -2149,6 +2149,25 @@ const RETIRED: &[(&str, &str)] = &[
     ),
 ];
 
+/// The adapters that still conclude a root in their own extractor, and what
+/// each is waiting on. The design says `DispatchRule` replaces the root code of
+/// EVERY adapter: a root here is the old mechanism deciding a verdict while the
+/// evidence its replacement reads sits beside it unused.
+///
+/// A row leaves this list when its rules land, and cannot come back. An empty
+/// list is the milestone's finish line.
+const ROOTS_STILL_IN_THE_EXTRACTOR: &[(&str, &str)] = &[
+    // `package main` + `func main` is a UNIT fact Go's manifest cannot state
+    // yet: a module is one Library unit, so no `in_unit` reaches it.
+    ("kndo-adapter-go", "the module's entries (go 3/3 left it named)"),
+    ("kndo-adapter-java", "the language rules of its row"),
+    ("kndo-adapter-kotlin", "the language rules of its row"),
+    ("kndo-adapter-rust", "the language rules of its row"),
+    ("kndo-adapter-swift", "the language rules of its row"),
+    // A `#!` line is FILE CONTENT, not a convention: the file says it is run.
+    ("kndo-adapter-ts", "the js-ts row"),
+];
+
 /// Every hook the design gives `Extension`, and nothing else. The four manifest
 /// hooks `extract_manifest` replaced were named `roots`, `packages`,
 /// `manifest_dependencies` and `manifest_mentions` — three of those words are
@@ -2226,6 +2245,43 @@ fn a_retired_mechanism_stays_retired() {
     assert_eq!(
         hooks, HOOKS,
         "the design gives Extension seven hooks, in this order"
+    );
+
+    // No adapter concludes a root the design says a rule states — except the
+    // ones still owed their rules, each named with what it waits on.
+    let mut concluding = Vec::new();
+    for source in &sources {
+        let Some(crate_name) = source
+            .strip_prefix(root.join("crates"))
+            .ok()
+            .and_then(|p| p.iter().next())
+            .and_then(|c| c.to_str())
+        else {
+            continue;
+        };
+        if !crate_name.starts_with("kndo-adapter-")
+            || ROOTS_STILL_IN_THE_EXTRACTOR
+                .iter()
+                .any(|(c, _)| *c == crate_name)
+        {
+            continue;
+        }
+        let text = std::fs::read_to_string(source).expect("readable source");
+        // `ManifestSink::root` is the design's own door for a launcher: only
+        // an EvidenceSink root is the retired mechanism.
+        for (line, number) in text.lines().zip(1..) {
+            if line.contains("out.root(") && !source.ends_with("manifest.rs") {
+                concluding.push(format!(
+                    "{}:{number}: {crate_name} concludes a root the design says a DispatchRule states",
+                    source.strip_prefix(&root).unwrap_or(source).display()
+                ));
+            }
+        }
+    }
+    assert!(
+        concluding.is_empty(),
+        "an adapter is back to concluding its own roots:\n{}",
+        concluding.join("\n")
     );
 }
 

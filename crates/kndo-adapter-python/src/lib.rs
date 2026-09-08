@@ -36,8 +36,8 @@ mod resolve;
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::EvidenceSink;
 use kndo_contract::evidence::RootKind;
-use kndo_contract::extension::{Extension, ExtensionSpec, FileRole};
-use kndo_contract::vocab::ProjectPath;
+use kndo_contract::extension::{DispatchRule, Extension, ExtensionSpec, FileRole};
+use kndo_contract::vocab::{Confidence, ProjectPath};
 
 pub struct PythonAdapter {
     spec: ExtensionSpec,
@@ -49,7 +49,7 @@ impl PythonAdapter {
             // 3: the generated banner is reported, never concluded.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:python",
-                9,
+                10,
                 &["py"],
                 &[
                     "**/pyproject.toml",
@@ -95,6 +95,7 @@ impl PythonAdapter {
                 // never has to declare.
                 FileRole::certain("**/__main__.py", RootKind::Production),
             ])
+            .dispatch(dispatch_rules())
             .build(),
         }
     }
@@ -130,4 +131,101 @@ impl Extension for PythonAdapter {
     ) {
         manifest::structure(manifest.path, manifest.content, cx, out);
     }
+}
+
+/// The file marker a `if __name__ == "__main__":` guard is reported as — the
+/// string the source itself compares against, so nothing here is invented.
+pub(crate) const MAIN_GUARD: &str = "__main__";
+
+/// What Python's own runtime and runners dispatch on, as data. Every one of
+/// these was a branch in the extractor concluding a root from evidence it had
+/// just emitted — the adapter reporting a fact and deciding what it means, two
+/// lines apart. The fact stays the adapter's; the meaning is a rule.
+///
+/// Frameworks are NOT here: pytest's collection of a `TestCase` subclass,
+/// Django's URL conf, Flask's `@app.route` are their packs' rules to state,
+/// gated by the dependency that proves the framework is installed.
+fn dispatch_rules() -> Vec<DispatchRule> {
+    use kndo_contract::evidence::SymbolKind;
+    use kndo_contract::extension::{Effect, Trigger};
+    use kndo_contract::manifest::UnitKind;
+
+    // `@d def f` IS `f = d(f)`: whatever the decorator registers or wraps, the
+    // hand-off is a use beyond static sight. WHICH decorator is unknowable
+    // without the framework, so the path is any and the confidence is the
+    // weakest tier — a keep-alive, never a claim.
+    let decorated = |target: SymbolKind| DispatchRule {
+        when: Trigger::Marker {
+            path: "*".into(),
+            arg: None,
+            target: Some(target),
+        },
+        then: Effect::Root(RootKind::Production),
+        confidence: Confidence::Possible,
+    };
+    // A test runner finds `test_*` by NAME, in the files it collects — and
+    // which files those are is the unit's kind or the file's own attachment,
+    // never this rule's to guess.
+    let named_test = |trigger: Trigger| DispatchRule {
+        when: trigger,
+        then: Effect::Root(RootKind::Test),
+        confidence: Confidence::Certain,
+    };
+    vec![
+        // `if __name__ == "__main__":` — the language's own entry idiom,
+        // reported as a file marker because that is what the source says.
+        DispatchRule {
+            when: Trigger::Marker {
+                path: MAIN_GUARD.into(),
+                arg: None,
+                target: None,
+            },
+            then: Effect::Root(RootKind::Production),
+            confidence: Confidence::Certain,
+        },
+        decorated(SymbolKind::Type),
+        decorated(SymbolKind::Function),
+        decorated(SymbolKind::Method),
+        named_test(Trigger::Name {
+            pattern: "test*".into(),
+            kind: Some(SymbolKind::Function),
+            in_unit: Some(UnitKind::Test),
+        }),
+        named_test(Trigger::MemberOf {
+            owner: Box::new(Trigger::Name {
+                pattern: "*".into(),
+                kind: Some(SymbolKind::Type),
+                in_unit: Some(UnitKind::Test),
+            }),
+            name: "test*".into(),
+        }),
+        // The runtime protocol invokes a dunder the source never names —
+        // `str(x)` calls `__str__`, `x[i]` calls `__getitem__`. A member one
+        // is a promise its owner made, so it is a WITNESS: alive while the
+        // type is, and of no color, because nothing outside is ENTERED here.
+        DispatchRule {
+            when: Trigger::MemberOf {
+                owner: Box::new(Trigger::Name {
+                    pattern: "*".into(),
+                    kind: Some(SymbolKind::Type),
+                    in_unit: None,
+                }),
+                name: "__*__".into(),
+            },
+            then: Effect::Witness,
+            confidence: Confidence::Certain,
+        },
+        // A MODULE-level dunder has no owner to be alive with: `__getattr__`
+        // and `__dir__` are the import machinery's hooks on the module
+        // itself, so they root the way any runtime entry does.
+        DispatchRule {
+            when: Trigger::Name {
+                pattern: "__*__".into(),
+                kind: Some(SymbolKind::Function),
+                in_unit: None,
+            },
+            then: Effect::Root(RootKind::Production),
+            confidence: Confidence::Possible,
+        },
+    ]
 }

@@ -1,9 +1,8 @@
 use kndo_adapter_python::PythonAdapter;
 use kndo_contract::evidence::{
-    Attachment, FileEvidence, ImportShape, ImportTarget, MarkerTarget, Reach, RefKind, RootKind,
-    RootTarget, SymbolKind, Timing,
+    Attachment, FileEvidence, ImportShape, ImportTarget, MarkerTarget, Reach, RefKind, SymbolKind,
+    Timing,
 };
-use kndo_contract::vocab::Confidence;
 use kndo_testkit::{declaration_named, extract_evidence};
 
 fn ev(path: &str, src: &str) -> FileEvidence {
@@ -90,37 +89,36 @@ if __name__ == "__main__":
     pass
 "#,
     );
-    let possible: Vec<usize> = e
-        .roots
-        .iter()
-        .filter(|r| r.confidence == Confidence::Possible)
-        .filter_map(|r| match &r.target {
-            RootTarget::Declaration(id) => Some(id.index()),
-            _ => None,
-        })
-        .collect();
-    let ix = |name: &str| {
-        e.declarations_with_ids()
-            .find(|(_, d)| d.name == name)
-            .map(|(id, _)| id.index())
-            .unwrap()
-    };
+    // The adapter states the FACTS and concludes nothing: a dunder is a name,
+    // a decorator is a marker, a `__main__` guard is a file marker. What each
+    // one MEANS is a rule in the spec, and the rules are what the engine reads
+    // — proved end-to-end by this adapter's conformance fixtures.
     assert!(
-        possible.contains(&ix("__repr__")),
-        "runtime protocol dispatch"
+        e.declarations.iter().any(|d| d.name == "__repr__"),
+        "the dunder is declared, and named by nothing here"
     );
-    assert!(possible.contains(&ix("handler")), "@d def f IS f = d(f)");
+    assert!(
+        e.markers
+            .iter()
+            .any(|m| m.path == "route" && matches!(m.on, MarkerTarget::Declaration(_))),
+        "the decorator is a marker on the definition it wraps, {:?}",
+        e.markers
+    );
     assert!(
         e.references.iter().any(|r| r.name == "route"),
-        "the decorator itself is used"
+        "and the decorator itself is used"
     );
     assert!(
-        e.roots
+        e.markers
             .iter()
-            .any(|r| matches!(r.target, RootTarget::WholeFile)
-                && r.kind == RootKind::Production
-                && r.confidence == Confidence::Certain),
-        "the __main__ guard is the language's own entry idiom"
+            .any(|m| m.path == "__main__" && m.on == MarkerTarget::File),
+        "the guard is the file marker its own source spells, {:?}",
+        e.markers
+    );
+    assert!(
+        e.roots.is_empty(),
+        "no root is concluded here at all: {:?}",
+        e.roots
     );
 }
 
@@ -140,19 +138,11 @@ def helper():
     // module joins the package in a test run and in no other — and the
     // per-function dispatch, which is a fact about this file's names.
     assert_eq!(e.attachment, Attachment::TestOnly);
-    assert!(
-        !e.roots
-            .iter()
-            .any(|r| matches!(r.target, RootTarget::WholeFile)),
-        "{:?}",
-        e.roots
-    );
-    let test_fn_rooted = e.roots.iter().any(|r| {
-        matches!(&r.target, RootTarget::Declaration(id)
-            if e.declarations[id.index()].name == "test_render")
-            && r.kind == RootKind::Test
-    });
-    assert!(test_fn_rooted, "the runner dispatches test_* by name");
+    assert!(e.roots.is_empty(), "{:?}", e.roots);
+    // `test_render` is a NAME, and a `Trigger::Name` in the spec is what makes
+    // it a root — in the compilation the attachment above puts this file in,
+    // and nowhere else.
+    assert!(e.declarations.iter().any(|d| d.name == "test_render"));
     let conftest = ev("tests/conftest.py", "def client():\n    pass\n");
     assert_eq!(conftest.attachment, Attachment::TestOnly);
 
@@ -172,9 +162,11 @@ def helper():
     );
     assert!(
         script
-            .roots
+            .markers
             .iter()
-            .any(|r| r.kind == RootKind::Production && matches!(r.target, RootTarget::WholeFile))
+            .any(|m| m.path == "__main__" && m.on == MarkerTarget::File),
+        "the file states the guard; the spec's rule roots it, {:?}",
+        script.markers
     );
 }
 

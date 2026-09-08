@@ -6232,3 +6232,42 @@ swift emits `@main` as a marker and then concludes the root itself from the
 same attribute, two lines apart. That is the coexistence, exactly. Each row
 retires its own, python first (its row is the open one), and each lands its
 names in the gate's table as it closes.
+
+## 2026-09-08 — python's roots become rules, and a gate holds the line
+
+The first row of the cleanup, and the shape every other adapter's row now
+follows.
+
+Five branches in python's `extract.rs` concluded a root from evidence the same
+function had just emitted. Six `DispatchRule`s in the spec replace them: the
+`__main__` guard reported as the file marker its own source spells, a decorator
+on a class/function/method at `Possible`, `test*` by name in a test compilation
+(a `Trigger::Name` for free functions and a `Trigger::MemberOf` for members),
+and a member dunder as `Effect::Witness` — the design's word for a promise its
+owner made, alive while the type is and of no colour.
+
+**Byte-identical: the whole corpus and every conformance fixture.** The rules
+reproduce the hand-written roots exactly, so this changed the mechanism and not
+one verdict — which is the only honest way to retire a mechanism that decides
+things. The adapter's version moved 9 → 10 (the same source, different
+evidence: a marker where a root used to be); neither the graph semantics nor
+the fingerprint did.
+
+`test_file` threaded through five functions to reach those branches; with
+nothing concluding from it, four of those parameters had no reader and are
+gone. That is the deletion the migration exposes, and the reason a replaced
+mechanism has to actually be deleted rather than left beside its replacement:
+the dead weight is invisible until the live path stops feeding it.
+
+**The gate that keeps it.** `a_retired_mechanism_stays_retired` grew a second
+assertion: no adapter concludes a root of its own, except the ones named in
+`ROOTS_STILL_IN_THE_EXTRACTOR` with what each waits on. Six adapters are on
+that list today; each leaves it when its rules land and cannot come back, and
+an empty list is the milestone's finish line. Verified by regression: putting
+python's `__main__` root back fails the gate at its file and line.
+
+Two entries there are not waiting on a row and should be read as decisions:
+ts's `#!` root is FILE CONTENT (the file says it is run), and go's
+`package main` + `func main` is a unit fact go.mod cannot state — a Go module
+is one Library unit, so no `in_unit` reaches it. Both stay until their row
+gives them a shape; neither is a convention read from a path.

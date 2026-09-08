@@ -2389,3 +2389,32 @@ docs site, so six files entered the graph and five are accused:
 Not discovering a directory is not the same as judging it correctly. The
 mechanism belongs to discovery, the roots belong to a pack, and the honest
 place for the gap in between is a number with its owner named.
+
+### Python's roots leave the extractor (2026-09-08)
+
+Five branches in `extract.rs` concluded a root from evidence the same function
+had just emitted — a decorator reported as a marker and then read again, two
+lines apart, to decide what it meant. The design says `DispatchRule` replaces
+the root code of every adapter; python is the first row to actually do it.
+
+| repo | before | after |
+|---|---|---|
+| every repository | — | — | byte-identical |
+
+**And every conformance fixture byte-identical too.** That is the result: the
+rules reproduce the hand-written roots exactly, so the migration changed the
+mechanism and not one verdict. Six rules now say what python's own runtime and
+runners dispatch on — the `__main__` guard as a file marker, a decorator on a
+class, a function or a method, `test*` by name in a test compilation (free
+functions and members alike), and a member dunder as a WITNESS rather than a
+root, which is the design's word for "alive while its owner is, and of no
+colour".
+
+The deletion the migration exposed is the part worth naming: `test_file`
+threaded through five functions, and once nothing concluded from it, four of
+those parameters had no reader. The extractor now states facts and stops.
+
+Frameworks stayed out: pytest's collection of a `TestCase` subclass, Django's
+URL conf, Flask's `@app.route` are their packs' rules, gated by the dependency
+that proves the framework is installed. What is here is the LANGUAGE's, which
+is the line the design draws.
