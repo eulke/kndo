@@ -134,11 +134,11 @@ impl Project {
     /// relation is about who is BUILT together, and what that implies about
     /// naming is the language's to state.
     pub fn sees_into(&self, viewer: u32, target: u32) -> bool {
-        viewer == target
-            || self.units[viewer as usize]
-                .compiles_against
-                .binary_search(&target)
-                .is_ok()
+        kndo_contract::adapter::unit_sees(
+            &self.units[viewer as usize].compiles_against,
+            viewer,
+            target,
+        )
     }
 
     /// Every unit's entries, as (file, color) — what assembly anchors. A unit's

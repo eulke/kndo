@@ -113,6 +113,18 @@ pub struct UnitView {
     pub compiles_against: Vec<u32>,
 }
 
+/// Can a file compiled in `viewer` name something of `target`? True for the
+/// unit itself, and for every unit it compiles against — a test module on the
+/// classpath of the library it exercises reads that library's names as its own.
+///
+/// `closure` is `viewer`'s [`UnitView::compiles_against`]: transitive and
+/// ascending, so the membership test is a binary search. One home, because two
+/// crates ask it — the engine when a language says its namespaces span a
+/// compilation, and resolution when a namespace is a name inside one.
+pub fn unit_sees(closure: &[u32], viewer: u32, target: u32) -> bool {
+    viewer == target || closure.binary_search(&target).is_ok()
+}
+
 /// What the project's MANIFESTS declared and its files' own clauses say, as
 /// the five questions resolution asks — the engine's answers, so an adapter
 /// never re-derives a source root from a path convention or re-parses another
@@ -242,13 +254,7 @@ impl<'a> ProjectView<'a> {
         all.iter()
             .filter(|p| match self.unit_of.get(*p) {
                 None => true,
-                Some(&u) => {
-                    u == owner
-                        || self.units[owner as usize]
-                            .compiles_against
-                            .binary_search(&u)
-                            .is_ok()
-                }
+                Some(&u) => unit_sees(&self.units[owner as usize].compiles_against, owner, u),
             })
             .cloned()
             .collect()

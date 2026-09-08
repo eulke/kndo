@@ -6578,3 +6578,54 @@ not describe; the gap was invisible while the borrowing worked.
 
 `kndo:rust` 15 → 16, `kndo:js-ts` 13 → 14. Neither the graph semantics nor the
 fingerprint moved.
+
+## 2026-09-08 — the sweep audited against its own list, and what it did not clean
+
+The owner asked whether anything legacy survives. Audited against the design's
+deletion columns, name by name, rather than answered from memory. Twenty of
+twenty-two named mechanisms are gone; the ledger of what is NOT:
+
+**A duplicate this sweep itself introduced, now collapsed.** Making a namespace
+a name inside a compilation put `compiles_against.binary_search` inside
+`ProjectView::files_in_namespace` — beside `Project::sees_into`, which had asked
+the same question since M8.b. Two crates carrying one predicate is the case this
+repository's own rule sends to `kndo-contract`, and it now lives there as
+`unit_sees(closure, viewer, target)` with both callers reading it. Naming it
+also names what it is: a unit sees itself and everything it compiles against,
+and the closure is sorted so the test is a search.
+
+**`("sees", None)` survives as a query ANSWER**, in
+`kndo-core/src/query.rs`. The hook is gone — `a_retired_mechanism_stays_retired`
+pins `fn sees(`, `sees_of`, `seen_by` and `seen_from` dead — but the gate scans
+function names, and this is a string literal in the generated query contract:
+user-facing output, so renaming it is a contract change and not a cleanup. It
+belongs to the naming decision below, not to this sweep.
+
+**The naming toll is still unpaid, and it is now four words.** `Extension`
+(407 mentions), `Conduct*` (96), `plugins` (53, including the report envelope's
+own key) and `rule pack` (5) orbit one concept: something that is not a language
+adapter and contributes rules or findings. The design's word is *pack*. Three of
+the four are internal and mechanical; the fourth is a published schema key, so
+the change is a contract change with a fingerprint move behind it. This is the
+owner's word to choose and has been outstanding since M6.a.
+
+**What is deliberately not deleted**, each with its sentence:
+
+| kept | why |
+|---|---|
+| `Project::sees_into` | the engine's caller of the one predicate, not a second copy |
+| `split_attribute_text` (rust) | parses inside `unsafe(…)`, which the grammar does not split — grammar knowledge at the adapter floor |
+| swift's `ladder(&[Step…])` | declarative data, which is what replaced the ladder-by-text |
+| one `specifier_shaped`, one `GENERATED_NEEDLES` | the design deletes the DUPLICATE; one copy is the survivor |
+| go's `func main` root | a UNIT fact `go.mod` cannot state — the last row of `ROOTS_STILL_IN_THE_EXTRACTOR`, named rather than pretended away |
+
+**And 28 known gaps on the books**, each naming its owner: 5 for `kndo:xctest`
+and `kndo:junit`, 2 for `kndo:swiftui`, 8 for M8.c/M8.d rows, 2 for the pinned
+Kotlin grammar, 2 for the reference that travels, and the rest for engine work
+with its milestone written down. A gap with an owner is a plan; a gap without
+one is a bug nobody filed.
+
+Also names `kndo-adapter-rust/macro-template-names` and
+`kndo-adapter-rust/macro-use-mod`, which the previous commit moved and described
+without spelling. Second time the gate has extracted a fixture name from me in
+this sweep, which is the gate working.
