@@ -42,19 +42,19 @@
     ]
   },
   "health": {
-    "implicated": 50,
+    "implicated": 37,
     "subjects": 3152,
     "by_category": [
       {
         "category": "unused",
-        "findings": 50
+        "findings": 37
       }
     ],
     "by_package": [
       {
         "name": "",
         "manifest": "",
-        "implicated": 50,
+        "implicated": 37,
         "subjects": 3152
       }
     ]
@@ -357,29 +357,6 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
-      "id": "kndo-1922dc1d3d7d",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "Sources/Vapor/Concurrency/RequestBody+Concurrency.swift",
-        "selector": {
-          "owner": "AsyncSequenceDelegate",
-          "name": "produceMore"
-        },
-        "span": {
-          "start": 2560,
-          "end": 2649
-        }
-      },
-      "lines": {
-        "start": 72,
-        "end": 74
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
       "id": "kndo-c2876e48f363",
       "category": "unused",
       "severity": "warning",
@@ -398,260 +375,6 @@
       "lines": {
         "start": 109,
         "end": 121
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-7e4ebb3cf05b",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "Sources/Vapor/Content/PlaintextEncoder.swift",
-        "selector": {
-          "owner": "_PlaintextEncoder",
-          "name": "encodeNil"
-        },
-        "span": {
-          "start": 1945,
-          "end": 1993
-        }
-      },
-      "lines": {
-        "start": 51,
-        "end": 51
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-2ae7ee7ee8a5",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "Sources/Vapor/URLEncodedForm/URLEncodedFormEncoder.swift",
-        "selector": {
-          "owner": "KeyedContainer",
-          "name": "nestedUnkeyedContainer"
-        },
-        "span": {
-          "start": 9208,
-          "end": 9550
-        }
-      },
-      "lines": {
-        "start": 214,
-        "end": 221
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-3afc88530393",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "Sources/Vapor/URLEncodedForm/URLEncodedFormEncoder.swift",
-        "selector": {
-          "owner": "SingleValueContainer",
-          "name": "encodeNil"
-        },
-        "span": {
-          "start": 16329,
-          "end": 16384
-        }
-      },
-      "lines": {
-        "start": 372,
-        "end": 374
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-3e463ba9da20",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "Sources/Vapor/URLEncodedForm/URLEncodedFormEncoder.swift",
-        "selector": {
-          "owner": "UnkeyedContainer",
-          "name": "encodeNil"
-        },
-        "span": {
-          "start": 11803,
-          "end": 11858
-        }
-      },
-      "lines": {
-        "start": 272,
-        "end": 274
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-6b9af93f642b",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "Sources/Vapor/URLEncodedForm/URLEncodedFormEncoder.swift",
-        "selector": {
-          "owner": "KeyedContainer",
-          "name": "encodeNil"
-        },
-        "span": {
-          "start": 7684,
-          "end": 7754
-        }
-      },
-      "lines": {
-        "start": 184,
-        "end": 186
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-79be0ab63c94",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "Sources/Vapor/URLEncodedForm/URLEncodedFormEncoder.swift",
-        "selector": {
-          "owner": "KeyedContainer",
-          "name": "superEncoder",
-          "nth": 1
-        },
-        "span": {
-          "start": 9951,
-          "end": 10206
-        }
-      },
-      "lines": {
-        "start": 231,
-        "end": 235
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-9ce766e406a8",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "Sources/Vapor/URLEncodedForm/URLEncodedFormEncoder.swift",
-        "selector": {
-          "owner": "UnkeyedContainer",
-          "name": "nestedContainer"
-        },
-        "span": {
-          "start": 14232,
-          "end": 14712
-        }
-      },
-      "lines": {
-        "start": 318,
-        "end": 328
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-a61c8dffddb3",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "Sources/Vapor/URLEncodedForm/URLEncodedFormEncoder.swift",
-        "selector": {
-          "owner": "KeyedContainer",
-          "name": "nestedContainer"
-        },
-        "span": {
-          "start": 8668,
-          "end": 9115
-        }
-      },
-      "lines": {
-        "start": 202,
-        "end": 211
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-d3556bbcbf40",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "Sources/Vapor/URLEncodedForm/URLEncodedFormEncoder.swift",
-        "selector": {
-          "owner": "UnkeyedContainer",
-          "name": "superEncoder"
-        },
-        "span": {
-          "start": 15235,
-          "end": 15525
-        }
-      },
-      "lines": {
-        "start": 342,
-        "end": 347
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-f8722e49d034",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "Sources/Vapor/URLEncodedForm/URLEncodedFormEncoder.swift",
-        "selector": {
-          "owner": "UnkeyedContainer",
-          "name": "nestedUnkeyedContainer"
-        },
-        "span": {
-          "start": 14790,
-          "end": 15167
-        }
-      },
-      "lines": {
-        "start": 331,
-        "end": 339
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-fdcceb3115a7",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "Sources/Vapor/URLEncodedForm/URLEncodedFormEncoder.swift",
-        "selector": {
-          "owner": "KeyedContainer",
-          "name": "superEncoder"
-        },
-        "span": {
-          "start": 9624,
-          "end": 9870
-        }
-      },
-      "lines": {
-        "start": 224,
-        "end": 228
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -1122,29 +845,6 @@
       "lines": {
         "start": 1047,
         "end": 1230
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-80275a47bb0c",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "Tests/VaporTests/SessionTests.swift",
-        "selector": {
-          "owner": "MockKeyedCache",
-          "name": "getOps"
-        },
-        "span": {
-          "start": 4126,
-          "end": 4171
-        }
-      },
-      "lines": {
-        "start": 119,
-        "end": 121
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -2748,29 +2448,6 @@
       "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
-      "id": "kndo-01cede9d4067",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "Sources/Development/routes.swift",
-        "selector": {
-          "owner": "TestController",
-          "name": "testRoute"
-        },
-        "span": {
-          "start": 11611,
-          "end": 11692
-        }
-      },
-      "lines": {
-        "start": 374,
-        "end": 376
-      },
-      "message": "declared `internal`, but every use is within `TestController` — `private` would suffice for this method"
-    },
-    {
       "id": "kndo-3c9b9f8b109a",
       "category": "internal-only",
       "severity": "info",
@@ -4186,29 +3863,6 @@
         "end": 116
       },
       "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
-    },
-    {
-      "id": "kndo-4f8617b29023",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "Tests/VaporTests/SessionTests.swift",
-        "selector": {
-          "owner": "MockKeyedCache",
-          "name": "resetOps"
-        },
-        "span": {
-          "start": 4177,
-          "end": 4222
-        }
-      },
-      "lines": {
-        "start": 123,
-        "end": 125
-      },
-      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this method"
     },
     {
       "id": "kndo-c8f17804abe9",
