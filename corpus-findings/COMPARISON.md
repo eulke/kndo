@@ -2026,3 +2026,23 @@ hand.
 v1 read Spring through a reflection-dispatch plugin of its own and reported
 these files alive; the difference is not the verdict but where the knowledge
 lives — a rule pack states what a marker MEANS and parses nothing.
+
+### A pack says whose files it speaks for (2026-09-08)
+
+| repo | before | after | what moved |
+|---|---|---|---|
+| every repository | — | — | byte-identical |
+
+No number moves, and that is the point: the capability exists because a
+measurement said it had to. Composed for every adapter, `kndo:spring` rooted a
+`@Controller struct` and nine `@GET`/`@HTTP` route methods in vapor — Vapor's
+macro, Spring's rule, the same bare name. `ExtensionSpec::rules_for` states the
+coordinates whose files a pack speaks for, the bleed is 20 findings on one
+repository, and it was visible only while swift briefly emitted markers.
+
+The swift tranche that exposed it is measured and stood down: Alamofire 426 →
+420 (the two SwiftUI previews the pack was built for, plus four `internal-only`
+advisories correctly withdrawn once protocol conformances are visible) and
+vapor 176 → 175, against one blocker — `builtin_conduct_proofs` over the
+apple-bundles fixture goes to zero findings, so the proof can no longer tell
+what the Apple plugins did. `DECISIONS.md` carries the account.

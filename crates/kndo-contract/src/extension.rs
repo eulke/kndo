@@ -888,6 +888,7 @@ pub struct ExtensionSpec {
     dependency_scoping: DependencyScoping,
     dependency_identity: DependencyIdentity,
     dependency_importers: Vec<SmolStr>,
+    rules_for: Vec<SmolStr>,
     dependency_builtins: DependencyBuiltins,
     import_cycles: CycleTolerance,
     ladder: Ladder,
@@ -931,6 +932,7 @@ impl ExtensionSpec {
                 dependency_scoping: DependencyScoping::Scoped,
                 dependency_identity: DependencyIdentity::Underivable,
                 dependency_importers: Vec::new(),
+                rules_for: Vec::new(),
                 dependency_builtins: DependencyBuiltins::None,
                 import_cycles: CycleTolerance::Tolerated,
                 ladder: Ladder::default(),
@@ -1002,6 +1004,16 @@ impl ExtensionSpec {
     /// import, and nothing unclaimed casts doubt.
     pub fn dependency_importers(&self) -> &[SmolStr] {
         &self.dependency_importers
+    }
+
+    /// The extensions whose files this one's dispatch rules apply to, by
+    /// coordinate. A RULE PACK states what a framework's marker means, and a
+    /// marker is a bare name: `@Controller` is Spring's on a JVM file and
+    /// Vapor's on a Swift one, and nothing in the name tells them apart. Empty
+    /// ⇒ every extension's files, which is what a language adapter's own rules
+    /// want.
+    pub fn rules_for(&self) -> &[SmolStr] {
+        &self.rules_for
     }
 
     /// See [`DependencyBuiltins`]; `undeclared` is the consumer.
@@ -1126,6 +1138,7 @@ pub struct ExtensionSpecParts {
     pub dependency_identity: DependencyIdentity,
     /// Wire components cannot declare importer suffixes yet; defaults to none.
     pub dependency_importers: Vec<SmolStr>,
+    pub rules_for: Vec<SmolStr>,
     /// Wire components cannot declare builtins yet; defaults to none.
     pub dependency_builtins: DependencyBuiltins,
     pub import_cycles: CycleTolerance,
@@ -1177,6 +1190,7 @@ impl From<ExtensionSpecParts> for ExtensionSpec {
             dependency_scoping: parts.dependency_scoping,
             dependency_identity: parts.dependency_identity,
             dependency_importers: parts.dependency_importers,
+            rules_for: parts.rules_for,
             dependency_builtins: parts.dependency_builtins,
             import_cycles: parts.import_cycles,
             ladder: parts.ladder,
@@ -1249,6 +1263,15 @@ impl ExtensionSpecBuilder {
     /// dependency-usage judgment abstains for every manifest this adapter reads.
     pub fn dependency_identity(mut self, identity: DependencyIdentity) -> Self {
         self.spec.dependency_identity = identity;
+        self
+    }
+
+    /// Declare whose files this extension's dispatch rules apply to, by
+    /// coordinate (see [`ExtensionSpec::rules_for`]). Omitted ⇒ everyone's.
+    pub fn rules_for(mut self, coordinates: &[&'static str]) -> Self {
+        self.spec
+            .rules_for
+            .extend(coordinates.iter().map(|c| SmolStr::new_static(c)));
         self
     }
 

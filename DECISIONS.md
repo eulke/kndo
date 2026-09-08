@@ -5689,3 +5689,45 @@ One conformance fixture is added and none moved: `spring-beans`
 (`kndo-adapter-kotlin`) pins a `@RestController` alive with its `@GetMapping`
 handler and an identical unannotated class dead beside it — the trigger is the
 gate, and a pack silences only what it means.
+
+## 2026-09-08 — a rule pack says whose files it speaks for (`rules_for`)
+
+A marker is a bare NAME. `@Controller` is Spring's on a JVM file and Vapor's on
+a Swift one, and nothing in the name tells them apart — so the `kndo:spring`
+pack, composed for every adapter, silenced twenty findings in vapor's
+`Sources/Development/routes.swift` and its macro-routing tests: a whole
+`@Controller struct` and its `@GET`/`@HTTP` route methods, rooted by a rule
+written for a different framework on a different platform.
+
+`ExtensionSpec::rules_for(&["kndo:java", "kndo:kotlin"])` states whose files a
+pack's rules apply to, by coordinate; empty means everyone, which is what a
+language adapter's own rules want. Core names no language: it compares the
+coordinates a pack itself states.
+
+Measured: with the scope stated, vapor returns to 176 and Exposed keeps its 966
+— the bleed was 20 findings on one repository, and it was invisible until swift
+briefly emitted markers.
+
+## 2026-09-08 — the swift marker/relation tranche stands down, with its numbers
+
+Swift emitting attributes and conformances was written, measured and NOT
+shipped. What it bought, on the pinned corpus: Alamofire 426 → 420 — the two
+SwiftUI preview findings the pack was built for (`ContentViewPreviews` and its
+`previews`), plus four `internal-only` advisories on protocol requirements
+(`Authenticator.didRequest`, `.isRequest`, `.refresh`,
+`EmptyResponse.emptyValue`) that the analysis correctly withdraws once the
+conformance is visible — and vapor 176 → 175.
+
+What stopped it: `builtin_conduct_proofs` over
+`kndo-apple/tests/fixtures/apple-bundles` goes to ZERO findings. That proof's
+shape is baseline-then-plugins — six names must stop being dead when the
+Interface Builder and Info.plist plugins run, and unrelated dead code must
+stay reported. With swift's relations in the graph the BASELINE already reports
+nothing, so the proof can no longer tell what the plugins did. That is a much
+broader effect than the two rules the tranche was for, it is not explained, and
+the repository does not push what it cannot explain.
+
+Recorded so the next attempt starts from the number rather than the idea: the
+swift half is worth ~6 findings, its blocker is one named gate, and the
+diagnosis to run first is why a conformance edge makes every declaration in
+that fixture reachable.

@@ -812,21 +812,29 @@ fn dispatch_files(files: &mut [GraphFile], adapters: &[Box<dyn Extension>]) {
     // rules ride beside the claiming adapter's, and its TRIGGER is its gate:
     // a marker no file carries fires nowhere, so a project without the
     // framework is untouched without anything having to decide that.
-    let packs: Vec<DispatchRule> = adapters
+    let packs: Vec<&ExtensionSpec> = adapters
         .iter()
-        .filter(|a| a.spec().suffixes().is_empty())
-        .flat_map(|a| a.spec().dispatch_rules().iter().cloned())
+        .map(|a| a.spec())
+        .filter(|s| s.suffixes().is_empty() && !s.dispatch_rules().is_empty())
         .collect();
     // One combined list per claiming adapter, built once: the adapter's own
     // rules first, in composition order, so the applied set is a pure function
-    // of the composition and not of the file order.
+    // of the composition and not of the file order. A pack that names whose
+    // files it speaks for is heard only there — a marker is a bare name, and
+    // `@Controller` is Spring's on a JVM file and Vapor's on a Swift one.
     let combined: BTreeMap<SmolStr, Vec<DispatchRule>> = adapters
         .iter()
         .filter(|a| !a.spec().suffixes().is_empty())
         .map(|a| {
             let spec = a.spec();
             let mut rules = spec.dispatch_rules().to_vec();
-            rules.extend(packs.iter().cloned());
+            for pack in &packs {
+                let speaks_here = pack.rules_for().is_empty()
+                    || pack.rules_for().iter().any(|c| c == spec.coordinate());
+                if speaks_here {
+                    rules.extend(pack.dispatch_rules().iter().cloned());
+                }
+            }
             (SmolStr::new(spec.coordinate()), rules)
         })
         .collect();

@@ -78,6 +78,10 @@ static SPEC: LazyLock<ExtensionSpec> = LazyLock::new(|| {
         confidence: Confidence::Certain,
     }));
     ExtensionSpec::builder("kndo:spring", 1)
+        // A marker is a bare NAME: `@Controller` is Spring's here and Vapor's
+        // on a Swift file, and nothing in the name tells them apart. The pack
+        // says whose files it speaks for.
+        .rules_for(&["kndo:java", "kndo:kotlin"])
         .dispatch(rules)
         .build()
 });

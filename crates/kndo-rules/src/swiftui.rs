@@ -67,6 +67,7 @@ static SPEC: LazyLock<ExtensionSpec> = LazyLock::new(|| {
         },
     ];
     ExtensionSpec::builder("kndo:swiftui", 1)
+        .rules_for(&["kndo:swift"])
         .dispatch(rules)
         .build()
 });
