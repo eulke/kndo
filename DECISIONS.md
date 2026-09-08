@@ -5811,3 +5811,38 @@ same commit as its replacement. `protocol-requirement-reach`
 (`kndo-adapter-swift`) is added and carries it as a `known_gap` naming that
 fix; the fixture pins the half that works today, both directions of it: an
 overridden member cannot narrow, and the member beside it still can.
+
+## 2026-09-08 — a value is a use, a backtick is spelling, and a Swift member says what it was read from
+
+`kndo:swift` moves to 11 with the rest of its evidence row, each half priced by
+ablation against the 419/175 baseline.
+
+- **S5, by deletion.** `property_declaration` was listed as a binder seat. Its
+  `name` field IS a `pattern`, and `pattern` was already on the list, so the
+  only identifier the entry ever suppressed was the `value`: `let alpha = beta`
+  threw `beta` away. Worth 2 `unused` on Alamofire. The design asks the toolkit
+  for `Seats` — (kind, field) pairs replacing kind lists — and that promotion
+  waits for its second consumer, which is python's parameter default and
+  kotlin's constructor default in this same close-out. One caller does not
+  earn an abstraction when the fix is removing a word.
+- **Backticks come off both sides.** Worth 2 more `unused`: `Endpoint.default`
+  and `TestParameters.default` are declared `` `default` `` and reached
+  `.default`, so declaration and use never joined.
+- **`Reference::on` for `expr.member`,** taken from the navigation's `target`
+  where the source spells it as a name and absent where it does not (`a.b.c`,
+  `f().x` name nothing a pool can use). Declaring `Qualifiers` opens
+  `internal_only`'s member branch, which abstains for any adapter that cannot
+  show a receiver: +58 advisories, 50 of Alamofire's 53 sampled as ordinary
+  internal members of internal helper types named in one file.
+
+Seven of the 58 sit on a `Codable`/`Content` conformer, whose stored properties
+the compiler also reads for the synthesized conformance. The advice is legal —
+narrowing them compiles — and the design's `codable-synthesis` rule would still
+prefer to make them witnesses. It is NOT taken: expressing it needs a kind
+filter on `Trigger::MemberOf` (the synthesis reads stored properties, not
+methods) that the contract does not have, and seven findings do not buy a
+contract change. Recorded so it is not rediscovered.
+
+Two fixtures added, none moved: `backtick-names` (both directions of the
+spelling, plus the value of a binding read across files) and — from the
+previous slice — `protocol-requirement-reach`.

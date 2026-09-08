@@ -1,0 +1,235 @@
+{
+  "run": {
+    "schema": "kndo-v2/m6",
+    "mode": "full",
+    "files_discovered": 3,
+    "files_claimed": 3,
+    "extensions": [
+      {
+        "id": "kndo:swift",
+        "files": 3,
+        "published_surface": "exports",
+        "import_cycles": "tolerated",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "underivable",
+        "ladder": [
+          {
+            "rung": "owner",
+            "word": "private"
+          },
+          {
+            "rung": "file",
+            "word": "fileprivate"
+          },
+          {
+            "rung": "unit",
+            "word": "internal"
+          },
+          {
+            "rung": "exported",
+            "word": "public"
+          }
+        ]
+      }
+    ]
+  },
+  "health": {
+    "implicated": 0,
+    "subjects": 10,
+    "by_category": [],
+    "by_package": [
+      {
+        "name": "",
+        "manifest": "",
+        "implicated": 0,
+        "subjects": 10
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "kndo-064caebd9521",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/App/Endpoint.swift",
+        "selector": {
+          "owner": "Endpoint",
+          "name": "plain"
+        },
+        "span": {
+          "start": 283,
+          "end": 331
+        }
+      },
+      "lines": {
+        "start": 7,
+        "end": 7
+      },
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this method"
+    },
+    {
+      "id": "kndo-831c2ac49187",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/App/Endpoint.swift",
+        "selector": {
+          "name": "Endpoint"
+        },
+        "span": {
+          "start": 0,
+          "end": 333
+        }
+      },
+      "lines": {
+        "start": 1,
+        "end": 8
+      },
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
+    },
+    {
+      "id": "kndo-8d5a250ca264",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/App/Endpoint.swift",
+        "selector": {
+          "owner": "Endpoint",
+          "name": "default"
+        },
+        "span": {
+          "start": 158,
+          "end": 208
+        }
+      },
+      "lines": {
+        "start": 4,
+        "end": 4
+      },
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this method"
+    },
+    {
+      "id": "kndo-0feccbb7f21e",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/App/main.swift",
+        "selector": {
+          "name": "chosen"
+        },
+        "span": {
+          "start": 104,
+          "end": 121
+        }
+      },
+      "lines": {
+        "start": 3,
+        "end": 3
+      },
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
+    },
+    {
+      "id": "kndo-7490ce9663e0",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/App/main.swift",
+        "selector": {
+          "name": "spare"
+        },
+        "span": {
+          "start": 122,
+          "end": 139
+        }
+      },
+      "lines": {
+        "start": 4,
+        "end": 4
+      },
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
+    }
+  ],
+  "fixed": [],
+  "baselined": 0,
+  "abstained": [
+    {
+      "category": "unused",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 1
+        }
+      }
+    },
+    {
+      "category": "test-only",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    },
+    {
+      "category": "untested",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    },
+    {
+      "category": "undeclared",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 1
+        }
+      }
+    },
+    {
+      "category": "crap",
+      "reason": "no-coverage-ingested",
+      "scope": "whole-run"
+    }
+  ],
+  "suppressed": {
+    "total": 0,
+    "by_category": []
+  },
+  "plugins": [
+    {
+      "coordinate": "kndo:coverage-lcov",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-cobertura",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-jacoco",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-go",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    }
+  ],
+  "diagnostics": []
+}

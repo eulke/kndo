@@ -1,0 +1,20 @@
+# backtick-names: the quotes are spelling, never name. A declaration written
+# `` `default` `` and a use written `.default` are one name, and so are the reverse —
+# without that, both sides read as dead. Beside it, the VALUE of a property binding:
+# `let chosen = seed` is a use of `seed`, which naming the parent kind a binder seat
+# used to throw away.
+
+[[alive]]
+subject = "Sources/App/Endpoint.swift#Endpoint.default"
+category = "unused"
+why = "declared with backticks because the word is a keyword, reached by `Endpoint.`default`()` — one name, spelled twice"
+
+[[alive]]
+subject = "Sources/App/Endpoint.swift#Endpoint.plain"
+category = "unused"
+why = "the other direction: declared with backticks it does not need, used without them"
+
+[[alive]]
+subject = "Sources/App/Endpoint.swift#seed"
+category = "unused"
+why = "named only as the VALUE of a binding in another file — the reference the `name`-field seat keeps"

@@ -2560,6 +2560,29 @@
       "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
     },
     {
+      "id": "kndo-6c426db679c2",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Sources/Development/routes.swift",
+        "selector": {
+          "owner": "User",
+          "name": "name"
+        },
+        "span": {
+          "start": 14052,
+          "end": 14068
+        }
+      },
+      "lines": {
+        "start": 452,
+        "end": 452
+      },
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
+    },
+    {
       "id": "kndo-792389f5151d",
       "category": "internal-only",
       "severity": "info",
@@ -2758,6 +2781,29 @@
       "lines": {
         "start": 112,
         "end": 112
+      },
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
+    },
+    {
+      "id": "kndo-cdca11ef5947",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporMacroIntegrationTests/AuthMiddlewareIntegrationTests.swift",
+        "selector": {
+          "owner": "AuthTestUser",
+          "name": "id"
+        },
+        "span": {
+          "start": 3601,
+          "end": 3612
+        }
+      },
+      "lines": {
+        "start": 111,
+        "end": 111
       },
       "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
@@ -3249,6 +3295,29 @@
       "lines": {
         "start": 329,
         "end": 329
+      },
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
+    },
+    {
+      "id": "kndo-bf96967548ce",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ClientTests.swift",
+        "selector": {
+          "owner": "AnythingResponse",
+          "name": "json"
+        },
+        "span": {
+          "start": 13159,
+          "end": 13185
+        }
+      },
+      "lines": {
+        "start": 339,
+        "end": 339
       },
       "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
@@ -3775,6 +3844,29 @@
       "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
+      "id": "kndo-823844d5285c",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ServerTests.swift",
+        "selector": {
+          "owner": "CustomServer",
+          "name": "listeningAddress"
+        },
+        "span": {
+          "start": 88750,
+          "end": 88907
+        }
+      },
+      "lines": {
+        "start": 1464,
+        "end": 1468
+      },
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
+    },
+    {
       "id": "kndo-ba7086eecb85",
       "category": "internal-only",
       "severity": "info",
@@ -3885,6 +3977,29 @@
         "end": 146
       },
       "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this type"
+    },
+    {
+      "id": "kndo-05daaf129e6d",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/URLEncodedFormTests.swift",
+        "selector": {
+          "owner": "DateCoding",
+          "name": "date"
+        },
+        "span": {
+          "start": 31816,
+          "end": 31830
+        }
+      },
+      "lines": {
+        "start": 762,
+        "end": 762
+      },
+      "message": "declared `internal`, but every use is within its own file — `fileprivate` would suffice for this declaration"
     },
     {
       "id": "kndo-458046f2484f",

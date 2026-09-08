@@ -129,6 +129,16 @@ pub fn extract(
     references_and_comments(root, source, out);
 }
 
+/// `` `default` `` and `default` are ONE identifier: Swift requires the
+/// backticks only where the word would otherwise be a keyword, and permits
+/// them anywhere. The quotes are spelling, never name, so they come off on
+/// both sides — a declaration and the reference that reaches it.
+fn bare(name: &str) -> &str {
+    name.strip_prefix('`')
+        .and_then(|n| n.strip_suffix('`'))
+        .unwrap_or(name)
+}
+
 fn is_extension(item: Node<'_>, source: &[u8]) -> bool {
     item.kind() == "class_declaration"
         && item
@@ -162,7 +172,7 @@ fn top_level_item(
         "typealias_declaration" => {
             if let Some(n) = item.child_by_field_name("name") {
                 out.declaration(
-                    tk::text(n, source),
+                    bare(tk::text(n, source)),
                     SymbolKind::Type,
                     tk::span(item),
                     reach_of(item, source),
@@ -224,11 +234,11 @@ fn class_like(
             .filter(|n| n.kind() == "type_identifier")
             .last()
         {
-            Some(last) => SmolStr::new(tk::text(last, source)),
+            Some(last) => SmolStr::new(bare(tk::text(last, source))),
             None => return,
         }
     } else {
-        SmolStr::new(tk::text(name_node, source))
+        SmolStr::new(bare(tk::text(name_node, source)))
     };
 
     let conforms = has_conformances(item);
@@ -290,7 +300,7 @@ fn protocol(
     let Some(name_node) = item.child_by_field_name("name") else {
         return;
     };
-    let name = SmolStr::new(tk::text(name_node, source));
+    let name = SmolStr::new(bare(tk::text(name_node, source)));
     let owner_id = out.declaration(
         name.clone(),
         SymbolKind::Type,
@@ -344,7 +354,7 @@ fn member(
         "typealias_declaration" => {
             if let Some(n) = m.child_by_field_name("name") {
                 let id = out.declaration(
-                    tk::text(n, source),
+                    bare(tk::text(n, source)),
                     SymbolKind::Type,
                     tk::span(m),
                     reach_of(m, source),
@@ -377,7 +387,7 @@ fn function(
         SymbolKind::Function
     };
     let scoped_or_wider = !matches!(reach, Reach::Owner | Reach::File);
-    let id = out.declaration(fn_name, kind, tk::span(item), reach);
+    let id = out.declaration(bare(fn_name), kind, tk::span(item), reach);
     markers_of(item, source, id, out);
 
     // The toolchain's own test runners dispatch on declarations no source line
@@ -458,7 +468,7 @@ fn property(
         };
         if let Some(ident) = ident {
             let id = out.declaration(
-                tk::text(ident, source),
+                bare(tk::text(ident, source)),
                 kind.clone(),
                 tk::span(item),
                 reach.clone(),
@@ -648,11 +658,29 @@ fn references_and_comments(root: Node<'_>, source: &[u8], out: &mut EvidenceSink
                 if is_binder_seat(n, parent) {
                     return;
                 }
-                out.reference(tk::text(n, source), classify(n, parent), tk::span(n));
+                out.reference_on(
+                    bare(tk::text(n, source)),
+                    classify(n, parent),
+                    receiver_of(parent, source),
+                    tk::span(n),
+                );
             }
         }
         _ => {}
     });
+}
+
+/// What `expr.member` was read FROM, where the source spells it as a name:
+/// the `target` of the navigation this identifier is the suffix of. A target
+/// that is itself an expression (`a.b.c`, `f().x`) names nothing the pool can
+/// use, and absence is the honest answer there.
+fn receiver_of(parent: Node<'_>, source: &[u8]) -> Option<SmolStr> {
+    if parent.kind() != "navigation_suffix" {
+        return None;
+    }
+    let target = parent.parent()?.child_by_field_name("target")?;
+    matches!(target.kind(), "simple_identifier" | "type_identifier")
+        .then(|| SmolStr::new(bare(tk::text(target, source))))
 }
 
 /// Identifier positions that BIND a new name rather than use one.
@@ -669,8 +697,12 @@ fn is_binder_seat(n: Node<'_>, parent: Node<'_>) -> bool {
         // Parameter external/internal names and argument labels.
         "parameter" => true,
         "value_argument" => parent.child_by_field_name("name") == Some(n),
-        // Property binding patterns (`let (a, b)` included).
-        "pattern" | "value_binding_pattern" | "property_declaration" => true,
+        // Property binding patterns (`let (a, b)` included). NOT
+        // `property_declaration` itself: its `name` field IS a `pattern`, so
+        // every bound name is already covered here, and the only other
+        // identifier directly under it is the `value` — `let alpha = beta`
+        // reads `beta`, which naming the parent kind used to throw away.
+        "pattern" | "value_binding_pattern" => true,
         "type_parameter" => true,
         _ => false,
     }

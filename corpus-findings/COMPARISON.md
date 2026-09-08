@@ -2102,3 +2102,43 @@ protocol declared here) plus the packs that state the requirements of bases
 outside it (`XCTestCase`, `View`, `Codable`). Deleting it first would ship 78
 accusations the design already knows how to answer. The
 `protocol-requirement-reach` fixture carries that as a named `known_gap`.
+
+### A Swift value is a use, a backtick is spelling, and a member is read FROM something (2026-09-08)
+
+| repo | before | after | what moved |
+|---|---|---|---|
+| Alamofire | 419 | 468 | −4 `unused`, +53 `internal-only` |
+| vapor | 175 | 180 | +5 `internal-only` |
+| every other repository | — | — | byte-identical |
+
+Three changes, priced one at a time by ablation from the 419/175 baseline.
+
+**Backticks: −2 `unused` on Alamofire.** `` `default` `` and `default` are one
+identifier; Swift demands the quotes only where the word is a keyword and
+permits them anywhere. `Endpoint.default` and `TestParameters.default` were
+declared with them and reached without, so both sides read as dead. The quotes
+now come off on both.
+
+**The value of a binding: −2 more `unused`.** `property_declaration` was named a
+binder seat wholesale, and its `name` field IS a `pattern` — so every bound
+name was already covered and the only thing the rule actually threw away was
+the VALUE. `let alpha = beta` reads `beta`. This is audit finding S5, and the
+fix is the deletion of one word rather than a new mechanism.
+
+**The receiver: +58 `internal-only`, all on members.** `internal_only` abstains
+on a member wherever its adapter does not declare `Qualifiers` — without a
+receiver it cannot tell `holder.name` from a bare `name`, and guessing is worse
+than silence. Swift now reports what `expr.member` was read from, so the whole
+member branch opens for it at once. Sampled: 50 of Alamofire's 53 are ordinary
+`internal` members of internal helper types named in one file
+(`RequestConvertible.parameters`, `Request.MutableState.downloadProgressHandler`,
+`StreamMutableState.outputStream`) — the advice this category exists for.
+
+**Named and not taken: 7 of the 58 sit on a `Codable`/`Content` conformer**
+(3 Alamofire, 4 vapor), where the stored properties are also a serialization
+surface the compiler reads. Narrowing them still compiles, so the advice is not
+wrong — but the design's `codable-synthesis` rule would make them witnesses,
+and it needs a kind filter on `Trigger::MemberOf` (the synthesis reads stored
+properties, not methods) that the contract does not have. Seven findings is not
+a contract change; it is a measured entry, and the rule lands if a bigger
+population appears.

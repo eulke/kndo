@@ -351,3 +351,37 @@ extension Point: CustomStringConvertible {
         "{relations:?}"
     );
 }
+
+#[test]
+fn a_bound_value_is_a_reference_and_a_backtick_is_spelling() {
+    let e = ev(
+        "Sources/App/Bind.swift",
+        r#"
+struct Holder {
+    func `default`() -> Int { 0 }
+}
+
+let alpha = beta
+let held = Holder()
+let picked = held.`default`
+"#,
+    );
+    // S5: `property_declaration`'s `name` field IS the pattern, so naming the
+    // parent kind a binder seat threw the VALUE away. `beta` is a use.
+    let names: Vec<&str> = e.references.iter().map(|r| r.name.as_str()).collect();
+    assert!(names.contains(&"beta"), "{names:?}");
+    // The quotes are spelling: the declaration and the reference agree on the
+    // bare name, which is the only way the pool can join them.
+    assert_eq!(declaration_named(&e, "default").name, "default");
+    assert!(names.contains(&"default"), "{names:?}");
+    assert!(!names.iter().any(|n| n.contains('`')), "{names:?}");
+    // And it was read FROM `held` — the receiver the member pool needs.
+    let on: Vec<(&str, Option<&str>)> = e
+        .references
+        .iter()
+        .map(|r| (r.name.as_str(), r.on.as_deref()))
+        .collect();
+    assert!(on.contains(&("default", Some("held"))), "{on:?}");
+    // A bare name is read from nothing, and says so.
+    assert!(on.contains(&("beta", None)), "{on:?}");
+}
