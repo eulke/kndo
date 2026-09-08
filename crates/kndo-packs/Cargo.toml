@@ -1,5 +1,5 @@
 [package]
-name = "kndo-rules"
+name = "kndo-packs"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

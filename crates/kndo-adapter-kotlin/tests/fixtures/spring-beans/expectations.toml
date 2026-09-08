@@ -1,18 +1,26 @@
 # spring-beans: a stereotype annotation is the whole of the evidence that something
-# outside the graph constructs a class — the rule pack says what the marker MEANS, and
-# the class beside it, identical but unannotated, stays dead.
+# outside the graph constructs a class. Both of the pack's gates are pinned here: the
+# build file DECLARES Spring, which is what activates `kndo:spring` at all, and each
+# annotation is IMPORTED from the path the rules name, which is what the engine
+# qualifies the marker through before matching. The class beside it, identical but
+# unannotated, stays dead.
 
 [[alive]]
 subject = "src/main/kotlin/demo/HelloController.kt#HelloController"
 category = "unused"
-why = "`@RestController` is a stereotype the container instantiates by component scan; nothing in the project names it and nothing has to"
+why = "`@RestController`, imported from `org.springframework.web.bind.annotation`, is a stereotype the container instantiates by component scan; nothing in the project names it and nothing has to"
 
 [[alive]]
 subject = "src/main/kotlin/demo/HelloController.kt#HelloController.hello"
 category = "unused"
-why = "`@GetMapping` is a handler the container calls on a bean it already holds — a witness of its owner, not a root of its own"
+why = "`@GetMapping` is a request handler: the container calls it when a route is hit, which is an entry the graph cannot see"
 
 [[dead]]
 subject = "src/main/kotlin/demo/Plain.kt#Plain"
 category = "unused"
 why = "the same shape with no annotation: no marker, no rule, no root — which is what keeps the pack from silencing everything it does not mean"
+
+[[alive]]
+subject = "src/main/kotlin/demo/App.kt#main"
+category = "unused"
+why = "`fun main` is the language's own entry — here so the project has a root at all, because a rootless graph abstains and the pack's effect would be unmeasurable against it"

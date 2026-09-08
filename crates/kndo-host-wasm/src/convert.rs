@@ -62,9 +62,6 @@ pub(crate) fn root_kind(k: awire::RootKind) -> RootKind {
 /// record itself: a hand-rolled guest is forced by the shape to state it.
 pub(crate) fn extension_spec(spec: awire::ExtensionSpec) -> ExtensionSpec {
     ExtensionSpecParts {
-        // The ABI carries no `rules-for` yet: a guest pack's rules apply to
-        // every extension's files, which is the pre-`rules_for` behaviour.
-        rules_for: Vec::new(),
         coordinate: SmolStr::new(spec.coordinate),
         version: spec.version,
         suffixes: spec.suffixes.into_iter().map(SmolStr::new).collect(),
@@ -120,6 +117,9 @@ pub(crate) fn extension_spec(spec: awire::ExtensionSpec) -> ExtensionSpec {
                         }
                         awire::ActivationRule::ManifestDependency(n) => {
                             ActivationRule::ManifestDependency(SmolStr::new(n))
+                        }
+                        awire::ActivationRule::FileImports(s) => {
+                            ActivationRule::FileImports(SmolStr::new(s))
                         }
                     })
                     .collect(),

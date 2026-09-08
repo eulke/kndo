@@ -412,9 +412,10 @@ impl Session {
         &self.composition_diagnostics
     }
 
-    /// Everything that could change how the same tree assembles: the contract
-    /// fingerprint, the graph semantics, and the full adapter set as data.
-    fn graph_cache_key(&self) -> [u8; 32] {
+    /// Everything about this SESSION that could change how a tree assembles:
+    /// the contract fingerprint, the graph semantics, and the full extension
+    /// set as data.
+    fn composition_identity(&self) -> [u8; 32] {
         let mut h = blake3::Hasher::new();
         h.update(&kndo_contract::contract_fingerprint());
         h.update(&crate::graph::GRAPH_SEMANTICS_VERSION.to_le_bytes());
@@ -422,6 +423,20 @@ impl Session {
             let spec = serde_json::to_string(extension.spec()).unwrap_or_default();
             h.update(&(spec.len() as u32).to_le_bytes());
             h.update(spec.as_bytes());
+        }
+        *h.finalize().as_bytes()
+    }
+
+    /// The composition, plus which extensions THIS PROJECT activated: a rule
+    /// pack's rules reach the graph as data, so a pack switching on assembles
+    /// the same evidence differently. That is why a pack does not declare
+    /// `MutatesGraph::Yes` and forfeit the cache — it is IN the key.
+    fn graph_cache_key(&self, active: &BTreeSet<SmolStr>) -> [u8; 32] {
+        let mut h = blake3::Hasher::new();
+        h.update(&self.composition_identity());
+        for coordinate in active {
+            h.update(&(coordinate.len() as u32).to_le_bytes());
+            h.update(coordinate.as_bytes());
         }
         *h.finalize().as_bytes()
     }
@@ -449,7 +464,9 @@ impl Session {
 
     fn pinned_key(&self, tree: &str) -> Option<[u8; 32]> {
         let mut h = blake3::Hasher::new();
-        h.update(&self.graph_cache_key());
+        // The composition alone, not the graph key: activation is a function
+        // of the tree, and `tree` is already in this key.
+        h.update(&self.composition_identity());
         h.update(
             serde_json::to_string(&self.config.categories)
                 .unwrap_or_default()
@@ -520,18 +537,24 @@ impl Session {
                     .extend(sink.finish().dependencies.into_iter().map(|d| d.name));
             });
         }
-        let active =
-            crate::conduct::activate(&self.extensions, &discovered_paths, &manifest_dependencies);
+        let active = crate::conduct::activate(&self.extensions, &files, &manifest_dependencies);
         let plugins_mutate = active
             .iter()
             .any(|(ix, _)| self.extensions[*ix].spec().mutates_graph());
+        // The active coordinates as the graph reads them: rule packs are
+        // gated here and nowhere else, and the same set names the cache key.
+        let active_coordinates: BTreeSet<SmolStr> = active
+            .iter()
+            .map(|(ix, _)| SmolStr::new(self.extensions[*ix].spec().coordinate()))
+            .collect();
 
         let fingerprint = kndo_contract::contract_fingerprint();
         let cache_root = self.config.cache.dir(&self.root);
         let cache =
             EvidenceCache::new(cache_root.as_ref().map(|r| r.join("evidence")), fingerprint);
-        let graph_cache = (!plugins_mutate)
-            .then(|| crate::cache::GraphCache::new(cache_root, self.graph_cache_key()));
+        let graph_cache = (!plugins_mutate).then(|| {
+            crate::cache::GraphCache::new(cache_root, self.graph_cache_key(&active_coordinates))
+        });
 
         // The surgical path first: a persisted graph patched in place when only file
         // contents moved. Re-extraction of the changed files happens inside `patch`,
@@ -545,6 +568,7 @@ impl Session {
                 &files,
                 &claims,
                 &self.extensions,
+                &active_coordinates,
                 &cache,
             )
         });
@@ -559,7 +583,13 @@ impl Session {
                     evidence = extract::extract(&files, &claims, &self.extensions, &cache);
                 });
                 let assemble_start = Instant::now();
-                let graph = crate::graph::assemble(&files, &claims, evidence, &self.extensions);
+                let graph = crate::graph::assemble(
+                    &files,
+                    &claims,
+                    evidence,
+                    &self.extensions,
+                    &active_coordinates,
+                );
                 timings.assemble = assemble_start.elapsed();
                 graph
             }

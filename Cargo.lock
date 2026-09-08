@@ -965,7 +965,7 @@ dependencies = [
  "kndo-core",
  "kndo-coverage",
  "kndo-host-wasm",
- "kndo-rules",
+ "kndo-packs",
  "kndo-testkit",
 ]
 
@@ -1183,7 +1183,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "kndo-rules"
+name = "kndo-packs"
 version = "0.0.0"
 dependencies = [
  "kndo-contract",

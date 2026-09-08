@@ -509,6 +509,10 @@ interface types {
     variant activation-rule {
         file-exists(string),
         manifest-dependency(string),
+        /// Mirrors `ActivationRule::FileImports`: some discovered file's source
+        /// names a matching import specifier. Coarse by construction — the gate
+        /// runs before anything is parsed.
+        file-imports(string),
     }
 
     /// Mirrors `Activation`. `any-rule([])` is the deliberate dependency-only

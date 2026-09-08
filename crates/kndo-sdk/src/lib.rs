@@ -148,6 +148,9 @@ fn activation_to_wire(activation: &Activation) -> wire::Activation {
                     ActivationRule::ManifestDependency(n) => {
                         wire::ActivationRule::ManifestDependency(n.to_string())
                     }
+                    ActivationRule::FileImports(s) => {
+                        wire::ActivationRule::FileImports(s.to_string())
+                    }
                 })
                 .collect(),
         ),

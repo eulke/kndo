@@ -121,7 +121,7 @@ pub enum ActivationReason {
 /// it never appears in the round or as a contribution row.
 pub fn activate(
     extensions: &[Box<dyn Extension>],
-    discovered_paths: &BTreeSet<ProjectPath>,
+    discovered: &[crate::discover::DiscoveredFile],
     manifest_dependencies: &BTreeSet<SmolStr>,
 ) -> Vec<(usize, ActivationReason)> {
     let mut active: Vec<(usize, ActivationReason)> = Vec::new();
@@ -134,7 +134,7 @@ pub fn activate(
             Activation::Always => Some(ActivationReason::AlwaysOn),
             Activation::AnyRule(rules) => rules
                 .iter()
-                .find(|rule| rule_matches(rule, discovered_paths, manifest_dependencies))
+                .find(|rule| rule_matches(rule, discovered, manifest_dependencies))
                 .map(|rule| ActivationReason::RuleMatched(rule.clone())),
         };
         if let Some(reason) = reason {
@@ -176,15 +176,30 @@ pub fn activate(
 
 fn rule_matches(
     rule: &ActivationRule,
-    discovered_paths: &BTreeSet<ProjectPath>,
+    discovered: &[crate::discover::DiscoveredFile],
     manifest_dependencies: &BTreeSet<SmolStr>,
 ) -> bool {
     match rule {
         ActivationRule::FileExists(glob) => globset::Glob::new(glob)
             .ok()
             .map(|g| g.compile_matcher())
-            .is_some_and(|m| discovered_paths.iter().any(|p| m.is_match(p.as_str()))),
-        ActivationRule::ManifestDependency(name) => manifest_dependencies.contains(name),
+            .is_some_and(|m| discovered.iter().any(|f| m.is_match(f.path.as_str()))),
+        ActivationRule::ManifestDependency(pattern) => manifest_dependencies
+            .iter()
+            .any(|name| kndo_contract::extension::matches_pattern(pattern, name)),
+        // Before any file is parsed there is no import stream to ask, so the
+        // gate reads the one thing every specifier leaves in the source: its
+        // literal text. The stem is the pattern up to its first `*` — what an
+        // `org.junit.*` rule and an `org.junit.jupiter.api.Test` import share
+        // verbatim — and a hit anywhere in a discovered file opens the gate.
+        // See `ActivationRule::FileImports` for why coarse is the contract.
+        ActivationRule::FileImports(pattern) => {
+            let stem = pattern.split('*').next().unwrap_or("");
+            !stem.is_empty()
+                && discovered
+                    .iter()
+                    .any(|f| f.content.windows(stem.len()).any(|w| w == stem.as_bytes()))
+        }
     }
 }
 
@@ -302,7 +317,15 @@ pub fn run_round(
 
         contributions.push(Contribution {
             coordinate: SmolStr::new(spec.coordinate()),
-            roots: applied_roots,
+            // A RULE PACK runs no code: its roots were derived in `Dispatch`,
+            // from its rules as data, and counted there. Same row, same
+            // meaning — what this extension asserted about this project.
+            roots: applied_roots
+                + graph
+                    .pack_roots
+                    .get(spec.coordinate())
+                    .copied()
+                    .unwrap_or(0),
             findings: applied_findings,
             dropped,
             content_budget_cut: content.budget_cut(),

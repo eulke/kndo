@@ -2,12 +2,12 @@
   "run": {
     "schema": "kndo-v2/m6",
     "mode": "full",
-    "files_discovered": 3,
-    "files_claimed": 2,
+    "files_discovered": 4,
+    "files_claimed": 3,
     "extensions": [
       {
         "id": "kndo:kotlin",
-        "files": 2,
+        "files": 3,
         "published_surface": "exports",
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
@@ -42,7 +42,7 @@
   },
   "health": {
     "implicated": 2,
-    "subjects": 6,
+    "subjects": 8,
     "by_category": [
       {
         "category": "unused",
@@ -54,7 +54,7 @@
         "name": "",
         "manifest": "",
         "implicated": 2,
-        "subjects": 6
+        "subjects": 8
       }
     ]
   },
@@ -171,6 +171,13 @@
     {
       "coordinate": "kndo:coverage-go",
       "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:spring",
+      "roots": 2,
       "findings": 0,
       "dropped": [],
       "content_budget_cut": false

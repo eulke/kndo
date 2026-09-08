@@ -168,6 +168,54 @@ imports is then judged, resolved and addressed as the host file's own, and
 the host's cache entry remembers which extensions read its regions, so a
 change in one of them re-extracts the file.
 
+## Rule packs: a framework as data
+
+Most framework knowledge needs no code. A JUnit `@Test`, a Spring
+`@RestController`, an `XCTestCase` subclass — the language adapter already
+reported the marker or the relation, and all that is missing is what it MEANS.
+A **rule pack** is a conduct extension that declares an activation and a list
+of `DispatchRule`s and nothing else: no claims, no manifests, no content
+access, no hooks. Its rules reach the engine as data, so an active pack does
+not invalidate the graph cache — the rules and the active set are part of its
+key.
+
+```rust
+ExtensionSpec::builder("kndo:spring", 1)
+    .dispatch(vec![DispatchRule {
+        // The FULL path. The engine qualifies the marker a file carries
+        // through that file's own import bindings before comparing, so this
+        // matches `@Controller` imported from Spring — and not the
+        // `@Controller` of a web framework in another language.
+        when: Trigger::marker_on(
+            "org.springframework.stereotype.Controller",
+            SymbolKind::Type,
+        ),
+        then: Effect::Root(RootKind::Production),
+        confidence: Confidence::Probable,
+    }])
+    .conduct(
+        Activation::AnyRule(vec![ActivationRule::ManifestDependency(
+            "org.springframework*".into(),
+        )]),
+        MutatesGraph::No,
+    )
+    .build()
+```
+
+Both gates are load-bearing, and neither substitutes for the other.
+**Activation** decides whether the project uses this framework at all —
+`ManifestDependency` for a framework its manifests declare, `FileImports` for
+one they never mention (Swift without a `Package.swift`, a JVM tree whose build
+file the run cannot see). It is coarse on purpose: it runs before anything is
+parsed. **Qualification** decides whether a particular marker is this
+framework's, and only a rule that spells the whole path gets it — a bare name
+is the same few letters in every ecosystem. A pack that skips either one
+silences code it never meant to.
+
+The `rule_packs_are_data` gate holds the shape, and `builtin_conduct_proofs`
+demands the same baseline-then-pack proof every other conducting coordinate
+carries.
+
 ## Proving one
 
 A plugin that removes findings must be shown to remove exactly those. The

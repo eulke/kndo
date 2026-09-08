@@ -666,6 +666,7 @@ mod tests {
             discovered: Vec::new(),
             packages: Vec::new(),
             project: Default::default(),
+            pack_roots: Default::default(),
         }
     }
 

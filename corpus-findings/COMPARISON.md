@@ -2027,22 +2027,38 @@ v1 read Spring through a reflection-dispatch plugin of its own and reported
 these files alive; the difference is not the verdict but where the knowledge
 lives — a rule pack states what a marker MEANS and parses nothing.
 
-### A pack says whose files it speaks for (2026-09-08)
+### A pack is gated twice, and one of the gates was never the trigger (2026-09-08)
 
 | repo | before | after | what moved |
 |---|---|---|---|
-| every repository | — | — | byte-identical |
+| Exposed | 966 | 966 | same findings; `kndo:spring` now reports 77 roots as a contribution |
+| every other repository | — | — | byte-identical |
 
-No number moves, and that is the point: the capability exists because a
-measurement said it had to. Composed for every adapter, `kndo:spring` rooted a
-`@Controller struct` and nine `@GET`/`@HTTP` route methods in vapor — Vapor's
-macro, Spring's rule, the same bare name. `ExtensionSpec::rules_for` states the
-coordinates whose files a pack speaks for, the bleed is 20 findings on one
-repository, and it was visible only while swift briefly emitted markers.
+The findings do not move; the mechanism does, and the measurement is about
+which mechanism was load-bearing.
 
-The swift tranche that exposed it is measured and stood down: Alamofire 426 →
-420 (the two SwiftUI previews the pack was built for, plus four `internal-only`
-advisories correctly withdrawn once protocol conformances are visible) and
-vapor 176 → 175, against one blocker — `builtin_conduct_proofs` over the
-apple-bundles fixture goes to zero findings, so the proof can no longer tell
-what the Apple plugins did. `DECISIONS.md` carries the account.
+`kndo:spring` had been composed for every adapter with its rules written as
+bare names (`Controller`, `GetMapping`), so it rooted Vapor's `@Controller
+struct` and its `@GET`/`@HTTP` routes: −20 findings on vapor, Vapor's macro
+under Spring's rule. Rewritten as the plan writes them — the full path
+(`org.springframework.stereotype.Controller`), which the engine qualifies
+against the file's own import bindings before comparing — **the bleed is gone
+with the pack forced ON for every project**: vapor 176 with
+`Activation::Always`, 176 with the pack absent, byte-identical. Qualification
+alone closes it, measured. `ExtensionSpec::rules_for` — a pack naming the
+language coordinates it speaks for — was solving a problem the contract's own
+`Pattern` semantics already solved, and it is reverted.
+
+Activation is the SECOND gate and earns its place elsewhere: it is what makes
+the pack a conduct extension, which is what puts it in `builtin_conduct_proofs`'
+baseline-then-pack toggle and in the run's contributions. Without it the pack
+was invisible to its own proof — on and unaccounted for in both runs.
+
+The 77 roots are the plan's shape for the rules, not the previous one: every
+stereotype AND every handler is a `Production` root at `Probable`, where this
+repository had shipped `Certain` stereotypes and `Witness` handlers. The
+silences are identical either way on this corpus (the handlers' owners are
+rooted, so a witness and a root keep the same set alive); the difference is what
+the pack CLAIMS, and `Probable` is the honest claim — an annotation says a
+container may construct this, and whether the container is ever started is
+outside anything kndo reads.

@@ -5690,44 +5690,89 @@ One conformance fixture is added and none moved: `spring-beans`
 handler and an identical unannotated class dead beside it — the trigger is the
 gate, and a pack silences only what it means.
 
-## 2026-09-08 — a rule pack says whose files it speaks for (`rules_for`)
+## 2026-09-08 — `rules_for` is reverted: the plan's two gates are activation and a qualified path
 
-A marker is a bare NAME. `@Controller` is Spring's on a JVM file and Vapor's on
-a Swift one, and nothing in the name tells them apart — so the `kndo:spring`
-pack, composed for every adapter, silenced twenty findings in vapor's
-`Sources/Development/routes.swift` and its macro-routing tests: a whole
-`@Controller struct` and its `@GET`/`@HTTP` route methods, rooted by a rule
-written for a different framework on a different platform.
+The owner read the root design against the tree and found the deviation. Both
+of the symptoms this repository hit last week — `kndo:spring` rooting Vapor's
+`@Controller struct` and its routes (−20 on vapor), and `builtin_conduct_proofs`
+over `apple-bundles` collapsing to zero findings — come from ONE decision that
+was mine and not the plan's: rule packs were built as ordinary extensions whose
+rules `dispatch_files` applies to every file unconditionally, under the entry
+"No activation, deliberately" of this same day. The design says a pack is a
+CONDUCT extension that "declares activation and rules", riding the existing
+mechanism — which already has activation, reported contributions and
+baseline-then-plugin proofs — and this file's own 2026-09-05 entry transcribed
+that correctly before the code went the other way.
 
-`ExtensionSpec::rules_for(&["kndo:java", "kndo:kotlin"])` states whose files a
-pack's rules apply to, by coordinate; empty means everyone, which is what a
-language adapter's own rules want. Core names no language: it compares the
-coordinates a pack itself states.
+`ExtensionSpec::rules_for`, the patch over the first symptom, is reverted with
+its number: **the vapor bleed is closed by qualification alone.** With the pack
+forced `Activation::Always` and its rules written as full paths, vapor measures
+176 findings — byte-identical to the pack being absent. `DeclarationCx::spells`
+already resolves a marker's path through the file's own import bindings; what
+was wrong was the DATA, ten rules written as bare names. A bare `Controller`
+is the same six letters in two ecosystems, which is exactly what the plan's
+`Pattern`-over-qualified-names is for. `rules_for` was a second mechanism for a
+problem the contract had already solved, and it named languages inside a
+framework pack, which is the ignorance rule inverted.
 
-Measured: with the scope stated, vapor returns to 176 and Exposed keeps its 966
-— the bleed was 20 findings on one repository, and it was invisible until swift
-briefly emitted markers.
+What lands instead, all of it the plan's:
 
-## 2026-09-08 — the swift marker/relation tranche stands down, with its numbers
+- **`ActivationRule::FileImports`** in the contract — the M8.a debt the plan
+  marks "viene de M8.a, se consume acá". Activation runs before anything is
+  parsed, so it matches the pattern's literal stem against discovered file text
+  and is coarse BY CONTRACT: the gate opens, the triggers decide. Not yet a
+  producer among the shipped packs; `kndo:testng`, `kndo:xctest` and the SwiftUI
+  pair are the named consumers, each blocked on its adapter.
+- **`ActivationRule::ManifestDependency` matches a pattern**, not an exact
+  name: the plan writes `junit*` and `org.springframework*`, and one ecosystem
+  spells one framework many ways. `matches_pattern` is promoted to the
+  contract's one `Pattern` semantics, shared with `DispatchRule`.
+- **A pack is a conduct extension.** `dispatch_files` consults only ACTIVE
+  packs; the active coordinates enter the graph cache key, which is how a pack
+  keeps `MutatesGraph::No` and the cache both — the plan's "un pack activo NO
+  invalida la caché: las reglas son dato y entran en la clave".
+- **A pack's contribution is counted where it happens.** It runs no code, so
+  `Dispatch` counts the roots its rules alone derive and the conduct round
+  reports them in the same row every plugin gets. Exposed: `kndo:spring`, 77
+  roots.
+- **The `rule_packs_are_data` gate**, from the plan's gate table: a pack
+  declares activation and rules and nothing else (no claims, no manifests, no
+  content access, no report paths, no finding rules, never `Always`), and every
+  pattern it compares through bindings is qualified. This gate fails
+  `fd52ea4` as written, which is why it is the deliverable and not the fix.
+- **`kndo:spring` on the plan's shape**: stereotypes AND handlers are
+  `Production` roots at `Probable` (this repository had shipped `Certain`
+  stereotypes and `Witness` handlers). Same silences on this corpus, an honest
+  claim instead of an overstated one.
 
-Swift emitting attributes and conformances was written, measured and NOT
-shipped. What it bought, on the pinned corpus: Alamofire 426 → 420 — the two
-SwiftUI preview findings the pack was built for (`ContentViewPreviews` and its
-`previews`), plus four `internal-only` advisories on protocol requirements
-(`Authenticator.didRequest`, `.isRequest`, `.refresh`,
-`EmptyResponse.emptyValue`) that the analysis correctly withdraws once the
-conformance is visible — and vapor 176 → 175.
+`GRAPH_SEMANTICS_VERSION` 33 → 34: the same evidence assembles differently now
+that pack rules are gated. The WIT `activation-rule` variant gains
+`file-imports`, the fingerprint moves with the contract shape, and
+`abi/compat/*.wasm` are re-pinned. One conformance fixture moves,
+`spring-beans` (`kndo-adapter-kotlin`): its build file now DECLARES Spring —
+which is what activates the pack at all, and what the fixture must pin — and it
+gains a `fun main` so the project has a root, because a rootless graph abstains
+and the baseline of a baseline-then-pack proof cannot be empty.
 
-What stopped it: `builtin_conduct_proofs` over
-`kndo-apple/tests/fixtures/apple-bundles` goes to ZERO findings. That proof's
-shape is baseline-then-plugins — six names must stop being dead when the
-Interface Builder and Info.plist plugins run, and unrelated dead code must
-stay reported. With swift's relations in the graph the BASELINE already reports
-nothing, so the proof can no longer tell what the plugins did. That is a much
-broader effect than the two rules the tranche was for, it is not explained, and
-the repository does not push what it cannot explain.
+## 2026-09-08 — the packs whose adapter cannot feed them yet, named rather than shipped
 
-Recorded so the next attempt starts from the number rather than the idea: the
-swift half is worth ~6 findings, its blocker is one named gate, and the
-diagnosis to run first is why a conformance edge makes every declaration in
-that fixture reachable.
+`kndo:swiftui` is withdrawn from the composition, not deleted in silence. The
+plan's dependency line for M8.e is "depende de M8.b y **del adapter
+correspondiente**", and swift emits neither markers nor relations: every rule
+in that pack fires on nothing, and `builtin_conduct_proofs` — which now closes
+over every conducting coordinate — cannot be given a baseline-then-pack proof
+for a pack that changes nothing. It returns with the swift tranche of M8.c,
+alongside `kndo:uikit`, `kndo:xctest` and `kndo:swift-testing`, and its rules
+return in the plan's shape: `PreviewProvider.previews`, `View.body`, `App.body`
+and `Scene.body` as EXTERNAL WITNESSES. The version shipped in `fd52ea4` also
+rooted the conforming type `Tooling` — an invention, and the direct cause of
+`apple-bundles` reporting nothing: a witness keeps a member alive while its
+owner lives, so `ContentView_Previews` stays accused, while a root on the type
+silences it and the proof's own control disappears.
+
+Still owed to M8.e by the same rule, each blocked on its adapter and none of
+them measured against zero: `kndo:junit`, `kndo:testng` and `kndo:lombok` (JVM,
+reachable now — next slice); `kndo:rstest` and kin (rust, markers only, so the
+name and marker rules are reachable); `kndo:pytest`/`django`/`flask` and
+`kndo:storybook`/`vitest` (python and js-ts emit no markers). The crate is
+`kndo-packs`, the plan's name, not `kndo-rules`.

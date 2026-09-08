@@ -684,6 +684,7 @@ fn builtin_conduct_proofs() {
         "kndo:coverage-go",
         "kndo:interface-builder",
         "kndo:info-plist",
+        "kndo:spring",
     ];
     let shipped: Vec<String> = kndo::default_extensions()
         .iter()
@@ -892,6 +893,103 @@ fn builtin_conduct_proofs() {
         "two classes, one outlet and one watchKit controller from the documents; \
          one delegate from the plist"
     );
+
+    // kndo:spring — a RULE PACK, so the proof is the same shape with none of
+    // the machinery: the pack runs no code, its rules reach the graph as data
+    // through `Dispatch`, and its contribution is counted there. Without it
+    // the annotated bean and its handler are dead code; with it they are the
+    // container's entries, and the unannotated class beside them still is not.
+    let (without, with) = baseline_then_plugins(
+        fixtures.join("../kndo-adapter-kotlin/tests/fixtures/spring-beans/project"),
+    );
+    let before: Vec<String> = without.findings.iter().map(label).collect();
+    let after: Vec<String> = with.findings.iter().map(label).collect();
+    let mut gone: Vec<&str> = before
+        .iter()
+        .filter(|l| !after.contains(l))
+        .map(String::as_str)
+        .collect();
+    gone.sort_unstable();
+    assert_eq!(
+        gone,
+        ["unused HelloController", "unused HelloController.hello"],
+        "the annotated bean and its handler, and only those:\nbefore {before:#?}\nafter {after:#?}"
+    );
+    assert!(
+        after.iter().all(|l| before.contains(l)),
+        "a root can only keep something alive, never accuse: {after:#?}"
+    );
+    assert!(
+        after.contains(&"unused Plain".to_string()),
+        "the same shape without the annotation stays reported: {after:#?}"
+    );
+    let mut expected = ingesters();
+    expected.push(("kndo:spring".to_string(), 2, 0));
+    assert_eq!(
+        contributions(&with),
+        expected,
+        "one stereotype and one handler, derived from the pack's rules alone"
+    );
+}
+
+#[test]
+fn rule_packs_are_data() {
+    // A rule pack is a conduct extension that declares an ACTIVATION and
+    // DISPATCH RULES and nothing else: no claims, no manifests, no content
+    // access, no report paths, no findings rules — nothing it could run. That
+    // is what lets its rules ride the graph cache as data instead of forcing
+    // `MutatesGraph::Yes`, and what makes "the trigger is its own gate" false:
+    // a marker is a bare name until the engine qualifies it, so a pack whose
+    // framework is absent must be switched OFF, not merely unmatched.
+    for extension in kndo::default_extensions() {
+        let spec = extension.spec();
+        if spec.dispatch_rules().is_empty() || !spec.suffixes().is_empty() {
+            continue;
+        }
+        let at = spec.coordinate();
+        assert!(
+            spec.declares_conduct(),
+            "{at}: a rule pack is a conduct extension — activation is its gate"
+        );
+        assert!(
+            !matches!(spec.activation(), kndo_core::Activation::Always),
+            "{at}: `Always` would apply a framework's rules to every project on \
+             the planet; name what the project must declare or import"
+        );
+        assert!(
+            !spec.mutates_graph(),
+            "{at}: a pack asserts nothing through the sink — its rules are data, \
+             and the graph cache key carries them and the active set"
+        );
+        assert!(
+            spec.claims().is_empty() && spec.manifests().is_empty(),
+            "{at}: a pack owns no files and reads no manifests"
+        );
+        assert!(
+            spec.requested_file_access().is_empty() && spec.reads_reports().is_empty(),
+            "{at}: a pack reads no content — it interprets evidence another \
+             extension already reported"
+        );
+        assert!(
+            spec.rules().is_empty(),
+            "{at}: a pack reports no findings of its own"
+        );
+        // Every rule NAMES the framework it speaks for. A bare `Controller` is
+        // Spring's on a JVM file and Vapor's on a Swift one, and the engine
+        // can only tell them apart when the rule spells the whole path.
+        for rule in spec.dispatch_rules() {
+            for named in rule.when.qualified_names() {
+                assert!(
+                    named.contains('.'),
+                    "{at}: rule pattern `{named}` is a bare name. The engine \
+                     qualifies a marker or a relation through the file's own \
+                     bindings before matching, and only a qualified pattern \
+                     uses that — a bare one matches the same six letters in \
+                     every ecosystem"
+                );
+            }
+        }
+    }
 }
 
 #[test]

@@ -23,7 +23,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Bump when the SAME evidence assembles into a DIFFERENT graph — resolution
 /// candidate changes, reachability semantics, new assembled fields. Folded into the
 /// graph cache key beside the contract fingerprint and the adapter set.
-pub const GRAPH_SEMANTICS_VERSION: u32 = 33;
+pub const GRAPH_SEMANTICS_VERSION: u32 = 34;
 
 #[derive(Serialize, Deserialize)]
 pub struct GraphFile {
@@ -198,6 +198,12 @@ pub struct Graph {
     /// that compile its files, and the files they are entered through.
     #[serde(default)]
     pub project: crate::project::Project,
+    /// How many roots each ACTIVE rule pack's rules derived, by coordinate.
+    /// A pack runs no code, so it asserts nothing through the conduct sink;
+    /// this is where its contribution row comes from, counted where the
+    /// derivation happens.
+    #[serde(default)]
+    pub pack_roots: BTreeMap<SmolStr, u32>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -488,6 +494,7 @@ pub fn assemble(
     claims: &[ClaimedFile],
     evidence: Vec<FileEvidence>,
     adapters: &[Box<dyn Extension>],
+    active: &BTreeSet<SmolStr>,
 ) -> Graph {
     let known: BTreeSet<ProjectPath> = claims
         .iter()
@@ -567,7 +574,7 @@ pub fn assemble(
     }
     mount_and_own(&mut graph_files, &project);
     anchor_manifest_roots(adapters, &project, &reads, &mut graph_files);
-    dispatch_files(&mut graph_files, adapters);
+    let pack_roots = dispatch_files(&mut graph_files, adapters, active);
     publish_surfaces(&mut graph_files, adapters, &project);
 
     let manifest_declarations = collect_manifest_declarations(&reads);
@@ -586,6 +593,7 @@ pub fn assemble(
         discovered,
         packages,
         project,
+        pack_roots,
     };
     graph.judge_dependency_usage(&reads, adapters);
     graph
@@ -805,36 +813,43 @@ fn mount_and_own(files: &mut [GraphFile], project: &crate::project::Project) {
 /// overrides for the file that belongs to its namespace in test builds alone.
 /// It recomputes from evidence alone, so a patched graph and a full build
 /// agree to the byte.
-fn dispatch_files(files: &mut [GraphFile], adapters: &[Box<dyn Extension>]) {
-    // A RULE PACK is an extension that claims no files and declares rules:
-    // what a FRAMEWORK means, which is no language's to own — a JUnit
-    // `@Test`, a Spring `@RestController`, a SwiftUI `PreviewProvider`. Its
-    // rules ride beside the claiming adapter's, and its TRIGGER is its gate:
-    // a marker no file carries fires nowhere, so a project without the
-    // framework is untouched without anything having to decide that.
+fn dispatch_files(
+    files: &mut [GraphFile],
+    adapters: &[Box<dyn Extension>],
+    active: &BTreeSet<SmolStr>,
+) -> BTreeMap<SmolStr, u32> {
+    // A RULE PACK is a conduct extension that claims no files and declares
+    // nothing but rules: what a FRAMEWORK means, which is no language's to own
+    // — a JUnit `@Test`, a Spring `@RestController`. Its rules ride here
+    // instead of through `contribute_roots` because they are DATA: the graph
+    // cache survives an active pack, because the rules and the active set are
+    // both in its key.
+    //
+    // ACTIVATION is the gate, as it is for every other conduct extension. The
+    // trigger alone is not one: a marker is a bare NAME, and `@Controller` is
+    // Spring's on a JVM file and Vapor's on a Swift one. A pack whose
+    // framework the project neither depends on nor imports never reaches a
+    // file it could be wrong about.
     let packs: Vec<&ExtensionSpec> = adapters
         .iter()
         .map(|a| a.spec())
         .filter(|s| s.suffixes().is_empty() && !s.dispatch_rules().is_empty())
+        .filter(|s| active.contains(s.coordinate()))
         .collect();
     // One combined list per claiming adapter, built once: the adapter's own
     // rules first, in composition order, so the applied set is a pure function
-    // of the composition and not of the file order. A pack that names whose
-    // files it speaks for is heard only there — a marker is a bare name, and
-    // `@Controller` is Spring's on a JVM file and Vapor's on a Swift one.
+    // of the composition and not of the file order.
     let combined: BTreeMap<SmolStr, Vec<DispatchRule>> = adapters
         .iter()
         .filter(|a| !a.spec().suffixes().is_empty())
         .map(|a| {
             let spec = a.spec();
             let mut rules = spec.dispatch_rules().to_vec();
-            for pack in &packs {
-                let speaks_here = pack.rules_for().is_empty()
-                    || pack.rules_for().iter().any(|c| c == spec.coordinate());
-                if speaks_here {
-                    rules.extend(pack.dispatch_rules().iter().cloned());
-                }
-            }
+            rules.extend(
+                packs
+                    .iter()
+                    .flat_map(|p| p.dispatch_rules().iter().cloned()),
+            );
             (SmolStr::new(spec.coordinate()), rules)
         })
         .collect();
@@ -856,6 +871,31 @@ fn dispatch_files(files: &mut [GraphFile], adapters: &[Box<dyn Extension>]) {
         f.generated = d.generated;
         f.witnesses = d.witnesses;
     }
+    // What each pack ASSERTED, counted from its own rules alone — the same
+    // question a plugin answers through its sink, asked of data. A second pass
+    // rather than attribution threaded through `apply`: it runs only for packs
+    // the project actually activated, and it is the pack's claim on its own,
+    // not whatever the language would have derived anyway.
+    packs
+        .iter()
+        .map(|pack| {
+            let rules = pack.dispatch_rules();
+            let n: u32 = files
+                .iter()
+                .map(|f| {
+                    let d = crate::dispatch::apply(&f.evidence, &supertypes, rules);
+                    let (roots, _) = crate::dispatch::declaration_effects(
+                        &f.evidence,
+                        f.compiled_into,
+                        &supertypes,
+                        rules,
+                    );
+                    (d.roots.len() + roots.len()) as u32
+                })
+                .sum();
+            (SmolStr::new(pack.coordinate()), n)
+        })
+        .collect()
 }
 
 fn publish_surfaces(
@@ -1090,6 +1130,7 @@ pub fn patch(
     files: &[DiscoveredFile],
     claims: &[ClaimedFile],
     adapters: &[Box<dyn Extension>],
+    active: &BTreeSet<SmolStr>,
     cache: &EvidenceCache,
 ) -> Option<Graph> {
     if manifest_state(files, adapters) != prev_manifest_state {
@@ -1146,7 +1187,7 @@ pub fn patch(
     }
     let project = std::mem::take(&mut prev.project);
     mount_and_own(&mut prev.files, &project);
-    dispatch_files(&mut prev.files, adapters);
+    prev.pack_roots = dispatch_files(&mut prev.files, adapters, active);
     publish_surfaces(&mut prev.files, adapters, &project);
     prev.project = project;
     Some(prev)
@@ -1332,6 +1373,7 @@ mod tests {
                 package("snippet", "docs/snippet", "docs/snippet/pom.xml"),
             ],
             project: Default::default(),
+            pack_roots: Default::default(),
         };
         let owner = |p: &str| {
             graph

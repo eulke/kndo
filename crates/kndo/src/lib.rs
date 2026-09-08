@@ -34,7 +34,7 @@ use kndo_adapter_swift::SwiftAdapter;
 use kndo_adapter_ts::TypeScriptAdapter;
 use kndo_apple::{InfoPlistPlugin, InterfaceBuilderPlugin};
 use kndo_coverage::{CoberturaPlugin, GoCoverPlugin, JacocoPlugin, LcovPlugin};
-use kndo_rules::{SpringRules, SwiftUiRules};
+use kndo_packs::SpringRules;
 
 /// Everything a stock run is, in deterministic registration order: claim priority
 /// among claiming extensions, and — among conduct-declaring ones — coverage
@@ -59,7 +59,6 @@ pub fn default_extensions() -> Vec<Box<dyn Extension>> {
         Box::new(InterfaceBuilderPlugin),
         Box::new(InfoPlistPlugin),
         Box::new(SpringRules),
-        Box::new(SwiftUiRules),
     ]
 }
 

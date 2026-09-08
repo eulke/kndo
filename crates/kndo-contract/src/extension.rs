@@ -25,10 +25,24 @@ use std::collections::{BTreeMap, BTreeSet};
 pub enum ActivationRule {
     /// At least one discovered file matches this glob (e.g. `next.config.*`).
     FileExists(SmolStr),
-    /// Some discovered manifest declares a dependency with this name, in any
-    /// section — as reported by the claiming extensions through
-    /// [`Extension::manifest_dependencies`], the one manifest pipeline.
+    /// Some discovered manifest declares a dependency whose name matches this
+    /// [`pattern`](matches_pattern), in any section — as the claiming
+    /// extensions report it through `extract_manifest`, the one manifest door.
+    /// A pattern because an ecosystem spells one framework many ways:
+    /// `org.springframework*` is boot, context and web alike.
     ManifestDependency(SmolStr),
+    /// Some discovered file's SOURCE names an import specifier matching this
+    /// pattern (`org.junit.*`, `XCTest`) — the gate for a framework no
+    /// manifest mentions: a Swift tree without `Package.swift`, a JVM tree
+    /// whose build file the run never sees.
+    ///
+    /// COARSE by construction, and never a verdict. Activation is decided
+    /// before any file is parsed (see `kndo_core::conduct::activate`), so the
+    /// engine matches the pattern's literal stem against file text: a
+    /// specifier named in a comment or a string opens the gate too. What the
+    /// pack then DOES is decided by its triggers, which read extracted
+    /// evidence qualified through the file's own bindings — the exact half.
+    FileImports(SmolStr),
 }
 
 /// When an extension's CONDUCT and INGESTION run (extraction is gated by claims
@@ -675,6 +689,23 @@ impl Trigger {
     /// Does this trigger fire on `marker`, in a file whose bindings are
     /// `cx`'s? Dispatch reads each trigger in the phase that holds its
     /// evidence, so a trigger watching something else never fires here.
+    /// Every name this trigger compares THROUGH THE FILE'S BINDINGS — a
+    /// marker's path, a relation's target, an external witness's base. These
+    /// are names of things the project does not declare, so a rule that spells
+    /// one in full matches only where the file imported it from there; a bare
+    /// spelling matches whatever the language leaves unqualified, in any
+    /// ecosystem. A `Name` pattern is absent on purpose: it ranges over the
+    /// project's OWN declarations, which no binding qualifies.
+    pub fn qualified_names(&self) -> Vec<&SmolStr> {
+        match self {
+            Trigger::Marker { path, .. } => vec![path],
+            Trigger::Relation { to, .. } => vec![to],
+            Trigger::ExternalWitness { base, .. } => vec![base],
+            Trigger::MemberOf { owner, .. } => owner.qualified_names(),
+            Trigger::Name { .. } => Vec::new(),
+        }
+    }
+
     pub fn matches(&self, cx: &DeclarationCx<'_>, marker: &Marker) -> bool {
         match self {
             Trigger::Marker { path, arg, target } => {
@@ -806,6 +837,14 @@ impl DeclarationCx<'_> {
 
 /// The trigger patterns' one grammar: literal text with `*` matching any run
 /// of characters, empty included.
+/// The contract's one `Pattern` semantics: a glob over a qualified name, where
+/// `*` spans any run of bytes. Every place a rule NAMES something it does not
+/// own — a marker path, a relation's target, an activation predicate — compares
+/// through here, so a pattern means the same thing wherever it is written.
+pub fn matches_pattern(pattern: &str, text: &str) -> bool {
+    pattern_matches(pattern, text)
+}
+
 fn pattern_matches(pattern: &str, text: &str) -> bool {
     let (p, t) = (pattern.as_bytes(), text.as_bytes());
     let (mut pi, mut ti) = (0, 0);
@@ -888,7 +927,6 @@ pub struct ExtensionSpec {
     dependency_scoping: DependencyScoping,
     dependency_identity: DependencyIdentity,
     dependency_importers: Vec<SmolStr>,
-    rules_for: Vec<SmolStr>,
     dependency_builtins: DependencyBuiltins,
     import_cycles: CycleTolerance,
     ladder: Ladder,
@@ -932,7 +970,6 @@ impl ExtensionSpec {
                 dependency_scoping: DependencyScoping::Scoped,
                 dependency_identity: DependencyIdentity::Underivable,
                 dependency_importers: Vec::new(),
-                rules_for: Vec::new(),
                 dependency_builtins: DependencyBuiltins::None,
                 import_cycles: CycleTolerance::Tolerated,
                 ladder: Ladder::default(),
@@ -1004,16 +1041,6 @@ impl ExtensionSpec {
     /// import, and nothing unclaimed casts doubt.
     pub fn dependency_importers(&self) -> &[SmolStr] {
         &self.dependency_importers
-    }
-
-    /// The extensions whose files this one's dispatch rules apply to, by
-    /// coordinate. A RULE PACK states what a framework's marker means, and a
-    /// marker is a bare name: `@Controller` is Spring's on a JVM file and
-    /// Vapor's on a Swift one, and nothing in the name tells them apart. Empty
-    /// ⇒ every extension's files, which is what a language adapter's own rules
-    /// want.
-    pub fn rules_for(&self) -> &[SmolStr] {
-        &self.rules_for
     }
 
     /// See [`DependencyBuiltins`]; `undeclared` is the consumer.
@@ -1138,7 +1165,6 @@ pub struct ExtensionSpecParts {
     pub dependency_identity: DependencyIdentity,
     /// Wire components cannot declare importer suffixes yet; defaults to none.
     pub dependency_importers: Vec<SmolStr>,
-    pub rules_for: Vec<SmolStr>,
     /// Wire components cannot declare builtins yet; defaults to none.
     pub dependency_builtins: DependencyBuiltins,
     pub import_cycles: CycleTolerance,
@@ -1190,7 +1216,6 @@ impl From<ExtensionSpecParts> for ExtensionSpec {
             dependency_scoping: parts.dependency_scoping,
             dependency_identity: parts.dependency_identity,
             dependency_importers: parts.dependency_importers,
-            rules_for: parts.rules_for,
             dependency_builtins: parts.dependency_builtins,
             import_cycles: parts.import_cycles,
             ladder: parts.ladder,
@@ -1263,15 +1288,6 @@ impl ExtensionSpecBuilder {
     /// dependency-usage judgment abstains for every manifest this adapter reads.
     pub fn dependency_identity(mut self, identity: DependencyIdentity) -> Self {
         self.spec.dependency_identity = identity;
-        self
-    }
-
-    /// Declare whose files this extension's dispatch rules apply to, by
-    /// coordinate (see [`ExtensionSpec::rules_for`]). Omitted ⇒ everyone's.
-    pub fn rules_for(mut self, coordinates: &[&'static str]) -> Self {
-        self.spec
-            .rules_for
-            .extend(coordinates.iter().map(|c| SmolStr::new_static(c)));
         self
     }
 

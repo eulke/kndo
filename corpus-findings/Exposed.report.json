@@ -21245,6 +21245,13 @@
       "findings": 0,
       "dropped": [],
       "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:spring",
+      "roots": 77,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
     }
   ],
   "diagnostics": [
