@@ -446,3 +446,49 @@ class Widget(Model, metaclass=Meta):
     let names: Vec<&str> = e.references.iter().map(|r| r.name.as_str()).collect();
     assert!(names.contains(&"DEFAULT"), "{names:?}");
 }
+
+#[test]
+fn a_member_says_what_it_was_read_from_and_a_guarded_def_is_still_surface() {
+    let e = ev(
+        "app/late.py",
+        r#"
+import sys
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .models import Later
+
+
+type Alias = int
+
+
+def resolve(target: "Later") -> "Later | None":
+    return registry.lookup(target)
+
+
+if sys.version_info >= (3, 12):
+    def shim():
+        return 1
+else:
+    def shim():
+        return 2
+"#,
+    );
+    // `registry.lookup(...)` was read FROM `registry` — the receiver the member
+    // pool needs, and the reason `internal_only` stops abstaining on members.
+    let on: Vec<(&str, Option<&str>)> = e
+        .references
+        .iter()
+        .map(|r| (r.name.as_str(), r.on.as_deref()))
+        .collect();
+    assert!(on.contains(&("lookup", Some("registry"))), "{on:?}");
+    assert!(on.contains(&("registry", None)), "{on:?}");
+    // A forward annotation is a type by another spelling — quotes are there
+    // because the name is not bound YET, not because it is a string.
+    assert!(on.contains(&("Later", None)), "{on:?}");
+    // PEP 695's `type X = …` declares a name.
+    assert_eq!(declaration_named(&e, "Alias").kind, SymbolKind::Type);
+    // A def behind a version guard is module surface: the guard decides WHICH
+    // definition binds, never whether the name exists.
+    assert_eq!(declaration_named(&e, "shim").kind, SymbolKind::Function);
+}

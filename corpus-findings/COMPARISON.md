@@ -2229,3 +2229,33 @@ losses:
 The rung still accuses (`_has_encoding` stands), which is what the decision
 turned on: the alternative, `Exported`, would have made no `_x` accusable
 inside a published distribution at all.
+
+### Python reads what is inside the quotes, behind the guard, and after the dot (2026-09-08)
+
+| repo | before | after | what moved |
+|---|---|---|---|
+| flask | 18 | 18 | no finding moves; **+9 subjects judged** |
+
+Four gaps, and the honest headline is that the corpus does not move — what
+moves is how much of the tree is under judgment at all.
+
+**Forward annotations.** `def resolve(target: "_Later")` names `_Later` exactly
+as the unquoted form does; the quotes are there because the name is not bound
+at runtime under `if TYPE_CHECKING`, which is the dominant idiom in modern
+Python. An adapter reading only identifiers sees a string literal and calls the
+class dead. Pinned by the `string-annotations` fixture, both directions.
+
+**Defs behind a guard.** A `def` under `if TYPE_CHECKING:`, in a
+`try/except ImportError` fallback, or behind `if sys.version_info >= …` is
+module surface exactly like one at column zero — the guard decides WHICH
+definition binds, never whether the name exists. Together with PEP 695's
+`type X = …`, this is the +9: nine names that were invisible are now declared,
+reachable, and judged.
+
+**`Reference::on` for `obj.attr`,** from the attribute's `object` where the
+source spells it as a name. Zero movement, and the reason is worth stating:
+Python's ladder is deliberately EMPTY (there is no keyword between
+module-private and public, so `internal-only` never speaks for it), so unlike
+Swift the receiver opens no advisory branch. What it buys is attribution — a
+qualified use lands on the member it names instead of on every member of that
+name — and that is precision the next measurement will read, not this one.

@@ -1,0 +1,15 @@
+# string-annotations: a forward annotation is a type by another spelling. `x: "_Later"`
+# names `_Later` exactly as the unquoted form does — the quotes exist because the name
+# is not bound yet at that point, and an adapter that reads only identifiers sees a
+# string literal and calls the class dead. The class beside it, named by nothing, stays
+# accused.
+
+[[alive]]
+subject = "src/app/models.py#_Later"
+category = "unused"
+why = "named from a forward annotation in `service.py`, and from nowhere else — the only reference is inside quotes"
+
+[[dead]]
+subject = "src/app/models.py#_Never"
+category = "unused"
+why = "the same shape, annotated by nothing: the accusation the string half must leave standing"

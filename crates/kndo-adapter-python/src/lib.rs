@@ -49,7 +49,7 @@ impl PythonAdapter {
             // 3: the generated banner is reported, never concluded.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:python",
-                7,
+                8,
                 &["py"],
                 &[
                     "**/pyproject.toml",
@@ -71,6 +71,7 @@ impl PythonAdapter {
             .emits(kndo_contract::evidence::EvidenceStreams::of(&[
                 kndo_contract::evidence::EvidenceStream::Markers,
                 kndo_contract::evidence::EvidenceStream::Relations,
+                kndo_contract::evidence::EvidenceStream::Qualifiers,
             ]))
             .ignores(&["**/site-packages/**"])
             // The runners' own discovery, where no manifest said what a file

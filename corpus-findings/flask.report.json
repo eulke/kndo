@@ -33,7 +33,7 @@
   },
   "health": {
     "implicated": 7,
-    "subjects": 1219,
+    "subjects": 1228,
     "by_category": [
       {
         "category": "cyclic",
@@ -49,7 +49,7 @@
         "name": "Flask",
         "manifest": "pyproject.toml",
         "implicated": 4,
-        "subjects": 1119
+        "subjects": 1127
       },
       {
         "name": "flask-example-celery",
@@ -61,7 +61,7 @@
         "name": "flaskr",
         "manifest": "examples/tutorial/pyproject.toml",
         "implicated": 1,
-        "subjects": 58
+        "subjects": 59
       },
       {
         "name": "js_example",

@@ -141,9 +141,32 @@ fn top_level_item(item: Node<'_>, source: &[u8], test_file: bool, out: &mut Evid
             }
         }
         "expression_statement" => module_assignment(item, source, out),
-        // Compound statements (the __main__ guard above all) carry no
-        // module-surface declarations of their own; their bodies' references
-        // arrive through the file-wide walk.
+        // `type Alias = int` (PEP 695): a declaration like any other, and its
+        // name sits under a `type` node rather than a bare identifier.
+        "type_alias_statement" => {
+            if let Some(lhs) = item.child_by_field_name("left")
+                && let Some(ident) = tk::child_of_kind(lhs, "identifier")
+            {
+                let name = tk::text(ident, source);
+                out.declaration(name, SymbolKind::Type, tk::span(item), reach_of(name));
+            }
+        }
+        // A def under `if TYPE_CHECKING:`, in a `try/except ImportError`
+        // fallback, or behind a version guard is module surface exactly like
+        // one at column zero — the guard decides WHICH definition binds, never
+        // whether the name exists. Their bodies' references arrive through the
+        // file-wide walk either way.
+        "if_statement" | "try_statement" | "with_statement" | "while_statement"
+        | "for_statement" => {
+            let mut c = item.walk();
+            for block in item.named_children(&mut c).filter(|n| n.kind() == "block") {
+                let mut bc = block.walk();
+                let inner: Vec<Node<'_>> = block.named_children(&mut bc).collect();
+                for stmt in inner {
+                    top_level_item(stmt, source, test_file, out);
+                }
+            }
+        }
         _ => {}
     }
 }
@@ -585,7 +608,24 @@ fn references_and_comments(root: Node<'_>, source: &[u8], out: &mut EvidenceSink
                     if is_binder_seat(n, parent) {
                         return;
                     }
-                    out.reference(tk::text(n, source), classify(n, parent), tk::span(n));
+                    out.reference_on(
+                        tk::text(n, source),
+                        classify(n, parent),
+                        receiver_of(n, parent, source),
+                        tk::span(n),
+                    );
+                }
+            }
+            // A FORWARD annotation is a type by another spelling: `x: "Later"`
+            // and `def f() -> "Later"` name `Later` exactly as the unquoted
+            // form does, and the quotes exist only because the name is not
+            // bound yet at that point in the file.
+            "string_content" if in_annotation(n) => {
+                for name in tk::text(n, source).split(['[', ']', ',', '|', ' ']) {
+                    let name = name.trim();
+                    if !name.is_empty() && name.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                        out.reference_on(name, RefKind::TypeUse, None, tk::span(n));
+                    }
                 }
             }
             _ => {}
@@ -615,6 +655,34 @@ fn is_binder_seat(n: Node<'_>, parent: Node<'_>) -> bool {
         "global_statement" | "nonlocal_statement" => true,
         _ => SEATS.binds(n),
     }
+}
+
+/// What `obj.attr` was read FROM, where the source spells it as a name — the
+/// `object` of the attribute this identifier is the attribute of. A receiver
+/// that is itself an expression (`a.b.c`, `f().x`) names nothing the pool can
+/// use, and absence is the honest answer there.
+fn receiver_of(n: Node<'_>, parent: Node<'_>, source: &[u8]) -> Option<SmolStr> {
+    if parent.kind() != "attribute" || parent.child_by_field_name("attribute") != Some(n) {
+        return None;
+    }
+    let object = parent.child_by_field_name("object")?;
+    (object.kind() == "identifier").then(|| SmolStr::new(tk::text(object, source)))
+}
+
+/// Is this string sitting where a TYPE goes — an annotation, a return type, a
+/// type alias?
+fn in_annotation(n: Node<'_>) -> bool {
+    let mut a = n.parent();
+    while let Some(node) = a {
+        match node.kind() {
+            "type" => return true,
+            // A string in an ordinary expression is data, and a walk that
+            // climbed past the statement would call every literal a type.
+            "block" | "module" | "argument_list" | "call" => return false,
+            _ => a = node.parent(),
+        }
+    }
+    false
 }
 
 fn classify(n: Node<'_>, parent: Node<'_>) -> RefKind {

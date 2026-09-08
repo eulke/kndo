@@ -5919,3 +5919,31 @@ M8.e), and ERROR-tolerant traversal (M8.f, where the design puts it).
 Still owed on this adapter: qualified references (`via: Binding(mod)`), string
 annotations as references, nested and conditional defs, `type X`, and
 `Nesting::ByPath`.
+
+## 2026-09-08 — Python: the quotes, the guard, and the dot
+
+`kndo:python` moves to 8. flask holds at 18 findings and gains 9 SUBJECTS —
+this slice widens what is judged rather than what is accused.
+
+- **A forward annotation is a type.** `target: "_Later"` names `_Later` the way
+  the unquoted form does; the quotes exist because the name is not bound at
+  runtime under `if TYPE_CHECKING`, which is the dominant idiom in typed
+  Python. Reading only identifiers made every such class read as dead. The
+  string is split on the type-expression punctuation (`[] , |`) so
+  `"list[_Later] | None"` names what it names, and a string anywhere else — an
+  argument, a plain expression — is data and reports nothing.
+- **A def behind a guard is module surface.** `if TYPE_CHECKING:`, a
+  `try/except ImportError` fallback, a `sys.version_info` branch: the guard
+  decides WHICH definition binds, never whether the name exists. With PEP 695's
+  `type X = …`, this is the +9.
+- **`Reference::on` for `obj.attr`.** Zero corpus movement, and the reason is
+  the design's own: Python's ladder is deliberately empty — no keyword sits
+  between module-private and public — so `internal-only` never speaks for it
+  and the receiver opens no advisory branch as it did for Swift. What it buys
+  is attribution inside `unused`: a qualified use lands on the member it names
+  instead of on every member of that name.
+
+Fixture `string-annotations` added, pinning both directions.
+
+Still owed on this adapter: `Nesting::ByPath{roots}` — the last item of its
+design row.
