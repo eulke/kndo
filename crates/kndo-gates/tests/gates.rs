@@ -2201,9 +2201,6 @@ const ROOTS_STILL_IN_THE_EXTRACTOR: &[(&str, &str)] = &[
         "kndo-adapter-go",
         "the module's entries (go 3/3 left it named)",
     ),
-    ("kndo-adapter-rust", "the language rules of its row"),
-    // A `#!` line is FILE CONTENT, not a convention: the file says it is run.
-    ("kndo-adapter-ts", "the js-ts row"),
 ];
 
 /// Every hook the design gives `Extension`, and nothing else. The four manifest

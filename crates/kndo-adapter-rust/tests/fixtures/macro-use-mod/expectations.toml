@@ -6,7 +6,15 @@ why = "anchored by `#[macro_use] mod messages;` in main.rs"
 
 [[alive]]
 subject = "src/messages.rs#set_errored"
-why = "named as crate::messages::set_errored inside the err_message! body that main.rs expands"
+category = "unused"
+why = "named as crate::messages::set_errored inside the err_message! body that main.rs expands — the mention is a reference, and a reference keeps it"
+
+[[known_gap]]
+subject = "src/messages.rs#set_errored"
+expect = "alive"
+category = "internal-only"
+why = "the use is at every EXPANSION site, not where the template is written — narrowing this below `pub(crate)` breaks call sites no reference in this file records. The template's mention is now a reference (the plan's shape for names inside macro token trees), which keeps the declaration alive but pools the use in its own file, so the ladder advises a rung the macro cannot live at"
+fix = "a reference that TRAVELS: the design has no coordinate for a use recorded in one file and performed in another, and `macro_rules!` is the case that needs one. The root this replaced suppressed the advice by accident rather than by saying anything"
 
 [[alive]]
 subject = "src/messages.rs#ERRORED"

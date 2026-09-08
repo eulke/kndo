@@ -481,7 +481,7 @@ fn broken_source_degrades_to_diagnostic() {
 }
 
 #[test]
-fn macro_template_names_root_their_declarations() {
+fn macro_template_names_are_references_to_their_declarations() {
     let ev = extract(
         "src/messages.rs",
         "macro_rules! log_err {\n\
@@ -492,27 +492,20 @@ fn macro_template_names_root_their_declarations() {
          pub(crate) fn set_flag(_m: &str) {}\n\
          pub(crate) fn unrelated() {}\n",
     );
-    let ix = |name: &str| {
-        ev.declarations_with_ids()
-            .find(|(_, d)| d.name == name)
-            .map(|(id, _)| id.index())
-            .unwrap()
-    };
-    let rooted: Vec<usize> = ev
-        .roots
-        .iter()
-        .filter_map(|r| match &r.target {
-            RootTarget::Declaration(id) => Some(id.index()),
-            _ => None,
-        })
-        .collect();
     assert!(
-        rooted.contains(&ix("set_flag")),
-        "a name the macro template mentions resolves at every expansion site"
+        ev.roots.is_empty(),
+        "a template body is a USE, not an entry: {:#?}",
+        ev.roots
+    );
+    let named = |name: &str| ev.references.iter().any(|r| r.name == name);
+    assert!(
+        named("set_flag"),
+        "the template mentions it, and the mention resolves at every expansion \
+         site — what this file can say is that the name appears"
     );
     assert!(
-        !rooted.contains(&ix("unrelated")),
-        "declarations the template never names stay unrooted"
+        !named("unrelated"),
+        "declarations the template never names are not referenced by it"
     );
 }
 

@@ -12,7 +12,7 @@ mod manifest;
 mod resolve;
 
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
-use kndo_contract::evidence::{Attachment, EvidenceSink, RootKind, RootTarget};
+use kndo_contract::evidence::{Attachment, EvidenceSink, RootKind};
 use kndo_contract::extension::{Extension, ExtensionSpec, FileRole, PublishedSurface, Rung, Step};
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use tree_sitter::Language;
@@ -87,13 +87,30 @@ pub struct TypeScriptAdapter {
     resolution_exts: Vec<String>,
 }
 
+/// What JAVASCRIPT ITSELF dispatches on. A `#!` line is the one fact here no
+/// path convention can state: the file says it is run, whatever it is called
+/// and wherever it sits. Framework dispatch — Storybook's `*.stories.*`,
+/// Vitest's config patterns — is its pack's (M8.e).
+fn dispatch_rules() -> Vec<kndo_contract::extension::DispatchRule> {
+    use kndo_contract::extension::{DispatchRule, Effect, Trigger};
+    vec![DispatchRule {
+        when: Trigger::Marker {
+            path: SHEBANG.into(),
+            arg: None,
+            target: None,
+        },
+        then: Effect::Root(RootKind::Production),
+        confidence: Confidence::Certain,
+    }]
+}
+
 impl TypeScriptAdapter {
     pub fn new() -> Self {
         let spec = kndo_toolkit::source_adapter_builder(
             "kndo:js-ts",
             // 13: `package.json` states a unit and `tsconfig.json` states the
             // aliases that are not packages, both through the one door.
-            13,
+            14,
             &["ts", "tsx", "js", "jsx", "mjs", "cjs", "mts", "cts"],
             // `tsconfig.json` states the names that are not packages — its
             // `paths` aliases; every other spelling of the file is a variant
@@ -163,6 +180,7 @@ impl TypeScriptAdapter {
             "vue", "svelte", "astro", "marko", "html", "htm", "css", "scss", "sass", "less",
             "styl", "pcss", "mdx", "coffee", "ejs", "pug",
         ])
+        .dispatch(dispatch_rules())
         .build();
         let mut resolution_exts = Vec::new();
         for ext in spec.suffixes() {
@@ -237,6 +255,10 @@ impl Extension for TypeScriptAdapter {
     }
 }
 
+/// The marker a `#!` line is reported as. A name this crate owns, so the fact
+/// and the rule that reads it cannot drift apart.
+const SHEBANG: &str = "#!";
+
 /// What the FILE ITSELF says about its role — the one fact here no path
 /// convention can state: a `#!` line makes the file an executable entry
 /// whatever it is called and wherever it sits. The path conventions
@@ -245,10 +267,11 @@ impl Extension for TypeScriptAdapter {
 /// is evidence: a spec file joins the project in a test run alone.
 fn convention_roots(file: &SourceFile<'_>, out: &mut EvidenceSink) {
     if file.content.starts_with(b"#!") {
-        out.root(
-            RootTarget::WholeFile,
-            RootKind::Production,
-            Confidence::Certain,
+        out.marker(
+            kndo_contract::evidence::MarkerTarget::File,
+            SHEBANG,
+            Vec::new(),
+            kndo_contract::vocab::Span::new(0, 2),
         );
     }
     if kndo_toolkit::web_test_path(file.path.as_str()) {

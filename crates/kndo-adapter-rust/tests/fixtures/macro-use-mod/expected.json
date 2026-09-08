@@ -42,7 +42,30 @@
       }
     ]
   },
-  "findings": [],
+  "findings": [
+    {
+      "id": "kndo-97b9539791bd",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "src/messages.rs",
+        "selector": {
+          "name": "set_errored"
+        },
+        "span": {
+          "start": 335,
+          "end": 428
+        }
+      },
+      "lines": {
+        "start": 17,
+        "end": 19
+      },
+      "message": "declared `pub(crate)`, but every use is within its own file — `private` would suffice for this function"
+    }
+  ],
   "fixed": [],
   "baselined": 0,
   "abstained": [

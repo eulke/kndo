@@ -105,7 +105,7 @@ impl RustAdapter {
             // manifest says holds it.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:rust",
-                15,
+                16,
                 &["rs"],
                 &["**/Cargo.toml"],
                 // Modules within a crate reference each other freely — legal,

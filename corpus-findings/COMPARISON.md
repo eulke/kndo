@@ -2664,3 +2664,38 @@ whole.
 `xctest-discovery` is the debt as a fixture — two `[[known_gap]]` entries owed
 to `kndo:xctest` and one control that must stay dead once the pack lands. It
 fails the day the pack closes it.
+
+### rust and ts: the list empties (2026-09-08)
+
+The last two rows of `ROOTS_STILL_IN_THE_EXTRACTOR`. What remains on it is go's
+`func main`, which is a UNIT fact go.mod cannot state — a Go module is one
+Library unit, so no `in_unit` reaches it — and stays named rather than pretended
+away.
+
+| repo | before | after | delta |
+|---|---|---|---|
+| ripgrep | 141 | 143 | +2 `internal-only` |
+| every other repository | — | — | byte-identical |
+
+**ts's `#!` line becomes a marker and a rule.** The file says the loader runs
+it, which is content and not a path, so it stays the adapter's — reported as
+the marker `#!`, rooted production Certain by one rule. Nothing moved.
+
+**rust's macro-template root becomes references, and the +2 is the honest
+price.** A name a `macro_rules!` body mentions was rooted `Possible`. The plan's
+shape for names inside macro token trees is a REFERENCE, and a reference is
+what the file can honestly say: the name appears here. References rose 61733 →
+61751 on ripgrep — the mentions, now recorded as the uses they are — and the
+declarations stay alive.
+
+What the root was also doing, by accident, is suppress narrowing advice. The
+use happens at every EXPANSION site; the reference is recorded where the
+template is written; so the ladder now sees a use pooled in one file and
+advises a rung the macro cannot live at. `ignore_messages` and `set_errored`
+are that, and both fixtures carry it as a `[[known_gap]]` naming the missing
+coordinate: **a reference that travels**. The design has none — a use recorded
+in one file and performed in another is not something the vocabulary can say,
+and `macro_rules!` is the case that needs it.
+
+A root that suppresses advice by being a root is not a rule about macros; it is
+a rule about entry points, borrowed. Naming the gap is worth two findings.

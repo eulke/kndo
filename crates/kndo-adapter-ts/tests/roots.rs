@@ -8,7 +8,7 @@
 use kndo_adapter_ts::TypeScriptAdapter;
 use kndo_contract::adapter::DependencyScope;
 use kndo_contract::adapter::SourceFile;
-use kndo_contract::evidence::{Attachment, EvidenceSink, RootKind, RootTarget};
+use kndo_contract::evidence::{Attachment, EvidenceSink, MarkerTarget, RootKind, RootTarget};
 use kndo_contract::extension::Extension;
 use kndo_contract::manifest::{ManifestEvidence, Publication, UnitKind};
 use kndo_contract::vocab::ProjectPath;
@@ -160,17 +160,26 @@ fn extracted_roots(path: &str, source: &str) -> Vec<(RootKind, bool)> {
 }
 
 #[test]
-fn a_shebang_is_the_one_root_the_file_itself_states() {
+fn a_shebang_is_reported_and_never_concluded() {
     // The path habits — `*.test.*`, `__tests__/`, `*.config.*`, rc-dotfiles —
     // are the spec's `file_roles`, gated in `kndo-gates`. A `#!` line is not a
-    // habit and not a path: it is the file saying the loader runs it, so it is
-    // the one root extraction still concludes.
+    // habit and not a path: it is the file saying the loader runs it. So the
+    // extractor reports the marker and one rule says it is a production root;
+    // no verdict is concluded here.
+    let markers = |path: &str, source: &str| -> Vec<String> {
+        kndo_testkit::extract_evidence(&TypeScriptAdapter::new(), path, source)
+            .markers
+            .iter()
+            .filter(|m| matches!(m.on, MarkerTarget::File))
+            .map(|m| m.path.to_string())
+            .collect()
+    };
     assert_eq!(
-        extracted_roots(
+        markers(
             "scripts/run.mjs",
             "#!/usr/bin/env node\nexport const x = 1;\n"
         ),
-        vec![(RootKind::Production, true)]
+        ["#!"]
     );
     for (path, source) in [
         ("src/thing.test.ts", "it('works', () => {});\n"),
@@ -179,8 +188,14 @@ fn a_shebang_is_the_one_root_the_file_itself_states() {
         (".eslintrc.cjs", "module.exports = {};\n"),
         ("src/plain.ts", "export const x = 1;\n"),
     ] {
+        assert_eq!(markers(path, source), Vec::<String>::new(), "{path}");
         assert_eq!(extracted_roots(path, source), vec![], "{path}");
     }
+    assert_eq!(
+        extracted_roots("scripts/run.mjs", "#!/usr/bin/env node\n"),
+        vec![],
+        "the extractor concludes no root of its own"
+    );
 }
 
 #[test]

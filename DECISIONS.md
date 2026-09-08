@@ -6545,3 +6545,36 @@ alive, never accuse" is restated at the level where it is true: nothing appears
 whose own file was not already accused whole.
 
 `kndo:swift` 12 → 13. Neither the graph semantics nor the fingerprint moved.
+
+## 2026-09-08 — rust and ts empty the list, and one gap gets a name
+
+`ROOTS_STILL_IN_THE_EXTRACTOR` holds one row: go's `package main` + `func main`,
+a UNIT fact go.mod cannot state. Every other adapter's roots are rules.
+
+**ts: `#!` is a marker plus a rule.** The one thing here no path convention can
+say is that the file says the loader runs it — content, not a path — so it
+stays the adapter's, as the marker `#!` and one production rule, Certain.
+Nothing moved.
+
+**rust: a macro template's names are references, and that costs two findings.**
+A name a `macro_rules!` body mentions was rooted `Possible`. The plan's shape
+for names inside macro token trees is a reference, and a reference is what the
+file can honestly say: the name appears here. ripgrep 141 → 143, references
+61733 → 61751, everything else byte-identical.
+
+**The two are `internal-only`, and they name a coordinate the design lacks.**
+The root was doing a second job by accident: suppressing narrowing advice. A
+`macro_rules!` body resolves at every EXPANSION site, so `crate::messages::
+set_flag` must stay `pub(crate)` however local its mention looks; the reference
+is recorded where the template is written, so the ladder pools one use in one
+file and advises a rung the macro cannot live at. Both fixtures now carry it as
+a `[[known_gap]]` whose `fix` names what is missing: **a reference that
+travels** — a use recorded in one file and performed in another, which this
+vocabulary cannot express and `macro_rules!` is the case that needs it.
+
+Recording it is the point. A root that suppresses advice by being a root is not
+a rule about macros, it is a rule about entry points borrowed for a job it does
+not describe; the gap was invisible while the borrowing worked.
+
+`kndo:rust` 15 → 16, `kndo:js-ts` 13 → 14. Neither the graph semantics nor the
+fingerprint moved.

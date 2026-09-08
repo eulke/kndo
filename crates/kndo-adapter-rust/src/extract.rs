@@ -8,7 +8,7 @@
 
 use kndo_contract::evidence::{
     DeclarationId, EvidenceSink, ImportBinding, ImportShape, ImportTarget, MarkerTarget, Reach,
-    RefKind, RootKind, RootTarget, SymbolKind,
+    RefKind, SymbolKind,
 };
 use kndo_contract::vocab::Confidence;
 use kndo_toolkit as tk;
@@ -78,17 +78,17 @@ pub fn extract(
     let free_declarations = std::mem::take(&mut cx.free_declarations);
     let use_locals = std::mem::take(&mut cx.use_locals);
     let redirects = std::mem::take(&mut cx.redirects);
-    macro_template_roots(root, source, &free_declarations, out);
+    macro_template_references(root, source, &free_declarations, out);
     references_and_comments(root, source, &use_locals, &redirects, out);
 }
 
-/// Names a `macro_rules!` template references are resolved at every EXPANSION
-/// site, not here: the macro travels (textual scope, `#[macro_use]`,
-/// `#[macro_export]`), and narrowing a name its body mentions breaks call
-/// sites no reference in this file records. Free declarations of this file
-/// named inside a macro body therefore root `Possible` — the same tier as the
-/// rest of the dispatch-the-source-never-names family.
-fn macro_template_roots(
+/// Names a `macro_rules!` template mentions are USES of those names, recorded
+/// where the template is written. The macro travels — textual scope,
+/// `#[macro_use]`, `#[macro_export]` — so its body resolves at every expansion
+/// site and not here; what this file can honestly say is that the name appears,
+/// which is a reference. Reporting it as a root instead said "something outside
+/// enters here", which is not what a template body is.
+fn macro_template_references(
     root: Node<'_>,
     source: &[u8],
     free_declarations: &BTreeMap<String, DeclarationId>,
@@ -106,11 +106,7 @@ fn macro_template_roots(
                 && let Some(&id) = free_declarations.get(tk::text(t, source))
                 && seen.insert(id.index())
             {
-                out.root(
-                    RootTarget::Declaration(id),
-                    RootKind::Production,
-                    Confidence::Possible,
-                );
+                out.reference(tk::text(t, source), RefKind::Read, tk::span(t));
             }
         });
     });

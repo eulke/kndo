@@ -3221,6 +3221,50 @@
       "message": "structural clone of tests/util.rs:Dir.link_dir"
     },
     {
+      "id": "kndo-70febcb60254",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/messages.rs",
+        "selector": {
+          "name": "set_errored"
+        },
+        "span": {
+          "start": 4967,
+          "end": 5042
+        }
+      },
+      "lines": {
+        "start": 137,
+        "end": 139
+      },
+      "message": "declared `pub(crate)`, but every use is within its own file — `private` would suffice for this function"
+    },
+    {
+      "id": "kndo-ed431c49d56a",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "crates/core/messages.rs",
+        "selector": {
+          "name": "ignore_messages"
+        },
+        "span": {
+          "start": 4177,
+          "end": 4264
+        }
+      },
+      "lines": {
+        "start": 113,
+        "end": 115
+      },
+      "message": "declared `pub(crate)`, but every use is within its own file — `private` would suffice for this function"
+    },
+    {
       "id": "kndo-b383e72406f5",
       "category": "internal-only",
       "severity": "info",
