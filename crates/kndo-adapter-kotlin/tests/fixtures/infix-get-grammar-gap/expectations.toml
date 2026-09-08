@@ -1,0 +1,18 @@
+# infix-get-grammar-gap: `Rows.insert { … } get Rows.id` — the shape Exposed's own quick-start
+# snippet is written in. `get` and `set` are Kotlin's accessor soft keywords, and the pinned
+# grammar prefers that reading wherever they appear as an INFIX function name, ending its
+# reading of the whole file: `Insert.kt` yields no declarations, `main` among them, so the run
+# finds no root anywhere and abstains on every colour question. Measured beside it: any other
+# infix name parses (`a foo b`, `a to b`, `a eq b`), `a.get(b)` parses, and `set` fails exactly
+# as `get` does.
+#
+# Same ledger row and same claim shape as `when-guard-grammar-gap`: an unparsed file has no
+# selectors to accuse, so the gap is stated on a second file that parses fine and is plainly
+# dead, and goes unreported all the same.
+
+[[known_gap]]
+subject = "src/main/kotlin/demo/waste/Waste.kt"
+expect = "dead"
+category = "unused"
+why = "nothing imports it and `internal` keeps it off the published surface, so it is dead — but the infix `get` cost the tree its only root, and `unused` abstains whole-run instead of judging"
+fix = "grammars: the pinned Kotlin grammar reads `get`/`set` as infix function names"

@@ -54,21 +54,11 @@ pub fn extract(
     // The test source set is its own compilation: what it declares belongs to
     // the package in test builds alone. The test-shaped NAME is not that — a
     // `LoadTest.kt` on the main source path is compiled into the library like
-    // any other file, and says nothing here.
+    // any other file, and says nothing here. Nothing else is concluded: which
+    // files a module publishes is `settings.gradle`'s and `build.gradle`'s to
+    // say and the engine's `publishes()` to read.
     if test_dir {
         out.attachment(Attachment::TestOnly);
-    } else {
-        // The one whole-file root still concluded here, and it is on the
-        // ledger: "any non-test file is importable published surface" is the
-        // engine's `publishes()` to say, but that reads the unit — and kotlin
-        // reads no Gradle yet, so nothing names its units. Measured: deleting
-        // it now costs Exposed +125 findings. It goes with the Gradle parser
-        // (M8.d), not before it.
-        out.root(
-            RootTarget::WholeFile,
-            RootKind::Production,
-            Confidence::Probable,
-        );
     }
 
     tk::mark_generated(source, tk::GENERATED_NEEDLES, &["//", "/*", "*"], out);

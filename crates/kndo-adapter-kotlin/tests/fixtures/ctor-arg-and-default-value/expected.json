@@ -53,7 +53,52 @@
       }
     ]
   },
-  "findings": [],
+  "findings": [
+    {
+      "id": "kndo-0e79a122618f",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "src/main/kotlin/demo/Demo.kt",
+        "selector": {
+          "name": "MyProvider"
+        },
+        "span": {
+          "start": 235,
+          "end": 272
+        }
+      },
+      "lines": {
+        "start": 9,
+        "end": 9
+      },
+      "message": "declared `internal`, but every use is within its own file — `private` would suffice for this type"
+    },
+    {
+      "id": "kndo-564989475f65",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "src/main/kotlin/demo/Demo.kt",
+        "selector": {
+          "name": "MyMeta"
+        },
+        "span": {
+          "start": 274,
+          "end": 314
+        }
+      },
+      "lines": {
+        "start": 11,
+        "end": 11
+      },
+      "message": "declared `internal`, but every use is within its own file — `private` would suffice for this type"
+    }
+  ],
   "fixed": [],
   "baselined": 0,
   "abstained": [

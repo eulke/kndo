@@ -5491,3 +5491,74 @@ manifest it did not before. Neither the fingerprint nor
 Gradle keeps its scanner for now, moved inside the one hook rather than left as
 a second door: the block scanner and the version catalog the plan calls for are
 their own slice, and it is the one that lets kotlin's library-mode root die.
+
+## 2026-09-08 — Gradle is a block scanner over a comment-blanked copy, graded against Gradle
+
+A `build.gradle(.kts)` is not a line-oriented file, and the three cases that
+prove it are all in the two-module build captured beside the reader
+(`crates/kndo-toolkit/tests/captured/`, what a `kndoReport` task printed from
+inside Gradle 8.14.3): `include(\n    "app",\n)` resolves to a project and a
+line reader misses it; `// include("legacy")` names nothing and a line reader
+makes a module out of it; and `implementation(libs.guava)` has no coordinate in
+the script at all — it is in `gradle/libs.versions.toml`, which is now a
+manifest the JVM adapters claim as data for the scripts beside it, never a unit
+of its own.
+
+So the reader is a scanner over calls, bounded by their PARENTHESES, on a copy
+with comments blanked to spaces (offsets preserved, so every span still points
+at the original). `settings.gradle(.kts)` states the modules as packages and
+member manifests; each `build.gradle(.kts)` states the two units Gradle's java
+plugin gives it, what each compiles against, and — the reason the reader exists
+— that the test set is the main set's FRIEND, because Kotlin's `internal` and
+Java's package-private both reach a module's own tests.
+
+`kndo:kotlin` moves to 13 and `kndo:java` to 19: both claim the same manifests
+through `jvm_manifest::MANIFEST_GLOBS`, so both now emit different evidence from
+the same sources. Neither the fingerprint nor `GRAPH_SEMANTICS_VERSION` moves.
+
+## 2026-09-08 — kotlin's library-mode Production root is deleted
+
+The last whole-file root an adapter concluded from a path convention. With
+Gradle read, a published unit's surface is what roots its files and the engine
+says so; a module that publishes nothing roots nothing.
+
+Measured on Exposed, 934 → 972, decomposed in `corpus-findings/COMPARISON.md`:
++28 `internal-only` in a category that reported ZERO for Kotlin before (with no
+module, `internal` had no bound and the rung was unjudgeable), +18 `unused`
+(14 Spring/JUnit in one sample module, owed to M8.e; 3 the pinned grammar, owed
+to M8.f; 1 true), −8 `untested` (3 are the same Spring beans, now `unused`
+rather than two verdicts at once; 5 are genuinely reached by their module's own
+test source set, which is a stated unit for the first time).
+
+Every other repository is byte-identical.
+
+Conformance fixtures moved, all `kndo-adapter-kotlin`: `internal-scope` (the
+file-level finding now subsumes the two declaration verdicts, and its
+expectations say so), `ctor-arg-and-default-value` (two `internal-only`
+advisories the module bound makes sayable), and three new ones —
+`gradle-multi-module`, which pins that `include(…)` across lines is a package
+and a commented-out one is not, plus `when-guard-grammar-gap` and
+`infix-get-grammar-gap`, which hold the two grammar gaps open.
+
+The ablation the ledger recorded before the parser existed stands as the reason
+this waited: deleting this root with no Gradle reader cost Exposed +125. It now
+costs the 38 above, each one named.
+
+The price of the judgment is real and recorded rather than hidden: Exposed goes
+1.0s → 1.8s (release, warm page cache, cold graph cache) and 7.5s → 26s in a
+debug build, because unit pools are now computed for 5150 files that had none.
+
+## 2026-09-08 — Killed: a file is alive whenever any declaration in it has a keeper
+
+Under test while `internal-scope` was rewritten. The idea was to close the gap
+that fixture holds open — `Caller.kt` calls `com.pkga.helper()` by qualified
+name with no import, so the file is compiled and used yet no root reaches it.
+
+Measured: Exposed +4, guava +1, **vite +26**. The rule turns a genuinely dead
+file into a report of every declaration inside it instead of one report of the
+file, which is strictly worse output for the same defect. Killed.
+
+The narrower rule the measurement points at — a file is reached by a resolved
+reference FROM A REACHABLE FILE — is its own slice with its own number, and the
+three known gaps in `internal-scope/expectations.toml` name it as their fix so
+the day it lands the fixture fails.

@@ -1218,6 +1218,7 @@ dependencies = [
  "roxmltree",
  "serde_json",
  "smol_str",
+ "toml",
  "tree-sitter",
  "yaml-rust2",
 ]

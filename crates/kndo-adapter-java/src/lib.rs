@@ -94,7 +94,7 @@ impl JavaAdapter {
         JavaAdapter {
             // 14: `@Override` states a witness on a METHOD, and the bases
             // are named as the source writes them, qualified by its imports.
-            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:java", 18, &["java"])
+            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:java", 19, &["java"])
                 // The conventions, as DATA the engine applies where no unit
                 // spoke for the file — never a root an adapter concluded. The
                 // library-mode "every non-test class is importable surface"

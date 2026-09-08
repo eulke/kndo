@@ -1839,3 +1839,83 @@ under `tests/` — the unit is what tells the engine those files are the runner'
 v1 is not the comparison here. It read `pyproject.toml` for dependency names
 alone and had no notion of a Python unit, so every one of these six is a
 question v1 never asked rather than one it answered differently.
+
+### Gradle is read as blocks, and kotlin's library root dies (2026-09-08)
+
+| repo | before | after | what moved |
+|---|---|---|---|
+| Exposed | 934 | 972 | +28 `internal-only`, +18 `unused`, −8 `untested` |
+| every other repository | — | — | byte-identical |
+
+`settings.gradle.kts` and every `build.gradle(.kts)` now state what they always
+said: the modules the build includes, the two source sets Gradle's java plugin
+gives each module, and that the test set is the main set's FRIEND. Three of
+Gradle's own answers are why this is a block scanner over a comment-blanked copy
+rather than a line reader — an `include(` spans lines, a commented-out one names
+nothing, and a dependency named through `gradle/libs.versions.toml` has no
+coordinate in the script at all — and all three are graded against what a
+`kndoReport` task printed from inside Gradle 8.14.3
+(`crates/kndo-toolkit/tests/captured/gradle.json`).
+
+With a unit under every Kotlin file, kotlin's library-mode whole-file Production
+root is deleted. The engine's published surface roots what a published unit
+publishes, and nothing roots what it does not.
+
+**+28 `internal-only`, from a category that reported ZERO here before.** Not a
+threshold change: `internal` means "the whole module", and with no module the
+reach was unbounded, so the rung could not be judged at all. Every one is a
+declaration whose only uses share its own file — `TransactionManagersContainer`,
+whose implementation sits below it in the same file while other modules import
+only `TransactionManagersContainerImpl`, is the shape.
+
+**+18 `unused`, three families.** Fourteen are the `samples/springboot3-exposed-r2dbc`
+module: seven Spring beans in `src/main` (`@RestController`, `@Configuration`,
+an `EnvironmentPostProcessor`) that only a component scan instantiates, and
+seven in `src/test` — an `internal` `@SpringBootTest` class and its six
+`@Test` methods. Both are M8.e's rule packs to witness, and they are visible
+now because the whole-file root no longer keeps every `src/main` file alive and
+because `internal` finally has a bound. One is true: nothing in the whole
+repository calls `TransactionManagersContainer.getCurrentTransactionManager`.
+Three are the pinned Kotlin grammar, and each now has a fixture holding its gap
+open (M8.f):
+
+- `Entity.kt#isPersistedIn` and `References.kt#allReferencesMatch` — `Entity.kt`
+  writes four `when` GUARDS (`is CompositeID if allReferencesMatch(…) ->`), and
+  the grammar ends its reading of the branch there. `used-by` on both returns
+  empty against uses at lines 168, 232 and 325.
+- `documentation-website/…/App.kt` — Exposed's own quick-start snippet writes
+  `Tasks.insert { … } get Tasks.id`. `get` and `set` are Kotlin's accessor soft
+  keywords and the grammar prefers that reading wherever they are an INFIX
+  function name, so the file yields NO declarations, `main` among them, and
+  nothing roots it. Measured beside it: `a foo b`, `a to b`, `a eq b` and
+  `a.get(b)` all parse; `set` fails exactly as `get` does.
+
+**−8 `untested`, none of it lost advice.** Instrumented on the run: three
+(`ExposedConfig.kt`, `HelloController.kt`, `UserController.kt`) went
+`prod=false test=false` — they are the Spring beans counted above, and `unused`
+is the one verdict, not two. Five went `prod=true test=true`: a module's Gradle
+test source set is now a stated unit sharing the main set's compilation, so the
+test colour reaches `MixedDatabaseTestsBase.kt`, `MigrationUtils.kt`,
+`Application.kt` and the two `hints/` files, and the question `untested` asks is
+answered rather than dropped.
+
+**The cost of judging `internal` instead of abstaining.** Exposed, release
+build, warm page cache, cold graph cache: 1.0s → 1.8s. Debug: 7.5s → 26s. The
+unit pools are computed for 5150 files that previously had none.
+
+**v1 is the quarry here, and the rung does not line up.** v1 reports 163
+`internal-only` on Exposed. Only 43 of them are the rung v2 judges: 84 are
+`possible`, whose own message reads "weaker matches point outside it — private
+would suffice … only if those are not real uses" (name-fuzzy resolution advising
+a code change on a maybe), 46 are `protected`, which v2 judges on its own
+`Heirs` rung over the owner and its subtypes, and 28 are `public`. Of those 43,
+v2 shares 16 and adds 12 — all but one in `src/test` trees, which now have test
+units to be judged in. The 27 v1 reports and v2 does not decompose into: 20 in
+packages some other file wildcard-imports (`import …core.vendors.*` in
+`Column.kt` and `Table.kt`, 28 such importers; `…v1.core` has 139), where the
+engine holds that a glob importer may name anything in the target and so
+declines to advise; 5 that are v1 false positives — `TestDbDsl.kt`'s four and
+`ExposedExtension.kt`'s one are used from other files, which `grep` confirms and
+v1's own resolution missed; and 2 members of `R2dbcDatabaseMetadataImpl.kt`
+named `getBoolean`/`getString`, names many other files spell for unrelated JDBC
+`ResultSet` calls.

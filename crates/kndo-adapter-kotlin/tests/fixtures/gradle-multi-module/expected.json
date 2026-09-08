@@ -1,0 +1,190 @@
+{
+  "run": {
+    "schema": "kndo-v2/m6",
+    "mode": "full",
+    "files_discovered": 9,
+    "files_claimed": 5,
+    "extensions": [
+      {
+        "id": "kndo:kotlin",
+        "files": 5,
+        "published_surface": "exports",
+        "import_cycles": "tolerated",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "underivable",
+        "ladder": [
+          {
+            "rung": "owner",
+            "word": "private",
+            "bearer": "member"
+          },
+          {
+            "rung": "file",
+            "word": "private",
+            "bearer": "free"
+          },
+          {
+            "rung": "heirs",
+            "word": "protected",
+            "bearer": "member"
+          },
+          {
+            "rung": "unit",
+            "word": "internal"
+          },
+          {
+            "rung": "exported",
+            "word": "public"
+          }
+        ]
+      }
+    ]
+  },
+  "health": {
+    "implicated": 1,
+    "subjects": 12,
+    "by_category": [
+      {
+        "category": "unused",
+        "findings": 1
+      }
+    ],
+    "by_package": [
+      {
+        "name": "",
+        "manifest": "",
+        "implicated": 1,
+        "subjects": 2
+      },
+      {
+        "name": "app",
+        "manifest": "app/build.gradle.kts",
+        "implicated": 0,
+        "subjects": 2
+      },
+      {
+        "name": "core",
+        "manifest": "core/build.gradle.kts",
+        "implicated": 0,
+        "subjects": 8
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "kndo-6da9f7be28d7",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "legacy/src/main/kotlin/demo/legacy/Scratch.kt"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-365af7162b83",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "core/src/main/kotlin/demo/core/Api.kt",
+        "selector": {
+          "name": "format"
+        },
+        "span": {
+          "start": 303,
+          "end": 363
+        }
+      },
+      "lines": {
+        "start": 8,
+        "end": 8
+      },
+      "message": "declared `internal`, but every use is within its own file — `private` would suffice for this function"
+    },
+    {
+      "id": "kndo-7a6c16bccf3b",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "app/src/main/kotlin/demo/app/Main.kt"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    }
+  ],
+  "fixed": [],
+  "baselined": 0,
+  "abstained": [
+    {
+      "category": "unused",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 4
+        }
+      }
+    },
+    {
+      "category": "test-only",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 4
+        }
+      }
+    },
+    {
+      "category": "undeclared",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 4
+        }
+      }
+    },
+    {
+      "category": "crap",
+      "reason": "no-coverage-ingested",
+      "scope": "whole-run"
+    }
+  ],
+  "suppressed": {
+    "total": 0,
+    "by_category": []
+  },
+  "plugins": [
+    {
+      "coordinate": "kndo:coverage-lcov",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-cobertura",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-jacoco",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-go",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    }
+  ],
+  "diagnostics": []
+}

@@ -1,0 +1,32 @@
+# gradle-multi-module: what `settings.gradle.kts` and two build scripts state — which
+# modules the build includes, and which test source set each module befriends.
+#
+# The pinned `health.by_package` beside this is the other half of the claim: `core` and
+# `app` are named packages with their build scripts as manifests, and `legacy/` — whose
+# `include` is commented out — belongs to none. A line reader would have made a package
+# out of that comment; the block scanner reads a comment-blanked copy and does not.
+
+[[alive]]
+subject = "core/src/main/kotlin/demo/core/Internals.kt#probe"
+category = "unused"
+why = "internal, named from `core`'s own test source set alone — the friendship the build script states between the two sets is the whole of what keeps it"
+
+[[alive]]
+subject = "core/src/main/kotlin/demo/core/Api.kt#greet"
+category = "unused"
+why = "`app` imports it across `implementation(project(\":core\"))`"
+
+[[dead]]
+subject = "core/src/main/kotlin/demo/core/Api.kt#format"
+category = "internal-only"
+why = "`internal` widens it to the whole `core` module, but its one use shares its file — the module is what makes the narrower rung sayable"
+
+[[dead]]
+subject = "legacy/src/main/kotlin/demo/legacy/Scratch.kt"
+category = "unused"
+why = "the `include(\"legacy\")` is commented out and the tree has no build script, so nothing states a unit over it: Gradle compiles none of this, and no root reaches it"
+
+[[dead]]
+subject = "app/src/main/kotlin/demo/app/Main.kt"
+category = "untested"
+why = "`core/src/test/kotlin/**` is a Test root, so the question can be asked at all — and no test reaches `app`"

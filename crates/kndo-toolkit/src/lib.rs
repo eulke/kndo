@@ -343,6 +343,11 @@ pub mod jvm_manifest {
         "**/build.gradle.kts",
         "**/settings.gradle",
         "**/settings.gradle.kts",
+        // Gradle's version catalog: a build script names a dependency through
+        // an alias (`libs.junit.core`) and this file is where the alias has a
+        // coordinate. Read as data for the scripts beside it, never a unit of
+        // its own.
+        "**/gradle/libs.versions.toml",
     ];
 
     /// The project structure one JVM manifest STATES: the unit it compiles,
@@ -384,7 +389,7 @@ pub mod jvm_manifest {
             // Gradle states its structure in a language, not a document: the
             // block scanner and its version catalog are their own reading.
             // What it does say plainly is read here.
-            gradle_structure(manifest, text, out);
+            gradle_structure(manifest, text, cx, out);
             return;
         }
         // A pom is XML and is read as XML. The shallow scanner this replaces
@@ -506,20 +511,546 @@ pub mod jvm_manifest {
     fn gradle_structure(
         manifest: &SourceFile<'_>,
         text: &str,
+        cx: &kndo_contract::adapter::ResolveContext<'_>,
         out: &mut kndo_contract::manifest::ManifestSink,
     ) {
-        let mut declarations = gradle(text);
-        declarations.sort_by(|a, b| {
-            (a.name.as_str(), a.scope.map(|s| s as u8))
-                .cmp(&(b.name.as_str(), b.scope.map(|s| s as u8)))
+        let path = manifest.path.as_str();
+        let file = path.rsplit('/').next().unwrap_or_default();
+        // A comment is not code and a string is not syntax: everything below
+        // reads a copy with the comments blanked, so `// include("x")` names
+        // nothing and a `//` inside a URL is not a comment.
+        let code = blank_gradle_comments(text);
+        match file {
+            "settings.gradle" | "settings.gradle.kts" => settings_structure(path, &code, out),
+            "build.gradle" | "build.gradle.kts" => {
+                build_script_structure(path, &code, cx, out);
+            }
+            // The catalog is data for the scripts beside it, never a unit.
+            _ => {}
+        }
+    }
+
+    /// What a `settings.gradle(.kts)` states: every module the build includes,
+    /// as a package and as a member manifest. `include` takes any number of
+    /// arguments across any number of lines, which is why the call's
+    /// PARENTHESES bound the reading rather than the line — `gradle` resolves
+    /// the captured build's `include(\n    "app",\n)` to a project, and a
+    /// line scanner does not.
+    fn settings_structure(path: &str, code: &str, out: &mut kndo_contract::manifest::ManifestSink) {
+        let dir = path.rsplit_once('/').map_or("", |(d, _)| d);
+        let join = |rel: &str| -> String {
+            if dir.is_empty() {
+                rel.to_string()
+            } else {
+                format!("{dir}/{rel}")
+            }
+        };
+        let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        for arguments in calls_named(code, "include") {
+            for literal in string_literals(arguments) {
+                let module = literal.trim().trim_start_matches(':');
+                if module.is_empty()
+                    || !module
+                        .chars()
+                        .all(|c| c.is_alphanumeric() || ".-_:".contains(c))
+                {
+                    continue;
+                }
+                if !seen.insert(module.to_string()) {
+                    continue;
+                }
+                let rel = module.replace(':', "/");
+                let name = module.rsplit(':').next().unwrap_or(module);
+                out.package(kndo_contract::adapter::PackageEntry {
+                    name: SmolStr::new(name),
+                    entry: None,
+                    dir: SmolStr::new(join(&rel)),
+                });
+                // A module's own build script states its units; naming it here
+                // is how two same-named modules in different builds stay apart.
+                for script in ["build.gradle.kts", "build.gradle"] {
+                    out.member(kndo_contract::vocab::ProjectPath::new(join(&format!(
+                        "{rel}/{script}"
+                    ))));
+                }
+            }
+        }
+    }
+
+    /// What a module's `build.gradle(.kts)` states: the two units Gradle's
+    /// java plugin gives it, and what each compiles against.
+    ///
+    /// The main set is the module's directory minus its test tree, because a
+    /// plugin may add sources this file never names and over-inclusion in main
+    /// is the keep-alive direction; the test set is the layout Gradle
+    /// answers, plus any `srcDirs` the script declares for it. The test set is
+    /// the main set's FRIEND: Kotlin's `internal` is visible from a module's
+    /// own tests, which is the whole reason this reader exists.
+    fn build_script_structure(
+        path: &str,
+        code: &str,
+        cx: &kndo_contract::adapter::ResolveContext<'_>,
+        out: &mut kndo_contract::manifest::ManifestSink,
+    ) {
+        use kndo_contract::adapter::{DependencyDeclaration, DependencyScope};
+        use kndo_contract::manifest::{Publication, Unit, UnitKind};
+        let dir = path.rsplit_once('/').map_or("", |(d, _)| d);
+        let join = |rel: &str| -> SmolStr {
+            if dir.is_empty() {
+                SmolStr::new(rel)
+            } else {
+                SmolStr::new(format!("{dir}/{rel}"))
+            }
+        };
+        let name = if dir.is_empty() {
+            // The root build script of a single-module build: the directory
+            // has no name to take, so the unit is the project itself.
+            "root".to_string()
+        } else {
+            dir.rsplit('/').next().unwrap_or(dir).to_string()
+        };
+        let catalog = version_catalog(path, cx);
+
+        let mut depends_on: Vec<SmolStr> = Vec::new();
+        let mut test_depends_on: Vec<SmolStr> = Vec::new();
+        let mut declared: Vec<(SmolStr, Option<DependencyScope>)> = Vec::new();
+        for (configuration, argument) in dependency_declarations(code) {
+            let scope = gradle_scope(&configuration);
+            let test = scope == Some(DependencyScope::Dev);
+            // `project(":core")` names a module of this same build, which is a
+            // UNIT rather than an artifact: the engine resolves the name among
+            // the members the settings file listed.
+            if let Some(inner) = call_arguments(&argument, "project") {
+                for literal in string_literals(&inner) {
+                    let module = literal.trim().trim_start_matches(':');
+                    let named = SmolStr::new(module.rsplit(':').next().unwrap_or(module));
+                    if test {
+                        test_depends_on.push(named);
+                    } else {
+                        depends_on.push(named);
+                    }
+                }
+                continue;
+            }
+            for coordinate in gradle_coordinates(&argument, &catalog) {
+                if let Some((group, artifact)) = coordinate.split_once(':') {
+                    declared.push((SmolStr::new(format!("{group}:{artifact}")), scope));
+                    declared.push((SmolStr::new(artifact), scope));
+                }
+            }
+        }
+        declared.sort_by(|a, b| {
+            (a.0.as_str(), a.1.map(|s| s as u8)).cmp(&(b.0.as_str(), b.1.map(|s| s as u8)))
         });
-        declarations.dedup();
-        for declaration in declarations {
-            out.dependency(declaration);
+        declared.dedup();
+        for (name, scope) in declared {
+            out.dependency(DependencyDeclaration {
+                name,
+                scope,
+                version_req: None,
+            });
         }
-        for package in gradle_packages(manifest, text) {
-            out.package(package);
+
+        let mut test_roots: Vec<SmolStr> = declared_src_dirs(code, "test")
+            .into_iter()
+            .map(|d| join(&d))
+            .collect();
+        if test_roots.is_empty() {
+            test_roots = vec![join("src/test/java"), join("src/test/kotlin")];
         }
+        test_roots.sort_unstable();
+        test_roots.dedup();
+        let main_roots: Vec<SmolStr> = declared_src_dirs(code, "main")
+            .into_iter()
+            .map(|d| join(&d))
+            .collect();
+        depends_on.sort_unstable();
+        depends_on.dedup();
+        test_depends_on.extend(depends_on.iter().cloned());
+        test_depends_on.push(SmolStr::new(&name));
+        test_depends_on.sort_unstable();
+        test_depends_on.dedup();
+        out.unit(Unit {
+            name: SmolStr::new(&name),
+            kind: UnitKind::Library,
+            roots: main_roots,
+            excludes: test_roots.clone(),
+            entries: Vec::new(),
+            depends_on,
+            friend_of: Vec::new(),
+            publication: Publication::Unstated,
+        });
+        out.unit(Unit {
+            name: SmolStr::new(format!("{name}:test")),
+            kind: UnitKind::Test,
+            roots: test_roots,
+            excludes: Vec::new(),
+            entries: Vec::new(),
+            depends_on: test_depends_on,
+            // Kotlin's `internal` and Java's package-private both reach a
+            // module's own tests: Gradle compiles the test set against the
+            // main one as an associated compilation, which is friendship.
+            friend_of: vec![SmolStr::new(&name)],
+            publication: Publication::Unpublished,
+        });
+    }
+
+    /// `gradle/libs.versions.toml` beside the build, as alias → coordinate.
+    /// Gradle's default catalog is `libs`, found at the SETTINGS file's
+    /// directory, so a module's script and the root's read the same one.
+    fn version_catalog(
+        path: &str,
+        cx: &kndo_contract::adapter::ResolveContext<'_>,
+    ) -> std::collections::BTreeMap<String, String> {
+        let mut at = crate::parent_dir(path).to_string();
+        loop {
+            let candidate = if at.is_empty() {
+                "gradle/libs.versions.toml".to_string()
+            } else {
+                format!("{at}/gradle/libs.versions.toml")
+            };
+            if let Some(content) = cx.manifest(&kndo_contract::vocab::ProjectPath::new(&candidate))
+                && let Ok(text) = std::str::from_utf8(content)
+            {
+                return catalog_libraries(text);
+            }
+            if at.is_empty() {
+                return std::collections::BTreeMap::new();
+            }
+            at = crate::parent_dir(&at).to_string();
+        }
+    }
+
+    /// `[libraries]` as alias → `group:artifact`. Both spellings a catalog
+    /// allows are read: `module = "g:a"`, and `group`/`name` as separate keys.
+    /// The alias is normalized the way Gradle's accessors spell it — `-` and
+    /// `_` become the `.` of `libs.junit.core`.
+    fn catalog_libraries(text: &str) -> std::collections::BTreeMap<String, String> {
+        let Ok(root) = text.parse::<toml::Value>() else {
+            return std::collections::BTreeMap::new();
+        };
+        let Some(libraries) = root.get("libraries").and_then(toml::Value::as_table) else {
+            return std::collections::BTreeMap::new();
+        };
+        libraries
+            .iter()
+            .filter_map(|(alias, value)| {
+                let coordinate = match value {
+                    toml::Value::String(s) => s.split(':').take(2).collect::<Vec<_>>().join(":"),
+                    _ => {
+                        if let Some(module) = value.get("module").and_then(toml::Value::as_str) {
+                            module.split(':').take(2).collect::<Vec<_>>().join(":")
+                        } else {
+                            let group = value.get("group").and_then(toml::Value::as_str)?;
+                            let name = value.get("name").and_then(toml::Value::as_str)?;
+                            format!("{group}:{name}")
+                        }
+                    }
+                };
+                Some((alias.replace(['-', '_'], "."), coordinate))
+            })
+            .collect()
+    }
+
+    // ------------------------------------------------- the Gradle block scanner
+
+    /// A copy of `text` with every comment replaced by spaces, so offsets are
+    /// preserved and `// include("x")` names nothing. String literals are
+    /// opaque: `//` inside one is not a comment, which is what a URL in a
+    /// repository declaration needs. Kotlin and Groovy agree on all three
+    /// forms this reads — `//`, `/* */`, and `"""…"""`.
+    fn blank_gradle_comments(text: &str) -> String {
+        let bytes = text.as_bytes();
+        let mut out: Vec<u8> = bytes.to_vec();
+        let mut i = 0usize;
+        let blank = |out: &mut Vec<u8>, from: usize, to: usize| {
+            for byte in out.iter_mut().take(to).skip(from) {
+                if *byte != b'\n' {
+                    *byte = b' ';
+                }
+            }
+        };
+        while i < bytes.len() {
+            match bytes[i] {
+                b'/' if bytes.get(i + 1) == Some(&b'/') => {
+                    let end = text[i..].find('\n').map_or(bytes.len(), |e| i + e);
+                    blank(&mut out, i, end);
+                    i = end;
+                }
+                b'/' if bytes.get(i + 1) == Some(&b'*') => {
+                    let end = text[i + 2..]
+                        .find("*/")
+                        .map_or(bytes.len(), |e| i + 2 + e + 2);
+                    blank(&mut out, i, end);
+                    i = end;
+                }
+                b'"' if text[i..].starts_with("\"\"\"") => {
+                    let end = text[i + 3..]
+                        .find("\"\"\"")
+                        .map_or(bytes.len(), |e| i + 3 + e + 3);
+                    i = end;
+                }
+                quote @ (b'"' | b'\'') => {
+                    i += 1;
+                    while i < bytes.len() && bytes[i] != quote {
+                        i += if bytes[i] == b'\\' { 2 } else { 1 };
+                    }
+                    i += 1;
+                }
+                _ => i += 1,
+            }
+        }
+        String::from_utf8(out).unwrap_or_else(|_| text.to_string())
+    }
+
+    /// The ARGUMENT TEXT of every `name(...)` call, parentheses balanced and
+    /// newlines crossed — `include(\n    "app",\n)` is one call with one
+    /// argument, which is what Gradle resolves and a line reader misses.
+    fn calls_named<'a>(code: &'a str, name: &str) -> Vec<&'a str> {
+        let mut out = Vec::new();
+        let bytes = code.as_bytes();
+        let mut from = 0usize;
+        while let Some(at) = code[from..].find(name) {
+            let at = from + at;
+            from = at + name.len();
+            let before_is_word = at > 0
+                && (bytes[at - 1].is_ascii_alphanumeric()
+                    || bytes[at - 1] == b'_'
+                    || bytes[at - 1] == b'.');
+            if before_is_word {
+                continue;
+            }
+            let mut cursor = at + name.len();
+            while cursor < bytes.len() && bytes[cursor].is_ascii_whitespace() {
+                cursor += 1;
+            }
+            if bytes.get(cursor) != Some(&b'(') {
+                continue;
+            }
+            if let Some(end) = balanced(code, cursor, b'(', b')') {
+                out.push(&code[cursor + 1..end]);
+                from = end;
+            }
+        }
+        out
+    }
+
+    /// The argument text of a `name(...)` call anywhere inside `code`, or
+    /// `None` where the call is not there.
+    fn call_arguments(code: &str, name: &str) -> Option<String> {
+        calls_named(code, name).first().map(|s| (*s).to_string())
+    }
+
+    /// The index of the delimiter closing the one at `open`, string literals
+    /// skipped so a bracket inside a name never closes a call.
+    fn balanced(code: &str, open: usize, opening: u8, closing: u8) -> Option<usize> {
+        let bytes = code.as_bytes();
+        let mut depth = 0usize;
+        let mut i = open;
+        while i < bytes.len() {
+            match bytes[i] {
+                quote @ (b'"' | b'\'') => {
+                    i += 1;
+                    while i < bytes.len() && bytes[i] != quote {
+                        i += if bytes[i] == b'\\' { 2 } else { 1 };
+                    }
+                }
+                b if b == opening => depth += 1,
+                b if b == closing => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some(i);
+                    }
+                }
+                _ => {}
+            }
+            i += 1;
+        }
+        None
+    }
+
+    /// Every string literal in `code`, single or double quoted.
+    fn string_literals(code: &str) -> Vec<&str> {
+        let bytes = code.as_bytes();
+        let mut out = Vec::new();
+        let mut i = 0usize;
+        while i < bytes.len() {
+            let quote = bytes[i];
+            if quote != b'"' && quote != b'\'' {
+                i += 1;
+                continue;
+            }
+            let start = i + 1;
+            i = start;
+            while i < bytes.len() && bytes[i] != quote {
+                i += if bytes[i] == b'\\' { 2 } else { 1 };
+            }
+            if i <= bytes.len() {
+                out.push(&code[start..i.min(code.len())]);
+            }
+            i += 1;
+        }
+        out
+    }
+
+    /// `configuration(argument)` pairs inside the script's `dependencies { … }`
+    /// blocks. The BLOCK bounds it — a coordinate-shaped string in a
+    /// `repositories` or `publishing` block is not a dependency — and the
+    /// configuration word carries the scope.
+    fn dependency_declarations(code: &str) -> Vec<(String, String)> {
+        let mut out = Vec::new();
+        let mut from = 0usize;
+        while let Some(at) = code[from..].find("dependencies") {
+            let at = from + at;
+            from = at + "dependencies".len();
+            let mut cursor = from;
+            let bytes = code.as_bytes();
+            while cursor < bytes.len() && bytes[cursor].is_ascii_whitespace() {
+                cursor += 1;
+            }
+            if bytes.get(cursor) != Some(&b'{') {
+                continue;
+            }
+            let Some(end) = balanced(code, cursor, b'{', b'}') else {
+                continue;
+            };
+            let block = &code[cursor + 1..end];
+            from = end;
+            for line in block.lines() {
+                let line = line.trim();
+                let Some(paren) = line.find('(') else {
+                    // Groovy's parenless form: `implementation "g:a:v"`.
+                    let Some((word, rest)) = line.split_once(char::is_whitespace) else {
+                        continue;
+                    };
+                    if is_configuration_word(word) {
+                        out.push((word.to_string(), rest.trim().to_string()));
+                    }
+                    continue;
+                };
+                let word = line[..paren].trim();
+                if !is_configuration_word(word) {
+                    continue;
+                }
+                let Some(close) = balanced(line, paren, b'(', b')') else {
+                    continue;
+                };
+                out.push((word.to_string(), line[paren + 1..close].to_string()));
+            }
+        }
+        out
+    }
+
+    /// A word shaped like a Gradle configuration: letters only, and not one of
+    /// the block names a dependency line never starts with.
+    fn is_configuration_word(word: &str) -> bool {
+        !word.is_empty()
+            && word.chars().all(|c| c.is_ascii_alphanumeric())
+            && !matches!(word, "if" | "else" | "for" | "return" | "val" | "var")
+    }
+
+    /// The coordinates one dependency argument names: a quoted
+    /// `group:artifact[:version]`, or a `libs.a.b` alias the catalog answers.
+    /// An alias Gradle would resolve and this cannot yields nothing rather
+    /// than a guess.
+    fn gradle_coordinates(
+        argument: &str,
+        catalog: &std::collections::BTreeMap<String, String>,
+    ) -> Vec<String> {
+        let mut out: Vec<String> = string_literals(argument)
+            .into_iter()
+            .filter(|s| s.contains(':') && !s.starts_with(':'))
+            .map(|s| s.split(':').take(2).collect::<Vec<_>>().join(":"))
+            .collect();
+        for accessor in catalog_accessors(argument) {
+            if let Some(coordinate) = catalog.get(&accessor) {
+                out.push(coordinate.clone());
+            }
+        }
+        out.sort();
+        out.dedup();
+        out
+    }
+
+    /// `libs.junit.core` → `junit.core`: the alias half of a catalog accessor,
+    /// wherever it sits in the argument.
+    fn catalog_accessors(argument: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        for (at, _) in argument.match_indices("libs.") {
+            let before_is_word = at > 0
+                && (argument.as_bytes()[at - 1].is_ascii_alphanumeric()
+                    || argument.as_bytes()[at - 1] == b'_'
+                    || argument.as_bytes()[at - 1] == b'.');
+            if before_is_word {
+                continue;
+            }
+            let rest = &argument[at + "libs.".len()..];
+            let end = rest
+                .find(|c: char| !(c.is_ascii_alphanumeric() || c == '.' || c == '_'))
+                .unwrap_or(rest.len());
+            let alias = rest[..end].trim_end_matches('.');
+            if !alias.is_empty() {
+                out.push(alias.to_string());
+            }
+        }
+        out
+    }
+
+    /// The `srcDirs(…)` a script declares for one source set, relative to the
+    /// module's own directory: `sourceSets { main { java { srcDirs(…) } } }`
+    /// and the Kotlin spelling beside it. Nothing declared is not an empty
+    /// list — the caller falls back to Gradle's own layout.
+    fn declared_src_dirs(code: &str, set: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        for source_sets in block_bodies(code, "sourceSets") {
+            for body in block_bodies(&source_sets, set) {
+                for language in ["java", "kotlin", "resources"] {
+                    for language_body in block_bodies(&body, language) {
+                        for arguments in calls_named(&language_body, "srcDirs") {
+                            for literal in string_literals(arguments) {
+                                let dir = literal.trim().trim_end_matches('/');
+                                if !dir.is_empty() && !dir.contains("${") {
+                                    out.push(dir.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        out.sort();
+        out.dedup();
+        out
+    }
+
+    /// The BODY of every `name { … }` block, braces balanced.
+    fn block_bodies(code: &str, name: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        let bytes = code.as_bytes();
+        let mut from = 0usize;
+        while let Some(at) = code[from..].find(name) {
+            let at = from + at;
+            from = at + name.len();
+            let before_is_word = at > 0
+                && (bytes[at - 1].is_ascii_alphanumeric()
+                    || bytes[at - 1] == b'_'
+                    || bytes[at - 1] == b'.');
+            if before_is_word {
+                continue;
+            }
+            let mut cursor = from;
+            while cursor < bytes.len() && bytes[cursor].is_ascii_whitespace() {
+                cursor += 1;
+            }
+            if bytes.get(cursor) != Some(&b'{') {
+                continue;
+            }
+            if let Some(end) = balanced(code, cursor, b'{', b'}') {
+                out.push(code[cursor + 1..end].to_string());
+                from = end;
+            }
+        }
+        out
     }
 
     /// A pom's own `<build><testSourceDirectory>`, else the nearest ancestor's
@@ -808,140 +1339,6 @@ pub mod jvm_manifest {
             | "ksp" => Some(S::Prod),
             _ => None,
         }
-    }
-
-    /// The modules a `settings.gradle(.kts)` includes: `include(":a", ":b")`
-    /// names each one, and the directory is the module path with `:` as `/`,
-    /// relative to the settings file. A module's own `build.gradle` declares
-    /// no package — a Gradle module's name is positional and the settings
-    /// file holds it.
-    fn gradle_packages(
-        manifest: &SourceFile<'_>,
-        text: &str,
-    ) -> Vec<kndo_contract::adapter::PackageEntry> {
-        let file = manifest
-            .path
-            .as_str()
-            .rsplit('/')
-            .next()
-            .unwrap_or_default();
-        if !matches!(file, "settings.gradle" | "settings.gradle.kts") {
-            return Vec::new();
-        }
-        let dir_of_manifest = manifest
-            .path
-            .as_str()
-            .rsplit_once('/')
-            .map(|(d, _)| d)
-            .unwrap_or("");
-        let mut out = Vec::new();
-        for line in text.lines() {
-            let line = line.trim();
-            if line.starts_with("//") || !line.contains("include") {
-                continue;
-            }
-            for quote in ['"', '\''] {
-                let mut rest = line;
-                while let Some(start) = rest.find(quote) {
-                    let after = &rest[start + 1..];
-                    let Some(end) = after.find(quote) else { break };
-                    let literal = &after[..end];
-                    rest = &after[end + 1..];
-                    // `include(":a")` and `include("a")` are the same
-                    // declaration; the colon is optional.
-                    let module = literal.strip_prefix(':').unwrap_or(literal);
-                    let ok = !module.is_empty()
-                        && module
-                            .chars()
-                            .all(|c| c.is_alphanumeric() || ".-_:".contains(c));
-                    if ok {
-                        let name = module.rsplit(':').next().unwrap_or(module);
-                        let rel = module.replace(':', "/");
-                        let dir = if dir_of_manifest.is_empty() {
-                            rel
-                        } else {
-                            format!("{dir_of_manifest}/{rel}")
-                        };
-                        out.push(kndo_contract::adapter::PackageEntry {
-                            name: SmolStr::new(name),
-                            entry: None,
-                            dir: SmolStr::new(dir),
-                        });
-                    }
-                }
-            }
-        }
-        out.sort_by(|a, b| a.name.cmp(&b.name));
-        out.dedup_by(|a, b| a.name == b.name);
-        out
-    }
-
-    /// Quoted `group:artifact[:version]` coordinates anywhere in the script — the
-    /// shape every dependency notation shares (`implementation "g:a:v"`,
-    /// `api('g:a')`, version catalogs excluded by their own syntax).
-    pub fn gradle(text: &str) -> Vec<kndo_contract::adapter::DependencyDeclaration> {
-        use kndo_contract::adapter::DependencyDeclaration;
-        let mut out = Vec::new();
-        for line in text.lines() {
-            let line = line.trim();
-            if line.starts_with("//") {
-                continue;
-            }
-            let scope = gradle_scope(line);
-            for quote in ['"', '\''] {
-                let mut rest = line;
-                while let Some(start) = rest.find(quote) {
-                    let after = &rest[start + 1..];
-                    let Some(end) = after.find(quote) else {
-                        break;
-                    };
-                    let literal = &after[..end];
-                    rest = &after[end + 1..];
-                    // `project(":name")` — a dependency on a workspace sibling,
-                    // spelled by module path; the name is the last segment.
-                    if line.contains("project(")
-                        && let Some(module) = literal.strip_prefix(':')
-                    {
-                        let name = module.rsplit(':').next().unwrap_or(module);
-                        if !name.is_empty()
-                            && name
-                                .chars()
-                                .all(|c| c.is_alphanumeric() || ".-_".contains(c))
-                        {
-                            out.push(DependencyDeclaration {
-                                name: SmolStr::new(name),
-                                scope,
-                                version_req: None,
-                            });
-                        }
-                        continue;
-                    }
-                    let mut parts = literal.split(':');
-                    if let (Some(g), Some(a)) = (parts.next(), parts.next()) {
-                        let extra = parts.next();
-                        let well_formed = !g.is_empty()
-                            && !a.is_empty()
-                            && parts.next().is_none()
-                            && g.chars().all(|c| c.is_alphanumeric() || ".-_".contains(c))
-                            && a.chars().all(|c| c.is_alphanumeric() || ".-_".contains(c))
-                            && extra.is_none_or(|v| !v.is_empty());
-                        if well_formed {
-                            out.push(DependencyDeclaration {
-                                name: SmolStr::new(format!("{g}:{a}")),
-                                scope,
-                                version_req: None,
-                            });
-                            out.push(DependencyDeclaration {
-                                name: SmolStr::new(a),
-                                scope,
-                                version_req: None,
-                            });
-                        }
-                    }
-                }
-            }
-        }
-        out
     }
 }
 

@@ -60,26 +60,15 @@
   },
   "findings": [
     {
-      "id": "kndo-2c0355f26de7",
+      "id": "kndo-2362a529d31c",
       "category": "unused",
       "severity": "warning",
       "confidence": "certain",
       "subject": {
-        "kind": "symbol",
-        "path": "src/main/kotlin/com/pkga/Util.kt",
-        "selector": {
-          "name": "fileGhost"
-        },
-        "span": {
-          "start": 335,
-          "end": 361
-        }
+        "kind": "file",
+        "path": "src/main/kotlin/com/pkga/Util.kt"
       },
-      "lines": {
-        "start": 11,
-        "end": 11
-      },
-      "message": "nothing references, roots, or imports this declaration"
+      "message": "no root anchors this file and no reachable file imports it"
     }
   ],
   "fixed": [],

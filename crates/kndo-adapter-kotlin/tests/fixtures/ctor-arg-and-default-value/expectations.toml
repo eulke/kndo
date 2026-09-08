@@ -1,11 +1,23 @@
-# ctor-arg-and-default-value: a superclass-constructor argument and a constructor default value are the only references keeping two declarations alive.
+# ctor-arg-and-default-value: a superclass-constructor argument and a constructor default
+# value are the only references keeping two declarations alive — and the Gradle unit that
+# bounds `internal` is what lets the same two references be counted as file-local advice.
 
 [[alive]]
 subject = "src/main/kotlin/demo/Demo.kt#MyProvider"
 category = "unused"
-why = "referenced only as an argument to a superclass constructor call; internal, so no library-surface root can keep it alive — the reference has to"
+why = "referenced only as an argument to a superclass constructor call; nothing roots it, so that reference is the whole of what keeps it alive"
 
 [[alive]]
 subject = "src/main/kotlin/demo/Demo.kt#Hasher.DEFAULT_COST"
 category = "unused"
 why = "referenced only as a default parameter value in its own class's constructor, and private, so nothing but that reference can keep it alive"
+
+[[dead]]
+subject = "src/main/kotlin/demo/Demo.kt#MyProvider"
+category = "internal-only"
+why = "`internal` widens it to the whole Gradle module, but the one reference is in its own file — with the module read from `build.gradle.kts`, the narrower rung can be named"
+
+[[dead]]
+subject = "src/main/kotlin/demo/Demo.kt#MyMeta"
+category = "internal-only"
+why = "same rung, one file later: `main()` is its only user and shares the file"

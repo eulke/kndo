@@ -407,6 +407,27 @@ before any of the keeper comes off — the same instrument, one variable at a
 time. Recorded so nobody reads "9" as the witness table failing: it is the
 keeper masking it.
 
+### `internal-only` and the wildcard import, sized — measured 2026-09-08
+
+With Gradle read, `internal-only` speaks for Kotlin for the first time: Exposed
+goes from 0 to 28. The v1 oracle reports 43 on the comparable rung (`certain`,
+declared `internal`), and the 27 it has that v2 does not are dominated by ONE
+posture — 20 sit in packages some other file wildcard-imports, where
+`internal_only` holds that "a namespace/glob importer may use anything" and
+declines to advise. `import org.jetbrains.exposed.v1.core.vendors.*` appears in
+28 files; `…v1.core.*` in 139.
+
+The engine already builds the per-file reference-name sets a sharper rule would
+need: a glob importer disqualifies only the names it actually spells. The
+population that rule could reach is those 20 on Exposed alone, and the risk it
+takes is a name the importing file reaches through something other than a bare
+reference. Recorded with its number so the slice that tries it starts from a
+measurement rather than the idea — and so the 27 is not mistaken for a v2 gap
+of 27 distinct causes. The other 7: 5 are v1 false positives (`TestDbDsl.kt`'s
+four and `ExposedExtension.kt`'s one ARE used from other files), and 2 are
+members named `getBoolean`/`getString`, names other files spell for unrelated
+JDBC `ResultSet` calls.
+
 ## The v1 surface ledger (owner directive, 2026-08-31)
 
 v1's shipped surface is a floor: every capability it offers is either present in v2,
@@ -606,26 +627,25 @@ promise.
 
 | mechanism | how much | replaced by | lands in |
 |---|---|---|---|
-| the four manifest hooks | `grep -c "fn roots(\|fn packages(\|fn manifest_dependencies(\|fn manifest_mentions(" crates/kndo-adapter-*/src/lib.rs` — 8 trait impls left: java 2, kotlin 2, ts 4 | `extract_manifest` + the structural parsers | M8.d, parser by parser |
-| line scanners for pom / Gradle | 4 in `kndo-toolkit::jvm_manifest` | the same structural parsers (`roxmltree`, block scanner + TOML catalog) | M8.d |
-| the library-mode Production root | 1 site: `kndo-adapter-kotlin::extract`, with its measurement in a comment | the engine's `publishes()`, which reads the unit | M8.d, with the Gradle parser |
+| the four manifest hooks | `grep -c "fn roots(\|fn packages(\|fn manifest_dependencies(\|fn manifest_mentions(" crates/kndo-adapter-*/src/lib.rs` — 4 trait impls left, all `kndo-adapter-ts` | `extract_manifest` + the structural parsers | M8.d's last row: `package.json` + `tsconfig` |
 
-Deleting any of these before its parser exists leaves the engine with NO
-mechanism, not a cleaner one: js-ts's `roots` hook alone carries 332 corpus
-findings (`EXPERIMENTS`, the legacy ledger, row 5), and deleting kotlin's
-library root costs Exposed +125. They die parser by parser, which is what M8.d
-is.
+Deleting these before their parser exists leaves the engine with NO mechanism,
+not a cleaner one: js-ts's `roots` hook alone carries 332 corpus findings
+(`EXPERIMENTS`, the legacy ledger, row 5). They die parser by parser, which is
+what M8.d is — and the row above is the only one left.
 
 ### Captures owed
 
 A parser is graded against the ecosystem's own tool where that tool runs here.
-Three do not, and the rows say so rather than letting an ungraded reader pass
-for a graded one.
+Two do not, and the rows say so rather than letting an ungraded reader pass for
+a graded one.
 
 | parser | graded against | owed |
 |---|---|---|
 | python PEP 508/503 | `packaging` 24.0, 14 specifiers — `tests/captured/tooling.json` | — |
 | python setuptools + setup.cfg | `setuptools` 68.1.2, 3 pyproject layouts + 1 setup.cfg — same capture | — |
+| jvm pom | `mvn help:effective-pom`, Maven 3.9.11, a two-pom reactor — `kndo-toolkit/tests/captured/maven.json` | — |
+| jvm Gradle | a `kndoReport` task run inside Gradle 8.14.3, a two-module build with a version catalog — `kndo-toolkit/tests/captured/gradle.json` | — |
 | python flit / poetry / hatch roots | their documented keys, fixture-exercised | none of the three is installed here; capture when one is |
 | swift `Package.swift` | fixtures + vapor/Alamofire | `swift package dump-package` — no swift toolchain here |
 
@@ -633,10 +653,12 @@ for a graded one.
 
 | mechanism | closed |
 |---|---|
-| whole-file roots per adapter (20 sites) | `FileRole` declarations + the unit's kind. `grep -rn "RootTarget::WholeFile" crates/kndo-adapter-*/src` — 4 hits: the two library roots above, plus python's `if __name__ == "__main__"` and js-ts's shebang |
+| whole-file roots per adapter (20 sites) | `FileRole` declarations + the unit's kind. `grep -rn "RootTarget::WholeFile" crates/kndo-adapter-*/src` — 2 hits, both the FILE's own statement: python's `if __name__ == "__main__"` and js-ts's shebang |
 | swift's library-mode root and its silent namespace | swift declares its namespace (the SwiftPM target, path-only), so `publishes()` and the scope forest answer instead |
 | python's library-mode root, and its line-scanned manifests | `pyproject.toml` / `setup.cfg` / `requirements*.txt` parsed into units, entries, packages and dependencies; `publishes()` reads the unit. Ablations: without the parser the deletion cost flask +15, with it nothing |
 | swift's `manifest_dependencies` | `Package.swift` read once, dependencies from the `Package(...)` call's own list |
+| the pom and Gradle line scanners | `roxmltree` over the pom; a block scanner over a comment-blanked copy of the Gradle scripts, plus the version catalog as TOML. Both graded against the ecosystem's own tool, rows above |
+| kotlin's library-mode Production root | the engine's published surface, read from the Gradle unit. Ablations from both sides: deleting it before the Gradle reader existed cost Exposed +125; with the reader it costs +38, every one decomposed in `corpus-findings/COMPARISON.md` |
 
 Two roots stayed for reasons that are NOT a missing parser, and they are not
 debt: js-ts's shebang and python's `if __name__ == "__main__"` are the FILE's

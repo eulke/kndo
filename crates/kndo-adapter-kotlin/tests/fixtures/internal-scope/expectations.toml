@@ -1,4 +1,6 @@
-# internal-scope: internal declarations are judged over the module region — a fully-qualified use with no import keeps one, and silence condemns another.
+# internal-scope: internal declarations are judged over the module region — a fully-qualified
+# use with no import keeps one, and silence would condemn another. All three declaration
+# verdicts here are held open by ONE gap, recorded last: the file itself is unreached.
 
 [[alive]]
 subject = "src/main/kotlin/com/pkga/Util.kt#helper"
@@ -8,10 +10,19 @@ why = "used from pkgb by fully-qualified name with no import — only the module
 subject = "src/main/kotlin/com/pkga/Util.kt#lonely"
 expect = "dead"
 category = "unused"
-why = "nothing in the module names it, so it SHOULD be reported — but kotlin reads no Gradle yet, so no manifest names the unit, `internal` has no bound, and an unbounded reach is keep-alive by the contract's own law"
-fix = "M8.d kotlin (Gradle units: main/test per module, test a friend of main)"
+why = "an internal declaration nothing in the module names, which SHOULD be reported now that the Gradle unit bounds `internal` — but the file-level finding below subsumes every declaration verdict in this file"
+fix = "unused: reachability follows a resolved same-unit reference"
 
-[[dead]]
+[[known_gap]]
 subject = "src/main/kotlin/com/pkga/Util.kt#fileGhost"
+expect = "dead"
 category = "unused"
-why = "a private top-level function nothing in its file names"
+why = "a private top-level function nothing in its file names, subsumed by the same file-level finding"
+fix = "unused: reachability follows a resolved same-unit reference"
+
+[[known_gap]]
+subject = "src/main/kotlin/com/pkga/Util.kt"
+expect = "alive"
+category = "unused"
+why = "`Caller.kt` calls `com.pkga.helper()` by its qualified name with no import, so the compiler follows an edge file-level reachability never records: the file is compiled and its declaration is used, yet no root reaches it. Measured: keeping a file alive whenever ANY declaration in it has a keeper is the wrong rule — vite +26, guava +1, because a genuinely dead file then reports every declaration instead of itself once. The rule wanted is narrower — a reference from a REACHABLE file — and it is its own measured slice"
+fix = "unused: reachability follows a resolved same-unit reference"

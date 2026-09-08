@@ -1,0 +1,6 @@
+[versions]
+junit = "4.13.2"
+
+[libraries]
+junit-core = { module = "junit:junit", version.ref = "junit" }
+guava = { group = "com.google.guava", name = "guava", version = "33.0.0-jre" }
