@@ -7114,3 +7114,34 @@ globs are spec data and two crates asked for them.
 was `plugin, con todo incluido`; the facade's one composition list, the gate
 registry's invariant text, the README and one CLI diagnostic still said
 `extension`.
+
+## 2026-09-09 — M8.g gains a row: the corpus decomposes its own deltas
+
+**Why it exists.** A corpus delta is a count, and the sentence explaining it is
+written by hand from memory of how the engine works. That is how the transcript
+tranche mis-explained guava's +24: the change was measured (60 retire, 24
+appear) and the CAUSE of the 24 was a hunch about GWT shipping its super-source,
+never a question put to the engine. The number was evidence; the sentence was
+not.
+
+**The row.** `xtask corpus` decomposes its own deltas: for every finding that
+appeared or disappeared between the committed `corpus-findings/` and a fresh
+run, it emits that subject's grounds — the keeper that changed, named by the
+engine — so a tranche's COMPARISON decomposition is generated rather than
+composed. Nothing new is invented for it: `Derivation`/`RuleId` landed with
+extension 1/7 and `Snapshot::grounds` is already the reader.
+
+**The hard half, named now rather than discovered late.** `grounds` answers
+about a subject in ONE graph. A finding that disappeared has no accusation left
+in the current graph, and one that appeared had none in the base, so the tool
+needs both sides. The `--diff` composition already runs two full analyses and
+pins the base by tree id; whether that hands back base-side grounds is the first
+thing to check, before any new machinery is designed.
+
+**What it retires.** The `Measure first` paragraph added to `CLAUDE.md` today —
+"The explanation is part of the measurement…" — is deleted in the same commit
+that lands this. A line in that file is a standing instruction only until a tool
+makes it unnecessary, and this is the tool: a generated decomposition cannot be
+written from memory, so the instruction has nothing left to govern. The second
+paragraph added today, under `Scope belongs to the owner`, has no such
+retirement and is not expected to grow one — no gate knows the plan's scope.
