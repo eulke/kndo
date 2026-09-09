@@ -6,16 +6,11 @@ mod common;
 
 use common::{keeper_kinds, reaches, reported};
 use kndo::Category;
-use kndo_contract::plugin::{PublishedSurface, Rung, Step};
+use kndo_contract::plugin::{Rung, Step};
 use kndo_testkit::{MockPlugin, TempProject};
 
 fn pair(declared: &str, effective: &str) -> (String, String) {
     (declared.to_string(), effective.to_string())
-}
-
-/// The kmock language whose units publish every export, like a jar.
-fn publishing() -> MockPlugin {
-    MockPlugin::with(|spec| spec.published_surface(PublishedSurface::Exports))
 }
 
 /// The kmock language with every rung the engine pools on its ladder — one
@@ -49,7 +44,7 @@ fn a_members_reach_is_capped_by_its_owners() {
         "src/api.kmock",
         "pub type Shown\npub member Shown.show\nfile type Hidden\npub member Hidden.show\n",
     );
-    let snap = common::analyze(&p, vec![Box::new(publishing())]);
+    let snap = common::analyze(&p, vec![Box::new(MockPlugin::new())]);
 
     assert_eq!(
         reaches(&snap, "src/api.kmock#Shown.show"),
@@ -81,7 +76,7 @@ fn an_inherited_member_reaches_as_its_owner_does() {
         "src/api.kmock",
         "pub type Contract\ninherited member Contract.run\nfile type Local\ninherited member Local.run\n",
     );
-    let snap = common::analyze(&p, vec![Box::new(publishing())]);
+    let snap = common::analyze(&p, vec![Box::new(MockPlugin::new())]);
 
     assert_eq!(
         reaches(&snap, "src/api.kmock#Contract.run"),
@@ -204,7 +199,10 @@ fn a_heirs_reach_pools_the_owner_its_subtypes_and_at_most_its_package() {
     let p = TempProject::new();
     p.file(
         "kmock.pkg",
-        "unit core library roots=src entries=src/base.kmock,src/sub.kmock,src/other.kmock,src/far.kmock\n",
+        // An npm-shaped library: every file is an entry, and what an entry
+        // does not hand out is internal — which is what makes the ladder's
+        // advice sayable at all.
+        "unit core library roots=src entries=src/base.kmock,src/sub.kmock,src/other.kmock,src/far.kmock publish=by-entry\n",
     )
     .file(
         "src/base.kmock",
@@ -255,7 +253,7 @@ fn a_heirs_member_of_a_published_type_is_published_surface() {
         "src/api.kmock",
         "pub type Base\nheirs member Base.hook\nfile type Local\nheirs member Local.hook\n",
     );
-    let snap = common::analyze(&p, vec![Box::new(publishing())]);
+    let snap = common::analyze(&p, vec![Box::new(MockPlugin::new())]);
 
     // A subtype outside the tree may name it: kept, and never advised.
     assert_eq!(

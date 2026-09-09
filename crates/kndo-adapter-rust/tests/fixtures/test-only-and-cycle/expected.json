@@ -8,7 +8,6 @@
       {
         "id": "kndo:rust",
         "files": 6,
-        "published_surface": "exports",
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
         "dependency_identity": "crate-root",

@@ -264,11 +264,12 @@ fn depends_on(unit: &kndo_contract::manifest::Unit) -> Vec<&str> {
     unit.depends_on.iter().map(|d| d.unit.as_str()).collect()
 }
 
-/// The half of those the build system marked FRIEND.
+/// The half of those the build system compiles the unit WITH, not merely
+/// against — an associated compilation, which reaches the target's unit rung.
 fn friends(unit: &kndo_contract::manifest::Unit) -> Vec<&str> {
     unit.depends_on
         .iter()
-        .filter(|d| d.friend)
+        .filter(|d| d.grants >= kndo_contract::manifest::Grant::Unit)
         .map(|d| d.unit.as_str())
         .collect()
 }

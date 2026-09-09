@@ -88,10 +88,12 @@ fn the_module_is_one_published_library_unit_over_its_own_directory() {
     assert_eq!(unit.depends_on, [UnitDep::on("example.com/dep")]);
     // Every package of the module hangs under the `module` line.
     assert_eq!(unit.namespace_root.as_deref(), Some("example.com/api"));
-    assert_eq!(unit.publication, Publication::Unstated);
+    assert_eq!(unit.publication, Publication::ByName);
     assert!(
-        unit.is_published(),
-        "a resolvable module path is importable by anyone who spells it"
+        unit.is_published() && unit.publishes_every_export(),
+        "a resolvable module path is importable by anyone who spells it, and \
+         what they spell is a NAME — so every exported identifier is on the \
+         surface and no entry file gates it"
     );
 }
 

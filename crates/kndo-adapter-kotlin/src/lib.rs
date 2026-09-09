@@ -89,14 +89,9 @@ impl KotlinAdapter {
                     FileRole::probable("**/*Tests.kt", RootKind::Test),
                     FileRole::probable("**/*TestCase.kt", RootKind::Test),
                 ])
-                // A package is one name across the whole compilation, like
-                // Java's: `src/test/kotlin/com/foo` and `src/main/kotlin/com/foo`
-                // are the same namespace, and the test set's build holds the
-                // main set it compiles against.
-                .namespace_span(kndo_contract::plugin::NamespaceSpan::Compilation)
                 // Kotlin's `package` clause is as free of the directory as
                 // Java's, and more often takes the freedom.
-                .nesting(kndo_contract::plugin::Nesting::Flat)
+                .nesting(kndo_contract::plugin::Nesting::ByUnit)
                 // What this adapter WRITES, so an absence stays typed: the
                 // annotations a declaration carries, the supertypes it
                 // promises, and a function's shape. A stream it does not

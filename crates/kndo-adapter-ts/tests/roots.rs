@@ -430,10 +430,17 @@ fn a_package_states_the_unit_npm_compiles() {
         [kndo_contract::manifest::UnitDep::on("@demo/util")]
     );
 
-    // A manifest with no entry field is run, not imported.
+    // A manifest with no entry field is run, not imported — and npm's
+    // resolution rule holds either way: what a consumer writes is a specifier
+    // this manifest maps to a FILE, so the form is stated even where the kind
+    // makes it moot.
     let app = evidence("app/package.json", r#"{ "name": "app" }"#, &[]);
     assert_eq!(app.units[0].kind, UnitKind::Executable);
-    assert_eq!(app.units[0].publication, Publication::Unstated);
+    assert_eq!(app.units[0].publication, Publication::ByEntry);
+    assert!(
+        !app.units[0].is_published(),
+        "an executable hands out no API"
+    );
 
     // An unnamed manifest still states its unit, named for the directory it
     // sits in — identity is (manifest, name), so the derived name is enough.

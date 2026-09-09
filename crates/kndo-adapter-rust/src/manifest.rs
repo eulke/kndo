@@ -46,10 +46,13 @@ pub fn structure(manifest: &SourceFile<'_>, cx: &ResolveContext<'_>, out: &mut M
     let dir = parent_dir(manifest.path);
     // `publish = false` (or an empty allow-list) is cargo's own word for "no
     // registry sees this": the lib's exports are the project's business alone.
+    // And what a registry DOES see, a consumer names: `mycrate::a::Foo` is a
+    // module path, not a file the manifest maps, so every `pub` item of every
+    // module is on the surface.
     let publication = match toml.get("package").and_then(|p| p.get("publish")) {
         Some(toml::Value::Boolean(false)) => Publication::Unpublished,
         Some(toml::Value::Array(a)) if a.is_empty() => Publication::Unpublished,
-        _ => Publication::Unstated,
+        _ => Publication::ByName,
     };
     let mut declared: Vec<SmolStr> = dependencies(manifest).into_iter().map(|d| d.name).collect();
     declared.sort();

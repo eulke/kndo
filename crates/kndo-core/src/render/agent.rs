@@ -506,7 +506,6 @@ mod tests {
         report.run.extensions.push(PluginRun {
             id: SmolStr::new("kndo:python"),
             files: 5,
-            published_surface: Default::default(),
             import_cycles: Default::default(),
             dependency_scoping: Default::default(),
             dependency_identity: Default::default(),

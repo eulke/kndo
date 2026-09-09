@@ -6876,3 +6876,101 @@ later, on the first fixture written after it.
 The contract fingerprint did not move — it is structural over the evidence
 types, and an alias table is manifest evidence the engine assembles, not
 evidence an extraction writes.
+
+## 2026-09-09 — the two capabilities go to the floor a manifest can vary
+
+Yesterday's entry kept `PublishedSurface` and `namespace_span` because ablating
+each cost findings. That defence was wrong in the way the owner named: a number
+proves a capability is doing work, never that it has the right shape. Both were
+stickers — facts about the PROJECT (floor 3) bolted onto the LANGUAGE (floor 2)
+— and the proof is in the code they patched.
+
+**`namespace_span` patched a key the engine had already built.** `Scopes::build`
+computes `(Compilation, segments)` for every file and every `Nesting` arm
+produces both halves — `Nesting` already IS the key-shape type. Then
+`span_nodes`/`cobuilt_nodes` threw the `Compilation` half away and re-grouped by
+`segments` alone, and `namespace_span` existed to gate that re-derivation off
+where it would be wrong. Not even a key fact in the end: a per-file boolean
+choosing between THREE precomputed lists at every pool lookup.
+
+**`PublishedSurface` said a second time, per language, what `Publication` says
+per unit** — and the two could disagree into a state with no meaning: a manifest
+saying `Published` under an adapter saying `Entries` published nothing at all.
+
+**What replaces them, in the plan's own vocabulary.**
+
+`UnitDep { unit, grants: Grant }`. The relation "unit A's files may name unit
+B's namespace-private names" is a fact about a dependency EDGE, and `UnitDep` is
+the type the plan already gives that edge. `friend: bool` — the same fact one
+rung up — dissolves into it. `Grant` is `Exports | Namespace | Unit`, each state
+implying the one before, because a build system that lets you INSIDE a unit has
+already put you on its classpath.
+
+`Grant` is deliberately NOT `Rung`, and the first attempt at this reused `Rung`
+and was caught by the corpus: a rung says how far a declaration reaches OUT and
+a grant says how far a dependent reaches IN, so the two orders run opposite ways.
+Under `Rung`, granting a JVM dependency the namespace rung also granted it
+Kotlin's `internal` — two findings on Exposed, and the reason a separate type
+exists rather than a reused one.
+
+`Publication { Unstated | Unpublished | ByName | ByEntry }`. `Published` was
+under-specified exactly as `Nesting::Flat` was: it said a unit publishes without
+saying how its consumers ADDRESS what they name. `ByName` is a jar, a Go module,
+a Python distribution, a Rust crate — a consumer writes
+`com.google.common.io.Files` and every export of every file is on the surface.
+`ByEntry` is npm — a consumer writes a specifier the manifest maps to a FILE, so
+an export no entry hands out is internal. `Unit::publishes_every_export` is the
+one predicate, and `internal_only`'s two-clause disjunction became that one call.
+
+**`Unstated` resolves to `ByName`, and that fixed a bias the flag had backwards.**
+A silent manifest lands on the WIDER surface, because a wider surface accuses
+less. Before, a js-ts unit the manifest reader failed to classify still got
+`Entries` from the language flag — the ACCUSING direction. Absent evidence now
+degrades toward silence, as the plan requires of every other absence.
+
+**`Nesting::Flat` → `Nesting::ByUnit`.** Its doc said "the CLAUSE is the whole
+key" and its arm produced `Compilation::Unit(u)`. It lied for the same reason
+`Publication::Published` did — a variant that names a shape without naming what
+else is in it.
+
+**Measured. 131 conformance fixtures: findings byte-identical. Corpus: eight of
+nine repos byte-identical.** The one row that moved is not this change's, and
+that needs saying plainly.
+
+**A correction to the entry before last.** The alias tranche reported "findings
+byte-identical, all nine repos". That corpus run was taken BEFORE its final edit
+— dropping `imports` from `entry_fields`, made while fixing the fixture — and I
+committed the earlier number. The true figure for that tranche is **vite 701 →
+712**, and this run is the first that shows it. Verified by ablation on a file
+copy: restoring `imports` to `entry_fields` puts vite back at 701 exactly, and
+nothing else moves.
+
+Of those 12, one was a defect of that tranche and is fixed here: `landing()` took
+the FIRST candidate of a rewriting, so `"#flag": { "module-sync": …, "default": …
+}` kept whichever branch the manifest's key order put first — `serde_json` sorts
+keys, so `default` won and `misc/true.js` died. The engine cannot know a runtime,
+which is exactly why every branch is an edge; it now answers `Resolution::Files`
+with all of them, and vite is 712.
+
+The remaining **11 are true consequences of the entries/aliases split**, and they
+decompose: `misc/true.d.ts` and `misc/false.d.ts` (a `.js` specifier resolves to
+the implementation, and its declaration file is reached only by TypeScript's own
+type resolution), `src/types/shims.d.ts` and `chokidar.d.ts#AwaitWriteFinishOptions`
+(ambient declarations a `tsconfig` `include` picks up, which no `package.json`
+states), and seven playground files behind the eight `#` specifiers a vite config
+aliases rather than a manifest. All three families are tsconfig- and
+config-shaped, which is M8.d's territory and not this one's; they go on the books
+there rather than being chased here.
+
+**Retired with them:** `Project::sees_into` (replaced by `granted`/`grants`),
+`ProjectUnit::friend_of` (the grant carries it), `Scopes::spans` and
+`Scopes::files` — three file lists per namespace node and a per-file toggle
+became two lists and no toggle, because the data now says what the flag said.
+`PluginRun.published_surface` leaves the report envelope: it answered per
+language a question that is per unit, and a per-language answer to a per-unit
+question is a wrong answer, not a partial one.
+
+`CLAUDE.md` gains the test both capabilities failed: a capability a manifest
+could state per unit or per edge is not the language's. Having a default, a named
+consumer and a conformance case does not make a fact belong to the floor it sits
+on — all three were satisfied, and both were still on the wrong floor.

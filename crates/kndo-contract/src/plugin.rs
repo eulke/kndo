@@ -34,10 +34,14 @@ pub enum Nesting {
     /// alone in. The default, and Swift's and js-ts's answer.
     #[default]
     PerFile,
-    /// The CLAUSE is the whole key: every file writing `package com.google.io`
-    /// stands in one namespace, wherever in the tree it sits. Java's answer,
-    /// and why a package that does not match its directory is not a defect.
-    Flat,
+    /// The clause is keyed by the UNIT that compiles the file: two units
+    /// spelling one name hold two namespaces, and a package that does not
+    /// match its directory is not a defect. Java's, Kotlin's and Swift's
+    /// answer — and where a build system puts two units on ONE name space,
+    /// the manifest says so per dependency
+    /// ([`crate::manifest::UnitDep::reaches`]), because that is a fact about
+    /// an edge and not about a language.
+    ByUnit,
     /// The clause is keyed by the DIRECTORY that holds it: two directories
     /// writing `package foo` are two namespaces, because the directory is
     /// what the compiler compiles together. Go's answer.
@@ -146,33 +150,6 @@ impl MutatesGraph {
 /// unambiguous from any source.
 pub fn is_reserved_coordinate(coordinate: &str) -> bool {
     coordinate.starts_with("kndo:")
-}
-
-/// What a unit of this ecosystem publishes — the surface an outside consumer
-/// can name, which no narrowing advice may touch. `Exports` (the default):
-/// every exported declaration is published — a jar, a crate, a Go package, a
-/// Python distribution hand out all of them, so `internal-only` never advises
-/// an exported declaration here until the unit's own publication says nobody
-/// outside consumes it. `Entries`: only what the unit's entries export — an
-/// npm package resolves through `main`/`exports`, so an `export` in a file no
-/// entry reaches is internal however it is spelled, and the analysis may say
-/// so. A language fact, because it is the ecosystem's resolution rule; the
-/// unit's own publication refines it.
-///
-/// NOT derivable, and the derivations were tried: not from [`Nesting`] (swift
-/// is `PerFile` and hands out every `public` declaration), not from whether
-/// the unit declares entries (rust and python declare them and hand out
-/// everything). The question an adapter author answers is one sentence: does
-/// an outside consumer's import of this unit name a FILE the manifest
-/// declared, or the unit itself? Deleting the capability — everything
-/// `Exports` — moves vite by 57 findings and nothing else in the corpus.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
-#[serde(rename_all = "lowercase")]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-pub enum PublishedSurface {
-    #[default]
-    Exports,
-    Entries,
 }
 
 /// How the ecosystem's manifests state a dependency's usage scope. `Scoped`
@@ -357,7 +334,9 @@ impl DependencyBuiltins {
 /// languages teach us rungs; a rung this build does not know sorts above every
 /// one it does, so an unknown rung never makes a narrower one appear.
 #[non_exhaustive]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, serde::Deserialize, Default,
+)]
 #[serde(rename_all = "lowercase")]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum Rung {
@@ -379,38 +358,10 @@ pub enum Rung {
     /// Nameable inside the group of units one manifest aggregates (Swift's
     /// `package`).
     Group,
-    Exported,
-}
-
-/// How far one namespace reaches across the project's units — the fact that
-/// decides who can name a namespace-scoped declaration.
-///
-/// Java's package is a NAME units contribute to: `guava-tests` compiles
-/// `com.google.common.io` classes against `guava`'s on one classpath, and each
-/// sees the other's package-private members. Go's package and Rust's module
-/// tree are the opposite: the unit owns the namespace, and two units spelling
-/// the same name hold two unrelated ones. Core cannot tell which without being
-/// told, so it is told.
-///
-/// `Attachment` does not answer this and the two are not the same question:
-/// attachment says which BUILD a file's namespace membership holds in, within
-/// one unit; this says whether two UNITS spelling one name hold one node.
-/// Deleting the capability — everything `Compilation` — costs 401 findings
-/// across the corpus (vite −382, lodash −18, flask −1): merging by name alone
-/// makes co-visible what no compiler ever compiled together.
-#[non_exhaustive]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
-#[serde(rename_all = "kebab-case")]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-pub enum NamespaceSpan {
-    /// The unit owns its namespaces; two units spelling one name hold two.
-    /// The default, and the narrower answer: a declaration stays accused where
-    /// a language has not said otherwise.
+    /// Nameable from anywhere — the widest rung, and the default a dependency
+    /// reaches into what it depends on.
     #[default]
-    Unit,
-    /// A namespace is a name units contribute to, so a unit and every unit
-    /// compiled against it share one.
-    Compilation,
+    Exported,
 }
 
 /// What a unit-wide reach is bounded by where NO manifest named the unit —
@@ -1009,14 +960,12 @@ pub struct PluginSpec {
     version: u32,
     // -- extraction --
     suffixes: Vec<SmolStr>,
-    published_surface: PublishedSurface,
     dependency_scoping: DependencyScoping,
     dependency_identity: DependencyIdentity,
     dependency_importers: Vec<SmolStr>,
     dependency_builtins: DependencyBuiltins,
     import_cycles: CycleTolerance,
     ladder: Ladder,
-    namespace_span: NamespaceSpan,
     unnamed_unit: UnnamedUnit,
     nesting: Nesting,
     file_roles: Vec<FileRole>,
@@ -1055,14 +1004,12 @@ impl PluginSpec {
                 coordinate: SmolStr::new_static(coordinate),
                 version,
                 suffixes: Vec::new(),
-                published_surface: PublishedSurface::Exports,
                 dependency_scoping: DependencyScoping::Scoped,
                 dependency_identity: DependencyIdentity::Underivable,
                 dependency_importers: Vec::new(),
                 dependency_builtins: DependencyBuiltins::None,
                 import_cycles: CycleTolerance::Tolerated,
                 ladder: Ladder::default(),
-                namespace_span: NamespaceSpan::Unit,
                 unnamed_unit: UnnamedUnit::Unbounded,
                 nesting: Nesting::PerFile,
                 file_roles: Vec::new(),
@@ -1102,12 +1049,6 @@ impl PluginSpec {
     /// "extension" already means the species.
     pub fn suffixes(&self) -> &[SmolStr] {
         &self.suffixes
-    }
-
-    /// See [`PublishedSurface`]; `internal-only`'s Exported rung is the
-    /// consumer. `Exports` (the default) keeps it silent for this language.
-    pub fn published_surface(&self) -> PublishedSurface {
-        self.published_surface
     }
 
     /// See [`DependencyScoping`]; the dependency subjects of `unused` and
@@ -1161,12 +1102,6 @@ impl PluginSpec {
     /// states no ladder and the analysis stays silent for its files.
     pub fn ladder(&self) -> &Ladder {
         &self.ladder
-    }
-
-    /// See [`NamespaceSpan`]; `Scopes` is the consumer. `Unit` (the default)
-    /// keeps every namespace inside the unit that compiles it.
-    pub fn namespace_span(&self) -> NamespaceSpan {
-        self.namespace_span
     }
 
     /// What bounds a unit-wide reach where no manifest named the unit — see
@@ -1270,7 +1205,6 @@ pub struct PluginSpecParts {
     pub suffixes: Vec<SmolStr>,
     /// `Exports` (silence for the Exported rung) unless the component says
     /// its ecosystem publishes through entries.
-    pub published_surface: PublishedSurface,
     pub dependency_scoping: DependencyScoping,
     pub dependency_identity: DependencyIdentity,
     pub dependency_importers: Vec<SmolStr>,
@@ -1280,7 +1214,6 @@ pub struct PluginSpecParts {
     /// `internal-only` stays silent — the same absence every other undeclared
     /// capability degrades to.
     pub ladder: Ladder,
-    pub namespace_span: NamespaceSpan,
     pub unnamed_unit: UnnamedUnit,
     pub nesting: Nesting,
     pub file_roles: Vec<FileRole>,
@@ -1321,14 +1254,12 @@ impl From<PluginSpecParts> for PluginSpec {
             coordinate: parts.coordinate,
             version: parts.version,
             suffixes: parts.suffixes,
-            published_surface: parts.published_surface,
             dependency_scoping: parts.dependency_scoping,
             dependency_identity: parts.dependency_identity,
             dependency_importers: parts.dependency_importers,
             dependency_builtins: parts.dependency_builtins,
             import_cycles: parts.import_cycles,
             ladder: parts.ladder,
-            namespace_span: parts.namespace_span,
             unnamed_unit: parts.unnamed_unit,
             nesting: parts.nesting,
             file_roles: parts.file_roles,
@@ -1376,14 +1307,6 @@ impl PluginSpecBuilder {
     /// stays for patterns that are not extension-shaped.
     pub fn suffixes(mut self, suffixes: &[&'static str]) -> Self {
         declare_suffixes(&mut self.spec.suffixes, &mut self.spec.claims, suffixes);
-        self
-    }
-
-    /// Declare what a unit of this ecosystem publishes (see
-    /// [`PublishedSurface`]). Omitted ⇒ `Exports` — every exported declaration
-    /// is published, and `internal-only` never advises narrowing one.
-    pub fn published_surface(mut self, surface: PublishedSurface) -> Self {
-        self.spec.published_surface = surface;
         self
     }
 
@@ -1436,19 +1359,11 @@ impl PluginSpecBuilder {
         self
     }
 
-    /// Declare how far a namespace reaches across units (see
-    /// [`NamespaceSpan`]). Omitted ⇒ `Unit`: a namespace stops at the unit
-    /// that compiles it, which keeps every advisory a wider span would silence.
     /// What this language's own tooling makes of a file by its path — see
     /// [`FileRole`]. The consumer is root anchoring, which reads them only for
     /// a file whose unit declared no role of its own.
     pub fn file_roles(mut self, roles: &[FileRole]) -> Self {
         self.spec.file_roles = roles.to_vec();
-        self
-    }
-
-    pub fn namespace_span(mut self, span: NamespaceSpan) -> Self {
-        self.spec.namespace_span = span;
         self
     }
 

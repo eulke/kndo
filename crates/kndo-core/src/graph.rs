@@ -15,7 +15,7 @@ use kndo_contract::evidence::{
     Attachment, FileEvidence, ImportShape, ImportTarget, Reach, Root, RootKind, RootTarget,
 };
 use kndo_contract::manifest::UnitKind;
-use kndo_contract::plugin::{Plugin, PluginSpec, PublishedSurface};
+use kndo_contract::plugin::{Plugin, PluginSpec};
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
@@ -610,7 +610,7 @@ pub fn assemble(
     mount_and_own(&mut graph_files, &project);
     anchor_manifest_roots(adapters, &project, &reads, &mut graph_files);
     let pack_roots = dispatch_files(&mut graph_files, adapters, active);
-    publish_surfaces(&mut graph_files, adapters, &project);
+    publish_surfaces(&mut graph_files, &project);
 
     let manifest_declarations = collect_manifest_declarations(&reads);
     let mut discovered: Vec<ProjectPath> = files.iter().map(|f| f.path.clone()).collect();
@@ -927,20 +927,12 @@ fn dispatch_files(
     pack_roots
 }
 
-fn publish_surfaces(
-    files: &mut [GraphFile],
-    adapters: &[Box<dyn Plugin>],
-    project: &crate::project::Project,
-) {
+fn publish_surfaces(files: &mut [GraphFile], project: &crate::project::Project) {
     for f in files.iter_mut() {
-        let surface = adapter_by_id(adapters, &f.adapter)
-            .spec()
-            .published_surface();
         let is_a_test = f
             .roots()
             .any(|r| r.kind == RootKind::Test && matches!(r.target, RootTarget::WholeFile));
-        f.published =
-            !is_a_test && publishes(surface, project, f.unit, &f.evidence, f.mount_cap.as_ref());
+        f.published = !is_a_test && publishes(project, f.unit, &f.evidence, f.mount_cap.as_ref());
     }
 }
 
@@ -1037,14 +1029,12 @@ impl DeclaredRoles {
 /// whole-file production root on every non-test file; the test half of that
 /// sentence is [`publish_surfaces`]'s.
 fn publishes(
-    surface: PublishedSurface,
     project: &crate::project::Project,
     unit: Option<u32>,
     evidence: &FileEvidence,
     mount_cap: Option<&Reach>,
 ) -> bool {
-    surface == PublishedSurface::Exports
-        && unit.is_some_and(|u| project.units[u as usize].published)
+    unit.is_some_and(|u| project.units[u as usize].publishes_every_export)
         && evidence.declarations.iter().any(|d| {
             d.owner.is_none()
                 && matches!(
@@ -1228,7 +1218,7 @@ pub fn patch(
     let project = std::mem::take(&mut prev.project);
     mount_and_own(&mut prev.files, &project);
     prev.pack_roots = dispatch_files(&mut prev.files, adapters, active);
-    publish_surfaces(&mut prev.files, adapters, &project);
+    publish_surfaces(&mut prev.files, &project);
     prev.project = project;
     Some(prev)
 }

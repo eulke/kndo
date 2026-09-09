@@ -25,7 +25,7 @@ fn a_units_kind_decides_the_color_its_entries_anchor() {
     let p = TempProject::new();
     p.file(
         "kmock.pkg",
-        "unit core library roots=src entries=src/lib.kmock\n\
+        "unit core library roots=src entries=src/lib.kmock publish=by-entry\n\
          unit suite test roots=tests entries=tests/api.kmock\n",
     )
     .file("src/lib.kmock", "pub fn shared\nfn helper\ncall helper\n")
@@ -106,13 +106,6 @@ fn a_manifest_root_carries_its_own_confidence_and_a_unit_entry_is_certain() {
     assert!(reported(&snap, &Category::UNUSED).is_empty());
 }
 
-/// The kmock language whose units publish every export, like a jar.
-fn publishing_exports() -> MockPlugin {
-    MockPlugin::with(|spec| {
-        spec.published_surface(kndo_contract::plugin::PublishedSurface::Exports)
-    })
-}
-
 #[test]
 fn a_friend_unit_may_name_a_units_own_reach() {
     let lib = "pub fn api\nunit fn helper\n";
@@ -162,7 +155,7 @@ fn a_published_units_exports_are_the_outside_worlds() {
     )
     .file("src/lib.kmock", entry)
     .file("src/util.kmock", util);
-    let snap = common::analyze(&p, vec![Box::new(publishing_exports())]);
+    let snap = common::analyze(&p, vec![Box::new(MockPlugin::new())]);
     assert!(
         reported(&snap, &Category::UNUSED).is_empty(),
         "{:?}",
@@ -180,7 +173,7 @@ fn a_published_units_exports_are_the_outside_worlds() {
     )
     .file("src/lib.kmock", entry)
     .file("src/util.kmock", util);
-    let snap = common::analyze(&p, vec![Box::new(publishing_exports())]);
+    let snap = common::analyze(&p, vec![Box::new(MockPlugin::new())]);
     assert_eq!(
         reported(&snap, &Category::UNUSED),
         ["src/util.kmock — spare"]
@@ -189,21 +182,21 @@ fn a_published_units_exports_are_the_outside_worlds() {
     let p = TempProject::new();
     p.file(
         "kmock.pkg",
-        "unit app executable roots=src entries=src/lib.kmock publish=yes\n",
+        "unit app executable roots=src entries=src/lib.kmock publish=by-name\n",
     )
     .file("src/lib.kmock", entry)
     .file("src/util.kmock", util);
-    let snap = common::analyze(&p, vec![Box::new(publishing_exports())]);
+    let snap = common::analyze(&p, vec![Box::new(MockPlugin::new())]);
     assert_eq!(
         reported(&snap, &Category::UNUSED),
         ["src/util.kmock — spare"]
     );
-    // And where the ecosystem publishes through entries, a library's
+    // And where the manifest says its consumers address an ENTRY, a library's
     // non-entry export is nobody's outside either.
     let p = TempProject::new();
     p.file(
         "kmock.pkg",
-        "unit core library roots=src entries=src/lib.kmock\n",
+        "unit core library roots=src entries=src/lib.kmock publish=by-entry\n",
     )
     .file("src/lib.kmock", entry)
     .file("src/util.kmock", util);
@@ -216,10 +209,10 @@ fn a_published_units_exports_are_the_outside_worlds() {
 
 #[test]
 fn an_export_of_an_unpublished_unit_may_narrow() {
-    use kndo_contract::plugin::{PublishedSurface, Rung, Step};
-    let laddered_jar = || {
+    use kndo_contract::plugin::{Rung, Step};
+    let laddered = || {
         MockPlugin::with(|spec| {
-            spec.published_surface(PublishedSurface::Exports).ladder(&[
+            spec.ladder(&[
                 Step::for_free(Rung::File, "local"),
                 Step::new(Rung::Exported, "pub"),
             ])
@@ -242,7 +235,7 @@ fn an_export_of_an_unpublished_unit_may_narrow() {
     )
     .file("src/main.kmock", entry)
     .file("src/util.kmock", util);
-    let snap = common::analyze(&p, vec![Box::new(laddered_jar())]);
+    let snap = common::analyze(&p, vec![Box::new(laddered())]);
     assert_eq!(
         advice(&snap),
         [
@@ -258,35 +251,37 @@ fn an_export_of_an_unpublished_unit_may_narrow() {
     )
     .file("src/main.kmock", entry)
     .file("src/util.kmock", util);
-    let snap = common::analyze(&p, vec![Box::new(laddered_jar())]);
+    let snap = common::analyze(&p, vec![Box::new(laddered())]);
     assert!(advice(&snap).is_empty(), "{:?}", advice(&snap));
 }
 
 #[test]
 fn what_a_published_unit_hands_out_is_the_ecosystems_rule() {
-    use kndo_contract::plugin::{PublishedSurface, Rung, Step};
-    // ONE project, ONE manifest, ONE published library. What differs is the
-    // ecosystem's resolution rule, and it is the whole of the difference: a
-    // jar hands out every `pub` class in every file it holds, and an npm
-    // package hands out what its entries reach and nothing else — so the same
-    // export is the outside world's in one ecosystem and internal in the
-    // other. Neither answer is derivable from the manifest, from the nesting,
-    // or from whether entries were declared: rust and python declare entries
-    // and hand out everything, swift declares none and hands out everything,
-    // npm declares them and hands out only those.
-    let ladder = |surface: PublishedSurface| {
-        MockPlugin::with(move |spec| {
-            spec.published_surface(surface).ladder(&[
+    use kndo_contract::plugin::{Rung, Step};
+    // ONE language, ONE project shape, ONE published library. What differs is
+    // the MANIFEST: a jar hands out every `pub` class in every file it holds,
+    // and an npm package hands out what its entries reach and nothing else, so
+    // the same export is the outside world's under one manifest and internal
+    // under the other.
+    //
+    // It is a fact about the unit and never about the language, which is why
+    // it cannot be a capability: rust and python declare entries and hand out
+    // everything, swift declares none and hands out everything, npm declares
+    // them and hands out only those. One adapter reading two manifests must be
+    // able to answer differently for each, and a per-language flag cannot.
+    let laddered = || {
+        MockPlugin::with(|spec| {
+            spec.ladder(&[
                 Step::for_free(Rung::File, "local"),
                 Step::new(Rung::Exported, "pub"),
             ])
         })
     };
-    let project = || {
+    let project = |publish: &str| {
         let p = TempProject::new();
         p.file(
             "kmock.pkg",
-            "unit core library roots=src entries=src/main.kmock\n",
+            &format!("unit core library roots=src entries=src/main.kmock {publish}\n"),
         )
         .file("src/main.kmock", "import ./util { other }\ncall other\n")
         .file(
@@ -302,24 +297,22 @@ fn what_a_published_unit_hands_out_is_the_ecosystems_rule() {
             .map(|f| f.subject.label().to_string())
             .collect()
     };
-    let jar = common::analyze(
-        &project(),
-        vec![Box::new(ladder(PublishedSurface::Exports))],
-    );
+    let jar = common::analyze(&project("publish=by-name"), vec![Box::new(laddered())]);
     assert!(
         advice(&jar).is_empty(),
         "every export of a published unit is the world's: {:?}",
         advice(&jar)
     );
-    let npm = common::analyze(
-        &project(),
-        vec![Box::new(ladder(PublishedSurface::Entries))],
-    );
+    let npm = common::analyze(&project("publish=by-entry"), vec![Box::new(laddered())]);
     assert_eq!(
         advice(&npm),
         ["helper"],
         "an export no entry hands out is internal however it is spelled"
     );
+    // And the silence between them: an unstated manifest lands on the WIDER
+    // surface, because a wider surface accuses less.
+    let silent = common::analyze(&project(""), vec![Box::new(laddered())]);
+    assert!(advice(&silent).is_empty(), "{:?}", advice(&silent));
 }
 
 #[test]

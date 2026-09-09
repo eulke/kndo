@@ -336,7 +336,8 @@ fn a_suppression_carries_what_it_allows_and_its_position() {
 
 #[test]
 fn a_ladder_names_the_narrowest_step_a_declaration_can_take() {
-    use kndo_contract::plugin::{Bearer, Ladder, PublishedSurface, Rung, Step};
+    use kndo_contract::manifest::Publication;
+    use kndo_contract::plugin::{Bearer, Ladder, Rung, Step};
     // Kotlin's shape: `private` twice — the class on a member, the file on a
     // top-level declaration — then `internal`, then `public`.
     let ladder = Ladder::new(vec![
@@ -370,9 +371,14 @@ fn a_ladder_names_the_narrowest_step_a_declaration_can_take() {
     assert!(Bearer::Any.admits(true) && Bearer::Any.admits(false));
     assert!(Bearer::Free.admits(false) && !Bearer::Free.admits(true));
     assert!(Bearer::Member.admits(true) && !Bearer::Member.admits(false));
-    // The defaults are silence: no ladder, and every export published.
+    // The defaults are silence: no ladder, and a manifest that said nothing
+    // about how its consumers address the unit.
     assert!(Ladder::default().is_empty());
-    assert_eq!(PublishedSurface::default(), PublishedSurface::Exports);
+    assert_eq!(Publication::default(), Publication::Unstated);
+    // A rung this build does not know sorts ABOVE every one it does, so an
+    // unknown grant never makes a narrower reach appear.
+    assert!(Rung::Namespace < Rung::Unit && Rung::Unit < Rung::Exported);
+    assert_eq!(Rung::default(), Rung::Exported);
 }
 
 #[test]

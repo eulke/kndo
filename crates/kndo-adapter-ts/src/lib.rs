@@ -13,7 +13,7 @@ mod resolve;
 
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{Attachment, EvidenceSink, RootKind};
-use kndo_contract::plugin::{FileRole, Plugin, PluginSpec, PublishedSurface, Rung, Step};
+use kndo_contract::plugin::{FileRole, Plugin, PluginSpec, Rung, Step};
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use tree_sitter::Language;
 
@@ -165,7 +165,6 @@ impl TypeScriptAdapter {
         // An npm package resolves through `main`/`exports`: what an entry
         // exports is published, and an export no entry reaches is internal
         // however it is spelled.
-        .published_surface(PublishedSurface::Entries)
         // `lodash/fp` names `lodash`; a scoped name carries its own slash.
         .dependency_identity(kndo_contract::plugin::DependencyIdentity::PackageName)
         .dependency_builtins(kndo_contract::plugin::DependencyBuiltins::Named(

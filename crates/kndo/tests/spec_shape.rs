@@ -122,7 +122,7 @@ fn a_directory_nested_language_keeps_two_same_named_namespaces_apart() {
     // Under `Flat` the clause is the whole key: one namespace, and the call in
     // `a` names the declaration in `b`. The same tree, two answers, and which
     // is right is the LANGUAGE's to say.
-    let flat = |spec: kndo_contract::plugin::PluginSpecBuilder| spec.nesting(Nesting::Flat);
+    let flat = |spec: kndo_contract::plugin::PluginSpecBuilder| spec.nesting(Nesting::ByUnit);
     let snap = common::analyze(&p, vec![Box::new(MockPlugin::with(flat))]);
     assert!(
         reported(&snap, &Category::UNUSED).is_empty(),

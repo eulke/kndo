@@ -1,6 +1,6 @@
 //! Resolution by the NAMESPACE, which is what a Java import names: `import
 //! com.foo.Bar;` says the type `Bar`, in the package `com.foo`. The package is
-//! a clause every file in it declares — `Nesting::Flat`, the spec's word for it
+//! a clause every file in it declares — `Nesting::ByUnit`, the spec's word for it
 //! — so the mechanism is the toolkit's, shared with Kotlin because the two
 //! share one package namespace and a mixed module's import crosses between them
 //! without noticing.

@@ -90,6 +90,13 @@ Core never names a language. The moment `if language == X` looks necessary, the
 vocabulary is missing a concept: add an `PluginSpec` capability — with a default, a
 named consumer in core, and a conformance case. All three, or it doesn't merge.
 
+And one test before you add it: **a capability a manifest could state per unit or
+per edge is not the language's.** A spec says what is true of EVERY file of a
+language; anything a build system varies between two units one adapter reads
+belongs on `Unit` or on `UnitDep`, where it can vary. Two capabilities were
+retired for failing exactly this, and both had a default, a named consumer and a
+conformance case — those three do not make a fact belong to the floor it sits on.
+
 ## Where language knowledge lives
 
 A language needs something new? Take the first floor that fits:

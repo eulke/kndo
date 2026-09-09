@@ -127,8 +127,10 @@ fn a_library_is_published_unless_cargo_says_otherwise() {
         "[package]\nname = \"demo\"\n",
         &["src/lib.rs"],
     );
-    assert_eq!(published.units[0].publication, Publication::Unstated);
-    assert!(published.units[0].is_published());
+    // What a registry sees, a consumer names: `demo::a::Foo` is a module path,
+    // not a file the manifest mapped, so every `pub` item is on the surface.
+    assert_eq!(published.units[0].publication, Publication::ByName);
+    assert!(published.units[0].is_published() && published.units[0].publishes_every_export());
 
     for spelling in ["publish = false", "publish = []"] {
         let private = read(
@@ -167,7 +169,12 @@ fn every_other_target_compiles_against_the_library() {
     // Cargo never says an integration test may read what its library keeps
     // private, because it may not: it is a separate crate — so not one of the
     // dependencies it states is a friendship.
-    assert!(unit("test:api").depends_on.iter().all(|d| !d.friend));
+    assert!(
+        unit("test:api")
+            .depends_on
+            .iter()
+            .all(|d| d.grants == kndo_contract::manifest::Grant::Exports)
+    );
 }
 
 #[test]

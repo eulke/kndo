@@ -22,8 +22,8 @@ use kndo_contract::manifest::UnitKind;
 use kndo_contract::plugin::{
     Activation, ActivationRule, Bearer, ContentAccess, CycleTolerance, DeclaredSymbol,
     DependencyBuiltins, DependencyIdentity, DependencyScoping, DispatchRule, Effect, GraphAccess,
-    NamespaceSpan, Nesting, Plugin, PluginSeverity, PluginSink, PluginSpec, PluginTarget,
-    PublishedSurface, Rung, Step, Trigger, UnnamedUnit,
+    Nesting, Plugin, PluginSeverity, PluginSink, PluginSpec, PluginTarget, Rung, Step, Trigger,
+    UnnamedUnit,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use smol_str::SmolStr;
@@ -55,10 +55,6 @@ pub fn spec_to_wire(spec: &PluginSpec) -> wire::PluginSpec {
         version: spec.version(),
         suffixes: spec.suffixes().iter().map(|s| s.to_string()).collect(),
         ladder: spec.ladder().steps().iter().map(step_to_wire).collect(),
-        published_surface: match spec.published_surface() {
-            PublishedSurface::Exports => wire::PublishedSurface::Exports,
-            PublishedSurface::Entries => wire::PublishedSurface::Entries,
-        },
         import_cycles: match spec.import_cycles() {
             CycleTolerance::Tolerated => wire::CycleTolerance::Tolerated,
             CycleTolerance::Hazard => wire::CycleTolerance::Hazard,
@@ -80,17 +76,13 @@ pub fn spec_to_wire(spec: &PluginSpec) -> wire::PluginSpec {
         // degrades to the DEFAULT rather than to a neighbour: the same posture
         // `dispatch_rule_to_wire` takes, and the same one the whole contract
         // takes toward an undeclared capability.
-        namespace_span: match spec.namespace_span() {
-            NamespaceSpan::Compilation => wire::NamespaceSpan::Compilation,
-            _ => wire::NamespaceSpan::Unit,
-        },
         unnamed_unit: match spec.unnamed_unit() {
             UnnamedUnit::Namespace => wire::UnnamedUnit::Namespace,
             _ => wire::UnnamedUnit::Unbounded,
         },
         nesting: match spec.nesting() {
             Nesting::PerFile => wire::Nesting::PerFile,
-            Nesting::Flat => wire::Nesting::Flat,
+            Nesting::ByUnit => wire::Nesting::ByUnit,
             Nesting::ByDirectory => wire::Nesting::ByDirectory,
             Nesting::ByPath { roots } => {
                 wire::Nesting::ByPath(roots.iter().map(SmolStr::to_string).collect())
@@ -647,13 +639,16 @@ pub fn manifest_evidence_to_wire(
                         .iter()
                         .map(|d| wire::UnitDep {
                             unit: d.unit.to_string(),
-                            friend: d.friend,
+                            grants: match d.grants {
+                                kndo_contract::manifest::Grant::Exports => wire::Grant::Exports,
+                                kndo_contract::manifest::Grant::Namespace => wire::Grant::Namespace,
+                                kndo_contract::manifest::Grant::Unit => wire::Grant::Unit,
+                            },
                         })
                         .collect(),
                     publication: match u.publication {
-                        kndo_contract::manifest::Publication::Published => {
-                            wire::Publication::Published
-                        }
+                        kndo_contract::manifest::Publication::ByName => wire::Publication::ByName,
+                        kndo_contract::manifest::Publication::ByEntry => wire::Publication::ByEntry,
                         kndo_contract::manifest::Publication::Unpublished => {
                             wire::Publication::Unpublished
                         }

@@ -214,7 +214,7 @@ testpaths = ["tests"]
 #[test]
 fn publication_is_stated_refused_or_unsaid() {
     let published = read("pyproject.toml", "[project]\nname = \"demo\"\n", &[]);
-    assert_eq!(published.units[0].publication, Publication::Published);
+    assert_eq!(published.units[0].publication, Publication::ByName);
 
     // The one classifier the index itself refuses an upload for.
     let private = read(

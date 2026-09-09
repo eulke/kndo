@@ -8,7 +8,6 @@
       {
         "id": "kndo:js-ts",
         "files": 2,
-        "published_surface": "entries",
         "import_cycles": "hazard",
         "dependency_scoping": "scoped",
         "dependency_identity": "package-name",

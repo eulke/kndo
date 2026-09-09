@@ -8,7 +8,6 @@
       {
         "id": "kndo:go",
         "files": 1,
-        "published_surface": "exports",
         "import_cycles": "tolerated",
         "dependency_scoping": "unscoped",
         "dependency_identity": "module-path",

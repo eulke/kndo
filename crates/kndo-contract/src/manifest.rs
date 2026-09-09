@@ -273,9 +273,10 @@ impl<T: Into<SmolStr>> From<T> for UnitRoot {
     }
 }
 
-/// One unit this unit compiles against, and whether it also sees that unit's
-/// unit-reaching names. One type rather than two lists, because a dependency
-/// and a friendship are one fact the manifest states once and they cannot be
+/// One unit this unit compiles against, and HOW FAR the dependent may reach
+/// into it — the same ladder every declaration is judged on, read from the
+/// other side. One type rather than a list per rung, because a dependency and
+/// what it grants are one fact the manifest states once and they cannot be
 /// allowed to disagree.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct UnitDep {
@@ -284,26 +285,72 @@ pub struct UnitDep {
     /// deliberate: the manifest declaring a dependency has not read the
     /// manifest declaring the unit, so it cannot spell a path it never saw.
     pub unit: SmolStr,
-    /// The dependent may use the target's unit-reaching names: a Kotlin test
-    /// source set over its main, a Swift test target that `@testable import`s.
-    /// The build system's statement and never inferred — a Rust integration
-    /// test is not a friend of the library it tests, so Cargo never says it.
-    pub friend: bool,
+    /// What this dependency grants the dependent BEYOND the target's public
+    /// API — see [`Grant`].
+    pub grants: Grant,
+}
+
+/// What a dependency grants the dependent beyond the target's exported API.
+///
+/// Its own ladder, and deliberately NOT [`Rung`]: a rung says how far a
+/// declaration reaches OUT, and these say how far a dependent reaches IN, so
+/// the two orders run opposite ways and reusing one for the other silently
+/// grants what no build system granted. Each state here implies the one before
+/// it, because a build system that lets you INSIDE a unit has already put you
+/// on its classpath.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Default,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub enum Grant {
+    /// The target's public API and nothing else — what a build system means
+    /// when it names a dependency and stops.
+    #[default]
+    Exports,
+    /// Its NAMESPACE-reaching names too, where both units declare the same
+    /// namespace: one JVM classpath, where a package is a name every unit on
+    /// it contributes to. Java's rule, and the JVM's alone among the
+    /// ecosystems here — a Go package and a Rust module tree are owned by
+    /// their unit, and two units spelling one name hold two.
+    Namespace,
+    /// Its UNIT-reaching names as well: an ASSOCIATED compilation, which is a
+    /// stronger statement than sharing a classpath — a Kotlin test source set
+    /// over its main (`internal`), a Swift test target that `@testable
+    /// import`s. Being on a classpath is not being inside the module, which
+    /// is why this is a rung above and not the same one.
+    Unit,
 }
 
 impl UnitDep {
+    /// An ordinary dependency: the target's public API and nothing else.
     pub fn on(unit: impl Into<SmolStr>) -> UnitDep {
         UnitDep {
             unit: unit.into(),
-            friend: false,
+            grants: Grant::Exports,
         }
     }
 
-    pub fn friend(unit: impl Into<SmolStr>) -> UnitDep {
+    /// A dependency granting more — see [`Grant`].
+    pub fn granting(unit: impl Into<SmolStr>, grants: Grant) -> UnitDep {
         UnitDep {
             unit: unit.into(),
-            friend: true,
+            grants,
         }
+    }
+
+    /// Friendship: the dependent may use the target's unit-reaching names.
+    pub fn friend(unit: impl Into<SmolStr>) -> UnitDep {
+        UnitDep::granting(unit, Grant::Unit)
     }
 }
 
@@ -334,18 +381,33 @@ pub struct Unit {
     pub namespace_root: Option<SmolStr>,
 }
 
-/// What a manifest says about a unit's consumers outside the project.
-/// Declared where the build system has a word for it (`publish = false`,
-/// `private: true`); `Unstated` where it is silent, under which a library is
-/// published and everything else is not.
+/// What a manifest says about a unit's consumers outside the project — and,
+/// where it publishes, HOW those consumers address what they name. The form is
+/// the ecosystem's resolution rule, which the manifest reader is the thing
+/// that knows: a per-language flag could not vary between two units one
+/// adapter reads, and this can.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum Publication {
-    Published,
-    Unpublished,
+    /// The manifest is silent. A library publishes and everything else does
+    /// not — and it publishes [`Publication::ByName`], the WIDER surface,
+    /// because a wider surface accuses less and an unread manifest must
+    /// degrade toward silence rather than toward advice.
     #[default]
     Unstated,
+    /// The manifest says nobody outside consumes it: `publish = false`,
+    /// `private: true`.
+    Unpublished,
+    /// A consumer NAMES what it wants — `com.google.common.io.Files`,
+    /// `pkg.Name`, `mycrate::a::Foo`. Every exported declaration of every file
+    /// is on the surface and none may be narrowed. A jar, a Go module, a
+    /// Python distribution, a Rust crate.
+    ByName,
+    /// A consumer names a specifier the manifest maps to a FILE. What no entry
+    /// hands out is internal however it is spelled, so the analysis may advise
+    /// narrowing it. An npm package, resolved through `main`/`exports`.
+    ByEntry,
 }
 
 impl Unit {
@@ -355,6 +417,15 @@ impl Unit {
     /// published unless the manifest says otherwise.
     pub fn is_published(&self) -> bool {
         self.kind == UnitKind::Library && self.publication != Publication::Unpublished
+    }
+
+    /// Is EVERY exported declaration of every file on the published surface?
+    /// True where this unit publishes and its consumers address it by name;
+    /// false where they address an entry, because then an export no entry
+    /// hands out is internal. [`Publication::Unstated`] resolves here — see
+    /// its doc.
+    pub fn publishes_every_export(&self) -> bool {
+        self.is_published() && self.publication != Publication::ByEntry
     }
 }
 
@@ -530,13 +601,26 @@ mod tests {
             namespace_root: None,
         };
         assert!(unit(UnitKind::Library, Publication::Unstated).is_published());
-        assert!(unit(UnitKind::Library, Publication::Published).is_published());
+        assert!(unit(UnitKind::Library, Publication::ByName).is_published());
+        assert!(unit(UnitKind::Library, Publication::ByEntry).is_published());
         assert!(!unit(UnitKind::Library, Publication::Unpublished).is_published());
         assert!(!unit(UnitKind::Executable, Publication::Unstated).is_published());
         assert!(
-            !unit(UnitKind::Executable, Publication::Published).is_published(),
+            !unit(UnitKind::Executable, Publication::ByName).is_published(),
             "a published binary hands out no API"
         );
         assert!(!unit(UnitKind::Test, Publication::Unstated).is_published());
+
+        // And the FORM, which is the half a per-language flag could not vary:
+        // a silent manifest lands on the wider surface, because that is the
+        // one that accuses less.
+        assert!(unit(UnitKind::Library, Publication::Unstated).publishes_every_export());
+        assert!(unit(UnitKind::Library, Publication::ByName).publishes_every_export());
+        assert!(
+            !unit(UnitKind::Library, Publication::ByEntry).publishes_every_export(),
+            "an export no entry hands out is internal"
+        );
+        assert!(!unit(UnitKind::Library, Publication::Unpublished).publishes_every_export());
+        assert!(!unit(UnitKind::Executable, Publication::ByName).publishes_every_export());
     }
 }

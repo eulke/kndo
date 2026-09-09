@@ -20,11 +20,8 @@ pub struct PluginRun {
     pub id: SmolStr,
     pub files: u32,
     /// The judgment capabilities this extension declared — the one-row answer
-    /// to "why does kndo (not) report X for this language". What a unit of
-    /// this ecosystem publishes: under `exports`, every exported declaration is
-    /// the outside world's and `internal-only`'s Exported rung never fires;
-    /// under `entries`, only what an entry exports is.
-    pub published_surface: kndo_contract::plugin::PublishedSurface,
+    /// to "why does kndo (not) report X for this language".
+    ///
     /// Whether the language calls import cycles a hazard (`cyclic` reads it);
     /// `tolerated` is why a cycle-free-by-compiler language reports none.
     pub import_cycles: kndo_contract::plugin::CycleTolerance,

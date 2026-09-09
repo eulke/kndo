@@ -15,6 +15,7 @@
 
 use crate::discover::DiscoveredFile;
 use kndo_contract::adapter::{ResolveContext, SourceFile};
+use kndo_contract::manifest::Grant;
 use kndo_contract::manifest::{ManifestEvidence, ManifestSink, UnitKind, UnitRoot};
 use kndo_contract::plugin::{Plugin, PluginSpec};
 use kndo_contract::vocab::ProjectPath;
@@ -37,6 +38,15 @@ pub struct ManifestRead {
 /// One unit as the project sees it: what a manifest declared, plus the manifest
 /// that declared it (identity is the pair — parallel trees legitimately give
 /// two units one name).
+/// One unit another compiles against, and what that dependency GRANTS the
+/// dependent — the resolution of a [`kndo_contract::manifest::UnitDep`]
+/// against this project's units.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UnitReach {
+    pub unit: u32,
+    pub grants: Grant,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectUnit {
     pub name: SmolStr,
@@ -48,16 +58,16 @@ pub struct ProjectUnit {
     pub roots: Vec<UnitRoot>,
     pub excludes: Vec<SmolStr>,
     pub entries: Vec<ProjectPath>,
-    /// Every unit of this project this one compiles against, transitively,
-    /// ascending — the resolution of what the manifest NAMED. Ascending so a
-    /// membership test is a binary search and the order is a function of the
-    /// unit list alone.
-    pub compiles_against: Vec<u32>,
-    /// The units whose unit-reaching names this one may use — the resolution
-    /// of the [`kndo_contract::manifest::UnitDep`]s the manifest marked
-    /// FRIEND, direct and ascending: friendship is the build system's
-    /// statement about one pair of units and never carries over a third.
-    pub friend_of: Vec<u32>,
+    /// Every unit of this project this one compiles against, ascending by
+    /// unit, with the narrowest rung of that unit this one may NAME — the
+    /// resolution of the manifest's [`kndo_contract::manifest::UnitDep`]s.
+    ///
+    /// The rungs resolve differently, and the difference is the build
+    /// systems': `Exported` and `Namespace` ride the TRANSITIVE closure,
+    /// because one classpath is flat and a dependency's dependency is on it;
+    /// `Unit` is DIRECT only, because friendship is a statement about one pair
+    /// and never carries over to a third.
+    pub compiles_against: Vec<UnitReach>,
     /// The manifest that aggregates this unit's — Maven's `<modules>`,
     /// Cargo's `workspace.members`, a SwiftPM package's targets — which is
     /// the group a `Reach::Unit { up: 1 }` declaration pools over; `None`
@@ -66,6 +76,11 @@ pub struct ProjectUnit {
     /// Whether the outside world consumes this unit's exported API —
     /// [`kndo_contract::manifest::Unit::is_published`], read once.
     pub published: bool,
+    /// Whether EVERY exported declaration of every file is on that surface —
+    /// [`kndo_contract::manifest::Unit::publishes_every_export`], read once.
+    /// False for a unit that publishes nothing AND for one whose consumers
+    /// address an entry, which are one question to every consumer here.
+    pub publishes_every_export: bool,
     /// The name this unit's namespaces hang under when its ROOTS do not
     /// contain it — see [`kndo_contract::manifest::Unit::namespace_root`].
     pub namespace_root: Option<SmolStr>,
@@ -124,21 +139,30 @@ impl Project {
             .map(|(_, i)| i as u32)
     }
 
-    /// Can a file compiled in `viewer` name a namespace-scoped declaration of
-    /// `target`? True for the unit itself, and for every unit it compiles
-    /// against: a test module on the classpath of the library it exercises
-    /// reads that library's namespace as its own.
+    /// What a file compiled in `viewer` is granted of `target` — `None` where
+    /// `viewer` does not compile against `target` at all, which is the honest
+    /// answer for two units the build system never put together.
     ///
-    /// The engine asks this only where a language has said its namespaces
-    /// span a compilation ([`kndo_contract::plugin::NamespaceSpan`]) — the
-    /// relation is about who is BUILT together, and what that implies about
-    /// naming is the language's to state.
-    pub fn sees_into(&self, viewer: u32, target: u32) -> bool {
-        kndo_contract::adapter::unit_sees(
-            &self.units[viewer as usize].compiles_against,
-            viewer,
-            target,
-        )
+    /// A unit is granted all of itself. Everything else is what a MANIFEST
+    /// granted on the edge: an ordinary dependency stops at the public API, a
+    /// classpath grants the namespace rung, an associated compilation grants
+    /// the unit rung too. The engine no longer asks a LANGUAGE whether
+    /// namespaces span — the edge says so, and two edges out of one unit may
+    /// say different things.
+    pub fn granted(&self, viewer: u32, target: u32) -> Option<Grant> {
+        if viewer == target {
+            return Some(Grant::Unit);
+        }
+        let edges = &self.units[viewer as usize].compiles_against;
+        edges
+            .binary_search_by_key(&target, |r| r.unit)
+            .ok()
+            .map(|i| edges[i].grants)
+    }
+
+    /// Whether `viewer` was granted at least `grant` of `target`.
+    pub fn grants(&self, viewer: u32, target: u32, grant: Grant) -> bool {
+        self.granted(viewer, target).is_some_and(|g| g >= grant)
     }
 
     /// Every unit's entries, as (file, color) — what assembly anchors. A unit's
@@ -227,7 +251,7 @@ pub fn read_manifests(
 /// named dependency resolved to the unit it means.
 pub fn assemble(reads: &[ManifestRead]) -> Project {
     let mut units: Vec<ProjectUnit> = Vec::new();
-    let mut named: Vec<(Vec<SmolStr>, Vec<SmolStr>)> = Vec::new();
+    let mut named: Vec<Vec<(SmolStr, Grant)>> = Vec::new();
     for read in reads {
         let dir = read
             .manifest
@@ -258,19 +282,17 @@ pub fn assemble(reads: &[ManifestRead]) -> Project {
                 excludes,
                 entries,
                 compiles_against: Vec::new(),
-                friend_of: Vec::new(),
                 published: unit.is_published(),
+                publishes_every_export: unit.publishes_every_export(),
                 group: None,
                 namespace_root: unit.namespace_root.clone(),
             });
-            named.push((
-                unit.depends_on.iter().map(|d| d.unit.clone()).collect(),
+            named.push(
                 unit.depends_on
                     .iter()
-                    .filter(|d| d.friend)
-                    .map(|d| d.unit.clone())
-                    .collect(),
-            ));
+                    .map(|d| (d.unit.clone(), d.grants))
+                    .collect::<Vec<_>>(),
+            );
         }
     }
     let mut order: Vec<usize> = (0..units.len()).collect();
@@ -287,38 +309,42 @@ pub fn assemble(reads: &[ManifestRead]) -> Project {
     };
     // Both relations a manifest states by NAME resolve the same way: the
     // unit's own manifest first, then the nearest aggregator above it.
-    let (direct, friends): (Vec<Vec<u32>>, Vec<Vec<u32>>) = {
+    let direct: Vec<Vec<UnitReach>> = {
         let aggregators = Aggregators::of(reads);
         let by_manifest_and_name: BTreeMap<(&ProjectPath, &SmolStr), u32> = units
             .iter()
             .enumerate()
             .map(|(i, u)| ((&u.manifest, &u.name), rank[i]))
             .collect();
-        let resolve_all = |i: usize, names: &[SmolStr]| -> Vec<u32> {
-            let mut out: Vec<u32> = names
-                .iter()
-                .filter_map(|n| aggregators.resolve(&units[i].manifest, n, &by_manifest_and_name))
-                .filter(|&d| d != rank[i])
-                .collect();
-            out.sort_unstable();
-            out.dedup();
-            out
-        };
-        (
-            (0..units.len())
-                .map(|i| resolve_all(i, &named[i].0))
-                .collect(),
-            (0..units.len())
-                .map(|i| resolve_all(i, &named[i].1))
-                .collect(),
-        )
+        (0..units.len())
+            .map(|i| {
+                let mut out: Vec<UnitReach> = named[i]
+                    .iter()
+                    .filter_map(|(n, grant)| {
+                        aggregators
+                            .resolve(&units[i].manifest, n, &by_manifest_and_name)
+                            .map(|unit| UnitReach {
+                                unit,
+                                grants: *grant,
+                            })
+                    })
+                    .filter(|r| r.unit != rank[i])
+                    .collect();
+                // Ascending by unit, then by grant descending — so the
+                // WIDEST grant survives the dedup: a manifest naming one unit
+                // twice granted more once and less once, and the more is what
+                // it built with.
+                out.sort_unstable_by_key(|r| (r.unit, std::cmp::Reverse(r.grants)));
+                out.dedup_by_key(|r| r.unit);
+                out
+            })
+            .collect()
     };
     let mut sorted: Vec<ProjectUnit> = order.iter().map(|&i| units[i].clone()).collect();
-    let by_rank: Vec<Vec<u32>> = order.iter().map(|&i| direct[i].clone()).collect();
+    let by_rank: Vec<Vec<UnitReach>> = order.iter().map(|&i| direct[i].clone()).collect();
     let aggregators = Aggregators::of(reads);
     for (i, unit) in sorted.iter_mut().enumerate() {
         unit.compiles_against = closure(i as u32, &by_rank);
-        unit.friend_of = friends[order[i]].clone();
         unit.group = aggregators.parent.get(&unit.manifest).cloned();
     }
     Project { units: sorted }
@@ -328,16 +354,33 @@ pub fn assemble(reads: &[ManifestRead]) -> Project {
 /// the declarations — illegal in every build system that has a reactor, and
 /// still possible in a file — terminates on the visited set rather than
 /// recursing.
-fn closure(start: u32, direct: &[Vec<u32>]) -> Vec<u32> {
-    let mut seen: BTreeSet<u32> = BTreeSet::new();
-    let mut queue: Vec<u32> = direct[start as usize].clone();
-    while let Some(u) = queue.pop() {
-        if u == start || !seen.insert(u) {
+fn closure(start: u32, direct: &[Vec<UnitReach>]) -> Vec<UnitReach> {
+    // Two rules, and the second is one sentence: everything on the build path
+    // is reachable at `Exported`, because a dependency's dependency is on it;
+    // and a grant NARROWER than that is a statement about the PAIR the
+    // manifest named, so it does not travel. Kotlin says so out loud —
+    // friendship is one pair's associated compilation and a third module
+    // inherits nothing — and the JVM classpath is the same shape read from
+    // the other side: `guava-tests` is on `guava`'s because a `<dependency>`
+    // put it there, not because something else was.
+    let mut best: BTreeMap<u32, Grant> = BTreeMap::new();
+    let mut queue: Vec<u32> = direct[start as usize].iter().map(|r| r.unit).collect();
+    while let Some(unit) = queue.pop() {
+        if unit == start || best.insert(unit, Grant::Exports).is_some() {
             continue;
         }
-        queue.extend_from_slice(&direct[u as usize]);
+        queue.extend(direct[unit as usize].iter().map(|r| r.unit));
     }
-    seen.into_iter().collect()
+    for reach in &direct[start as usize] {
+        if reach.unit == start {
+            continue;
+        }
+        let held = best.entry(reach.unit).or_insert(reach.grants);
+        *held = (*held).max(reach.grants);
+    }
+    best.into_iter()
+        .map(|(unit, grants)| UnitReach { unit, grants })
+        .collect()
 }
 
 /// Which manifest aggregates which — Maven's `<modules>`, Cargo's
@@ -429,7 +472,9 @@ impl ProjectIndex {
                 roots: u.roots.clone(),
                 namespace_root: u.namespace_root.clone(),
                 published: u.published,
-                compiles_against: u.compiles_against.clone(),
+                // Resolution asks only "is it on my build path"; the rung is
+                // the engine's question and stays inside it.
+                compiles_against: u.compiles_against.iter().map(|r| r.unit).collect(),
             })
             .collect();
         let mut aliases: Vec<(SmolStr, kndo_contract::manifest::PathAlias)> = reads
@@ -523,6 +568,16 @@ mod tests {
         unit
     }
 
+    /// The same, on one classpath — the JVM's grant, which is the rung these
+    /// namespace tests are about.
+    fn on_one_classpath(mut unit: Unit, names: &[&str]) -> Unit {
+        unit.depends_on = names
+            .iter()
+            .map(|n| UnitDep::granting(*n, Grant::Namespace))
+            .collect();
+        unit
+    }
+
     fn index_of(project: &Project, manifest: &str) -> u32 {
         project
             .units
@@ -535,7 +590,9 @@ mod tests {
     fn a_dependency_name_resolves_inside_its_own_reactor() {
         // guava's shape: two reactors, each with a `guava` and a `guava-tests`.
         // The word `guava` in each tests module means ITS sibling, and the two
-        // compilations never meet.
+        // compilations never meet. Each `<dependency>` puts both on ONE
+        // classpath, which is the grant that makes a package one name across
+        // them — stated on the EDGE, so the mirror reactor grants nothing.
         let project = assemble(&[
             aggregator("pom.xml", &["guava/pom.xml", "guava-tests/pom.xml"]),
             aggregator(
@@ -548,7 +605,7 @@ mod tests {
             ),
             read(
                 "guava-tests/pom.xml",
-                vec![needing(
+                vec![on_one_classpath(
                     unit("guava-tests", UnitKind::Test, &["guava-tests"], &[]),
                     &["guava"],
                 )],
@@ -559,7 +616,7 @@ mod tests {
             ),
             read(
                 "android/guava-tests/pom.xml",
-                vec![needing(
+                vec![on_one_classpath(
                     unit("guava-tests", UnitKind::Test, &["android/guava-tests"], &[]),
                     &["guava"],
                 )],
@@ -570,18 +627,21 @@ mod tests {
         let android_main = index_of(&project, "android/guava/pom.xml");
         let android_tests = index_of(&project, "android/guava-tests/pom.xml");
 
-        assert!(project.sees_into(tests, main));
-        assert!(project.sees_into(android_tests, android_main));
+        assert!(project.grants(tests, main, Grant::Namespace));
+        assert!(project.grants(android_tests, android_main, Grant::Namespace));
         assert!(
-            !project.sees_into(tests, android_main),
+            !project.grants(tests, android_main, Grant::Namespace),
             "the mirror is another reactor, however identical its names"
         );
-        assert!(!project.sees_into(android_tests, main));
+        assert!(!project.grants(android_tests, main, Grant::Namespace));
         assert!(
-            !project.sees_into(main, tests),
+            !project.grants(main, tests, Grant::Namespace),
             "seeing is directional: the library never reads its tests"
         );
-        assert!(project.sees_into(main, main), "a unit sees itself");
+        assert!(
+            project.grants(main, main, Grant::Namespace),
+            "a unit sees itself"
+        );
     }
 
     #[test]
@@ -590,17 +650,26 @@ mod tests {
             aggregator("pom.xml", &["a/pom.xml", "b/pom.xml", "c/pom.xml"]),
             read(
                 "a/pom.xml",
-                vec![needing(unit("a", UnitKind::Test, &["a"], &[]), &["b"])],
+                vec![on_one_classpath(
+                    unit("a", UnitKind::Test, &["a"], &[]),
+                    &["b"],
+                )],
             ),
             read(
                 "b/pom.xml",
-                vec![needing(unit("b", UnitKind::Library, &["b"], &[]), &["c"])],
+                vec![on_one_classpath(
+                    unit("b", UnitKind::Library, &["b"], &[]),
+                    &["c"],
+                )],
             ),
             read(
                 "c/pom.xml",
                 // A declaration cycle no build system would accept; the
                 // closure still terminates and stays a set.
-                vec![needing(unit("c", UnitKind::Library, &["c"], &[]), &["a"])],
+                vec![on_one_classpath(
+                    unit("c", UnitKind::Library, &["c"], &[]),
+                    &["a"],
+                )],
             ),
         ]);
         let (a, b, c) = (
@@ -608,8 +677,23 @@ mod tests {
             index_of(&project, "b/pom.xml"),
             index_of(&project, "c/pom.xml"),
         );
-        assert!(project.sees_into(a, c), "through b");
-        assert_eq!(project.units[a as usize].compiles_against, vec![b, c]);
+        // On the build path through b — at the EXPORTED rung, which is what a
+        // transitive dependency is. The narrower grant b holds over c is b's,
+        // and a manifest that never named c cannot have granted it.
+        assert!(project.grants(a, c, Grant::Exports), "through b");
+        assert!(!project.grants(a, c, Grant::Namespace), "and no further");
+        assert!(
+            project.grants(a, b, Grant::Namespace),
+            "which b's own edge is"
+        );
+        assert_eq!(
+            project.units[a as usize]
+                .compiles_against
+                .iter()
+                .map(|r| r.unit)
+                .collect::<Vec<_>>(),
+            vec![b, c]
+        );
     }
 
     #[test]
@@ -679,16 +763,21 @@ mod tests {
             .iter()
             .position(|u| u.name == "core:test")
             .unwrap() as u32;
-        assert_eq!(by_name("core:test").friend_of, vec![core]);
+        let friends_of = |n: &str| -> Vec<u32> {
+            by_name(n)
+                .compiles_against
+                .iter()
+                .filter(|r| r.grants >= Grant::Unit)
+                .map(|r| r.unit)
+                .collect()
+        };
+        assert_eq!(friends_of("core:test"), vec![core]);
         assert_eq!(
-            by_name("other").friend_of,
+            friends_of("other"),
             vec![core_test],
             "resolved through the aggregator like a dependency"
         );
-        assert!(
-            by_name("core").friend_of.is_empty(),
-            "friendship is directional"
-        );
+        assert!(friends_of("core").is_empty(), "friendship is directional");
         assert!(by_name("core").published && !by_name("core:test").published);
     }
 

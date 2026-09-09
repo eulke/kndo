@@ -51,7 +51,7 @@
 //! A `kmock.pkg` manifest states the project's structure, one unit per line:
 //!
 //! ```text
-//! unit name kind roots=a,b excludes=c entries=x.kmock,y.kmock needs=other friends=other publish=no
+//! unit name kind roots=a,b excludes=c entries=x.kmock,y.kmock needs=o friends=o classpath=o publish=no
 //! member sub/kmock.pkg              a manifest this one aggregates
 //! run path.kmock                    a file this manifest runs (tooling)
 //! dep name                          a dependency this manifest declares
@@ -60,14 +60,18 @@
 //! ```
 //!
 //! `kind` is one of library, executable, test, bench, example, tooling — the
-//! color a unit's entries anchor follows from it. `needs=` names units this
-//! one compiles against and `friends=` the units whose unit-reaching names it
-//! may use; the engine resolves each name among the manifests this one's
-//! aggregator lists, which is how two units of one name stay apart.
-//! `publish=yes|no` states the unit's publication; unstated, a library is
-//! published and nothing else is. The kmock ecosystem publishes through its
-//! entries, like npm; [`MockPlugin::with`] speaks the variant that
-//! publishes every export, like a jar.
+//! color a unit's entries anchor follows from it. The three dependency keys
+//! are one ladder at three rungs: `needs=` reaches a unit's exports alone,
+//! `friends=` its unit-reaching names too, and `classpath=` its
+//! namespace-reaching ones — the JVM's rule, which is a fact about the EDGE
+//! and never about a language. The engine resolves each name among the
+//! manifests this one's aggregator lists, which is how two units of one name
+//! stay apart.
+//!
+//! `publish=no|by-name|by-entry` states the unit's publication AND how its
+//! consumers address it: `by-name` hands out every export of every file, like
+//! a jar; `by-entry` hands out what the entries reach, like npm. Unstated, a
+//! library publishes `by-name` and nothing else publishes.
 //!
 //! A `.kdoc` document ([`MockPlugin::hosting`]) is a page holding kmock in
 //! fences — what a test of embedded regions speaks:
@@ -88,10 +92,12 @@ use kndo_contract::evidence::{
     EvidenceStreams, ImportBinding, ImportShape, ImportTarget, MarkerTarget, Reach, RefKind,
     RegionMode, RelationKind, RootKind, RootTarget, SymbolKind, Timing,
 };
-use kndo_contract::manifest::{ManifestSink, Publication, Unit, UnitDep, UnitKind, UnitRoot};
+use kndo_contract::manifest::{
+    Grant, ManifestSink, Publication, Unit, UnitDep, UnitKind, UnitRoot,
+};
 use kndo_contract::plugin::{
     ContentAccess, DispatchRule, GraphAccess, Plugin, PluginSink, PluginSpec, PluginSpecBuilder,
-    PublishedSurface, Step,
+    Step,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use std::collections::BTreeMap;
@@ -169,8 +175,6 @@ fn kmock_spec() -> PluginSpecBuilder {
             EvidenceStream::Qualifiers,
         ]))
         .manifests(&["**/kmock.pkg"])
-        // Entries publish, like npm: an export no entry reaches is internal.
-        .published_surface(PublishedSurface::Entries)
 }
 
 impl MockPlugin {
@@ -184,17 +188,6 @@ impl MockPlugin {
         MockPlugin::speaking(
             kmock_spec()
                 .import_cycles(kndo_contract::plugin::CycleTolerance::Hazard)
-                .build(),
-        )
-    }
-
-    /// The kmock language whose namespaces span the compilation — what a test
-    /// of unit friendship speaks, since the plain mock keeps each namespace
-    /// inside the unit that compiles it.
-    pub fn spanning() -> Self {
-        MockPlugin::speaking(
-            kmock_spec()
-                .namespace_span(kndo_contract::plugin::NamespaceSpan::Compilation)
                 .build(),
         )
     }
@@ -249,8 +242,7 @@ impl MockPlugin {
                 EvidenceStream::Markers,
                 EvidenceStream::Relations,
                 EvidenceStream::Qualifiers,
-            ]))
-            .published_surface(PublishedSurface::Entries);
+            ]));
         MockPlugin::speaking(declare(spec).build())
     }
 
@@ -591,20 +583,32 @@ impl Plugin for MockPlugin {
                     .unwrap_or_default()
             };
             let publication = match words.clone().find_map(|w| w.strip_prefix("publish=")) {
-                Some("yes") => Publication::Published,
                 Some("no") => Publication::Unpublished,
+                Some("by-name") => Publication::ByName,
+                Some("by-entry") => Publication::ByEntry,
                 _ => Publication::Unstated,
             };
-            let friends = list("friends=");
-            let mut depends_on: Vec<UnitDep> = list("needs=")
-                .into_iter()
-                .chain(friends.iter().copied())
-                .map(|n| match friends.contains(&n) {
-                    true => UnitDep::friend(n),
-                    false => UnitDep::on(n),
+            // One ladder, three keys — and the NARROWEST grant wins where a
+            // line names a unit twice, which is what the engine does with a
+            // manifest that says the same thing two ways.
+            // One ladder, three keys — and the WIDEST grant wins where a line
+            // names a unit twice, which is what the engine does with a
+            // manifest that says the same thing two ways.
+            let grants = [
+                ("friends=", Grant::Unit),
+                ("classpath=", Grant::Namespace),
+                ("needs=", Grant::Exports),
+            ];
+            let mut depends_on: Vec<UnitDep> = grants
+                .iter()
+                .flat_map(|(key, grant)| {
+                    list(key)
+                        .into_iter()
+                        .map(move |n| UnitDep::granting(n, *grant))
                 })
                 .collect();
-            depends_on.dedup();
+            depends_on.dedup_by(|a, b| a.unit == b.unit);
+            depends_on.sort();
             out.unit(Unit {
                 name: name.into(),
                 kind,

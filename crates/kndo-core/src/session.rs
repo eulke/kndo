@@ -728,12 +728,10 @@ impl Session {
                 (
                     SmolStr::new(s.coordinate()),
                     DeclaredCapabilities {
-                        published_surface: s.published_surface(),
                         import_cycles: s.import_cycles(),
                         dependency_scoping: s.dependency_scoping(),
                         dependency_identity: s.dependency_identity(),
                         ladder: s.ladder().clone(),
-                        namespace_span: s.namespace_span(),
                         unnamed_unit: s.unnamed_unit(),
                         nesting: s.nesting().clone(),
                     },
@@ -875,9 +873,6 @@ impl Snapshot {
                         PluginRun {
                             id,
                             files,
-                            published_surface: caps
-                                .map(|c| c.published_surface)
-                                .unwrap_or_default(),
                             import_cycles: caps.map(|c| c.import_cycles).unwrap_or_default(),
                             dependency_scoping: caps
                                 .map(|c| c.dependency_scoping)

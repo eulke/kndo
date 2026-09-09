@@ -627,22 +627,17 @@
           "type": "string"
         },
         "import_cycles": {
-          "description": "Whether the language calls import cycles a hazard (`cyclic` reads it);\n`tolerated` is why a cycle-free-by-compiler language reports none.",
+          "description": "The judgment capabilities this extension declared — the one-row answer\nto \"why does kndo (not) report X for this language\".\n\nWhether the language calls import cycles a hazard (`cyclic` reads it);\n`tolerated` is why a cycle-free-by-compiler language reports none.",
           "$ref": "#/$defs/CycleTolerance"
         },
         "ladder": {
           "description": "The reaches this language can spell, narrowest first, each under the\nword this language uses for it (`internal-only` reads both: the rungs\nto know a narrower one exists, the word to say so). Empty means the\nlanguage states no ladder and that analysis stays silent for its files.",
           "$ref": "#/$defs/Ladder"
-        },
-        "published_surface": {
-          "description": "The judgment capabilities this extension declared — the one-row answer\nto \"why does kndo (not) report X for this language\". What a unit of\nthis ecosystem publishes: under `exports`, every exported declaration is\nthe outside world's and `internal-only`'s Exported rung never fires;\nunder `entries`, only what an entry exports is.",
-          "$ref": "#/$defs/PublishedSurface"
         }
       },
       "required": [
         "id",
         "files",
-        "published_surface",
         "import_cycles",
         "dependency_scoping",
         "dependency_identity"
@@ -651,14 +646,6 @@
     "ProjectPath": {
       "description": "A `/`-separated, project-relative path. The one path spelling that crosses crate\nboundaries; OS paths stay at the discovery edge.",
       "type": "string"
-    },
-    "PublishedSurface": {
-      "description": "What a unit of this ecosystem publishes — the surface an outside consumer\ncan name, which no narrowing advice may touch. `Exports` (the default):\nevery exported declaration is published — a jar, a crate, a Go package, a\nPython distribution hand out all of them, so `internal-only` never advises\nan exported declaration here until the unit's own publication says nobody\noutside consumes it. `Entries`: only what the unit's entries export — an\nnpm package resolves through `main`/`exports`, so an `export` in a file no\nentry reaches is internal however it is spelled, and the analysis may say\nso. A language fact, because it is the ecosystem's resolution rule; the\nunit's own publication refines it.\n\nNOT derivable, and the derivations were tried: not from [`Nesting`] (swift\nis `PerFile` and hands out every `public` declaration), not from whether\nthe unit declares entries (rust and python declare them and hand out\neverything). The question an adapter author answers is one sentence: does\nan outside consumer's import of this unit name a FILE the manifest\ndeclared, or the unit itself? Deleting the capability — everything\n`Exports` — moves vite by 57 findings and nothing else in the corpus.",
-      "type": "string",
-      "enum": [
-        "exports",
-        "entries"
-      ]
     },
     "ReportDiagnostic": {
       "type": "object",
@@ -729,12 +716,6 @@
       "description": "One reach a language can spell with a keyword, narrowest first — the\nLADDER. `internal-only` reads it to ask whether a declaration could stand\non a narrower rung than the one it declares: Java spells\n`[Owner, Namespace, Exported]` (private, package-private, public), so a\npackage-private name used only in its own file has somewhere to go, while\nGo spells `[Namespace, Exported]` and the same evidence is noise. Grows as\nlanguages teach us rungs; a rung this build does not know sorts above every\none it does, so an unknown rung never makes a narrower one appear.",
       "oneOf": [
         {
-          "type": "string",
-          "enum": [
-            "exported"
-          ]
-        },
-        {
           "description": "Nameable only inside the declaration that owns it (Java's `private`).",
           "type": "string",
           "const": "owner"
@@ -768,6 +749,11 @@
           "description": "Nameable inside the group of units one manifest aggregates (Swift's\n`package`).",
           "type": "string",
           "const": "group"
+        },
+        {
+          "description": "Nameable from anywhere — the widest rung, and the default a dependency\nreaches into what it depends on.",
+          "type": "string",
+          "const": "exported"
         }
       ]
     },

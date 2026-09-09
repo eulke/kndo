@@ -1499,7 +1499,6 @@ fn agent_format_matches_its_committed_golden() {
                 PluginRun {
                     id: SmolStr::new("kndo:python"),
                     files: 7,
-                    published_surface: Default::default(),
                     import_cycles: Default::default(),
                     dependency_scoping: Default::default(),
                     dependency_identity: Default::default(),
@@ -1508,7 +1507,6 @@ fn agent_format_matches_its_committed_golden() {
                 PluginRun {
                     id: SmolStr::new("kndo:swift"),
                     files: 4,
-                    published_surface: Default::default(),
                     import_cycles: Default::default(),
                     dependency_scoping: Default::default(),
                     dependency_identity: Default::default(),

@@ -98,7 +98,7 @@ fn pyproject(text: &str, dir: &str, cx: &ResolveContext<'_>, out: &mut ManifestS
         // unsaid — which is what a manifest without a `[project]` table does.
         publication: match (project.is_some(), private(&root)) {
             (_, true) => Publication::Unpublished,
-            (true, false) => Publication::Published,
+            (true, false) => Publication::ByName,
             (false, false) => Publication::Unstated,
         },
     });
@@ -477,7 +477,7 @@ fn setup_cfg(text: &str, dir: &str, cx: &ResolveContext<'_>, out: &mut ManifestS
         excludes: Vec::new(),
         entries: Vec::new(),
         depends_on: Vec::new(),
-        publication: Publication::Published,
+        publication: Publication::ByName,
         // Every layout `setup.cfg` states puts the package UNDER the root it
         // names, so the dotted path already carries the package's own name.
         namespace_root: None,

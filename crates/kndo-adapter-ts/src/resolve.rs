@@ -121,16 +121,25 @@ fn subpath(
     landing(landings, cx, exts)
 }
 
-/// The first candidate of a rewriting that names a file of this project. A
-/// table offers several because a runtime picks one by condition and the
-/// engine picks none: what matters is that the file is reached at all.
+/// EVERY candidate of a rewriting that names a file of this project — not the
+/// first. A table offers several because a runtime picks one by condition and
+/// the engine picks none, so every branch is a possible resolution and all of
+/// them are edges: `"#flag": { "module-sync": "./true.js", "default":
+/// "./false.js" }` keeps both files, because kndo cannot know which condition
+/// the consumer's runtime sets. Taking the first would keep whichever the
+/// manifest's key order happened to put there, which is not a fact about the
+/// program.
 fn landing(candidates: Vec<SmolStr>, cx: &ResolveContext<'_>, exts: &[String]) -> Resolution {
-    match candidates
+    let mut found: Vec<ProjectPath> = candidates
         .iter()
-        .find_map(|c| resolve_in_dir("", c, cx, exts))
-    {
-        Some(path) => Resolution::File(path),
-        None => Resolution::Unresolved,
+        .filter_map(|c| resolve_in_dir("", c, cx, exts))
+        .collect();
+    found.sort();
+    found.dedup();
+    match found.len() {
+        0 => Resolution::Unresolved,
+        1 => Resolution::File(found.remove(0)),
+        _ => Resolution::Files(found),
     }
 }
 

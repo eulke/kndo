@@ -198,7 +198,7 @@ pub fn structure(manifest: &ProjectPath, content: &[u8], out: &mut ManifestSink)
                 // place SwiftPM states this, and stating it is not the same
                 // as leaving it unsaid.
                 publication: if published.iter().any(|t| t == &name) {
-                    Publication::Published
+                    Publication::ByName
                 } else {
                     Publication::Unpublished
                 },

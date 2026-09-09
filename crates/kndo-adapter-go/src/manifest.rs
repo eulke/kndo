@@ -51,8 +51,10 @@ pub fn structure(manifest: &SourceFile<'_>, _cx: &ResolveContext<'_>, out: &mut 
         depends_on: depends_on.into_iter().map(UnitDep::on).collect(),
         // Go has no `publish = false`: a module path resolvable by the proxy is
         // importable by anyone who spells it, and nothing in go.mod says
-        // otherwise.
-        publication: Publication::Unstated,
+        // otherwise. What they spell is a NAME — the module path plus the
+        // package — so every exported identifier of every file is on the
+        // surface, and no entry file gates it.
+        publication: Publication::ByName,
         // Every package of the module is imported by the module path plus its
         // directory — the `module` line is the prefix all of them hang under.
         namespace_root: Some(SmolStr::new(&module)),

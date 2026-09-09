@@ -107,7 +107,7 @@ fn a_module_is_two_units_and_the_tests_are_the_mains_friend() {
         tests
             .depends_on
             .iter()
-            .filter(|d| d.friend)
+            .filter(|d| d.grants >= kndo_contract::manifest::Grant::Unit)
             .map(|d| d.unit.as_str())
             .collect::<Vec<_>>(),
         ["core"],

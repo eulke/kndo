@@ -297,6 +297,17 @@ pub mod jvm_manifest {
     //! reasonably be expected to write. Deliberately shallow line-shaped scans,
     //! not XML/Groovy parsers: dependency names are all activation reads.
 
+    /// One JVM dependency, at the rung a classpath grants. Both readers use
+    /// it, because both build systems put the whole compile path on ONE
+    /// classpath, where a package is a name every unit on it contributes to —
+    /// so the grant is a fact about the EDGE, and the same edge covers
+    /// Kotlin's `internal` (`Rung::Unit` is wider, so `Namespace` carries it).
+    pub fn on_the_classpath(
+        unit: impl Into<smol_str::SmolStr>,
+    ) -> kndo_contract::manifest::UnitDep {
+        kndo_contract::manifest::UnitDep::granting(unit, kndo_contract::manifest::Grant::Namespace)
+    }
+
     use kndo_contract::adapter::SourceFile;
     use smol_str::SmolStr;
 
@@ -487,11 +498,11 @@ pub mod jvm_manifest {
             roots: Vec::new(),
             excludes: Vec::new(),
             entries: Vec::new(),
-            depends_on: depends_on
-                .into_iter()
-                .map(kndo_contract::manifest::UnitDep::on)
-                .collect(),
-            publication: kndo_contract::manifest::Publication::Unstated,
+            depends_on: depends_on.into_iter().map(on_the_classpath).collect(),
+            // A jar hands out every `public` class of every package it holds:
+            // a consumer writes `com.google.common.io.Files`, never a file
+            // this manifest mapped.
+            publication: kndo_contract::manifest::Publication::ByName,
             namespace_root: None,
         });
         out.unit(kndo_contract::manifest::Unit {
@@ -503,16 +514,19 @@ pub mod jvm_manifest {
                 .collect(),
             excludes: Vec::new(),
             entries: Vec::new(),
-            // Surefire compiles the test sources against the main classes,
-            // which for package-private names is friendship.
+            // ONE classpath: javac puts every dependency on it, and a package
+            // is a name every unit on it contributes to — so a dependent
+            // declaring `com.google.common.io` names that package's
+            // package-private members, whether it is the module's own test set
+            // (Surefire) or a separate artifact (guava-tests). The module's
+            // OWN main set is more than that: Surefire compiles the test
+            // sources as an ASSOCIATED compilation, which reaches the unit
+            // rung too. Being on a classpath is not being inside the module.
             depends_on: test_depends_on
                 .into_iter()
-                .map(|d| {
-                    if d == name {
-                        kndo_contract::manifest::UnitDep::friend(d)
-                    } else {
-                        kndo_contract::manifest::UnitDep::on(d)
-                    }
+                .map(|d| match d == name {
+                    true => kndo_contract::manifest::UnitDep::friend(d),
+                    false => on_the_classpath(d),
                 })
                 .collect(),
             publication: kndo_contract::manifest::Publication::Unstated,
@@ -701,8 +715,8 @@ pub mod jvm_manifest {
             roots: main_roots.into_iter().map(UnitRoot::from).collect(),
             excludes: test_roots.clone(),
             entries: Vec::new(),
-            depends_on: depends_on.into_iter().map(UnitDep::on).collect(),
-            publication: Publication::Unstated,
+            depends_on: depends_on.into_iter().map(on_the_classpath).collect(),
+            publication: Publication::ByName,
             namespace_root: None,
         });
         out.unit(Unit {
@@ -711,17 +725,16 @@ pub mod jvm_manifest {
             roots: test_roots.into_iter().map(UnitRoot::from).collect(),
             excludes: Vec::new(),
             entries: Vec::new(),
-            // Kotlin's `internal` and Java's package-private both reach a
-            // module's own tests: Gradle compiles the test set against the
-            // main one as an associated compilation, which is friendship.
+            // The same classpath rule as Maven's, plus Kotlin's `internal`:
+            // Gradle compiles the test set against the MAIN one as an
+            // associated compilation, which reaches the unit rung; every other
+            // dependency is on the classpath and no more, because a module's
+            // `internal` is not a dependent's to name.
             depends_on: test_depends_on
                 .into_iter()
-                .map(|d| {
-                    if d == name {
-                        UnitDep::friend(d)
-                    } else {
-                        UnitDep::on(d)
-                    }
+                .map(|d| match d == name {
+                    true => UnitDep::friend(d),
+                    false => on_the_classpath(d),
                 })
                 .collect(),
             publication: Publication::Unpublished,
@@ -1381,7 +1394,7 @@ pub mod jvm_manifest {
 /// Resolution by the NAMESPACE a dotted specifier names, for the languages
 /// whose imports name one rather than a file — `import com.foo.Bar;`,
 /// `import a.b.Foo`. The package is a clause its files declare
-/// ([`kndo_contract::plugin::Nesting::Flat`]), so the files that answer are
+/// ([`kndo_contract::plugin::Nesting::ByUnit`]), so the files that answer are
 /// the files that wrote it, and the import's binding picks the name among
 /// them.
 ///

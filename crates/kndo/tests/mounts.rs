@@ -10,13 +10,7 @@ mod common;
 
 use common::{keeper_kinds, reaches, reported};
 use kndo::Category;
-use kndo_contract::plugin::PublishedSurface;
 use kndo_testkit::{MockPlugin, TempProject};
-
-/// The kmock language whose units publish every export, like a jar or a crate.
-fn publishing() -> MockPlugin {
-    MockPlugin::with(|spec| spec.published_surface(PublishedSurface::Exports))
-}
 
 #[test]
 fn a_private_mount_fences_everything_under_it_off_the_published_surface() {
@@ -34,7 +28,7 @@ fn a_private_mount_fences_everything_under_it_off_the_published_surface() {
     .file("src/hidden.kmock", "pub fn fenced\n")
     // Under an exported one: the unit hands it out.
     .file("src/shown.kmock", "pub fn open\n");
-    let snap = common::analyze(&p, vec![Box::new(publishing())]);
+    let snap = common::analyze(&p, vec![Box::new(MockPlugin::new())]);
 
     assert_eq!(
         reaches(&snap, "src/hidden.kmock#fenced"),
@@ -72,7 +66,7 @@ fn a_namespace_reaches_down_the_mounts_it_holds() {
     .file("src/a.kmock", "mount b ./b\ncall shared\n")
     // Two namespaces down, and still inside the one that holds `shared`.
     .file("src/b.kmock", "call shared\n");
-    let snap = common::analyze(&p, vec![Box::new(publishing())]);
+    let snap = common::analyze(&p, vec![Box::new(MockPlugin::new())]);
 
     assert_eq!(
         reaches(&snap, "src/lib.kmock#shared"),
@@ -101,7 +95,7 @@ fn a_reach_that_climbs_a_mount_pools_the_namespace_it_names() {
     // its parent's parent is not.
     .file("src/b.kmock", "ns(1) fn from_b\nns fn own_b\ncall own_b\n")
     .file("src/c.kmock", "call from_b\n");
-    let snap = common::analyze(&p, vec![Box::new(publishing())]);
+    let snap = common::analyze(&p, vec![Box::new(MockPlugin::new())]);
 
     assert_eq!(
         reaches(&snap, "src/b.kmock#from_b"),
@@ -147,7 +141,7 @@ fn an_include_makes_the_target_content_this_file_s_own() {
     // Private to its own file — and the file including it reads it anyway,
     // because the language pastes the content in rather than importing it.
     .file("src/gen.kmock", "ns fn helper\nns fn nobody\n");
-    let snap = common::analyze(&p, vec![Box::new(publishing())]);
+    let snap = common::analyze(&p, vec![Box::new(MockPlugin::new())]);
 
     assert_eq!(keeper_kinds(&snap, "src/gen.kmock#helper"), ["reference"]);
     let unused = reported(&snap, &Category::UNUSED);

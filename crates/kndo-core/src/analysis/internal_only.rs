@@ -17,11 +17,13 @@
 //! reference in ANY other claimed file, reachable or not, because an
 //! unreachable file still compiles against the export it spells (vite's
 //! `__tests_dts__` type-tests proved that vice). And it is judged only where
-//! the export is nobody's outside: an ecosystem that publishes through entries
-//! ([`kndo_contract::plugin::PublishedSurface::Entries`]), or a unit that
-//! publishes nothing — an executable, a test set, a library its manifest keeps
-//! private. Where every export is published, an exported declaration is the
-//! outside world's however it is used inside. A whole-file-rooted file is
+//! the export is nobody's outside — which is one question the unit's manifest
+//! answers ([`kndo_contract::manifest::Unit::publishes_every_export`]): a unit
+//! that publishes nothing (an executable, a test set, a library its manifest
+//! keeps private), or one whose consumers address an ENTRY, where an export no
+//! entry hands out is internal however it is spelled. Where every export is
+//! published, an exported declaration is the outside world's however it is
+//! used inside. A whole-file-rooted file is
 //! exempt on that rung: an entry's exports are that surface, and a test's are
 //! its runner's.
 //!
@@ -37,7 +39,7 @@ use kndo_contract::evidence::{
     Declaration, EvidenceStream, FileEvidence, ImportShape, Reach, RootTarget, SymbolKind,
 };
 use kndo_contract::finding::{Finding, Severity};
-use kndo_contract::plugin::{PublishedSurface, Rung};
+use kndo_contract::plugin::Rung;
 use kndo_contract::vocab::{Category, Confidence};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -169,12 +171,14 @@ impl Analysis for InternalOnly {
             if ladder.is_empty() {
                 continue;
             }
-            // An export is nobody's outside where the ecosystem publishes
-            // through entries, or where the unit compiling the file publishes
-            // nothing at all.
-            let export_is_internal = caps.published_surface == PublishedSurface::Entries
-                || f.unit
-                    .is_some_and(|u| !g.project.units[u as usize].published);
+            // An export is nobody's outside unless the unit compiling this
+            // file hands out every export — which is one question the manifest
+            // answers, covering both "this unit publishes nothing" and "its
+            // consumers address an entry, so an export no entry reaches is
+            // internal".
+            let export_is_internal = !f
+                .unit
+                .is_some_and(|u| g.project.units[u as usize].publishes_every_export);
             // The whole file was namespace-imported: anything here may be used.
             // The Exported rung honors even an unreachable such importer.
             let bounded_open = !bound_names.contains(&(i as u32, ""));

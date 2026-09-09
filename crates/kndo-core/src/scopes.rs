@@ -16,7 +16,8 @@
 
 use crate::analysis::DeclaredCapabilities;
 use crate::graph::Graph;
-use kndo_contract::plugin::{NamespaceSpan, Nesting, UnnamedUnit};
+use kndo_contract::manifest::Grant;
+use kndo_contract::plugin::{Nesting, UnnamedUnit};
 use smol_str::SmolStr;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -25,20 +26,14 @@ pub struct Scopes {
     /// a file declaring no namespace is a node of its own, so a
     /// namespace-reaching declaration there pools nothing beyond its file.
     of_file: Vec<u32>,
-    /// namespace node → the files of THIS node, ascending: one name inside one
-    /// compilation.
-    files: Vec<Vec<u32>>,
     /// namespace node → those files plus every file spelling the same name in
-    /// a unit that compiles against this node's, ascending. Equal to `files`
-    /// wherever no manifest said otherwise.
+    /// a unit whose manifest granted [`Rung::Namespace`] into this node's,
+    /// ascending. Who may NAME me. EQUAL to `files` wherever no manifest
+    /// granted it, so there is nothing to switch on — the data says it.
     spanned: Vec<Vec<u32>>,
-    /// namespace node → the files it is BUILT TOGETHER with — `spanned` made
-    /// symmetric. Reachability's input; see [`Scopes::covisible`].
+    /// namespace node → the files its build PULLS IN: the same grant read in
+    /// the other direction. Reachability's input; see [`Scopes::covisible`].
     cobuilt: Vec<Vec<u32>>,
-    /// file → whether the language that claims it says a namespace spans the
-    /// compilation. Per file, because the DECLARATION's language decides who
-    /// may name it, and one namespace can hold two languages' files.
-    spans: Vec<bool>,
     /// file → whether the language that claims it says the namespace a file
     /// declares IS its unit where no manifest named one — see
     /// [`kndo_contract::plugin::UnnamedUnit`].
@@ -164,7 +159,7 @@ impl Scopes {
                 },
                 // The CLAUSE is the whole key: a package that does not match
                 // its directory is not a defect, it is Java.
-                Nesting::Flat => match f.evidence.namespace.is_empty() {
+                Nesting::ByUnit => match f.evidence.namespace.is_empty() {
                     true => alone(),
                     false => {
                         let compilation = match f.unit {
@@ -220,11 +215,6 @@ impl Scopes {
                 .find(|(c, _)| *c == f.adapter)
                 .map(|(_, caps)| caps)
         };
-        let spans = graph
-            .files
-            .iter()
-            .map(|f| declared(f).is_some_and(|c| c.namespace_span == NamespaceSpan::Compilation))
-            .collect();
         let namespace_is_unit = graph
             .files
             .iter()
@@ -232,10 +222,8 @@ impl Scopes {
             .collect();
         Scopes {
             of_file,
-            files,
             spanned,
             cobuilt,
-            spans,
             namespace_is_unit,
             unit_pool: unit_pools(graph),
             group_pool: group_pools(graph),
@@ -287,12 +275,7 @@ impl Scopes {
     /// declaration, this asks what the compiler builds together, and only the
     /// second makes a file with no exported name alive because its package is.
     pub fn covisible(&self, file: usize) -> &[u32] {
-        let node = self.of_file[file] as usize;
-        if self.spans[file] {
-            &self.cobuilt[node]
-        } else {
-            &self.files[node]
-        }
+        &self.cobuilt[self.of_file[file] as usize]
     }
 
     /// The files a `Reach::Named { namespace }` declaration in `file` pools
@@ -301,7 +284,7 @@ impl Scopes {
     pub fn named_pool(&self, file: usize, namespace: &[SmolStr]) -> Option<&[u32]> {
         let key = (self.compilation_of[file].clone(), namespace.to_vec());
         let node = *self.nodes.get(&key)? as usize;
-        Some(self.pool_at(file, node))
+        Some(self.pool_at(node))
     }
 
     /// The files a `Reach::Unit { up: 0 }` declaration pools over where no
@@ -331,13 +314,10 @@ impl Scopes {
     /// the node's own files where they are flat, and every file of a
     /// same-named node in a unit this one compiles against where the language
     /// says a namespace spans the compilation.
-    fn pool_at(&self, file: usize, node: usize) -> &[u32] {
-        if self.node_in_forest[node] {
-            &self.subtree[node]
-        } else if self.spans[file] {
-            &self.spanned[node]
-        } else {
-            &self.files[node]
+    fn pool_at(&self, node: usize) -> &[u32] {
+        match self.node_in_forest[node] {
+            true => &self.subtree[node],
+            false => &self.spanned[node],
         }
     }
 
@@ -371,7 +351,7 @@ impl Scopes {
         if up > 0 {
             return None;
         }
-        Some(self.pool_at(file, node))
+        Some(self.pool_at(node))
     }
 }
 
@@ -452,8 +432,13 @@ fn unit_pools(graph: &Graph) -> Vec<Vec<u32>> {
     }
     let mut pools = own.clone();
     for (viewer, unit) in graph.project.units.iter().enumerate() {
-        for &target in &unit.friend_of {
-            pools[target as usize].extend_from_slice(&own[viewer]);
+        // A unit-reaching declaration is nameable from every unit whose
+        // manifest granted at least that rung into this one — friendship, and
+        // the classpath grant that subsumes it.
+        for reach in &unit.compiles_against {
+            if reach.grants >= Grant::Unit {
+                pools[reach.unit as usize].extend_from_slice(&own[viewer]);
+            }
         }
     }
     for pool in &mut pools {
@@ -569,7 +554,12 @@ fn cobuilt_nodes(
                 .flatten()
             {
                 let theirs = unit_of_node[other].expect("grouped only units");
-                if other != n && graph.project.sees_into(mine, theirs) {
+                // ACROSS units, never within one: two nodes of one unit that
+                // spell the same segments are two namespaces its own nesting
+                // kept apart (every file of a `PerFile` language declares
+                // none), and no grant between a unit and itself may merge
+                // what its own key separated.
+                if theirs != mine && graph.project.grants(mine, theirs, Grant::Namespace) {
                     out.extend_from_slice(&files[other]);
                 }
             }
@@ -604,7 +594,8 @@ fn span_nodes(
                 .flatten()
             {
                 let theirs = unit_of_node[other].expect("grouped only units");
-                if other != n && graph.project.sees_into(theirs, mine) {
+                // The same guard, the other direction — see `cobuilt_nodes`.
+                if theirs != mine && graph.project.grants(theirs, mine, Grant::Namespace) {
                     out.extend_from_slice(&files[other]);
                 }
             }
@@ -684,12 +675,15 @@ mod tests {
 
     /// A graph whose files each carry a unit, under a project assembled from
     /// the manifests the test spells: `(manifest, unit name, roots, needs)`.
+    /// A project whose every declared dependency grants `reaches` — the rung
+    /// is the SUBJECT of these tests, so the manifests say it out loud.
     fn graph_with_units(
         manifests: &[(&str, &str, &[&str], &[&str])],
         aggregator: (&str, &[&str]),
         files: &[(&str, &[&str])],
+        grants: Grant,
     ) -> Graph {
-        graph_with_named_units(manifests, aggregator, files, None)
+        graph_with_named_units(manifests, aggregator, files, None, grants)
     }
 
     /// The same, with every unit hanging under one namespace root.
@@ -698,6 +692,7 @@ mod tests {
         aggregator: (&str, &[&str]),
         files: &[(&str, &[&str])],
         namespace_root: Option<&str>,
+        grants: Grant,
     ) -> Graph {
         use kndo_contract::manifest::{ManifestEvidence, Unit, UnitDep, UnitKind, UnitRoot};
         let mut reads = vec![crate::project::ManifestRead {
@@ -718,7 +713,10 @@ mod tests {
                         roots: roots.iter().map(|r| UnitRoot::from(*r)).collect(),
                         excludes: Vec::new(),
                         entries: Vec::new(),
-                        depends_on: needs.iter().map(|n| UnitDep::on(*n)).collect(),
+                        depends_on: needs
+                            .iter()
+                            .map(|n| UnitDep::granting(*n, grants))
+                            .collect(),
                         publication: Default::default(),
                         namespace_root: namespace_root.map(SmolStr::new),
                     }],
@@ -734,17 +732,6 @@ mod tests {
         }
         graph.project = project;
         graph
-    }
-
-    /// The one adapter of these tests, saying a namespace spans a compilation.
-    fn spanning() -> Vec<(SmolStr, DeclaredCapabilities)> {
-        vec![(
-            SmolStr::new_static("test"),
-            DeclaredCapabilities {
-                namespace_span: NamespaceSpan::Compilation,
-                ..Default::default()
-            },
-        )]
     }
 
     fn graph_of(files: &[(&str, &[&str])]) -> Graph {
@@ -847,7 +834,7 @@ mod tests {
     }
 
     #[test]
-    fn a_namespace_spans_the_units_compiled_against_it_when_the_language_says_so() {
+    fn a_namespace_spans_the_units_a_manifest_put_on_one_classpath() {
         // guava's shape: the tests module is a SEPARATE artifact whose classes
         // declare the same package, and the two are compiled together. Its
         // Android twin declares the same names and is never on that classpath.
@@ -884,8 +871,9 @@ mod tests {
                     &["com", "google", "io"],
                 ),
             ],
+            Grant::Namespace,
         );
-        let scopes = Scopes::build(&graph, &spanning());
+        let scopes = Scopes::build(&graph, &[]);
         assert_eq!(
             scopes.namespace_pool(0, 0),
             Some([0u32, 1].as_slice()),
@@ -926,7 +914,7 @@ mod tests {
     }
 
     #[test]
-    fn a_namespace_stops_at_its_unit_where_a_language_has_not_spoken() {
+    fn a_namespace_stops_at_its_unit_where_no_manifest_granted_it() {
         let graph = graph_with_units(
             &[
                 ("guava/pom.xml", "guava", &["guava"], &[]),
@@ -948,9 +936,12 @@ mod tests {
                     &["com", "google", "io"],
                 ),
             ],
+            Grant::Exports,
         );
-        // No capability declared: the default keeps the namespace inside its
-        // unit, so the advisory the wider span would silence survives.
+        // The SAME project, one word different: an ordinary dependency grants
+        // the target's exports and no more, so the namespace stays inside its
+        // unit and the advisory a classpath would silence survives. Not a
+        // capability — the edge.
         let scopes = Scopes::build(&graph, &[]);
         assert_eq!(scopes.namespace_pool(0, 0), Some([0u32].as_slice()));
         assert_eq!(scopes.namespace_pool(1, 0), Some([1u32].as_slice()));
@@ -995,6 +986,7 @@ mod tests {
             ("workspace.toml", &["pyproject.toml"]),
             &[("lib/api.py", &[]), ("lib/deep/impl.py", &[])],
             Some("mypkg"),
+            Grant::Exports,
         );
         assert_eq!(
             namespaces(&Scopes::build(&rooted, &by_path_caps())),
@@ -1009,6 +1001,7 @@ mod tests {
             ("workspace.toml", &["pyproject.toml"]),
             &[("lib/api.py", &[]), ("lib/deep/impl.py", &[])],
             None,
+            Grant::Exports,
         );
         assert_eq!(
             namespaces(&Scopes::build(&bare, &by_path_caps())),

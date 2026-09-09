@@ -346,18 +346,12 @@ pub struct AnalysisOutcome {
 /// wherever a lookup misses.
 #[derive(Debug, Clone, Default)]
 pub struct DeclaredCapabilities {
-    /// What a unit of this language's ecosystem publishes — see
-    /// [`kndo_contract::plugin::PublishedSurface`].
-    pub published_surface: kndo_contract::plugin::PublishedSurface,
     pub import_cycles: kndo_contract::plugin::CycleTolerance,
     pub dependency_scoping: kndo_contract::plugin::DependencyScoping,
     pub dependency_identity: kndo_contract::plugin::DependencyIdentity,
     /// The reaches this language can spell, narrowest first, each under this
     /// language's own word for it — see [`kndo_contract::plugin::Ladder`].
     pub ladder: kndo_contract::plugin::Ladder,
-    /// How far one of this language's namespaces reaches across the project's
-    /// units — see [`kndo_contract::plugin::NamespaceSpan`].
-    pub namespace_span: kndo_contract::plugin::NamespaceSpan,
     /// What bounds a unit-wide reach where no manifest named the unit — see
     /// [`kndo_contract::plugin::UnnamedUnit`].
     pub unnamed_unit: kndo_contract::plugin::UnnamedUnit,

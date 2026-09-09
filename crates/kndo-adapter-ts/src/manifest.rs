@@ -109,10 +109,14 @@ fn package(
             .iter()
             .map(|d| UnitDep::on(d.name.clone()))
             .collect(),
-        // `"private": true` is npm's own word for "no consumer outside".
+        // `"private": true` is npm's own word for "no consumer outside"; and
+        // what a consumer of a published package writes is a SPECIFIER npm
+        // resolves through `main`/`exports` to a file, so an export no entry
+        // hands out is internal however it is spelled. That is npm's
+        // resolution rule, which this reader is the thing that knows.
         publication: match json.get("private").and_then(serde_json::Value::as_bool) {
             Some(true) => Publication::Unpublished,
-            _ => Publication::Unstated,
+            _ => Publication::ByEntry,
         },
         // A module's specifier is its path from the package root: nothing
         // hangs the files of an npm package under a name of their own.

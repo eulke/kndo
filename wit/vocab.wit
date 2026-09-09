@@ -405,27 +405,7 @@ interface types {
         bearer: bearer,
     }
 
-    /// Mirrors `PublishedSurface` — what a unit of the ecosystem publishes.
-    enum published-surface {
-        exports,
-        entries,
-    }
 
-    /// Mirrors `PluginSpec` — the ONE manifest for every capability, claims
-    /// already derived (the guest-side builder does the extension-to-glob
-    /// derivation; the wire carries the finished list). `coordinate` is identity
-    /// AND provenance; the `kndo:` namespace is reserved for built-ins — the host
-    /// rejects any external component claiming it at load. `conducts` is the
-    /// conduct-stage bit: with it false, the activation/mutates-graph/rules half
-    /// is inert and the component never appears in the round; a hand-rolled guest
-    /// is forced by the record's shape to state every gate either way.
-    /// Mirrors `NamespaceSpan` — whether a namespace stops at the unit that
-    /// compiles it (`unit`, the narrower default) or is a name units
-    /// contribute to (`compilation`).
-    enum namespace-span {
-        unit,
-        compilation,
-    }
 
     /// Mirrors `UnnamedUnit` — what bounds a unit-wide reach where no manifest
     /// named the unit. `unbounded` is the default and the wider answer.
@@ -439,7 +419,7 @@ interface types {
     /// clause names.
     variant nesting {
         per-file,
-        flat,
+        by-unit,
         by-directory,
         /// Source roots the LANGUAGE knows without a manifest; empty leaves
         /// the unit's own roots to say it.
@@ -489,7 +469,6 @@ interface types {
         ladder: list<step>,
         /// What a unit of the ecosystem publishes — `exports` keeps
         /// internal-only's Exported rung silent.
-        published-surface: published-surface,
         /// Whether import cycles are a hazard here — `cyclic` reads it.
         import-cycles: cycle-tolerance,
         /// What the language's markers mean — the host's dispatch reads it.
@@ -504,7 +483,6 @@ interface types {
         ignores: list<string>,
         /// How far a namespace reaches, what bounds a unit-wide reach with no
         /// manifest, and how the namespace forest is shaped.
-        namespace-span: namespace-span,
         unnamed-unit: unnamed-unit,
         nesting: nesting,
         /// Conventions that rule only where no unit declares the role.
@@ -549,9 +527,14 @@ interface types {
     /// outside the project. `unstated` is the silence under which a library is
     /// published and everything else is not.
     enum publication {
-        published,
-        unpublished,
         unstated,
+        unpublished,
+        /// A consumer NAMES what it wants, so every export of every file is on
+        /// the surface.
+        by-name,
+        /// A consumer names a specifier the manifest maps to a FILE, so what
+        /// no entry hands out is internal.
+        by-entry,
     }
 
     /// Mirrors `Unit` — one thing the build system compiles as one artifact.
@@ -577,9 +560,20 @@ interface types {
 
     /// Mirrors `UnitDep` — one unit this unit compiles against, and whether it
     /// also sees that unit's unit-reaching names.
+    /// Mirrors `Grant` — what a dependency gives the dependent beyond the
+    /// target's exported API. Its own ladder, not `rung`: a rung says how far
+    /// a declaration reaches OUT and this says how far a dependent reaches IN.
+    enum grant {
+        exports,
+        namespace,
+        unit,
+    }
+
+    /// Mirrors `UnitDep`: a unit this one compiles against, and what that
+    /// dependency grants the dependent.
     record unit-dep {
         unit: string,
-        friend: bool,
+        grants: grant,
     }
 
     /// Mirrors `DependencyScope` — the manifest section a declaration sits in.

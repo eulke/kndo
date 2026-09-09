@@ -16,9 +16,9 @@ use kndo_contract::evidence::{
 use kndo_contract::manifest::{PathAlias, UnitKind};
 use kndo_contract::plugin::{
     Activation, ActivationRule, Bearer, CycleTolerance, DeclaredSymbol, DependencyBuiltins,
-    DependencyIdentity, DependencyScoping, DispatchRule, Effect, FileRole, Ladder, NamespaceSpan,
-    Nesting, PluginSeverity, PluginSpec, PluginSpecParts, PluginTarget, PublishedSurface,
-    RuleDescriptor, Rung, Step, Trigger, UnnamedUnit,
+    DependencyIdentity, DependencyScoping, DispatchRule, Effect, FileRole, Ladder, Nesting,
+    PluginSeverity, PluginSpec, PluginSpecParts, PluginTarget, RuleDescriptor, Rung, Step, Trigger,
+    UnnamedUnit,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use smol_str::SmolStr;
@@ -67,10 +67,6 @@ pub(crate) fn extension_spec(spec: awire::PluginSpec) -> PluginSpec {
         version: spec.version,
         suffixes: spec.suffixes.into_iter().map(SmolStr::new).collect(),
         ladder: Ladder::new(spec.ladder.into_iter().map(step).collect()),
-        published_surface: match spec.published_surface {
-            awire::PublishedSurface::Exports => PublishedSurface::Exports,
-            awire::PublishedSurface::Entries => PublishedSurface::Entries,
-        },
         claims: spec.claims.into_iter().map(SmolStr::new).collect(),
         import_cycles: match spec.import_cycles {
             awire::CycleTolerance::Tolerated => CycleTolerance::Tolerated,
@@ -81,17 +77,13 @@ pub(crate) fn extension_spec(spec: awire::PluginSpec) -> PluginSpec {
             .into_iter()
             .filter_map(dispatch_rule)
             .collect(),
-        namespace_span: match spec.namespace_span {
-            awire::NamespaceSpan::Unit => NamespaceSpan::Unit,
-            awire::NamespaceSpan::Compilation => NamespaceSpan::Compilation,
-        },
         unnamed_unit: match spec.unnamed_unit {
             awire::UnnamedUnit::Unbounded => UnnamedUnit::Unbounded,
             awire::UnnamedUnit::Namespace => UnnamedUnit::Namespace,
         },
         nesting: match spec.nesting {
             awire::Nesting::PerFile => Nesting::PerFile,
-            awire::Nesting::Flat => Nesting::Flat,
+            awire::Nesting::ByUnit => Nesting::ByUnit,
             awire::Nesting::ByDirectory => Nesting::ByDirectory,
             awire::Nesting::ByPath(roots) => Nesting::ByPath {
                 roots: roots.into_iter().map(SmolStr::new).collect(),
@@ -343,11 +335,16 @@ pub(crate) fn manifest_evidence(
                 .into_iter()
                 .map(|d| UnitDep {
                     unit: SmolStr::new(d.unit),
-                    friend: d.friend,
+                    grants: match d.grants {
+                        awire::Grant::Exports => kndo_contract::manifest::Grant::Exports,
+                        awire::Grant::Namespace => kndo_contract::manifest::Grant::Namespace,
+                        awire::Grant::Unit => kndo_contract::manifest::Grant::Unit,
+                    },
                 })
                 .collect(),
             publication: match unit.publication {
-                awire::Publication::Published => Publication::Published,
+                awire::Publication::ByName => Publication::ByName,
+                awire::Publication::ByEntry => Publication::ByEntry,
                 awire::Publication::Unpublished => Publication::Unpublished,
                 awire::Publication::Unstated => Publication::Unstated,
             },

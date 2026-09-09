@@ -132,17 +132,23 @@ fn a_namespace_pools_over_the_unit_that_compiles_it() {
 }
 
 #[test]
-fn a_namespace_spans_the_unit_compiled_against_it_when_the_language_says_so() {
+fn a_namespace_spans_the_units_a_manifest_put_on_one_classpath() {
     // A separate test artifact that compiles against the library and declares
-    // the same namespace: on one classpath, so it may name what the namespace
+    // the same namespace: on ONE classpath, so it may name what the namespace
     // holds. guava's `guava-tests` against `guava` is this, and no `src/main`
     // ↔ `src/test` mirror rule reaches it.
-    let project = || {
+    //
+    // The grant is on the EDGE, not on the language: `classpath=core` is what
+    // a JVM manifest reader says about a `<dependency>`, and `needs=core` is
+    // what every other build system says about the same shape.
+    let project = |grant: &str| {
         let p = TempProject::new();
         p.file(
             "kmock.pkg",
-            "unit core library roots=src entries=src/com/foo/lib.kmock\n\
-             unit suite test roots=tests needs=core entries=tests/com/foo/spec.kmock\n",
+            &format!(
+                "unit core library roots=src entries=src/com/foo/lib.kmock\n\
+                 unit suite test roots=tests {grant}=core entries=tests/com/foo/spec.kmock\n"
+            ),
         )
         .file(
             "src/com/foo/lib.kmock",
@@ -155,20 +161,21 @@ fn a_namespace_spans_the_unit_compiled_against_it_when_the_language_says_so() {
         p
     };
 
-    let snap = common::analyze(&project(), vec![Box::new(MockPlugin::spanning())]);
+    let snap = common::analyze(&project("classpath"), vec![Box::new(MockPlugin::new())]);
     assert!(
         reported(&snap, &Category::UNUSED).is_empty(),
-        "the suite compiles against the library, so its call is a use: {:?}",
+        "the suite is on the library's classpath, so its call is a use: {:?}",
         reported(&snap, &Category::UNUSED)
     );
 
-    // The default span keeps every namespace inside its own unit, so the same
-    // project accuses — the capability, not the manifest, is what decides.
-    let snap = common::analyze(&project(), vec![Box::new(MockPlugin::new())]);
+    // The SAME project and the SAME language, one word different: an ordinary
+    // dependency reaches the target's exports and no more, so the namespace
+    // stays inside its unit and the accusation survives.
+    let snap = common::analyze(&project("needs"), vec![Box::new(MockPlugin::new())]);
     assert!(
         reported(&snap, &Category::UNUSED)
             .contains(&"src/com/foo/lib.kmock — internals".to_string()),
-        "an undeclared span pools nothing across units: {:?}",
+        "an ordinary dependency pools nothing across units: {:?}",
         reported(&snap, &Category::UNUSED)
     );
 }
