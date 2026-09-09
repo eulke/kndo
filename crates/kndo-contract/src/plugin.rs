@@ -158,6 +158,14 @@ pub fn is_reserved_coordinate(coordinate: &str) -> bool {
 /// entry reaches is internal however it is spelled, and the analysis may say
 /// so. A language fact, because it is the ecosystem's resolution rule; the
 /// unit's own publication refines it.
+///
+/// NOT derivable, and the derivations were tried: not from [`Nesting`] (swift
+/// is `PerFile` and hands out every `public` declaration), not from whether
+/// the unit declares entries (rust and python declare them and hand out
+/// everything). The question an adapter author answers is one sentence: does
+/// an outside consumer's import of this unit name a FILE the manifest
+/// declared, or the unit itself? Deleting the capability — everything
+/// `Exports` — moves vite by 57 findings and nothing else in the corpus.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
 #[serde(rename_all = "lowercase")]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -383,6 +391,13 @@ pub enum Rung {
 /// tree are the opposite: the unit owns the namespace, and two units spelling
 /// the same name hold two unrelated ones. Core cannot tell which without being
 /// told, so it is told.
+///
+/// `Attachment` does not answer this and the two are not the same question:
+/// attachment says which BUILD a file's namespace membership holds in, within
+/// one unit; this says whether two UNITS spelling one name hold one node.
+/// Deleting the capability — everything `Compilation` — costs 401 findings
+/// across the corpus (vite −382, lodash −18, flask −1): merging by name alone
+/// makes co-visible what no compiler ever compiled together.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
 #[serde(rename_all = "kebab-case")]

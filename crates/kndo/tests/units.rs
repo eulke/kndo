@@ -263,6 +263,66 @@ fn an_export_of_an_unpublished_unit_may_narrow() {
 }
 
 #[test]
+fn what_a_published_unit_hands_out_is_the_ecosystems_rule() {
+    use kndo_contract::plugin::{PublishedSurface, Rung, Step};
+    // ONE project, ONE manifest, ONE published library. What differs is the
+    // ecosystem's resolution rule, and it is the whole of the difference: a
+    // jar hands out every `pub` class in every file it holds, and an npm
+    // package hands out what its entries reach and nothing else — so the same
+    // export is the outside world's in one ecosystem and internal in the
+    // other. Neither answer is derivable from the manifest, from the nesting,
+    // or from whether entries were declared: rust and python declare entries
+    // and hand out everything, swift declares none and hands out everything,
+    // npm declares them and hands out only those.
+    let ladder = |surface: PublishedSurface| {
+        MockPlugin::with(move |spec| {
+            spec.published_surface(surface).ladder(&[
+                Step::for_free(Rung::File, "local"),
+                Step::new(Rung::Exported, "pub"),
+            ])
+        })
+    };
+    let project = || {
+        let p = TempProject::new();
+        p.file(
+            "kmock.pkg",
+            "unit core library roots=src entries=src/main.kmock\n",
+        )
+        .file("src/main.kmock", "import ./util { other }\ncall other\n")
+        .file(
+            "src/util.kmock",
+            "pub fn other\npub fn helper\ncall helper\n",
+        );
+        p
+    };
+    let advice = |snap: &kndo::Snapshot| -> Vec<String> {
+        snap.findings
+            .iter()
+            .filter(|f| f.category == Category::INTERNAL_ONLY)
+            .map(|f| f.subject.label().to_string())
+            .collect()
+    };
+    let jar = common::analyze(
+        &project(),
+        vec![Box::new(ladder(PublishedSurface::Exports))],
+    );
+    assert!(
+        advice(&jar).is_empty(),
+        "every export of a published unit is the world's: {:?}",
+        advice(&jar)
+    );
+    let npm = common::analyze(
+        &project(),
+        vec![Box::new(ladder(PublishedSurface::Entries))],
+    );
+    assert_eq!(
+        advice(&npm),
+        ["helper"],
+        "an export no entry hands out is internal however it is spelled"
+    );
+}
+
+#[test]
 fn a_units_kind_gives_its_files_their_role() {
     // A test set's files are what the runner discovers and a tooling set's
     // are built to build something else: each is rooted by its unit's kind,

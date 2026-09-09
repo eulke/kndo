@@ -6759,3 +6759,56 @@ their explanation gained a name.
 pack's coordinate is that pack's claim — and the language-first ordering means a
 root the language would have derived anyway is credited to the language, which
 is what the second pass was approximating.
+
+## 2026-09-09 — the two deletions the extension proposed, both refuted by ablation
+
+"Las formas que faltan" proposed removing two capabilities as my own inventions,
+one outright and one as a hypothesis to verify. Both were verified. Both stay,
+and the numbers are here so nobody rebuilds the argument from scratch.
+
+**`PublishedSurface` — kept. The claimed derivation does not exist.** The
+proposal was that a unit's published surface is the closure of its entries, so
+the enum is redundant. It is not: swift is `Nesting::PerFile` and hands out
+every `public` declaration of the module with no entry file anywhere, while
+js-ts is `PerFile` and hands out only what `main`/`exports` reach — same
+nesting, opposite surface. The other candidate derivation, "does the unit
+declare entries", fails the same way: rust and python declare entries and hand
+out everything. The fact is irreducible and the question is one sentence, now in
+the doc-comment: does an outside consumer's import of this unit name a FILE the
+manifest declared, or the unit itself?
+
+Ablated (every unit `Exports`, on a file copy): **vite 701 → 644, −57**, and
+every other repo byte-identical. Those 57 are the `internal-only` advice on
+exports no npm entry hands out — the same family the export-narrowing
+experiment measured at 51 before the ladder landed.
+
+**`namespace_span` — kept. `Attachment` answers a different question.** The
+proposal was that the plan's glossary already covers it: "a `_test.go` with
+`package x` belongs to x only in test builds". That is attachment, and it is
+about which BUILD a file's membership holds in, inside ONE unit. `namespace_span`
+is about whether two UNITS spelling one name hold one node — guava's
+`guava-tests` naming `guava`'s package-private members across the classpath.
+Neither implies the other.
+
+Ablated (every namespace `Compilation`, on a file copy): **−401 findings —
+vite 701 → 319, lodash 20 → 2, flask 19 → 18.** Merging namespace nodes by name
+alone makes co-visible what no compiler ever compiled together, and the
+accusations dissolve into a co-visibility that does not exist. The default
+(`Unit`) is carrying 401 findings.
+
+**What landed instead of the deletions.** Each capability now carries its
+ablation number in its doc-comment, so the next reader sees the cost before
+proposing the cut. `namespace_span` already had its two-sided conformance case
+(`a_namespace_spans_the_unit_compiled_against_it_when_the_language_says_so`:
+same project, capability flipped, opposite verdict). `PublishedSurface` did not,
+and now does — `what_a_published_unit_hands_out_is_the_ecosystems_rule` runs one
+project through both values and asserts the jar hands out `helper` and the npm
+package does not.
+
+**The precedent this sets for the extension itself.** The artifact put its
+tiers on the table as an instrument of trust, and Tier B ("borrar — ley del
+repo") turned out to be the weakest of the three: retiring a capability is the
+repo's stated ideal, which made two untested derivations feel like law. The
+ideal is real, but it is a reason to TRY the derivation, never to assume it
+holds. The remaining five proposals get the same treatment — the number decides,
+in whichever direction it points.
