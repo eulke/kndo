@@ -103,7 +103,7 @@ impl RustAdapter {
             // dependency names the manifest that declares the crate.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:rust",
-                17,
+                18,
                 &["rs"],
                 &["**/Cargo.toml"],
                 // Modules within a crate reference each other freely — legal,

@@ -88,12 +88,12 @@ pub fn extract(
     references_and_comments(root, source, &use_locals, &redirects, out);
 }
 
-/// Names a `macro_rules!` template mentions are USES of those names, recorded
-/// where the template is written. The macro travels — textual scope,
+/// Names a `macro_rules!` template mentions are USES of those names, performed
+/// wherever the template is expanded. The macro travels — textual scope,
 /// `#[macro_use]`, `#[macro_export]` — so its body resolves at every expansion
-/// site and not here; what this file can honestly say is that the name appears,
-/// which is a reference. Reporting it as a root instead said "something outside
-/// enters here", which is not what a template body is.
+/// site and at none this file records. That pair is exactly `Performed::
+/// Elsewhere`: the mention keeps the name alive, and it is not evidence that
+/// the name is used only here.
 fn macro_template_references(
     root: Node<'_>,
     source: &[u8],
@@ -112,7 +112,7 @@ fn macro_template_references(
                 && let Some(&id) = free_declarations.get(tk::text(t, source))
                 && seen.insert(id.index())
             {
-                out.reference(tk::text(t, source), RefKind::Read, tk::span(t));
+                out.template_reference(tk::text(t, source), RefKind::Read, tk::span(t));
             }
         });
     });

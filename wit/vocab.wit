@@ -94,6 +94,16 @@ interface types {
         /// `qualifiers` stream.
         on: option<string>,
         span: span,
+        /// Mirrors `Reference::performed`: where the use happens, which for a
+        /// template body is not where the name is written.
+        performed: performed,
+    }
+
+    /// Mirrors `Performed`: a use written here and resolved here, or one whose
+    /// sites this file does not record — a `macro_rules!` body, a C macro.
+    enum performed {
+        here,
+        elsewhere,
     }
 
     /// Mirrors `ImportTarget` — the specifier as written, tagged by form.

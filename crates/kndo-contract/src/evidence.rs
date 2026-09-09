@@ -487,6 +487,36 @@ pub struct Reference {
     /// consumer must read the stream before believing it.
     pub on: Option<SmolStr>,
     pub span: Span,
+    /// Where this use is PERFORMED — see [`Performed`]. Every reference is
+    /// written somewhere; not every one is resolved where it is written.
+    pub performed: Performed,
+}
+
+/// Where a use is performed, which is not always where it is written.
+///
+/// A name in ordinary code is spelled and resolved in the same file, and that
+/// is what makes "used only in its own file" mean something. A TEMPLATE body is
+/// the other case: `macro_rules!`, a C macro, anything whose text is pasted at
+/// its use sites. The name is spelled once, in the template, and resolved at
+/// every expansion — and the file holding the template cannot say where those
+/// are, because expansion is not a thing its own text records.
+///
+/// So `Elsewhere` states a use and withholds a site, which is the honest pair:
+/// the reference still KEEPS the declaration alive (a use is a use), and it can
+/// no longer be read as evidence that nobody outside this file names it.
+/// Narrowing a `pub(crate)` on the strength of a template's own mention breaks
+/// exactly the call sites the template exists to serve.
+#[non_exhaustive]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize, ContractFingerprint,
+)]
+#[serde(rename_all = "lowercase")]
+pub enum Performed {
+    /// Here, where it is written — every ordinary reference.
+    #[default]
+    Here,
+    /// At sites this file does not record.
+    Elsewhere,
 }
 
 /// Where an import points. The specifier string as written lives inside the variant
@@ -1205,6 +1235,21 @@ impl EvidenceSink {
         self.reference_on(name, kind, None, span);
     }
 
+    /// A name a TEMPLATE body spells: a use, performed at every site the
+    /// template is expanded and at none this file can name — see [`Performed`].
+    /// Bare by construction: a template's mention qualifies nothing, since what
+    /// it would qualify against is not resolved here either.
+    pub fn template_reference(&mut self, name: impl Into<SmolStr>, kind: RefKind, span: Span) {
+        let span = self.clamp(span, "reference");
+        self.out.references.push(Reference {
+            name: name.into(),
+            kind,
+            on: None,
+            span,
+            performed: Performed::Elsewhere,
+        });
+    }
+
     /// A reference and what it was read from — see [`Reference::on`]. The
     /// receiver is kept only where [`EvidenceStream::Qualifiers`] is declared;
     /// undeclared it is dropped, and the reference lands bare like every other.
@@ -1225,6 +1270,7 @@ impl EvidenceSink {
             kind,
             on,
             span,
+            performed: Performed::Here,
         });
     }
 

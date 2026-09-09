@@ -582,12 +582,17 @@ pub(crate) fn replay_evidence(evidence: awire::FileEvidence, sink: &mut Evidence
     }
 
     for r in evidence.references {
-        sink.reference_on(
-            SmolStr::new(r.name),
-            ref_kind(r.kind),
-            r.on.map(SmolStr::new),
-            span(r.span),
-        );
+        match r.performed {
+            awire::Performed::Elsewhere => {
+                sink.template_reference(SmolStr::new(r.name), ref_kind(r.kind), span(r.span))
+            }
+            awire::Performed::Here => sink.reference_on(
+                SmolStr::new(r.name),
+                ref_kind(r.kind),
+                r.on.map(SmolStr::new),
+                span(r.span),
+            ),
+        }
     }
     for i in evidence.imports {
         sink.import_at(

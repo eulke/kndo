@@ -2798,3 +2798,18 @@ an untested file plus an unused `setup`, and `examples/celery/make_celery.py`
 joins it. The total is 19 either way, which is why the stale pin went unnoticed.
 No python file emits a unit marker and no python manifest emits a `path =`, so
 nothing in this tranche can reach flask.
+
+## ripgrep 141 → 139: a template's mention stops advising (2026-09-09)
+
+`crates/core/messages.rs` declares `pub(crate) fn set_errored` and
+`pub(crate) fn ignore_messages`, and the only mentions of either are inside
+`macro_rules! err_message` and `macro_rules! ignore_message` in that same file.
+The macros expand from `main.rs` and `haystack.rs`, so the uses are performed
+there and recorded here — and the ladder, seeing every use pooled in one file,
+advised a rung the macro cannot live at. A reference performed `Elsewhere`
+states the use and withholds the site, so the advice stops. Both findings
+retire, nothing is added, and the eight other repositories are byte-identical.
+
+`crates/matcher/tests/util.rs#RegexCaptures` — the repository's third
+`internal-only` — is ordinary code and stays accused, which is the precision
+half of the same measurement.

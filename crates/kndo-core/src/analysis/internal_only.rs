@@ -36,7 +36,8 @@
 use super::{Analysis, AnalysisContext, RunContext};
 use crate::navigate::Pool;
 use kndo_contract::evidence::{
-    Declaration, EvidenceStream, FileEvidence, ImportShape, Reach, RootTarget, SymbolKind,
+    Declaration, EvidenceStream, FileEvidence, ImportShape, Performed, Reach, RootTarget,
+    SymbolKind,
 };
 use kndo_contract::finding::{Finding, Severity};
 use kndo_contract::plugin::Rung;
@@ -73,6 +74,9 @@ impl Analysis for InternalOnly {
         let mut bound_names: BTreeSet<(u32, &str)> = BTreeSet::new();
         let mut bound_all: BTreeSet<(u32, &str)> = BTreeSet::new();
         let mut per_file_refs: Vec<BTreeSet<&str>> = Vec::with_capacity(g.files.len());
+        // The subset of those whose use is performed at sites this file does
+        // not record — see [`Performed::Elsewhere`].
+        let mut travelled: Vec<BTreeSet<&str>> = Vec::with_capacity(g.files.len());
         // The same names, narrowed to those read FROM something — a member
         // access. A file whose adapter does not declare the stream reports
         // none, and `qualifies` below is what keeps that absence from reading
@@ -89,6 +93,20 @@ impl Analysis for InternalOnly {
                 f.evidence
                     .references
                     .iter()
+                    .map(|r| r.name.as_str())
+                    .collect(),
+            );
+            // A use this file spells and does not perform — a name inside a
+            // template body, expanded who knows where. It keeps the declaration
+            // alive through the graph like any reference, and here, where the
+            // question is "does anybody OUTSIDE this file name it", it answers
+            // that nobody can say: advising a narrower rung on the strength of
+            // a template's own mention breaks the sites the template serves.
+            travelled.push(
+                f.evidence
+                    .references
+                    .iter()
+                    .filter(|r| r.performed == Performed::Elsewhere)
                     .map(|r| r.name.as_str())
                     .collect(),
             );
@@ -198,6 +216,13 @@ impl Analysis for InternalOnly {
                 .collect();
             for (id, d) in f.evidence.declarations_with_ids() {
                 let d_ix = id.index();
+                // A template in this file spells this name, and performs the
+                // use somewhere this file cannot name. Whatever the rest of the
+                // evidence says about where the name is used, it is not the
+                // whole of it, so no narrower rung is advisable.
+                if travelled[i].contains(d.name.as_str()) {
+                    continue;
+                }
                 // The rung the declaration stands on, and the pool its bounded
                 // reach names. Silence for a reach with no rung (an adapter's
                 // own token), an unbounded pool, and an exported name in an

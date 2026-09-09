@@ -7409,3 +7409,73 @@ fixture is for.
 contract is unchanged; what changed is how the assembly reads it, so
 `GRAPH_SEMANTICS_VERSION` moves 39 → 40 and nothing else does. The fingerprint
 stays put.
+
+## 2026-09-09 — a reference that travels: `Performed::Elsewhere`, and the artifact's own shape corrected
+
+**What the extension proposed, and why it could not be built as written.**
+Item 6/7 was `Transparency { Opaque, Template }`, a field on `Declaration`:
+"a use of this declaration is a use of what its body names". The rust adapter
+has nothing to put it on — `macro_rules!` macros are DELIBERATELY undeclared
+("textual scope… never accusing what the grammar alone cannot prove dead"), so
+there is no declaration whose transparency could be stated. The shape was
+designed from the metaphor rather than from what an adapter can say, which is
+the same mistake `UnitVoice` made one layer down and on the same day.
+
+**The `known_gap` already named the right shape.** `macro-template-names` asked
+for "a reference that TRAVELS: the design has no coordinate for a use recorded
+in one file and performed in another." So the coordinate goes on `Reference`:
+
+```rust
+pub enum Performed { Here, Elsewhere }
+```
+
+`Elsewhere` states a use and WITHHOLDS a site, which is the honest pair. The
+reference still keeps the declaration alive — a use is a use — and it can no
+longer be read as evidence that nobody outside this file names the declaration.
+`EvidenceSink::template_reference` is how an adapter says it, bare by
+construction: a template's mention qualifies nothing, because what it would
+qualify against is not resolved here either.
+
+**The consumer is `internal-only`, and only it.** A name a template in this file
+spells is a name whose full set of use sites this file does not hold, so no
+narrower rung is advisable for it. `unused` is untouched: it already read the
+mention as a keeper, which was right.
+
+**The measurement, taken from source before the design.** ripgrep's
+`crates/core/messages.rs` declares `pub(crate) fn set_errored` (line 137) and
+`pub(crate) fn ignore_messages` (line 113); the only mentions of either are at
+lines 84 and 94, inside `macro_rules! err_message` and `macro_rules!
+ignore_message`, and those macros are expanded from `main.rs` and `haystack.rs`.
+Narrowing below `pub(crate)` on the strength of a template's own mention breaks
+exactly those call sites.
+
+**Numbers.** ripgrep 141 → 139, and the two that retire are exactly
+`crates/core/messages.rs#set_errored` and `#ignore_messages` — zero added.
+`crates/matcher/tests/util.rs#RegexCaptures`, the third `internal-only` on that
+repository, is not a template case and stays. Alamofire 1484, Exposed 965,
+flask 19, gin 109, guava 8235, lodash 20, vapor 732, vite 712 — byte-identical.
+
+**Two known gaps close, and the precision holds.** `macro-template-names` and
+`macro-use-mod` each carried a `known_gap` for this; both become `[[alive]]`.
+And in the same file as the silenced `set_flag`, `local_only` — a `pub(crate)`
+whose every use is ordinary code in its own file — is STILL accused. That pair
+is the whole of the claim: the suppression is per NAME a template spells, never
+per file.
+
+**What is NOT built, and why.** The artifact's generalization — `type X = Y`,
+re-export shims, generators, a C macro — has no measured case. The artifact
+itself said so ("tiene un caso medido (ripgrep) y una generalización que todavía
+no medí"), and a coordinate that travels is exactly the shape those would use
+when one of them produces a number. `Performed` is `#[non_exhaustive]` and its
+default reproduces every prior verdict, so nothing has to move for them to
+arrive.
+
+**Knobs.** `kndo:rust` 17 → 18 — the same source now yields a reference with a
+different `performed`. The contract fingerprint moves (`Reference` grew a field,
+`Performed` is new) and the ABI is re-pinned: `wit/vocab.wit` carries
+`performed`, the SDK writes it and the host reads it back through
+`template_reference`, so a WASM guest can state it and one that does not
+defaults to `Here`. `GRAPH_SEMANTICS_VERSION` does not move — the assembly is
+unchanged, the evidence entering it is not. Two pinned reports move
+(`macro-template-names`, `macro-use-mod`), both losing the finding their
+`known_gap` predicted.

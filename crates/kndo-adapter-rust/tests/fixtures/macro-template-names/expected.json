@@ -43,28 +43,6 @@
   },
   "findings": [
     {
-      "id": "kndo-43f8dbf18534",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "src/messages.rs",
-        "selector": {
-          "name": "set_flag"
-        },
-        "span": {
-          "start": 94,
-          "end": 129
-        }
-      },
-      "lines": {
-        "start": 7,
-        "end": 7
-      },
-      "message": "declared `pub(crate)`, but every use is within its own file — `private` would suffice for this function"
-    },
-    {
       "id": "kndo-e0eba007185f",
       "category": "internal-only",
       "severity": "info",

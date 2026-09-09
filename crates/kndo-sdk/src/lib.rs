@@ -16,7 +16,7 @@
 
 use kndo_contract::adapter::{PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{
-    self as ev, CoverageRecords, EvidenceSink, EvidenceStream, FileEvidence,
+    self as ev, CoverageRecords, EvidenceSink, EvidenceStream, FileEvidence, Performed,
 };
 use kndo_contract::manifest::UnitKind;
 use kndo_contract::plugin::{
@@ -444,6 +444,10 @@ pub fn evidence_to_wire(evidence: &FileEvidence) -> wire::FileEvidence {
                 kind: ref_kind_to_wire(r.kind),
                 on: r.on.as_ref().map(|o| o.to_string()),
                 span: span_to_wire(r.span),
+                performed: match r.performed {
+                    Performed::Elsewhere => wire::Performed::Elsewhere,
+                    _ => wire::Performed::Here,
+                },
             })
             .collect(),
         imports: evidence.imports.iter().map(import_to_wire).collect(),
