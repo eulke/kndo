@@ -60,12 +60,12 @@
     ]
   },
   "health": {
-    "implicated": 938,
+    "implicated": 945,
     "subjects": 70182,
     "by_category": [
       {
         "category": "unused",
-        "findings": 938
+        "findings": 945
       }
     ],
     "by_package": [
@@ -90,13 +90,13 @@
       {
         "name": "guava",
         "manifest": "guava/pom.xml",
-        "implicated": 39,
+        "implicated": 42,
         "subjects": 15470
       },
       {
         "name": "guava-gwt",
         "manifest": "guava-gwt/pom.xml",
-        "implicated": 26,
+        "implicated": 30,
         "subjects": 822
       },
       {
@@ -10935,6 +10935,28 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
+      "id": "kndo-5e1b51c51145",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-gwt/src-super/com/google/common/base/super/com/google/common/base/ExtraObjectsMethodsForWeb.java",
+        "selector": {
+          "name": "ExtraObjectsMethodsForWeb"
+        },
+        "span": {
+          "start": 736,
+          "end": 882
+        }
+      },
+      "lines": {
+        "start": 20,
+        "end": 24
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
       "id": "kndo-20f53dd4285f",
       "category": "unused",
       "severity": "warning",
@@ -10968,37 +10990,26 @@
       "message": "no root anchors this file and no reachable file imports it"
     },
     {
-      "id": "kndo-9c8d923fff9a",
+      "id": "kndo-b159bab049f6",
       "category": "unused",
       "severity": "warning",
       "confidence": "certain",
       "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/cache/super/com/google/common/cache/CapacityEnforcingMap.java"
+        "kind": "symbol",
+        "path": "guava-gwt/src-super/com/google/common/cache/super/com/google/common/cache/LongAddables.java",
+        "selector": {
+          "name": "LongAddables"
+        },
+        "span": {
+          "start": 709,
+          "end": 1069
+        }
       },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-8b5c815de6b1",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/cache/super/com/google/common/cache/LocalCache.java"
+      "lines": {
+        "start": 24,
+        "end": 44
       },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-fee486222e04",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/cache/super/com/google/common/cache/LongAddables.java"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
+      "message": "nothing references, roots, or imports this declaration"
     },
     {
       "id": "kndo-cbcf1de70bb1",
@@ -11175,15 +11186,114 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
-      "id": "kndo-daa261733ec4",
+      "id": "kndo-cd460384da57",
       "category": "unused",
       "severity": "warning",
       "confidence": "certain",
       "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/escape/super/com/google/common/escape/Platform.java"
+        "kind": "symbol",
+        "path": "guava-gwt/src-super/com/google/common/escape/super/com/google/common/escape/Platform.java",
+        "selector": {
+          "name": "Platform"
+        },
+        "span": {
+          "start": 669,
+          "end": 1105
+        }
       },
-      "message": "no root anchors this file and no reachable file imports it"
+      "lines": {
+        "start": 22,
+        "end": 35
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-a4017f91ef84",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-gwt/src-super/com/google/common/primitives/super/com/google/common/primitives/DoublesMethodsForWeb.java",
+        "selector": {
+          "name": "DoublesMethodsForWeb"
+        },
+        "span": {
+          "start": 771,
+          "end": 1045
+        }
+      },
+      "lines": {
+        "start": 21,
+        "end": 28
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-37eeb777bb0d",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-gwt/src-super/com/google/common/primitives/super/com/google/common/primitives/FloatsMethodsForWeb.java",
+        "selector": {
+          "name": "FloatsMethodsForWeb"
+        },
+        "span": {
+          "start": 770,
+          "end": 1039
+        }
+      },
+      "lines": {
+        "start": 21,
+        "end": 28
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-b8cf3b45d06c",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-gwt/src-super/com/google/common/primitives/super/com/google/common/primitives/IntsMethodsForWeb.java",
+        "selector": {
+          "name": "IntsMethodsForWeb"
+        },
+        "span": {
+          "start": 768,
+          "end": 1027
+        }
+      },
+      "lines": {
+        "start": 21,
+        "end": 28
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-6e0d8293d02a",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-gwt/src-super/com/google/common/primitives/super/com/google/common/primitives/ShortsMethodsForWeb.java",
+        "selector": {
+          "name": "ShortsMethodsForWeb"
+        },
+        "span": {
+          "start": 770,
+          "end": 1039
+        }
+      },
+      "lines": {
+        "start": 21,
+        "end": 28
+      },
+      "message": "nothing references, roots, or imports this declaration"
     },
     {
       "id": "kndo-69628c9709ae",
@@ -11296,6 +11406,28 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
+      "id": "kndo-c8aa2ebd0eee",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-gwt/src-super/com/google/common/util/concurrent/super/com/google/common/util/concurrent/Uninterruptibles.java",
+        "selector": {
+          "name": "Uninterruptibles"
+        },
+        "span": {
+          "start": 881,
+          "end": 1280
+        }
+      },
+      "lines": {
+        "start": 25,
+        "end": 39
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
       "id": "kndo-26da9c42a853",
       "category": "unused",
       "severity": "warning",
@@ -11318,37 +11450,70 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
-      "id": "kndo-fedb2bfed98b",
+      "id": "kndo-c5c929e10f94",
       "category": "unused",
       "severity": "warning",
       "confidence": "certain",
       "subject": {
-        "kind": "file",
-        "path": "guava-gwt/test-super/com/google/common/collect/testing/super/com/google/common/collect/testing/Platform.java"
+        "kind": "symbol",
+        "path": "guava-gwt/test-super/com/google/common/collect/testing/super/com/google/common/collect/testing/Platform.java",
+        "selector": {
+          "name": "Platform"
+        },
+        "span": {
+          "start": 864,
+          "end": 2129
+        }
       },
-      "message": "no root anchors this file and no reachable file imports it"
+      "lines": {
+        "start": 28,
+        "end": 68
+      },
+      "message": "nothing references, roots, or imports this declaration"
     },
     {
-      "id": "kndo-d6f2d03d18d6",
+      "id": "kndo-5af1047123d5",
       "category": "unused",
       "severity": "warning",
       "confidence": "certain",
       "subject": {
-        "kind": "file",
-        "path": "guava-gwt/test-super/com/google/common/collect/testing/super/com/google/common/collect/testing/testers/Platform.java"
+        "kind": "symbol",
+        "path": "guava-gwt/test-super/com/google/common/collect/testing/super/com/google/common/collect/testing/testers/Platform.java",
+        "selector": {
+          "name": "Platform"
+        },
+        "span": {
+          "start": 779,
+          "end": 2317
+        }
       },
-      "message": "no root anchors this file and no reachable file imports it"
+      "lines": {
+        "start": 26,
+        "end": 74
+      },
+      "message": "nothing references, roots, or imports this declaration"
     },
     {
-      "id": "kndo-93e03f2e3678",
+      "id": "kndo-a5783fbeef2c",
       "category": "unused",
       "severity": "warning",
       "confidence": "certain",
       "subject": {
-        "kind": "file",
-        "path": "guava-gwt/test-super/com/google/common/math/super/com/google/common/math/TestPlatform.java"
+        "kind": "symbol",
+        "path": "guava-gwt/test-super/com/google/common/math/super/com/google/common/math/TestPlatform.java",
+        "selector": {
+          "name": "TestPlatform"
+        },
+        "span": {
+          "start": 720,
+          "end": 908
+        }
       },
-      "message": "no root anchors this file and no reachable file imports it"
+      "lines": {
+        "start": 24,
+        "end": 35
+      },
+      "message": "nothing references, roots, or imports this declaration"
     },
     {
       "id": "kndo-b93fddf7bc04",
@@ -11373,15 +11538,26 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
-      "id": "kndo-1f537fdb3afe",
+      "id": "kndo-fe30c36ee860",
       "category": "unused",
       "severity": "warning",
       "confidence": "certain",
       "subject": {
-        "kind": "file",
-        "path": "guava-gwt/test-super/com/google/common/testing/super/com/google/common/testing/Platform.java"
+        "kind": "symbol",
+        "path": "guava-gwt/test-super/com/google/common/testing/super/com/google/common/testing/Platform.java",
+        "selector": {
+          "name": "Platform"
+        },
+        "span": {
+          "start": 812,
+          "end": 1049
+        }
       },
-      "message": "no root anchors this file and no reachable file imports it"
+      "lines": {
+        "start": 26,
+        "end": 34
+      },
+      "message": "nothing references, roots, or imports this declaration"
     },
     {
       "id": "kndo-462f6626bd71",
@@ -21540,6 +21716,72 @@
       "lines": {
         "start": 137,
         "end": 137
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-474c7957a60a",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava/src/com/google/common/collect/ForwardingImmutableList.java",
+        "selector": {
+          "name": "ForwardingImmutableList"
+        },
+        "span": {
+          "start": 805,
+          "end": 904
+        }
+      },
+      "lines": {
+        "start": 26,
+        "end": 29
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-e35924fde718",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava/src/com/google/common/collect/ForwardingImmutableMap.java",
+        "selector": {
+          "name": "ForwardingImmutableMap"
+        },
+        "span": {
+          "start": 805,
+          "end": 905
+        }
+      },
+      "lines": {
+        "start": 26,
+        "end": 29
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-83241516f597",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava/src/com/google/common/collect/ForwardingImmutableSet.java",
+        "selector": {
+          "name": "ForwardingImmutableSet"
+        },
+        "span": {
+          "start": 805,
+          "end": 902
+        }
+      },
+      "lines": {
+        "start": 26,
+        "end": 29
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -156647,28 +156889,214 @@
       "message": "declared `package-private`, but every use is within `PublicSuffixType` — `private` would suffice for this method"
     },
     {
-      "id": "kndo-57cd3dd313fe",
+      "id": "kndo-0ab813fbede0",
       "category": "internal-only",
       "severity": "info",
       "confidence": "probable",
       "subject": {
         "kind": "symbol",
-        "path": "guava-gwt/src-super/com/google/common/base/super/com/google/common/base/Platform.java",
+        "path": "guava-gwt/src-super/com/google/common/cache/super/com/google/common/cache/LocalCache.java",
         "selector": {
-          "owner": "Platform",
-          "name": "lenientFormat",
-          "signature": "(String, , @Nullable Object @Nullable ... args)"
+          "owner": "LocalCache",
+          "name": "KeyIterator"
         },
         "span": {
-          "start": 1994,
-          "end": 2141
+          "start": 16970,
+          "end": 17369
         }
       },
       "lines": {
-        "start": 65,
-        "end": 67
+        "start": 606,
+        "end": 627
       },
-      "message": "declared `package-private`, but every use is within `Platform` — `private` would suffice for this method"
+      "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this type"
+    },
+    {
+      "id": "kndo-3076f6448e64",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-gwt/src-super/com/google/common/cache/super/com/google/common/cache/LocalCache.java",
+        "selector": {
+          "owner": "Timestamped",
+          "name": "getAccessTimestamp",
+          "signature": "()"
+        },
+        "span": {
+          "start": 11406,
+          "end": 11469
+        }
+      },
+      "lines": {
+        "start": 382,
+        "end": 384
+      },
+      "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this method"
+    },
+    {
+      "id": "kndo-484ad3953f8c",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-gwt/src-super/com/google/common/cache/super/com/google/common/cache/LocalCache.java",
+        "selector": {
+          "owner": "LocalCache",
+          "name": "keySet"
+        },
+        "span": {
+          "start": 17847,
+          "end": 17860
+        }
+      },
+      "lines": {
+        "start": 653,
+        "end": 653
+      },
+      "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this declaration"
+    },
+    {
+      "id": "kndo-5eb801262cd4",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-gwt/src-super/com/google/common/cache/super/com/google/common/cache/LocalCache.java",
+        "selector": {
+          "owner": "Timestamped",
+          "name": "getWriteTimestamp",
+          "signature": "()"
+        },
+        "span": {
+          "start": 11475,
+          "end": 11536
+        }
+      },
+      "lines": {
+        "start": 386,
+        "end": 388
+      },
+      "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this method"
+    },
+    {
+      "id": "kndo-6d7c4c332ba8",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-gwt/src-super/com/google/common/cache/super/com/google/common/cache/LocalCache.java",
+        "selector": {
+          "owner": "LocalCache",
+          "name": "entrySet"
+        },
+        "span": {
+          "start": 18284,
+          "end": 18299
+        }
+      },
+      "lines": {
+        "start": 671,
+        "end": 671
+      },
+      "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this declaration"
+    },
+    {
+      "id": "kndo-7765f36c6dc6",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-gwt/src-super/com/google/common/cache/super/com/google/common/cache/LocalCache.java",
+        "selector": {
+          "owner": "LocalCache",
+          "name": "values"
+        },
+        "span": {
+          "start": 18057,
+          "end": 18070
+        }
+      },
+      "lines": {
+        "start": 662,
+        "end": 662
+      },
+      "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this declaration"
+    },
+    {
+      "id": "kndo-7c4dd9f1a720",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-gwt/src-super/com/google/common/cache/super/com/google/common/cache/LocalCache.java",
+        "selector": {
+          "owner": "LocalManualCache",
+          "name": "localCache"
+        },
+        "span": {
+          "start": 11985,
+          "end": 11995
+        }
+      },
+      "lines": {
+        "start": 408,
+        "end": 408
+      },
+      "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this declaration"
+    },
+    {
+      "id": "kndo-87c4aab82424",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-gwt/src-super/com/google/common/cache/super/com/google/common/cache/LocalCache.java",
+        "selector": {
+          "owner": "LocalCache",
+          "name": "ValueIterator"
+        },
+        "span": {
+          "start": 17427,
+          "end": 17826
+        }
+      },
+      "lines": {
+        "start": 630,
+        "end": 651
+      },
+      "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this type"
+    },
+    {
+      "id": "kndo-eb21b67b3bb2",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "guava-gwt/src-super/com/google/common/cache/super/com/google/common/cache/LocalCache.java",
+        "selector": {
+          "owner": "Timestamped",
+          "name": "updateTimestamp",
+          "signature": "()"
+        },
+        "span": {
+          "start": 11331,
+          "end": 11400
+        }
+      },
+      "lines": {
+        "start": 378,
+        "end": 380
+      },
+      "message": "declared `package-private`, but every use is within `LocalCache` — `private` would suffice for this method"
     },
     {
       "id": "kndo-adb360cfa897",
@@ -156834,29 +157262,6 @@
         "end": 267
       },
       "message": "declared `package-private`, but every use is within `ImmutableMap` — `private` would suffice for this declaration"
-    },
-    {
-      "id": "kndo-a4d55b05995a",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/ImmutableMap.java",
-        "selector": {
-          "owner": "ImmutableMap",
-          "name": "IteratorBasedImmutableMap"
-        },
-        "span": {
-          "start": 2004,
-          "end": 2518
-        }
-      },
-      "lines": {
-        "start": 54,
-        "end": 71
-      },
-      "message": "declared `package-private`, but every use is within `ImmutableMap` — `private` would suffice for this type"
     },
     {
       "id": "kndo-dae07565ca59",
@@ -157049,54 +157454,6 @@
       "message": "declared `package-private`, but every use is within `ImmutableSortedSet` — `private` would suffice for this method"
     },
     {
-      "id": "kndo-15f30786fd88",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/Platform.java",
-        "selector": {
-          "owner": "Platform",
-          "name": "newLinkedHashMapWithExpectedSize",
-          "signature": "(int)"
-        },
-        "span": {
-          "start": 1411,
-          "end": 1611
-        }
-      },
-      "lines": {
-        "start": 44,
-        "end": 47
-      },
-      "message": "declared `package-private`, but every use is within `Platform` — `private` would suffice for this method"
-    },
-    {
-      "id": "kndo-2135b7181bd5",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/Platform.java",
-        "selector": {
-          "owner": "Platform",
-          "name": "newHashSetWithExpectedSize",
-          "signature": "(int)"
-        },
-        "span": {
-          "start": 1615,
-          "end": 1766
-        }
-      },
-      "lines": {
-        "start": 49,
-        "end": 51
-      },
-      "message": "declared `package-private`, but every use is within `Platform` — `private` would suffice for this method"
-    },
-    {
       "id": "kndo-615c4c676070",
       "category": "internal-only",
       "severity": "info",
@@ -157117,30 +157474,6 @@
       "lines": {
         "start": 61,
         "end": 63
-      },
-      "message": "declared `package-private`, but every use is within `Platform` — `private` would suffice for this method"
-    },
-    {
-      "id": "kndo-99abad39b900",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/Platform.java",
-        "selector": {
-          "owner": "Platform",
-          "name": "newHashMapWithExpectedSize",
-          "signature": "(int)"
-        },
-        "span": {
-          "start": 1219,
-          "end": 1407
-        }
-      },
-      "lines": {
-        "start": 39,
-        "end": 42
       },
       "message": "declared `package-private`, but every use is within `Platform` — `private` would suffice for this method"
     },
@@ -179241,523 +179574,6 @@
         "end": 54
       },
       "message": "declared `package-private`, but every use is within `PublicSuffixType` — `private` would suffice for this method"
-    },
-    {
-      "id": "kndo-22d341b80bfd",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "futures/failureaccess/src/com/google/common/util/concurrent/internal/InternalFutureFailureAccess.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-05e25483ec0f",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "futures/failureaccess/src/com/google/common/util/concurrent/internal/InternalFutures.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-5e3ea9698bfe",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "futures/listenablefuture1/src/com/google/common/util/concurrent/ListenableFuture.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-10d05f1101e9",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/base/super/com/google/common/base/ExtraObjectsMethodsForWeb.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-d4b4018bb8d8",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/base/super/com/google/common/base/Platform.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-834b1bb67f36",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/AbstractSortedMultiset.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-fd129b75ef5c",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/DescendingMultiset.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-a5ea92359b01",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/EnumMultiset.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-a543d9303b80",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/ForwardingImmutableCollection.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-dde4236df7f9",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/ForwardingImmutableList.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-78fd007faad2",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/ForwardingImmutableMap.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-eb3b331c4765",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/ForwardingImmutableSet.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-0c82feac2fac",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/ForwardingSortedMultiset.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-41437a742a0c",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/ImmutableBiMap.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-6dd7686d27a6",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/ImmutableCollection.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-07e51cc0cf09",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/ImmutableEnumMap.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-77541bd05395",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/ImmutableEnumSet.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-343612a0d921",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/ImmutableList.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-b6e3be74e8f7",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/ImmutableMap.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-e20d9c63e751",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/ImmutableSet.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-40637af6d998",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/ImmutableSortedMap.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-1b53e97069cf",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/ImmutableSortedSet.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-8545cd838d11",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/MapMaker.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-8043222ef558",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/Platform.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-b43b2a98bcf9",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/RegularImmutableBiMap.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-00532b2ed35e",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/RegularImmutableList.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-4091cdfa29b8",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/RegularImmutableMultiset.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-975b479a20b9",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/RegularImmutableSortedSet.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-6162a36ec322",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/SingletonImmutableBiMap.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-cb1a9d81c0c3",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/SingletonImmutableList.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-0f2fabab4ef1",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/SingletonImmutableSet.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-8bf26fb83444",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/SortedMultiset.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-d6d40c1585db",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect/UnmodifiableSortedMultiset.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-02365b6eb33b",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/primitives/super/com/google/common/primitives/DoublesMethodsForWeb.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-2cf95c97cb22",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/primitives/super/com/google/common/primitives/FloatsMethodsForWeb.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-dfb609633cc4",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/primitives/super/com/google/common/primitives/IntsMethodsForWeb.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-4bb6a9f28df2",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/primitives/super/com/google/common/primitives/ShortsMethodsForWeb.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-cad8431e1698",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/util/concurrent/super/com/google/common/util/concurrent/AbstractFutureState.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-7056e6cc9d27",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/util/concurrent/super/com/google/common/util/concurrent/AggregateFutureState.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-92a5b0aa1162",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/util/concurrent/super/com/google/common/util/concurrent/GwtFluentFutureCatchingSpecialization.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-6af923d51b0e",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/util/concurrent/super/com/google/common/util/concurrent/GwtFuturesCatchingSpecialization.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-349112d92130",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/util/concurrent/super/com/google/common/util/concurrent/InterruptibleTask.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-5f4f20fe35e6",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/util/concurrent/super/com/google/common/util/concurrent/ListenableFuture.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-421f09c7e42b",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/util/concurrent/super/com/google/common/util/concurrent/Platform.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-6837b0b55b2e",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/src-super/com/google/common/util/concurrent/super/com/google/common/util/concurrent/Uninterruptibles.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-229fd55c1821",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/test-super/com/google/common/primitives/super/com/google/common/primitives/TestPlatform.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
-    },
-    {
-      "id": "kndo-23524f014d1d",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "guava-gwt/test-super/com/google/common/util/concurrent/super/com/google/common/util/concurrent/TestPlatform.java"
-      },
-      "message": "production-reachable, but no test reaches this file"
     }
   ],
   "fixed": [],

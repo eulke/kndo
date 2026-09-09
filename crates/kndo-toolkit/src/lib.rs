@@ -487,7 +487,7 @@ pub mod jvm_manifest {
             ],
         };
         test_roots.extend(
-            helper_added_test_sources(project)
+            helper_added_sources(project, "add-test-source")
                 .into_iter()
                 .map(|d| SmolStr::new(join(&d))),
         );
@@ -497,17 +497,39 @@ pub mod jvm_manifest {
         test_depends_on.push(SmolStr::new(name));
         test_depends_on.sort_unstable();
         test_depends_on.dedup();
-        // `<sourceDirectory>` is READ but not yet a root: guava's own poms
-        // declare `src`, and narrowing the main unit to it leaves
-        // `guava-gwt/src-super` — a tree GWT compiles and javac does not —
-        // belonging to no unit at all, which the graph today reads as
-        // second-class rather than as unstated. 60 findings correctly retire
-        // and 24 appear for that reason; the pair is on the books, and the
-        // unit-less file is the question to answer before the root narrows.
+        // What the pom SAYS it compiles, where it says it — the same inheritance
+        // the test side already reads. Unstated, the unit compiles the
+        // manifest's own directory: Maven's default is `src/main/java`, and a
+        // JVM tree routinely holds a second language's source set beside it
+        // that its own plugin compiles, so the narrower reading would drop
+        // files the build really builds. Where it IS stated, the tree outside
+        // it is a different build's — guava's `guava-gwt/src-super` replaces
+        // library files at GWT compile time and is never compiled beside them,
+        // so keeping it in the unit resolves names ACROSS two variants of one
+        // library.
+        // Narrowing is safe only when every statement the pom makes about its
+        // main sources is read: `<sourceDirectory>` AND what the build helper
+        // adds with `add-source`, the twin of the `add-test-source` the test
+        // side already reads. A pom that states neither compiles its own
+        // directory, whole.
+        let mut main_roots: Vec<SmolStr> = Vec::new();
+        if let Some(dir) = source_directory(project, path, cx, &resolve, "sourceDirectory") {
+            main_roots.push(SmolStr::new(join(&dir)));
+            main_roots.extend(
+                helper_added_sources(project, "add-source")
+                    .into_iter()
+                    .map(|d| SmolStr::new(join(&d))),
+            );
+            main_roots.sort_unstable();
+            main_roots.dedup();
+        }
         out.unit(kndo_contract::manifest::Unit {
             name: SmolStr::new(name),
             kind: kndo_contract::manifest::UnitKind::Library,
-            roots: Vec::new(),
+            roots: main_roots
+                .into_iter()
+                .map(kndo_contract::manifest::UnitRoot::from)
+                .collect(),
             excludes: Vec::new(),
             entries: Vec::new(),
             depends_on: depends_on.into_iter().map(on_the_classpath).collect(),
@@ -1198,7 +1220,7 @@ pub mod jvm_manifest {
     /// The directories the pom's `build-helper-maven-plugin` adds to the
     /// test set (`add-test-source` executions' `<sources>`), relative to the
     /// pom's directory.
-    fn helper_added_test_sources(project: roxmltree::Node<'_, '_>) -> Vec<String> {
+    fn helper_added_sources(project: roxmltree::Node<'_, '_>, goal: &str) -> Vec<String> {
         let mut out = Vec::new();
         for plugin in child(project, "build")
             .into_iter()
@@ -1215,11 +1237,11 @@ pub mod jvm_manifest {
                 .into_iter()
                 .flat_map(|e| children_named(e, "execution"))
             {
-                let adds_tests = child(execution, "goals")
+                let adds = child(execution, "goals")
                     .into_iter()
                     .flat_map(|g| children_named(g, "goal"))
-                    .any(|g| text_of(g).trim() == "add-test-source");
-                if !adds_tests {
+                    .any(|g| text_of(g).trim() == goal);
+                if !adds {
                     continue;
                 }
                 for source in child(execution, "configuration")

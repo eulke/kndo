@@ -506,13 +506,6 @@ const ECOSYSTEMS_WITH_NO_TRANSCRIPT: &[(&str, &str)] = &[
          is a program only swiftpm can evaluate — there is no second reader of it \
          to grade against",
     ),
-    (
-        "kndo:kotlin",
-        "its two manifests answer nothing yet: a Gradle script resolves its plugins \
-         from the network, so an offline evaluation stops at the first `plugins {}` \
-         block, and Maven answers `src/main/java` for a Kotlin tree until the \
-         toolkit reads the `<sourceDirectory>` a Kotlin pom declares",
-    ),
 ];
 
 #[test]

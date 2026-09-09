@@ -164,9 +164,14 @@ fn a_module_is_two_units_and_its_test_set_is_a_friend_that_compiles_against_main
     assert_eq!(friends(test), ["core"]);
     assert!(!test.is_published());
 
-    // A pom that spells its test directory is read at its word; the main
-    // set stays the whole directory, since what the build adds to it is not
-    // enumerable and over-inclusion there is the keep-alive direction.
+    // A pom that spells either source directory is read at its word on BOTH
+    // sides. Over-inclusion on the main side is not the keep-alive direction it
+    // looks like: guava's own poms say `src`, and holding the rest of the
+    // module in the unit puts `guava-gwt/src-super` — a tree GWT compiles
+    // INSTEAD of the library's files, never beside them — in one namespace pool
+    // with the files it replaces, so two variants of one class keep each other
+    // alive. Measured on guava: 60 findings retire and 24 appear, and the 24
+    // are edges that crossed a variant boundary the build never crosses.
     let ev = read(
         "guava-tests/pom.xml",
         r#"<project>
@@ -177,8 +182,36 @@ fn a_module_is_two_units_and_its_test_set_is_a_friend_that_compiles_against_main
   </build>
 </project>"#,
     );
-    assert!(ev.units[0].roots.is_empty());
+    assert_eq!(roots(&ev.units[0]), ["guava-tests/src"]);
     assert_eq!(roots(&ev.units[1]), ["guava-tests/test"]);
+
+    // What the build helper ADDS to the main set is read too — narrowing to
+    // `<sourceDirectory>` alone would drop a generated tree the build compiles,
+    // which is the over-inclusion worry answered rather than accepted.
+    let ev = read(
+        "mod/pom.xml",
+        r#"<project>
+  <artifactId>mod</artifactId>
+  <build>
+    <sourceDirectory>src</sourceDirectory>
+    <plugins>
+      <plugin>
+        <artifactId>build-helper-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <goals><goal>add-source</goal></goals>
+            <configuration><sources><source>target/generated-sources/antlr</source></sources></configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>"#,
+    );
+    assert_eq!(
+        roots(&ev.units[0]),
+        ["mod/src", "mod/target/generated-sources/antlr"]
+    );
 }
 
 #[test]

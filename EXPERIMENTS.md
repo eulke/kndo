@@ -691,3 +691,12 @@ recorded here because neither shipped.
 | read `<build><sourceDirectory>` as the Maven main unit's root | guava 8271 → 8235: 60 retire (47 `untested`, 8 `unused`, 5 `internal-only`, all under `guava-gwt/src-super`, `guava-gwt/test-super`, `futures/failureaccess`), 24 appear (15 `unused`, 9 `internal-only`); eight other repos byte-identical | HELD. The 24 appear because those files then belong to NO unit and the graph reads a unit-less claimed file as second-class. The tag is read (one walk, generalised over both source-directory tags) and not yet rooted |
 | a file no unit compiles publishes every export | guava identical either way (8235); `gradle-multi-module`'s `legacy/Scratch.kt` stops being an `unused` FILE and becomes "production-reachable, but no test reaches this file" | KILLED. The fixture already decided the opposite, and deliberately: `include("legacy")` is commented out, so Gradle compiles none of it. Two trees produce a unit-less file and want opposite answers — guava's is shipped for another compiler, Gradle's is left out of the build — and no evidence yet tells them apart |
 | every fixture pom read by maven 3.9.11 offline | 8 of 14 REFUSED before the fix, 14 of 14 after | SHIPPED. A manifest fixture the real tool refuses to read proves nothing about the real tool |
+
+The first row above changed disposition the same day it was written. Asked with
+`used-by` instead of reasoned about, the 24 turned out to be cross-variant name
+resolution ending, not a graph defect: guava keeps three to five copies of each
+of those classes across `guava/src`, `android/guava/src` and
+`guava-gwt/{src,test}-super`, and GWT compiles its copy INSTEAD of the one it
+shadows. The read SHIPPED, once the build helper's `add-source` was read beside
+`<sourceDirectory>` so no generated tree is dropped. guava 8271 → 8235; the
+other eight repositories byte-identical.

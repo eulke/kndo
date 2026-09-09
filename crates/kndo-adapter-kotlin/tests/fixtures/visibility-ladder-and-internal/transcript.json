@@ -1,0 +1,22 @@
+{
+  "producer": {
+    "tool": "maven",
+    "version": "Apache Maven 3.9.11 (3e54c93a704957b63ee3494413a2b544fd3d825b)",
+    "command": "mvn -o -q help:evaluate -Dexpression=project.build.sourceDirectory -DforceStdout && mvn -o -q help:evaluate -Dexpression=project.build.testSourceDirectory -DforceStdout && mvn -o -q help:evaluate -Dexpression=project.modules -DforceStdout"
+  },
+  "reading": "whole",
+  "says": [
+    {
+      "compiles": {
+        "file": "src/main/kotlin/com/foo/Sibling.kt",
+        "kind": "production"
+      }
+    },
+    {
+      "compiles": {
+        "file": "src/main/kotlin/com/foo/Widget.kt",
+        "kind": "production"
+      }
+    }
+  ]
+}

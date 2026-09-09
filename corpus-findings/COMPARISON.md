@@ -2730,3 +2730,34 @@ findings this corpus still holds that a manifest could retire: reading the
 trees, because a file no unit compiles is read as private rather than as
 unstated. The 60 are the reason to do it; the 24 are the question to answer
 first.
+
+## guava 8271 → 8235: two variants of one library stop keeping each other alive (2026-09-09)
+
+The `<sourceDirectory>` guava's own root pom declares is now the main unit's
+root, and the delta is one mechanism, not two. `guava-gwt/src-super` holds a
+second copy of the classes it replaces — `ForwardingImmutableList`,
+`ExtraObjectsMethodsForWeb`, `LongAddables`, `Platform`, `TestPlatform` and the
+rest each exist three to five times across `guava/src`, `android/guava/src`,
+`guava-gwt/src-super` and `guava-gwt/test-super`, all under the same package
+clause. GWT compiles super-source INSTEAD of the file it shadows, never beside
+it; while the whole module directory was one unit, both copies shared one
+namespace pool and resolved into each other.
+
+**60 retire**: 47 `untested`, 8 `unused`, 5 `internal-only`, every one under
+`guava-gwt/src-super`, `guava-gwt/test-super` or `futures/failureaccess` —
+trees javac does not compile from this pom.
+
+**24 appear**, and they are the false keeps ending rather than new noise:
+
+- **3 in `guava/src`** — `ForwardingImmutable{List,Map,Set}`, named by nothing
+  in `guava/src` and previously kept by a super-source class that extends its
+  own same-named copy. In the Maven build of the `guava` module they are dead.
+- **21 in `guava-gwt/{src,test}-super`** — 12 `unused` and 9 `internal-only` on
+  files nothing in this project reaches. True of the javac build; unknown of the
+  GWT build, which nothing here reads. A `.gwt.xml` reader is what would answer
+  them and is on the books in DECISIONS.
+
+`kndo used-by` is what settled it: `kept_by` for `ForwardingImmutableList` was
+one super-source reference before and is empty after. The first reading of this
+delta, recorded earlier the same day, called the 24 false positives without
+asking that question; it was wrong.

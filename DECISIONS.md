@@ -7145,3 +7145,79 @@ makes it unnecessary, and this is the tool: a generated decomposition cannot be
 written from memory, so the instruction has nothing left to govern. The second
 paragraph added today, under `Scope belongs to the owner`, has no such
 retirement and is not expected to grow one — no gate knows the plan's scope.
+
+## 2026-09-09 — the pom's source directory is a root, and the 24 were never false positives
+
+**Correcting today's earlier entry.** It decomposed this change as "60 findings
+correctly retire and 24 appear for that reason" and held it back, calling the 24
+a consequence of the graph reading a unit-less file as second-class. The second
+half was a hunch about GWT, taken without asking the engine. Asked now, the
+engine says something else, and the change ships.
+
+**What the engine says.** With the root narrowed,
+`kndo used-by guava/src/com/google/common/collect/ForwardingImmutableList.java#ForwardingImmutableList`
+returns `kept_by: []`. Before it returned one keeper: a reference in
+`guava-gwt/src-super/…/RegularImmutableList.java`. And guava's own tree explains
+why that keeper was wrong — every one of these names is declared three to five
+times across parallel variants of one library, each with the same package
+clause:
+
+| name | declared in |
+|---|---|
+| `ForwardingImmutableList` | `guava/src`, `android/guava/src`, `guava-gwt/src-super` |
+| `ExtraObjectsMethodsForWeb` | `guava/src`, `android/guava/src`, `guava-gwt/src-super` |
+| `LongAddables` | `guava/src` (cache), `android/guava/src` (cache + hash), `guava-gwt/src-super` |
+| `TestPlatform` | `guava-tests/test` (×2), `guava-gwt/test-super` (×3) |
+
+GWT super-source REPLACES a library file at compile time; it is never compiled
+beside it. `guava-gwt/src-super/…/RegularImmutableList.java` extends the
+`ForwardingImmutableList` that sits in its OWN tree, not the one in `guava/src`.
+Holding the whole module directory in one unit put both variants in one
+namespace pool, and the engine resolved a name across a boundary the build never
+crosses. That is not a conservative over-inclusion — it is a false keep. It is
+also the same fact an earlier entry recorded while refuting a `namespace_span`
+fix: guava's super-source is "compiled INSTEAD of the library's file, never
+beside it."
+
+**So the 24 are the false keeps ending.** Three of them —
+`ForwardingImmutable{List,Map,Set}` — are in `guava/src` itself and are named by
+nothing in `guava/src`: in the Maven build of the `guava` module they are dead,
+and reporting them is the point of this tool. The other twenty-one are files in
+`guava-gwt/{src,test}-super` that this project has no evidence anyone reaches,
+because nothing reads `.gwt.xml` and no manifest here says that tree is another
+compiler's input. That is a missing READER, not a missing shape, and it goes on
+the books below.
+
+**The precondition, answered rather than accepted.** The test that pinned the
+old behaviour carried its reason: "what the build adds to it is not enumerable".
+It was right — the toolkit read the build helper's `add-test-source` and not its
+`add-source` twin, so narrowing to `<sourceDirectory>` alone would have dropped
+a generated tree the build really compiles. One walk now serves both goals, as
+one walk already served both source-directory tags, and the main unit's roots
+are `<sourceDirectory>` plus whatever `add-source` adds. A pom that states
+neither still compiles its own directory, whole.
+
+**Numbers.** guava 8271 → 8235. Alamofire 1484, Exposed 965, flask 19, gin 109,
+lodash 20, ripgrep 143, vapor 732, vite 712 — byte-identical. No conformance
+fixture moves: the one fixture that declares `<sourceDirectory>` roots it where
+its files already lived.
+
+**Knobs.** `kndo:java` 21 → 22 and `kndo:kotlin` 16 → 17: the same poms now
+yield different roots, which is different evidence from the same source.
+`GRAPH_SEMANTICS_VERSION` does not move — the assembly is unchanged, the
+evidence entering it is not. The contract fingerprint does not move.
+
+**And kotlin earns its transcript.** With `<sourceDirectory>` read, maven's
+answer for a Kotlin tree stops being an empty `src/main/java` and becomes the
+`src/main/kotlin` the pom declares, so `visibility-ladder-and-internal` captures
+a real transcript and the `kndo:kotlin` row leaves
+`ECOSYSTEMS_WITH_NO_TRANSCRIPT`. Only `kndo:swift` remains, for the reason its
+row states.
+
+**On the books, unstarted.** A `.gwt.xml` reader: the GWT module descriptor
+names its source and super-source trees, which is a MANIFEST stating what
+another compiler consumes. `ManifestEvidence::ignores` already has the slot —
+"paths THIS manifest excludes from the project" — and its consumers already
+leave such a file discovered, unclaimed, and casting no doubt. Twenty-one of
+guava's findings are what it would answer for. Not started, not promised in a
+release table, and named here so it is not rediscovered.

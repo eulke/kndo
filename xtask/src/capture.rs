@@ -109,6 +109,16 @@ const CAPTURES: &[Capture] = &[
         read: maven,
     },
     Capture {
+        fixture: "crates/kndo-adapter-kotlin/tests/fixtures/visibility-ladder-and-internal",
+        tool: "maven",
+        version: &["mvn", "--version"],
+        commands: MAVEN,
+        prepare: &[],
+        asks: &[],
+        reading: Reading::Whole,
+        read: maven,
+    },
+    Capture {
         fixture: "crates/kndo-adapter-ts/tests/fixtures/conditional-subpaths",
         tool: "node",
         version: &["node", "--version"],
