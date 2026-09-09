@@ -7931,3 +7931,50 @@ context parameters are what is left, and both are more than one `choice` arm. Th
 open question for the owner is whether to keep patching the canonical grammar
 toward them, or to take the fork and pay for the language with the ledger's
 reach — a trade this entry states rather than makes.
+
+## 2026-09-09 — The multi-dollar string, and the attribution that was wrong
+
+The second grammar patch, and a correction to the reasoning that ordered it.
+
+I attributed the 98000 bytes the patched grammar still discards by reading the
+source just before each discarded stretch: 51% multi-dollar strings, 44% infix
+`get`/`set`, 5% dust. That table was wrong. A gap starts where recovery gave UP,
+not at what it choked on, and most of the files bucketed as "multi-dollar" hold
+a `$$` string that parses and break somewhere later. Isolating each shape as its
+own snippet settles it: a template inside a lambda, a template with escaped
+quotes, `logger.warn("$WARN_LOG ${…}")`, `exec("DROP TABLE ${…}")` and a `$$`
+string followed by an escaped-quote string ALL parse. `T.insert { … } get T.id`
+does not. What remains is essentially one construct, and it is infix `get`/`set`
+after a trailing lambda — the patch to write next.
+
+The multi-dollar rule ships regardless, and its case is semantic, not numeric.
+It bought 1130 bytes; what it fixes is what a name MEANS. Kotlin 2.0's
+`@Value($$"${spring.exposed.url}")` exists so the placeholder reaches Spring
+unexpanded: under a `$$` prefix a `$` does not interpolate. Read as a template,
+those names are uses of things that do not exist. `multi-dollar-string` pins
+that and not the parse — a function named `spring`, written nowhere else in the
+project, is reported dead, and would be alive if the body were a template.
+
+Two things the measurement taught, both now in the provenance record:
+
+The dollars and the quote they open are ONE token. A free-standing `$$` token
+competes with the `$` this grammar declares external, and the lexer state that
+resolves them is not local: with `$$` standing alone, `InsertTests.kt` discarded
+6522 bytes at an ordinary `"… AS ($x))"` holding no multi-dollar string. That
+was a 2-file regression against a 2-file win, caught by diffing per-file
+discarded bytes rather than the total — the total alone said 98000 → 106391 and
+would not have said why.
+
+`string_content` joins `kndo:kotlin`'s ledger names. The grammar has always read
+a simple `$name` template as three `string_content` nodes instead of an
+`interpolation`, which is why the adapter scans template text by hand; the
+ledger caught it the first time a fixture exercised one. Verified against the
+previous vendored tree that the tree shape is unchanged: this declares a fact
+that was always true and never stated.
+
+Measured on Exposed: 49 error files → 45, 98000 discarded bytes → 96870, 22532
+declaration nodes → 22731. Findings 977 → 984: nine `duplicate` move, all in
+`JsonColumnTests.kt` and `JsonBColumnTests.kt`, whose test methods are visible
+now and pair with their jdbc/r2dbc twins — and one of them merely re-identified
+with an owner, because its class is a node. The other eight repositories are
+byte-identical. `kndo:kotlin` moves 20 → 21; the kotlin fixture floor 6 → 7.

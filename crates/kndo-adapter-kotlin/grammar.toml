@@ -1,7 +1,8 @@
-grammar = "tree-sitter-kotlin-ng 1.1 (vendored, + the Kotlin 2.1 `when` guard)"
+grammar = "tree-sitter-kotlin-ng 1.1 (vendored, + the Kotlin 2.1 `when` guard and the 2.0 multi-dollar string)"
 names = [
     "identifier",
     "qualified_identifier",
+    "string_content",
 ]
 visited = [
     "class_declaration.name",

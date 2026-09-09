@@ -16,25 +16,25 @@ dropped = [".cargo_vcs_info.json", "Cargo.toml.orig"]
 [[changed]]
 path = "grammar.js"
 upstream = "1f6260635f96071fe1a164a3acbdaaf9d670dc2b35766e438c91f58ed2d50a7f"
-vendored = "9c5b1b033f72141ed8b1ba7d778e202ea5e819a164e72debc6d6e8003694d7b9"
-why = "Kotlin 2.1's `when` guard (`is String if x.isEmpty() -> …`), which 1.1.0 does not know: one entry with a guard ends the grammar's reading of the WHOLE file, and Exposed pays 147100 non-space bytes and 61 of 860 files for it. The rule is one `choice` arm — a guard binds ONE condition, which is also what keeps it apart from an `if` expression opening the next condition after a comma. Measured after: 49 files, 98000 bytes, 723 more declarations."
+vendored = "95c5a09637dcf93377f1cbb4289e0947cb84b4776d984f3f6aebc4673192ab95"
+why = "Two constructs 1.1.0 does not know, one `choice` arm each. (1) Kotlin 2.1's `when` guard (`is String if x.isEmpty() -> …`): one guard ended the grammar's reading of the WHOLE file, and Exposed paid 147100 non-space bytes and 61 of 860 files for it. A guard binds ONE condition, which is also what keeps it apart from an `if` expression opening the next condition after a comma. (2) Kotlin 2.0's multi-dollar string (`@Value($$\"${spring.exposed.enabled}\")`, where the placeholder has to reach Spring unexpanded): the dollars and the quote they open are ONE token, because a free-standing `$$` token competes with the `$` this grammar declares external and the lexer state that decides between them is not local — measured, that shape cost `InsertTests.kt` 6522 bytes at an ordinary string with no multi-dollar in it at all. Measured together on Exposed: 61 error files -> 45, 147100 discarded bytes -> 96870, 21809 declarations -> 22731."
 
 [[changed]]
 path = "src/grammar.json"
 upstream = "c795af096c42fef46ca242a7d1eee1830e2d95fe462ccacefe04cda91885822a"
-vendored = "598643e4b95e0c33e359cdccfa5b6e19c85bf1992d4c5470b80654bd6b7a5975"
+vendored = "f789c3f6ef66718659409bc14f402a2cdfd2de66d38ff2648ea6c9eb5417023d"
 why = "Generated from the patched `grammar.js` by `tree-sitter-cli 0.25.10` — the same version this workspace links as a runtime."
 
 [[changed]]
 path = "src/node-types.json"
 upstream = "0f21509031ad37902dc05d5828f178fed3545c466ffcf38ef30d969cb64e8e9d"
-vendored = "68764a0c2151a4cbc0c5f20d206419764229732921cdc6a7f8f71227dab0a1fd"
+vendored = "27fe7f4d9bdbeb8fc9a0058535f4244a2cdc125007a36d4e8c104ddfd216dde1"
 why = "Generated from the patched `grammar.js` by `tree-sitter-cli 0.25.10`. It carries the new `when_entry.guard` field, which is what the grammar ledger reads."
 
 [[changed]]
 path = "src/parser.c"
 upstream = "9ff65161845b9e9c9d62c12e9a4e4b8d8628bdc31c681ec7e6b4bd3bd6444cb3"
-vendored = "fbd2fa64880f7362744086699262ba313175ca3ed64cefa31923057f60abdfc6"
+vendored = "54b444fe327f07b0712a902ce1f7743e69c9eab1ba2b2626a0da26d35d141da2"
 why = "Generated from the patched `grammar.js` by `tree-sitter-cli 0.25.10`."
 
 [[changed]]

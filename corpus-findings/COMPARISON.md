@@ -2993,3 +2993,58 @@ guard, stays alive. `recovered-under-error` keeps its subject and changes its
 break: it was pinned on the guard, which now parses, so it moves to `get` used as
 an infix name after a trailing lambda — the construct `infix-get-grammar-gap`
 still pins, and the one that still costs Exposed 98000 bytes.
+
+## The multi-dollar string, and a correction to the attribution above
+
+The plan for the remaining discarded bytes rested on an attribution that was
+wrong, and the way it was wrong is worth writing down.
+
+The method was: for each file that discards text, read the source just BEFORE
+the first discarded stretch and call that the construct the grammar failed on.
+It produced a tidy table — 51% Kotlin 2.0 multi-dollar strings, 44% infix
+`get`/`set`, 5% dust. The multi-dollar rule landed, and it bought **1130
+bytes**, not 49881. The method's flaw is that a gap starts where recovery gave
+UP, which can be well past what it choked on: the 17 files bucketed as
+"multi-dollar" mostly hold a `$$` string that parses fine, and break later.
+
+Isolating each shape as its own snippet says what the crude method could not.
+Every second-cluster shape parses: a template inside a lambda
+(`data.map { it.first to "new${it.second}" }`), a template with escaped quotes
+(`"{\"team\":\"$teamA\"}"`), `logger.warn("$WARN_LOG ${context.sql(t)}")`,
+`exec("DROP TABLE ${x.name}")`, and a `$$` string followed by an escaped-quote
+string. One shape does not: `T.insert { … } get T.id`. **What remains is
+essentially one construct — infix `get`/`set` after a trailing lambda — and the
+next patch is the one that matters.**
+
+The multi-dollar rule ships anyway, and not for the byte count. Its subject is
+`@Value($$"${spring.exposed.url}")`, where the placeholder has to reach Spring
+unexpanded: under a `$$` prefix a `$` does not interpolate, so those names are
+TEXT. Read as a template they would be uses of things that do not exist. The
+`multi-dollar-string` fixture pins exactly that and nothing weaker — a function
+named `spring`, written nowhere in the project except inside that body, is
+reported dead; were the body a template it would be alive.
+
+Two mechanics are recorded with it, both found by measuring:
+
+- The dollars and the quote they open must be ONE token. A free-standing `$$`
+  token competes with the `$` this grammar declares external, and the lexer
+  state that decides between them is not local: with `$$` standing alone,
+  `InsertTests.kt` discarded 6522 bytes at an ordinary `"… AS ($x))"` with no
+  multi-dollar string in it at all. Bound to the quote, that file is back to
+  zero.
+- `string_content` joins the Kotlin ledger's name kinds. `tree-sitter-kotlin-ng`
+  has always parsed a simple `$name` template as three `string_content` nodes
+  rather than an `interpolation` — that is why the adapter scans template text
+  by hand — and the ledger caught it the moment a fixture first exercised one.
+  Checked against the previous vendored tree: the shape is unchanged, so this
+  states a fact that was always true and never declared.
+
+Over Exposed's 860 files: 49 error files → 45, 98000 discarded non-space bytes →
+96870, 22532 declaration nodes → 22731.
+
+**Exposed: 977 → 984.** All nine moved findings are `duplicate` in
+`JsonColumnTests.kt` and `JsonBColumnTests.kt` — the files holding the `$$`
+string. Their test methods are now visible and pair with the jdbc/r2dbc twins;
+the one `duplicate` that leaves is `testJsonContains` re-identified with its
+owner, because the class it belongs to is a node now. The other eight
+repositories are byte-identical.

@@ -630,6 +630,7 @@ module.exports = grammar({
     primary_expression: $ => choice(
       $._identifier,
       $.string_literal,
+      $.multi_dollar_string_literal,
       $.multiline_string_literal,
       $.character_literal,
       $.number_literal,
@@ -963,6 +964,29 @@ module.exports = grammar({
       )),
       '"',
     ),
+
+    // Kotlin 2.0's multi-dollar string. A run of two or more `$` before the
+    // quote raises the number of dollars an interpolation needs, so `$name` and
+    // `${…}` inside are ordinary TEXT — which is the whole point of
+    // `@Value($$"${spring.datasource.url}")`, where the placeholder has to reach
+    // Spring unexpanded. HOW MANY dollars interpolate is the prefix's length,
+    // and no context-free rule can check that against the body, so the body is
+    // content and the count stays where a reader can count it: the prefix.
+    multi_dollar_string_literal: $ => seq(
+      // The dollars and the quote they open are ONE token. A free-standing
+      // `$$` token would compete with the `$` this grammar declares external,
+      // and the lexer state that decides between them is not local: measured,
+      // it cost `InsertTests.kt` 6522 bytes at an ordinary `"… AS ($x))"`,
+      // which has no multi-dollar string in it at all.
+      $.multi_dollar_prefix,
+      repeat(choice(
+        alias(token.immediate(prec(1, /[^"\\]+/)), $.string_content),
+        $.escape_sequence,
+      )),
+      '"',
+    ),
+
+    multi_dollar_prefix: _ => token(/\$\$+"/),
 
     multiline_string_literal: $ => seq(
       '"""',

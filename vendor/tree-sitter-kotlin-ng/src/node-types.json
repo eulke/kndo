@@ -138,6 +138,10 @@
         "named": true
       },
       {
+        "type": "multi_dollar_string_literal",
+        "named": true
+      },
+      {
         "type": "multiline_string_literal",
         "named": true
       },
@@ -1485,6 +1489,29 @@
         },
         {
           "type": "visibility_modifier",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "multi_dollar_string_literal",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "escape_sequence",
+          "named": true
+        },
+        {
+          "type": "multi_dollar_prefix",
+          "named": true
+        },
+        {
+          "type": "string_content",
           "named": true
         }
       ]
@@ -2935,6 +2962,10 @@
     "type": "line_comment",
     "named": true,
     "extra": true
+  },
+  {
+    "type": "multi_dollar_prefix",
+    "named": true
   },
   {
     "type": "noinline",

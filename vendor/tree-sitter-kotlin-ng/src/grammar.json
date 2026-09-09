@@ -3301,6 +3301,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "multi_dollar_string_literal"
+        },
+        {
+          "type": "SYMBOL",
           "name": "multiline_string_literal"
         },
         {
@@ -5557,6 +5561,54 @@
           "value": "\""
         }
       ]
+    },
+    "multi_dollar_string_literal": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "multi_dollar_prefix"
+        },
+        {
+          "type": "REPEAT",
+          "content": {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "ALIAS",
+                "content": {
+                  "type": "IMMEDIATE_TOKEN",
+                  "content": {
+                    "type": "PREC",
+                    "value": 1,
+                    "content": {
+                      "type": "PATTERN",
+                      "value": "[^\"\\\\]+"
+                    }
+                  }
+                },
+                "named": true,
+                "value": "string_content"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "escape_sequence"
+              }
+            ]
+          }
+        },
+        {
+          "type": "STRING",
+          "value": "\""
+        }
+      ]
+    },
+    "multi_dollar_prefix": {
+      "type": "TOKEN",
+      "content": {
+        "type": "PATTERN",
+        "value": "\\$\\$+\""
+      }
     },
     "multiline_string_literal": {
       "type": "SEQ",
