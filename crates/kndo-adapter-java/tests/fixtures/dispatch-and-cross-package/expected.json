@@ -45,7 +45,7 @@
     ],
     "by_package": [
       {
-        "name": "dispatch-and-cross-package",
+        "name": "com.foo:dispatch-and-cross-package",
         "manifest": "pom.xml",
         "implicated": 1,
         "subjects": 13

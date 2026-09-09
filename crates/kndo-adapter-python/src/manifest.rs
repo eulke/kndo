@@ -366,6 +366,7 @@ fn test_unit(root: &Value, dir: &str, out: &mut ManifestSink) {
 /// pulls in, and an extra, a PEP 735 group or a poetry group is not.
 fn dependencies(root: &Value, out: &mut ManifestSink) {
     let mut runtime: Vec<&str> = Vec::new();
+    let mut extras: Vec<&str> = Vec::new();
     let mut dev: Vec<&str> = Vec::new();
     fn strings(v: Option<&Value>) -> Vec<&str> {
         v.and_then(Value::as_array)
@@ -374,12 +375,12 @@ fn dependencies(root: &Value, out: &mut ManifestSink) {
     }
     if let Some(project) = root.get("project") {
         runtime.extend(strings(project.get("dependencies")));
-        if let Some(extras) = project
+        if let Some(optional) = project
             .get("optional-dependencies")
             .and_then(Value::as_table)
         {
-            for list in extras.values() {
-                dev.extend(strings(Some(list)));
+            for list in optional.values() {
+                extras.extend(strings(Some(list)));
             }
         }
     }
@@ -406,7 +407,15 @@ fn dependencies(root: &Value, out: &mut ManifestSink) {
         }
     }
     for spec in runtime {
-        declare(out, spec, None);
+        declare(out, spec, Some(DependencyScope::Prod));
+    }
+    // An extra is a feature the CONSUMER opts into (`pip install pkg[postgres]`),
+    // which is a gate and never a usage claim — the same fact cargo states with
+    // `optional = true`, and the one setuptools writes as `extra == "..."`. A
+    // group is the other thing: an input for developing this project, which no
+    // install of it pulls in.
+    for spec in extras {
+        declare(out, spec, Some(DependencyScope::Optional));
     }
     for spec in dev {
         declare(out, spec, Some(DependencyScope::Dev));
@@ -426,20 +435,17 @@ fn setup_cfg(text: &str, dir: &str, cx: &ResolveContext<'_>, out: &mut ManifestS
             .find(|(s, k, _)| s == section && k == key)
             .map(|(_, _, v)| v.clone())
     };
-    for (section, _, value) in &cfg {
-        let scope = match section.as_str() {
-            "options" => None,
-            s if s.starts_with("options.extras_require") => Some(DependencyScope::Dev),
+    // The KEY says which entries are requirements: `install_requires` is the
+    // runtime table PEP 621 later spelled `[project] dependencies`, and every
+    // key of an `extras_require` section is one extra's list.
+    for (section, key, value) in &cfg {
+        let scope = match (section.as_str(), key.as_str()) {
+            ("options", "install_requires") => DependencyScope::Prod,
+            (s, _) if s.starts_with("options.extras_require") => DependencyScope::Optional,
             _ => continue,
         };
-        let is_requires = cfg.iter().any(|(s, k, v)| {
-            s == section && v == value && (k == "install_requires" || scope.is_some())
-        });
-        if !is_requires {
-            continue;
-        }
         for spec in value.lines().map(str::trim).filter(|l| !l.is_empty()) {
-            declare(out, spec, scope);
+            declare(out, spec, Some(scope));
         }
     }
     let Some(name) = get("metadata", "name") else {
@@ -537,26 +543,6 @@ pub fn dependency_name(spec: &str) -> Option<&str> {
         .unwrap_or(spec.len());
     let name = spec[..end].trim();
     (!name.is_empty()).then_some(name)
-}
-
-/// PEP 503: runs of `-`, `_` and `.` collapse to one `-`, lowercased. The
-/// spelling under which two names are the SAME name — how an import's
-/// top-level module is compared with a declared distribution.
-pub fn canonicalize(name: &str) -> String {
-    let mut out = String::with_capacity(name.len());
-    let mut pending = false;
-    for c in name.chars() {
-        if c == '-' || c == '_' || c == '.' {
-            pending = !out.is_empty();
-        } else {
-            if pending {
-                out.push('-');
-                pending = false;
-            }
-            out.extend(c.to_lowercase());
-        }
-    }
-    out
 }
 
 fn declare(out: &mut ManifestSink, spec: &str, scope: Option<DependencyScope>) {

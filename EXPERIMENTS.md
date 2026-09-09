@@ -679,3 +679,15 @@ own statements, which is exactly what extraction is for. The additive-glob
 worry the previous note raised dissolved with the library roots: what remains
 overlaps on purpose, and a file the test build alone compiles seeds no
 production flood whatever colour a root on it claims.
+
+
+## The build tool grades the manifest reader (2026-09-09)
+
+`ToolTranscript` landed with five producers; two measurements it produced are
+recorded here because neither shipped.
+
+| what | number | disposition |
+|---|---|---|
+| read `<build><sourceDirectory>` as the Maven main unit's root | guava 8271 → 8235: 60 retire (47 `untested`, 8 `unused`, 5 `internal-only`, all under `guava-gwt/src-super`, `guava-gwt/test-super`, `futures/failureaccess`), 24 appear (15 `unused`, 9 `internal-only`); eight other repos byte-identical | HELD. The 24 appear because those files then belong to NO unit and the graph reads a unit-less claimed file as second-class. The tag is read (one walk, generalised over both source-directory tags) and not yet rooted |
+| a file no unit compiles publishes every export | guava identical either way (8235); `gradle-multi-module`'s `legacy/Scratch.kt` stops being an `unused` FILE and becomes "production-reachable, but no test reaches this file" | KILLED. The fixture already decided the opposite, and deliberately: `include("legacy")` is commented out, so Gradle compiles none of it. Two trees produce a unit-less file and want opposite answers — guava's is shipped for another compiler, Gradle's is left out of the build — and no evidence yet tells them apart |
+| every fixture pom read by maven 3.9.11 offline | 8 of 14 REFUSED before the fix, 14 of 14 after | SHIPPED. A manifest fixture the real tool refuses to read proves nothing about the real tool |

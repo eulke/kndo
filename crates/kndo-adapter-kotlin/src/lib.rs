@@ -77,7 +77,7 @@ impl KotlinAdapter {
         KotlinAdapter {
             // 14: the annotations a declaration carries and the supertypes it
             // promises are evidence; what one MEANS is a dispatch rule's.
-            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:kotlin", 15, &["kt"])
+            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:kotlin", 16, &["kt"])
                 // The conventions as data; the library-mode root's replacement
                 // is the engine's published surface, read from the unit.
                 .file_roles(&[

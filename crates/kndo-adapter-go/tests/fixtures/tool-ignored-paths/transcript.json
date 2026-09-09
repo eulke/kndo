@@ -1,0 +1,28 @@
+{
+  "producer": {
+    "tool": "go",
+    "version": "go version go1.24.7 linux/amd64",
+    "command": "go list -e -json ./..."
+  },
+  "reading": "sampled",
+  "says": [
+    {
+      "compiles": {
+        "file": "main.go",
+        "kind": "production"
+      }
+    },
+    {
+      "compiles": {
+        "file": "main_test.go",
+        "kind": "test"
+      }
+    },
+    {
+      "compiles": {
+        "file": "sub/sub.go",
+        "kind": "production"
+      }
+    }
+  ]
+}

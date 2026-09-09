@@ -6974,3 +6974,143 @@ question is a wrong answer, not a partial one.
 could state per unit or per edge is not the language's. Having a default, a named
 consumer and a conformance case does not make a fact belong to the floor it sits
 on — all three were satisfied, and both were still on the wrong floor.
+
+## 2026-09-09 — M8.d: a manifest reader is graded by the build tool that owns the manifest
+
+**The circle transcripts break.** Every manifest test in this tree was one hand
+grading another: a manifest string I wrote and the answer I expected, authored
+in the same sitting from the same reading of the same spec. Nothing that is not
+us ever got to say what a manifest means. `kndo-testkit`'s `transcript` module
+closes that: a `ToolTranscript` is one build tool's answers about one fixture,
+captured from the tool by `cargo xtask capture` with the command and version
+that produced them, replayed by the `captured_transcripts_hold` gate with no
+toolchain present. A fixture now carries two claims side by side —
+`expectations.toml` says what the RUN must report, `transcript.json` says what
+the BUILD says the tree is.
+
+**The shape.** `ToolClaim` is six variants, each a question `ManifestEvidence`
+or `resolve` also answers, each keyed by a path or by a manifest's own spelling
+— the coordinates two independent derivations of one tree cannot disagree about
+by accident. `Compiles { file, kind }` carries a `RootKind` and not a
+`UnitKind`, deliberately: a build's target granularity is its own (go links an
+executable per `main` PACKAGE where its unit is the module), and demanding the
+two agree on a target would grade our model of go rather than our reading of
+it. `Enters { file, kind }` keeps `UnitKind`, because an entry names a target
+and nothing else does. A unit's NAME is graded by nothing — cargo calls a bench
+`throughput` where the engine calls it `bench:throughput`. `Reading` is
+`Whole | Sampled`, stated once per transcript because one command is one
+reading; a tool that answers two ways gets two transcripts.
+
+**Five tools answer, and two ecosystems get a row instead.** cargo
+(`cargo metadata`, whole), go (`go list -e -json ./...`, sampled), maven
+(`help:evaluate` on the effective model, whole), node
+(`createRequire().resolve`, sampled) and `packaging` (PEP 508, whole) are
+captured. `ECOSYSTEMS_WITH_NO_TRANSCRIPT` carries the other two with the reason
+each cannot answer here, and the gate fails if a row names an ecosystem that no
+longer reads a manifest: swift ships no toolchain where transcripts are taken
+and `Package.swift` is a program only swiftpm evaluates; kotlin's Gradle script
+resolves its plugins from the network (measured: an offline `gradle -q projects`
+on the `gradle-multi-module` fixture stops at `plugins { kotlin("jvm") }`) and
+its Maven half answers `src/main/java` for a Kotlin tree until the toolkit reads
+the `<sourceDirectory>` a Kotlin pom declares.
+
+**go's `./...` is a SAMPLED reading, re-measured.** Against go 1.24.7 in a
+scratch module: `go build ./...` succeeds and `go run .` prints from both when
+`main.go` imports `example.com/sem/testdata/gen` and `example.com/sem/_scratch`,
+while `go list ./...` lists only `example.com/sem`. The pattern reaches less
+than the compiler compiles, so what the command omits is not a claim that go
+skips it — the same measurement M8.b.12 made, taken again because the label
+depended on it.
+
+**What it caught, first run.** Two defects in `kndo:python`'s manifest reader,
+both silent because the dependency family abstains for python
+(`DependencyIdentity::Underivable`), so no finding moved and no test failed:
+`[project] dependencies` declared `scope: None` — "the source could not
+classify it" — for the one table PEP 621 defines as what an install pulls in;
+and `[project.optional-dependencies]` declared `Dev`, when an extra is a feature
+the CONSUMER opens (`pip install pkg[postgres]`), which is the fact cargo states
+with `optional = true`. Now `Prod` and `Optional`; `[dependency-groups]` and
+poetry groups stay `Dev`. The setup.cfg half said the same two things and gained
+a third defect in the same edit — with `[options]` scoped, its
+`is_requires` test admitted every key of the section, and `packages = find:`
+became a dependency named `find`; the key decides now, not the value.
+`kndo:python` moves 11 → 12. Nine repositories byte-identical.
+
+**The ad-hoc capture is retired into the mechanism.** `tests/captured/tooling.json`
+and `tests/tooling.rs` were the only real-producer grading in the tree, and a
+sticker: an ad-hoc JSON shape, an ad-hoc reader in one test file, and a
+"recapture with `scratchpad/capture-py.py`" pointing at a file that does not
+exist. Its fourteen PEP 508 spellings are now a fixture's `[project]
+dependencies` (`pep508-spellings`), and `packaging` — the parser pip and
+setuptools both call — answers them through `xtask capture`. Not the wheel
+metadata a build backend writes, deliberately: that file RENDERS a name
+(`A.B_c-D` becomes `A.B-c-D`), and a rendering is a third spelling neither the
+manifest nor the reader uses. `canonicalize` goes with it: PEP 503 folding had
+exactly one caller, its own test, and the comparison it exists for does not
+happen while python's specifier identity is underivable — it returns the day
+that does, with its consumer.
+
+**Eight of fourteen fixture poms were not poms.** Measured with maven 3.9.11
+offline: `dead-code-same-package`, `dispatch-and-cross-package`,
+`multi-release-variants`, `nested-type-qualifier`,
+`package-private-across-modules`, `visibility-ladder-and-nested-members` (java)
+and three kotlin siblings were REFUSED by maven — no `<modelVersion>`, no
+`<groupId>`, no `<version>`, or a dependency with no version. A manifest fixture
+the real tool refuses to read proves nothing about the real tool, so all
+fourteen are now poms maven reads. Six pinned reports move by exactly one line
+each — `dead-code-same-package`, `dispatch-and-cross-package` and
+`visibility-ladder-and-nested-members` under kndo-adapter-java, and
+`dead-code-same-package`, `dispatch-and-cross-package` and
+`visibility-ladder-and-internal` under kndo-adapter-kotlin: the unit gains the
+groupId it never had (`dead-code-same-package` →
+`com.foo:dead-code-same-package`), which is how a real Maven coordinate is
+named. `pep508-spellings` is the seventh pinned report, new. No other fixture
+moves and no corpus repository moves.
+
+**One gate was left red for a commit, and this says so.** `contract_changes_are_loud`
+judges the DECISIONS text added over a RANGE of commits, so a commit's own entry
+is only checked once that commit exists — running the suite before committing
+judges the previous pair. The entry for `9c459d2` wrote "131 conformance fixtures:
+findings byte-identical" where every one of their pinned reports moved (the
+`extensions` block carries adapter versions), and the gate wants each fixture
+named, `<crate> fixtures`, or `every conformance fixture`. It was red from that
+commit until this one. DECISIONS is append-only, so the correction lives here:
+that commit moved **every conformance fixture**, with findings byte-identical
+and only the reported adapter versions changed.
+
+**Two changes measured and NOT shipped, with their numbers.**
+
+- *Reading `<build><sourceDirectory>` as the main unit's root.* The toolkit
+  already walks `<testSourceDirectory>` through `<parent>` inheritance and
+  ignores its twin; guava's root pom and `android/pom.xml` declare
+  `<sourceDirectory>src</sourceDirectory>`. Narrowing the main unit to it:
+  guava 8271 → 8235, **60 findings retire** (47 `untested`, 8 `unused`,
+  5 `internal-only`, every one under `guava-gwt/src-super`,
+  `guava-gwt/test-super` or `futures/failureaccess` — trees javac does not
+  compile) and **24 appear** (15 `unused`, 9 `internal-only`), because those
+  files then belong to NO unit and the graph reads a unit-less claimed file as
+  second-class rather than as unstated. The eight other repositories are
+  byte-identical. The narrowing waits on the unit-less file, not on the read.
+- *A file no unit compiles publishes every export.* The obvious companion — an
+  absence degrading toward keep-alive, the same law `Publication::Unstated`
+  follows — is refuted by a fixture that already decided the opposite:
+  `gradle-multi-module`'s `legacy/` is commented out of `settings.gradle.kts`,
+  and under the generous default its `Scratch.kt` stops being an `unused` FILE
+  and becomes "production-reachable, but no test reaches this file". Zero effect
+  on guava (8235 either way): the two trees that produce a unit-less file want
+  opposite answers, and the evidence cannot yet tell "shipped for another
+  compiler" from "left out of the build". `GRAPH_SEMANTICS_VERSION` stays 38.
+
+**Knobs.** `kndo:python` 11 → 12 (its manifest evidence changed);
+`kndo:java` 21 and `kndo:kotlin` 16 were bumped for the `<sourceDirectory>`
+read and stay bumped — the toolkit reads the tag through a walk generalised
+over both source-directory tags, and the pom fixtures behind them are new
+files. `GRAPH_SEMANTICS_VERSION` does not move; the contract fingerprint does
+not move (`Ord` on `DependencyScope` and `RootKind` is a derive, not a shape).
+`declared_roles` moves from `kndo-core` to `PluginSpec::roles_for` — file-role
+globs are spec data and two crates asked for them.
+
+**`default_extensions` becomes `default_plugins`.** The owner's term decision
+was `plugin, con todo incluido`; the facade's one composition list, the gate
+registry's invariant text, the README and one CLI diagnostic still said
+`extension`.

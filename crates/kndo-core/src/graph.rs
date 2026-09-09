@@ -984,31 +984,13 @@ struct DeclaredRoles {
     verdicts: Vec<(RootKind, Confidence)>,
 }
 
-/// The roles `spec` declares for `path` — the file-role globs applied exactly
-/// as anchoring applies them, so a caller outside the engine (a gate proving
-/// nine adapters spelled their conventions right) asks the engine's own
-/// question instead of re-deriving how a path-shaped glob matches.
-pub fn declared_roles(spec: &PluginSpec, path: &str) -> Vec<(RootKind, Confidence)> {
-    let declared = spec.file_roles();
-    role_globs(spec)
-        .matches(path)
-        .into_iter()
-        .map(|i| (declared[i].kind, declared[i].confidence))
-        .collect()
-}
-
-/// One spec's file-role globs, compiled — index-parallel to `file_roles()`.
-fn role_globs(spec: &PluginSpec) -> globset::GlobSet {
-    crate::extract::path_glob_set(spec.file_roles().iter().map(|r| r.glob.as_str()))
-}
-
 impl DeclaredRoles {
     fn of(adapter: &dyn Plugin) -> DeclaredRoles {
         let spec = adapter.spec();
         let declared = spec.file_roles();
         DeclaredRoles {
             adapter: SmolStr::new(spec.coordinate()),
-            globs: role_globs(spec),
+            globs: spec.role_globs(),
             verdicts: declared.iter().map(|r| (r.kind, r.confidence)).collect(),
         }
     }

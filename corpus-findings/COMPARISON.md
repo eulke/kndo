@@ -2699,3 +2699,34 @@ and `macro_rules!` is the case that needs it.
 
 A root that suppresses advice by being a root is not a rule about macros; it is
 a rule about entry points, borrowed. Naming the gap is worth two findings.
+
+## The transcript tranche moves nothing, and that is the measurement (2026-09-09)
+
+Five build tools now grade the manifest readers (`captured_transcripts_hold`),
+and the first run found two real defects in `kndo:python`'s scoping: the runtime
+table declared no scope at all, and an extra declared `Dev` where it is a gate
+the consumer opens. Both are silent on this corpus, and the reason is stated in
+the reports themselves — every python run abstains from the dependency family
+with `specifier-identity-underivable`, so nothing reads a python declaration's
+scope yet. All nine repositories are byte-identical against a baseline taken
+before this tranche began: Alamofire 1484, Exposed 965, flask 19, gin 109,
+guava 8271, lodash 20, ripgrep 143, vapor 732, vite 712.
+
+The committed reports move anyway, for two reasons that are not this tranche's
+findings. `corpus-findings/` was one commit stale: the alias tranche's vite
+number (701 → 712, import edges 2447 → 2590, the eleven decomposed in its own
+DECISIONS entry) was measured and recorded in prose but never written out, and
+this run writes it. And every report's `extensions` block drops
+`published_surface`, a field the previous commit deleted from the contract while
+the reports still carried it. Findings themselves move on no repository.
+
+Two candidate changes were measured and held back rather than shipped for a
+number; both are decomposed in `DECISIONS.md` and carried in `EXPERIMENTS.md`.
+The one worth naming here is guava's, because it is the largest single block of
+findings this corpus still holds that a manifest could retire: reading the
+`<sourceDirectory>src</sourceDirectory>` guava's own root pom declares retires
+60 findings across `guava-gwt/src-super`, `guava-gwt/test-super` and
+`futures/failureaccess` — trees javac does not compile — and adds 24 in the same
+trees, because a file no unit compiles is read as private rather than as
+unstated. The 60 are the reason to do it; the 24 are the question to answer
+first.

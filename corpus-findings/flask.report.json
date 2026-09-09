@@ -8,7 +8,6 @@
       {
         "id": "kndo:css",
         "files": 2,
-        "published_surface": "exports",
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
         "dependency_identity": "underivable"
@@ -16,7 +15,6 @@
       {
         "id": "kndo:html",
         "files": 20,
-        "published_surface": "exports",
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
         "dependency_identity": "underivable"
@@ -24,7 +22,6 @@
       {
         "id": "kndo:python",
         "files": 83,
-        "published_surface": "exports",
         "import_cycles": "hazard",
         "dependency_scoping": "scoped",
         "dependency_identity": "underivable"
@@ -32,7 +29,7 @@
     ]
   },
   "health": {
-    "implicated": 8,
+    "implicated": 7,
     "subjects": 1228,
     "by_category": [
       {
@@ -41,7 +38,7 @@
       },
       {
         "category": "unused",
-        "findings": 6
+        "findings": 5
       }
     ],
     "by_package": [
@@ -54,7 +51,7 @@
       {
         "name": "flask-example-celery",
         "manifest": "examples/celery/pyproject.toml",
-        "implicated": 1,
+        "implicated": 0,
         "subjects": 18
       },
       {
@@ -95,26 +92,26 @@
       "message": "9 files form an import cycle: src/flask/__init__.py → src/flask/app.py → src/flask/__init__.py"
     },
     {
-      "id": "kndo-dbe4c933098d",
+      "id": "kndo-4d64d964475a",
       "category": "unused",
       "severity": "warning",
       "confidence": "certain",
       "subject": {
-        "kind": "file",
-        "path": "docs/conf.py"
+        "kind": "symbol",
+        "path": "docs/conf.py",
+        "selector": {
+          "name": "setup"
+        },
+        "span": {
+          "start": 3334,
+          "end": 3385
+        }
       },
-      "message": "no root anchors this file and no reachable file imports it"
-    },
-    {
-      "id": "kndo-42b0827e9950",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "examples/celery/make_celery.py"
+      "lines": {
+        "start": 100,
+        "end": 101
       },
-      "message": "no root anchors this file and no reachable file imports it"
+      "message": "nothing references, roots, or imports this declaration"
     },
     {
       "id": "kndo-b48bc44863cd",
@@ -400,6 +397,17 @@
         "end": 110
       },
       "message": "structural clone of tests/test_templating.py:test_escaping"
+    },
+    {
+      "id": "kndo-fafb1d5a0d15",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "docs/conf.py"
+      },
+      "message": "production-reachable, but no test reaches this file"
     },
     {
       "id": "kndo-ac26eed80e7a",

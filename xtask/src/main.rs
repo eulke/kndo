@@ -6,6 +6,7 @@
 //! shell dialects.
 
 mod bench;
+mod capture;
 
 use sha2::{Digest, Sha256};
 use std::fs;
@@ -27,9 +28,10 @@ fn main() {
         Some("corpus") => corpus(&args[1..]),
         Some("pin-abi") => pin_abi(),
         Some("bench") => bench::run(&args[1..]),
+        Some("capture") => capture::run(&args[1..]),
         _ => {
             eprintln!(
-                "usage: cargo xtask <gen-ci | gen-fingerprint | gen-schema | package --tag T --out-dir D | verify-artifact --dir D | corpus --corpus-dir D [--out-dir D] | pin-abi | bench [--sizes 1k,5k] [--update-baseline] [--gate]>"
+                "usage: cargo xtask <gen-ci | gen-fingerprint | gen-schema | package --tag T --out-dir D | verify-artifact --dir D | corpus --corpus-dir D [--out-dir D] | pin-abi | bench [--sizes 1k,5k] [--update-baseline] [--gate] | capture [--only FIXTURE]>"
             );
             exit(2);
         }
@@ -40,11 +42,11 @@ fn main() {
     }
 }
 
-fn workspace_root() -> PathBuf {
+pub(crate) fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..")
 }
 
-fn flag(args: &[String], name: &str) -> Option<String> {
+pub(crate) fn flag(args: &[String], name: &str) -> Option<String> {
     args.iter()
         .position(|a| a == name)
         .and_then(|i| args.get(i + 1))

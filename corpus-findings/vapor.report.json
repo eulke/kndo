@@ -8,7 +8,6 @@
       {
         "id": "kndo:html",
         "files": 3,
-        "published_surface": "exports",
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
         "dependency_identity": "underivable"
@@ -16,7 +15,6 @@
       {
         "id": "kndo:swift",
         "files": 251,
-        "published_surface": "exports",
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
         "dependency_identity": "underivable",

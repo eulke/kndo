@@ -45,7 +45,7 @@
     ],
     "by_package": [
       {
-        "name": "visibility-ladder-and-nested-members",
+        "name": "com.foo:visibility-ladder-and-nested-members",
         "manifest": "pom.xml",
         "implicated": 1,
         "subjects": 26

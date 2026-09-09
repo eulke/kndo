@@ -138,13 +138,15 @@ dev = ["ruff", "gha-update ; python_full_version >= '3.12'"]
     assert_eq!(
         named,
         vec![
-            ("blinker".to_string(), None),
-            ("click".to_string(), None),
-            ("asgiref".to_string(), Some(DependencyScope::Dev)),
+            ("blinker".to_string(), Some(DependencyScope::Prod)),
+            ("click".to_string(), Some(DependencyScope::Prod)),
+            ("asgiref".to_string(), Some(DependencyScope::Optional)),
             ("ruff".to_string(), Some(DependencyScope::Dev)),
             ("gha-update".to_string(), Some(DependencyScope::Dev)),
         ],
-        "an extra and a PEP 735 group are for developing this project, not for installing it"
+        "the runtime table is what an install pulls in; an extra is a gate the \
+         CONSUMER opens; a PEP 735 group is for developing this project and no \
+         install of it carries either"
     );
 
     // poetry states requirements as a TABLE, and `python` is the interpreter.
@@ -162,7 +164,7 @@ dev = ["ruff", "gha-update ; python_full_version >= '3.12'"]
     assert_eq!(
         named,
         vec![
-            ("click".to_string(), None),
+            ("click".to_string(), Some(DependencyScope::Prod)),
             ("pytest".to_string(), Some(DependencyScope::Dev)),
         ]
     );
@@ -278,9 +280,9 @@ dev =
     assert_eq!(
         named,
         vec![
-            ("blinker".to_string(), None),
-            ("click".to_string(), None),
-            ("pytest".to_string(), Some(DependencyScope::Dev)),
+            ("blinker".to_string(), Some(DependencyScope::Prod)),
+            ("click".to_string(), Some(DependencyScope::Prod)),
+            ("pytest".to_string(), Some(DependencyScope::Optional)),
         ]
     );
 }

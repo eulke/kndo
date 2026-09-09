@@ -54,7 +54,9 @@ pub struct PackageEntry {
 /// engine's vocabulary by the declaring adapter. Closed by design like RootKind:
 /// analyses read scopes as verdict-changing facts (peer is a contract with the
 /// consumer, never a usage claim), so an unknown scope has no honest meaning.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum DependencyScope {
     Prod,

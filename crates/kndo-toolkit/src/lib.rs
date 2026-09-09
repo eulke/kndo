@@ -473,8 +473,13 @@ pub mod jvm_manifest {
             .collect();
         depends_on.sort_unstable();
         depends_on.dedup();
-        let mut test_roots: Vec<SmolStr> = match test_source_directory(project, path, cx, &resolve)
-        {
+        let mut test_roots: Vec<SmolStr> = match source_directory(
+            project,
+            path,
+            cx,
+            &resolve,
+            "testSourceDirectory",
+        ) {
             Some(dir) => vec![SmolStr::new(join(&dir))],
             None => vec![
                 SmolStr::new(join("src/test/java")),
@@ -492,6 +497,13 @@ pub mod jvm_manifest {
         test_depends_on.push(SmolStr::new(name));
         test_depends_on.sort_unstable();
         test_depends_on.dedup();
+        // `<sourceDirectory>` is READ but not yet a root: guava's own poms
+        // declare `src`, and narrowing the main unit to it leaves
+        // `guava-gwt/src-super` — a tree GWT compiles and javac does not —
+        // belonging to no unit at all, which the graph today reads as
+        // second-class rather than as unstated. 60 findings correctly retire
+        // and 24 appear for that reason; the pair is on the books, and the
+        // unit-less file is the question to answer before the root narrows.
         out.unit(kndo_contract::manifest::Unit {
             name: SmolStr::new(name),
             kind: kndo_contract::manifest::UnitKind::Library,
@@ -1100,21 +1112,24 @@ pub mod jvm_manifest {
         out
     }
 
-    /// A pom's own `<build><testSourceDirectory>`, else the nearest ancestor's
-    /// along `<parent>` — Maven's inheritance, read through the context. A
-    /// relative directory, to be joined under the INHERITING pom's own
-    /// directory: `<testSourceDirectory>test-src</testSourceDirectory>` in a
-    /// parent means each child's `test-src`, which is what
-    /// `mvn help:effective-pom` answers for the captured reactor.
-    fn test_source_directory(
+    /// A pom's own `<build><`*tag*`>`, else the nearest ancestor's along
+    /// `<parent>` — Maven's inheritance, read through the context. A relative
+    /// directory, to be joined under the INHERITING pom's own directory:
+    /// `<testSourceDirectory>test-src</testSourceDirectory>` in a parent means
+    /// each child's `test-src`, which is what `mvn help:effective-pom` answers
+    /// for the captured reactor. `tag` is `sourceDirectory` or
+    /// `testSourceDirectory` — one walk, because Maven inherits both the same
+    /// way and two copies of it could disagree.
+    fn source_directory(
         project: roxmltree::Node<'_, '_>,
         path: &str,
         cx: &kndo_contract::adapter::ResolveContext<'_>,
         resolve: &dyn Fn(&str) -> String,
+        tag: &str,
     ) -> Option<String> {
         let declared = |node: roxmltree::Node<'_, '_>| -> Option<String> {
             let raw = child(node, "build")
-                .and_then(|b| child(b, "testSourceDirectory"))
+                .and_then(|b| child(b, tag))
                 .map(text_of)?;
             let raw = resolve(raw.trim());
             let raw = raw

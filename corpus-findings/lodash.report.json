@@ -8,7 +8,6 @@
       {
         "id": "kndo:css",
         "files": 5,
-        "published_surface": "exports",
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
         "dependency_identity": "underivable"
@@ -16,7 +15,6 @@
       {
         "id": "kndo:html",
         "files": 6,
-        "published_surface": "exports",
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
         "dependency_identity": "underivable"
@@ -24,7 +22,6 @@
       {
         "id": "kndo:js-ts",
         "files": 54,
-        "published_surface": "entries",
         "import_cycles": "hazard",
         "dependency_scoping": "scoped",
         "dependency_identity": "package-name",

@@ -412,7 +412,7 @@ fn fixture_corpora() -> Vec<(std::path::PathBuf, usize)> {
         (manifest.join("../kndo-adapter-java/tests/fixtures"), 6),
         (manifest.join("../kndo-adapter-kotlin/tests/fixtures"), 5),
         (manifest.join("../kndo-adapter-swift/tests/fixtures"), 4),
-        (manifest.join("../kndo-adapter-python/tests/fixtures"), 7),
+        (manifest.join("../kndo-adapter-python/tests/fixtures"), 8),
         (manifest.join("../kndo-adapter-html/tests/fixtures"), 1),
         (manifest.join("../kndo-adapter-css/tests/fixtures"), 4),
         (manifest.join("../kndo-apple/tests/fixtures"), 1),
@@ -494,6 +494,84 @@ impl kndo_testkit::expectations::Tree for TheRun<'_> {
             .map(|g| g.to_string())
             .collect()
     }
+}
+
+/// The ecosystems no build tool answers for here, and why — a row is a promise
+/// NOT made, not a gap glossed over. The day the tool answers,
+/// `cargo xtask capture` takes the transcript and the row goes.
+const ECOSYSTEMS_WITH_NO_TRANSCRIPT: &[(&str, &str)] = &[
+    (
+        "kndo:swift",
+        "swift ships no toolchain where transcripts are taken, and `Package.swift` \
+         is a program only swiftpm can evaluate — there is no second reader of it \
+         to grade against",
+    ),
+    (
+        "kndo:kotlin",
+        "its two manifests answer nothing yet: a Gradle script resolves its plugins \
+         from the network, so an offline evaluation stops at the first `plugins {}` \
+         block, and Maven answers `src/main/java` for a Kotlin tree until the \
+         toolkit reads the `<sourceDirectory>` a Kotlin pom declares",
+    ),
+];
+
+#[test]
+fn captured_transcripts_hold() {
+    // The other half of a fixture's claims: `expectations.toml` says what the RUN
+    // must report, `transcript.json` says what the BUILD TOOL says the tree is —
+    // captured from cargo, go, maven, gradle, node and setuptools themselves by
+    // `cargo xtask capture`, replayed here with no toolchain present. Every other
+    // manifest test is one hand grading another; this is the only place where
+    // something that is not us gets to say what a manifest means.
+    use kndo_testkit::transcript::{ToolTranscript, Tree};
+    let plugins = kndo::default_plugins();
+    let mut failures: Vec<String> = Vec::new();
+    let mut graded = 0;
+    for (fixtures, _) in fixture_corpora() {
+        let mut names: Vec<_> = std::fs::read_dir(&fixtures)
+            .expect("fixture corpus exists")
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().join("transcript.json").is_file())
+            .map(|e| e.path())
+            .collect();
+        names.sort();
+        for dir in &names {
+            let transcript = ToolTranscript::read(&dir.join("transcript.json"));
+            let tree = Tree::read(&dir.join("project"));
+            let name = dir.file_name().unwrap_or_default().to_string_lossy();
+            if transcript.says.is_empty() {
+                failures.push(format!("{name}: the transcript claims nothing"));
+                continue;
+            }
+            for disagreement in transcript.check(&plugins, &tree) {
+                failures.push(format!(
+                    "{name} (vs {}): {disagreement}",
+                    transcript.producer.tool
+                ));
+            }
+            graded += 1;
+        }
+    }
+    let ecosystems: std::collections::BTreeSet<&str> = kndo::default_plugins()
+        .iter()
+        .filter(|p| !p.spec().manifests().is_empty())
+        .map(|p| p.spec().coordinate().to_string())
+        .collect::<std::collections::BTreeSet<String>>()
+        .iter()
+        .map(|c| Box::leak(c.clone().into_boxed_str()) as &str)
+        .collect();
+    let excused: std::collections::BTreeSet<&str> =
+        ECOSYSTEMS_WITH_NO_TRANSCRIPT.iter().map(|(c, _)| *c).collect();
+    let stale: Vec<&&str> = excused.iter().filter(|c| !ecosystems.contains(*c)).collect();
+    assert!(
+        stale.is_empty(),
+        "the no-transcript ledger names ecosystems that no longer read a manifest: {stale:?}"
+    );
+    assert!(
+        failures.is_empty(),
+        "{graded} transcripts replayed; the build tool and the adapter disagree:\n  {}",
+        failures.join("\n  ")
+    );
 }
 
 #[test]
@@ -691,7 +769,7 @@ fn builtin_plugin_proofs() {
     // proof the authoring docs demand of anyone else: the run WITHOUT it
     // establishes what fires, the run WITH it changes exactly what it claims to
     // change, and the contribution is reported in full. Closed over the conduct
-    // subset of `default_extensions()`: a coordinate shipped without its proof
+    // subset of `default_plugins()`: a coordinate shipped without its proof
     // here fails, the same posture that makes the conduct gates arguments of
     // `.conduct()` — an extension nothing asserts is one nothing notices
     // breaking, and the cost is measured in findings that silently return.
@@ -704,7 +782,7 @@ fn builtin_plugin_proofs() {
         "kndo:info-plist",
         "kndo:spring",
     ];
-    let shipped: Vec<String> = kndo::default_extensions()
+    let shipped: Vec<String> = kndo::default_plugins()
         .iter()
         .filter(|e| e.spec().declares_conduct())
         .map(|e| e.spec().coordinate().to_string())
@@ -723,7 +801,7 @@ fn builtin_plugin_proofs() {
             cache: CacheLocation::Off,
             ..Config::default()
         };
-        let extraction_only: Vec<Box<dyn kndo::Plugin>> = kndo::default_extensions()
+        let extraction_only: Vec<Box<dyn kndo::Plugin>> = kndo::default_plugins()
             .into_iter()
             .filter(|e| !e.spec().declares_conduct())
             .collect();
@@ -982,8 +1060,8 @@ fn rule_packs_are_data() {
     // `MutatesGraph::Yes`, and what makes "the trigger is its own gate" false:
     // a marker is a bare name until the engine qualifies it, so a pack whose
     // framework is absent must be switched OFF, not merely unmatched.
-    for extension in kndo::default_extensions() {
-        let spec = extension.spec();
+    for plugin in kndo::default_plugins() {
+        let spec = plugin.spec();
         if spec.dispatch_rules().is_empty() || !spec.suffixes().is_empty() {
             continue;
         }
@@ -1971,10 +2049,10 @@ fn every_adapter_declares_its_namespace_in_one_vocabulary() {
         ("kndo:css", "no namespace: a sheet is its own scope"),
     ];
 
-    let extensions = kndo::default_extensions();
+    let plugins = kndo::default_plugins();
     let mut silent = Vec::new();
     for (coordinate, path, content) in sample {
-        let adapter = extensions
+        let adapter = plugins
             .iter()
             .find(|e| e.spec().coordinate() == *coordinate)
             .unwrap_or_else(|| panic!("{coordinate} is a built-in"));
@@ -2096,15 +2174,15 @@ fn every_declared_file_role_names_the_paths_its_language_means() {
         ),
     ];
 
-    let extensions = kndo::default_extensions();
+    let plugins = kndo::default_plugins();
     let mut wrong = Vec::new();
     for (coordinate, path, expected) in sample {
-        let spec = extensions
+        let spec = plugins
             .iter()
             .find(|e| e.spec().coordinate() == *coordinate)
             .unwrap_or_else(|| panic!("{coordinate} is a built-in"))
             .spec();
-        let mut got: Vec<RootKind> = kndo_core::declared_roles(spec, path)
+        let mut got: Vec<RootKind> = spec.roles_for(path)
             .into_iter()
             .map(|(kind, _)| kind)
             .collect();
@@ -2433,7 +2511,7 @@ fn every_dispatch_rule_fires_in_some_fixture() {
     let mut cold: Vec<String> = Vec::new();
     let mut warm_but_listed: Vec<String> = Vec::new();
     let mut declared: BTreeSet<String> = BTreeSet::new();
-    for plugin in kndo::default_extensions() {
+    for plugin in kndo::default_plugins() {
         let spec = plugin.spec();
         // Only a CLAIMING extension's rules: see the doc-comment above.
         if spec.suffixes().is_empty() {

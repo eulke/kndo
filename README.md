@@ -124,6 +124,12 @@ slice landed the four remaining pieces:
 - **Harvested-fixture conformance**: the 22 v1 js fixture projects replay through the
   v2 engine under the new `adapter_conformance_fixtures_are_byte_identical` gate,
   each report pinned byte-for-byte and regenerated only deliberately.
+- **Build-tool transcripts**: a fixture's `transcript.json` holds what cargo, go,
+  maven, node or `packaging` answered about that same tree, captured by
+  `cargo xtask capture` with the command and version that produced it and replayed
+  by `captured_transcripts_hold` with no toolchain present — the one place where
+  something that is not us says what a manifest means. An ecosystem no tool answers
+  for carries a row with its reason instead.
 - **The corpus CI job**: `corpus/clone.sh` fetches the pins shallowly (cached by
   `corpus.toml` hash), `cargo xtask corpus` measures, and `git diff --exit-code`
   holds `corpus-findings/` equal to the committed measurement — the same three
@@ -262,7 +268,7 @@ Complete (CI verification pending only the credits reset, like M0–M2):
   the first built-in ingester — byte-identical findings everywhere. Envelope
   grew `plugins` (SCHEMA `kndo-v2/m5`); gates eleven and twelve landed here and
   carry their post-M6.a spellings: `builtin_plugin_proofs` closed over the
-  conduct subset of `default_extensions()`, and
+  conduct subset of `default_plugins()`, and
   `extension_dependency_implication`.
 - **M5.c — the WASM ABI, done**: `kndo:vocab@1.0.0` under `wit/` — one types
   interface, three worlds (`adapter` born COMPLETE: extraction, resolve,

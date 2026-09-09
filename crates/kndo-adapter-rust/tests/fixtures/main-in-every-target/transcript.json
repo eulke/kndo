@@ -1,0 +1,34 @@
+{
+  "producer": {
+    "tool": "cargo",
+    "version": "cargo 1.98.0 (797e8a9bc 2026-08-05)",
+    "command": "cargo metadata --no-deps --format-version 1 --offline"
+  },
+  "reading": "whole",
+  "says": [
+    {
+      "enters": {
+        "file": "build.rs",
+        "kind": "tooling"
+      }
+    },
+    {
+      "enters": {
+        "file": "examples/demo.rs",
+        "kind": "example"
+      }
+    },
+    {
+      "enters": {
+        "file": "src/bin/tool.rs",
+        "kind": "executable"
+      }
+    },
+    {
+      "enters": {
+        "file": "src/lib.rs",
+        "kind": "library"
+      }
+    }
+  ]
+}

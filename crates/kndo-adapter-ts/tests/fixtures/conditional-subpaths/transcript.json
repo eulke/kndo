@@ -1,0 +1,44 @@
+{
+  "producer": {
+    "tool": "node",
+    "version": "v22.22.2",
+    "command": "npm install --offline --no-audit --no-fund && node -e \nconst { createRequire } = require('node:module');\nconst path = require('node:path');\nconst asks = JSON.parse(process.env.KNDO_ASKS);\nconst out = [];\nfor (const [from, specifier] of asks) {\n  try {\n    out.push({ from, specifier, to: createRequire(path.resolve(from)).resolve(specifier) });\n  } catch (e) {\n    out.push({ from, specifier, refused: String(e.code || e.message) });\n  }\n}\nconsole.log(JSON.stringify(out));\n"
+  },
+  "reading": "sampled",
+  "says": [
+    {
+      "resolves": {
+        "from": "packages/app/main.js",
+        "specifier": "@demo/lib",
+        "to": "packages/lib/src/index.cjs"
+      }
+    },
+    {
+      "resolves": {
+        "from": "packages/app/main.js",
+        "specifier": "@demo/lib/client",
+        "to": "packages/lib/src/client.js"
+      }
+    },
+    {
+      "resolves": {
+        "from": "packages/app/main.js",
+        "specifier": "@demo/lib/tools/probe",
+        "to": "packages/lib/src/tools/probe.js"
+      }
+    },
+    {
+      "resolves": {
+        "from": "packages/lib/src/index.js",
+        "specifier": "./client.js",
+        "to": "packages/lib/src/client.js"
+      }
+    },
+    {
+      "refuses": {
+        "from": "packages/app/main.js",
+        "specifier": "@demo/lib/internal/secret"
+      }
+    }
+  ]
+}

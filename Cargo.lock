@@ -1211,8 +1211,10 @@ dependencies = [
 name = "kndo-testkit"
 version = "0.0.0"
 dependencies = [
+ "globset",
  "kndo-contract",
  "serde",
+ "serde_json",
  "smol_str",
  "tempfile",
  "toml",
@@ -2882,8 +2884,10 @@ dependencies = [
  "kndo-contract",
  "kndo-core",
  "kndo-gates",
+ "kndo-testkit",
  "serde_json",
  "sha2",
+ "smol_str",
  "tar",
  "tempfile",
  "wit-component 0.219.2",

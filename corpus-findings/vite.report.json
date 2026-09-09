@@ -8,7 +8,6 @@
       {
         "id": "kndo:css",
         "files": 232,
-        "published_surface": "exports",
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
         "dependency_identity": "underivable"
@@ -16,7 +15,6 @@
       {
         "id": "kndo:html",
         "files": 155,
-        "published_surface": "exports",
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
         "dependency_identity": "underivable"
@@ -24,7 +22,6 @@
       {
         "id": "kndo:js-ts",
         "files": 1558,
-        "published_surface": "entries",
         "import_cycles": "hazard",
         "dependency_scoping": "scoped",
         "dependency_identity": "package-name",
@@ -43,7 +40,7 @@
     ]
   },
   "health": {
-    "implicated": 495,
+    "implicated": 505,
     "subjects": 5702,
     "by_category": [
       {
@@ -56,7 +53,7 @@
       },
       {
         "category": "unused",
-        "findings": 447
+        "findings": 457
       }
     ],
     "by_package": [
@@ -77,12 +74,6 @@
         "manifest": "playground/resolve-tsconfig-paths/src/nested/tsconfig.a.json",
         "implicated": 1,
         "subjects": 7
-      },
-      {
-        "name": "@vite/test-config-entry",
-        "manifest": "packages/vite/src/node/__tests__/fixtures/config/entry/package.json",
-        "implicated": 0,
-        "subjects": 3
       },
       {
         "name": "@vite/test-config-plugin-module-condition",
@@ -155,12 +146,6 @@
         "manifest": "playground/ssr-webworker/browser-exports/package.json",
         "implicated": 0,
         "subjects": 2
-      },
-      {
-        "name": "@vitejs/test-css",
-        "manifest": "playground/css/package.json",
-        "implicated": 34,
-        "subjects": 156
       },
       {
         "name": "@vitejs/test-css-dep",
@@ -395,6 +380,12 @@
         "manifest": "playground/worker/dep-self-reference-url-worker/package.json",
         "implicated": 1,
         "subjects": 3
+      },
+      {
+        "name": "@vitejs/test-dep-source-map-no-sources",
+        "manifest": "playground/optimize-deps/dep-source-map-no-sources/package.json",
+        "implicated": 0,
+        "subjects": 4
       },
       {
         "name": "@vitejs/test-dep-to-optimize",
@@ -679,12 +670,6 @@
         "subjects": 2
       },
       {
-        "name": "@vitejs/test-resolve",
-        "manifest": "playground/resolve/package.json",
-        "implicated": 14,
-        "subjects": 99
-      },
-      {
         "name": "@vitejs/test-resolve-browser-field",
         "manifest": "playground/resolve/browser-field/package.json",
         "implicated": 7,
@@ -837,14 +822,14 @@
       {
         "name": "vite",
         "manifest": "packages/vite/package.json",
-        "implicated": 77,
-        "subjects": 2717
+        "implicated": 80,
+        "subjects": 2720
       },
       {
         "name": "~utils",
         "manifest": "playground/package.json",
-        "implicated": 328,
-        "subjects": 2030
+        "implicated": 383,
+        "subjects": 2281
       }
     ]
   },
@@ -2423,6 +2408,28 @@
       "message": "no root anchors this file and no reachable file imports it"
     },
     {
+      "id": "kndo-840952793d68",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/misc/false.d.ts"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-b19d13c3716e",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/misc/true.d.ts"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
       "id": "kndo-01f3f07a944e",
       "category": "unused",
       "severity": "warning",
@@ -2939,6 +2946,17 @@
         "end": 97
       },
       "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-d92f1c2eef41",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "packages/vite/src/types/shims.d.ts"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
     },
     {
       "id": "kndo-addca05ffc15",
@@ -3513,6 +3531,17 @@
       "message": "no root anchors this file and no reachable file imports it"
     },
     {
+      "id": "kndo-27759b91366f",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/css/imports-field.css"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
       "id": "kndo-7621927bded9",
       "category": "unused",
       "severity": "warning",
@@ -3773,6 +3802,50 @@
       "subject": {
         "kind": "file",
         "path": "playground/dynamic-import/(app)/main.js"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-16534fb66c98",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/dynamic-import/alias/hello.js"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-2fda1b45cd46",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/dynamic-import/alias/hi.js"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-99782ebf206b",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/dynamic-import/alias/url.js"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-1909eef61422",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/dynamic-import/alias/worker.js"
       },
       "message": "no root anchors this file and no reachable file imports it"
     },
@@ -4125,6 +4198,28 @@
       "subject": {
         "kind": "file",
         "path": "playground/glob-import/root/escape/{curlies}/mod/index.js"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-3c07116ead26",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/glob-import/root/imports-path/bar.js"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-d631c0f24468",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "playground/glob-import/root/imports-path/foo.js"
       },
       "message": "no root anchors this file and no reachable file imports it"
     },
@@ -9386,6 +9481,28 @@
       "lines": {
         "start": 11,
         "end": 17
+      },
+      "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this type"
+    },
+    {
+      "id": "kndo-1c878c267171",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "packages/vite/src/types/chokidar.d.ts",
+        "selector": {
+          "name": "AwaitWriteFinishOptions"
+        },
+        "span": {
+          "start": 6709,
+          "end": 6956
+        }
+      },
+      "lines": {
+        "start": 201,
+        "end": 211
       },
       "message": "declared `export`, but every use is within its own file and nothing else in the tree imports or names it — `unexported` would suffice for this type"
     },

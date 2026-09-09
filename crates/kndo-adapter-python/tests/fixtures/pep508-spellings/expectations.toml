@@ -1,0 +1,26 @@
+# pep508-spellings: every requirement spelling PEP 508 allows, in the one table
+# that declares them — and `transcript.json` beside this file is what makes the
+# fixture worth its weight. setuptools' own build backend parses the same
+# fourteen strings and writes into `Requires-Dist` the names it read out of
+# them; the adapter must read the same fourteen names out of the same table,
+# and the transcript gate is where the two answers meet.
+#
+# The spellings are the interesting ones and nothing else: a version specifier
+# with and without spaces, an extras bracket, an environment marker (before a
+# `;` and after one), a dotted name, a name that is dots and underscores at
+# once, a wildcard pin, and a direct URL reference.
+#
+# The judgement below exists so the tree is a project and not a bare manifest:
+# a console script anchors the module, and the classifier that says the
+# distribution does not upload is what lets its unreached function be accused.
+
+[[dead]]
+subject = "src/extra.py"
+category = "unused"
+why = "a whole module the console script never imports, in a distribution whose `Private :: Do Not Upload` classifier says no consumer names it either — a file nothing reaches is accused as a file, not one declaration at a time"
+
+[[alive]]
+subject = "src/app.py#serve"
+category = "unused"
+because = "entry-surface"
+why = "the `[project.scripts]` console script names it, which is the whole of what anchors this tree"

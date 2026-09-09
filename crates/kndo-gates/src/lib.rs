@@ -59,6 +59,10 @@ pub const GATES: &[Gate] = &[
         invariant: "every fixture's expectations.toml holds: dead reported, alive unreported, known gaps still open",
     },
     Gate {
+        name: "captured_transcripts_hold",
+        invariant: "every fixture's transcript.json holds: the build tool that owns the manifest and the adapter that reads it answer the same",
+    },
+    Gate {
         name: "finding_identity_is_unique",
         invariant: "no two findings in any pinned report share an identity — every subject a file can hold twice carries its position",
     },
@@ -88,7 +92,7 @@ pub const GATES: &[Gate] = &[
     },
     Gate {
         name: "builtin_plugin_proofs",
-        invariant: "every built-in conducting extension proves its effect baseline-then-conduct, closed over the conduct subset of default_extensions",
+        invariant: "every built-in conducting plugin proves its effect baseline-then-conduct, closed over the conduct subset of default_plugins",
     },
     Gate {
         name: "extension_dependency_implication",

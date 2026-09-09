@@ -1,0 +1,108 @@
+{
+  "producer": {
+    "tool": "packaging",
+    "version": "packaging 24.0",
+    "command": "python3 -c \nimport json, tomllib\nfrom packaging.requirements import Requirement\nwith open(\"pyproject.toml\", \"rb\") as f:\n    doc = tomllib.load(f)\nout = [Requirement(spec).name for spec in doc[\"project\"][\"dependencies\"]]\nprint(json.dumps(out))\n"
+  },
+  "reading": "whole",
+  "says": [
+    {
+      "declares": {
+        "manifest": "pyproject.toml",
+        "name": "A.B_c-D",
+        "scope": "prod"
+      }
+    },
+    {
+      "declares": {
+        "manifest": "pyproject.toml",
+        "name": "Flask_SQL.Alchemy",
+        "scope": "prod"
+      }
+    },
+    {
+      "declares": {
+        "manifest": "pyproject.toml",
+        "name": "blinker",
+        "scope": "prod"
+      }
+    },
+    {
+      "declares": {
+        "manifest": "pyproject.toml",
+        "name": "click",
+        "scope": "prod"
+      }
+    },
+    {
+      "declares": {
+        "manifest": "pyproject.toml",
+        "name": "flask-sqlalchemy",
+        "scope": "prod"
+      }
+    },
+    {
+      "declares": {
+        "manifest": "pyproject.toml",
+        "name": "gha-update",
+        "scope": "prod"
+      }
+    },
+    {
+      "declares": {
+        "manifest": "pyproject.toml",
+        "name": "importlib-metadata",
+        "scope": "prod"
+      }
+    },
+    {
+      "declares": {
+        "manifest": "pyproject.toml",
+        "name": "itsdangerous",
+        "scope": "prod"
+      }
+    },
+    {
+      "declares": {
+        "manifest": "pyproject.toml",
+        "name": "name",
+        "scope": "prod"
+      }
+    },
+    {
+      "declares": {
+        "manifest": "pyproject.toml",
+        "name": "pytest",
+        "scope": "prod"
+      }
+    },
+    {
+      "declares": {
+        "manifest": "pyproject.toml",
+        "name": "ruamel.yaml.clib",
+        "scope": "prod"
+      }
+    },
+    {
+      "declares": {
+        "manifest": "pyproject.toml",
+        "name": "sphinx",
+        "scope": "prod"
+      }
+    },
+    {
+      "declares": {
+        "manifest": "pyproject.toml",
+        "name": "types-contextvars",
+        "scope": "prod"
+      }
+    },
+    {
+      "declares": {
+        "manifest": "pyproject.toml",
+        "name": "zope.interface",
+        "scope": "prod"
+      }
+    }
+  ]
+}

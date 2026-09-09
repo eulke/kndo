@@ -611,7 +611,19 @@ pub struct Import {
 
 /// Closed by design: the role taxonomy (production/test/tooling) is a reporting
 /// contract — extending it changes what every color-based verdict means.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ContractFingerprint)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Serialize,
+    Deserialize,
+    ContractFingerprint,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum RootKind {
     Production,

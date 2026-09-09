@@ -102,7 +102,7 @@ fn a_broken_component_degrades_to_a_visible_diagnostic() {
     assert_eq!(out.code, 0, "{}{}", out.stdout, out.stderr);
     assert!(
         out.stdout.contains(
-            "diagnostic .kndo/plugins/broken.wasm: not a loadable kndo:vocab extension component"
+            "diagnostic .kndo/plugins/broken.wasm: not a loadable kndo:vocab plugin component"
         ),
         "an opted-in component never vanishes silently: {}",
         out.stdout

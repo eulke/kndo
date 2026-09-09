@@ -45,7 +45,7 @@
     "by_category": [],
     "by_package": [
       {
-        "name": "dead-code-same-package",
+        "name": "com.foo:dead-code-same-package",
         "manifest": "pom.xml",
         "implicated": 0,
         "subjects": 6

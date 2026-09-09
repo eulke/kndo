@@ -85,6 +85,7 @@
 //! ```
 
 pub mod expectations;
+pub mod transcript;
 
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{

@@ -1115,6 +1115,35 @@ impl PluginSpec {
         &self.file_roles
     }
 
+    /// The roles this spec declares for `path` — a path-shaped match, where
+    /// `*` stops at a `/` and only `**` crosses one, which is what makes
+    /// `**/*_test.go` name a suffix rather than a substring. The one reading
+    /// of `file_roles`: the engine anchors roots with it, and a caller outside
+    /// the engine asks this question instead of re-deriving how a glob matches.
+    pub fn roles_for(&self, path: &str) -> Vec<(RootKind, Confidence)> {
+        self.role_globs()
+            .matches(path)
+            .into_iter()
+            .map(|i| (self.file_roles[i].kind, self.file_roles[i].confidence))
+            .collect()
+    }
+
+    /// This spec's file-role globs, compiled — index-parallel to
+    /// [`PluginSpec::file_roles`]. An unparseable glob is skipped: a
+    /// misspelled convention states nothing, never a refusal to run.
+    pub fn role_globs(&self) -> globset::GlobSet {
+        let mut builder = globset::GlobSetBuilder::new();
+        for role in &self.file_roles {
+            if let Ok(glob) = globset::GlobBuilder::new(&role.glob)
+                .literal_separator(true)
+                .build()
+            {
+                builder.add(glob);
+            }
+        }
+        builder.build().unwrap_or_else(|_| globset::GlobSet::empty())
+    }
+
     pub fn claims(&self) -> &[SmolStr] {
         &self.claims
     }
