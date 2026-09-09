@@ -1,9 +1,10 @@
 # recovered-under-error: what a parse error costs, and what the pair of walks buys back.
-# The `when` guard here is the same Kotlin 2.1 construct `when-guard-grammar-gap` pins, in
-# the shape Exposed's `Entity.kt` has it: recovery ends the class at the guard, so
-# `class Cache` is not a node at all, `invalidate` and `neverCalled` above the break survive
-# as `function_declaration`s under the ERROR, and everything after it — `refresh` and the
-# `invalidate()` call inside it — is text NO node covers.
+# The break here is `get` used as an INFIX function name after a trailing lambda — the shape
+# `infix-get-grammar-gap` pins, and Exposed's own quick-start spelling — in the arrangement
+# Exposed's `Entity.kt` has it: recovery ends the class at the break, so `class Cache` is not
+# a node at all, `invalidate` and `neverCalled` above it survive as `function_declaration`s
+# under the ERROR, and everything after it — `refresh` and the `invalidate()` call inside it
+# — is text NO node covers.
 #
 # The two survivors are therefore spelled WITHOUT an owner: the class node they were written
 # in no longer exists, so the item walk surfaces them at file level and the sink names them

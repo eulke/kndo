@@ -36,7 +36,8 @@ license = "Apache-2.0"
 rust-version = "1.98"
 publish = false
 
-# One line of the SCSS grammar's build script keeps it off Windows; the vendored copy
-# under `vendor/` fixes that line and nothing else (vendor/README.md).
+# Two grammars kndo carries itself, each as its release plus a recorded change:
+# vendor/<crate>.provenance.toml says what changed and why, and a gate checks it.
 [patch.crates-io]
 tree-sitter-scss = { path = "vendor/tree-sitter-scss" }
+tree-sitter-kotlin-ng = { path = "vendor/tree-sitter-kotlin-ng" }

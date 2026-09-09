@@ -1,0 +1,20 @@
+# when-guard: a `when` guard (Kotlin 2.1), the construct that cost this grammar the most.
+# 1.1.0 does not know it, and one guard ended its reading of the WHOLE file — `Classify.kt`
+# yielded no declarations at all, `main` among them, so the run found no root anywhere and
+# abstained on every colour question. That is what this fixture pinned as a `known_gap`, and
+# the gap is now shut: `vendor/tree-sitter-kotlin-ng/` carries the release plus the one rule
+# that adds the guard, and the file parses. Measured on Exposed: 61 error files fall to 49,
+# 147100 discarded non-space bytes to 98000, and 723 declarations come back.
+#
+# The two rows below are what a closed gap looks like — a verdict on each side of the guard,
+# where before there was silence.
+
+[[dead]]
+subject = "src/main/kotlin/demo/waste/Waste.kt"
+category = "unused"
+why = "nothing imports it and `internal` keeps it off the published surface, so it is dead — and now that the guard parses, `main` roots the tree and `unused` judges instead of abstaining"
+
+[[alive]]
+subject = "src/main/kotlin/demo/Classify.kt#lengthy"
+category = "unused"
+why = "a private function the guard itself calls: it is only reachable if the guard's expression is read as an expression, which is the half of the patch a parse-without-error does not prove on its own"
