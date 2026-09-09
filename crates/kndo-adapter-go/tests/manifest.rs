@@ -169,3 +169,131 @@ fn indirect_requirements_declare_transitive_and_direct_ones_no_scope() {
         "the single-line form carries the marker too"
     );
 }
+
+#[test]
+fn the_indirect_comment_is_the_go_tools_rule_and_not_a_substring() {
+    // Six spellings, and `go mod edit -json` was asked which are indirect: the
+    // comment, trimmed and cut at its first `;`, must be exactly `indirect`.
+    // Read as a substring, three of these came back wrong in both directions —
+    // `//indirect` read as direct, and both `// indirect dependency` and a
+    // second `// indirect` after another comment read as indirect.
+    let ev = read(
+        "go.mod",
+        "module example.com/edges\n\ngo 1.22\n\nrequire (\n\
+         \texample.com/a v1.0.0 // indirect\n\
+         \texample.com/b v1.0.0 //indirect\n\
+         \texample.com/c v1.0.0 // indirect; needed by a\n\
+         \texample.com/d v1.0.0 // indirect dependency\n\
+         \texample.com/e v1.0.0 // Indirect\n\
+         \texample.com/f v1.0.0 // see https://x/y // indirect\n)\n",
+    );
+    let transitive = |name: &str| {
+        ev.dependencies
+            .iter()
+            .find(|d| d.name == name)
+            .unwrap_or_else(|| panic!("{name} missing: {:?}", ev.dependencies))
+            .scope
+            == Some(kndo_contract::adapter::DependencyScope::Transitive)
+    };
+    for name in ["example.com/a", "example.com/b", "example.com/c"] {
+        assert!(transitive(name), "{name} is indirect to the go tool");
+    }
+    for name in ["example.com/d", "example.com/e", "example.com/f"] {
+        assert!(!transitive(name), "{name} is direct to the go tool");
+    }
+}
+
+#[test]
+fn a_quoted_path_is_the_path_and_a_slash_inside_a_string_is_not_a_comment() {
+    let ev = read(
+        "go.mod",
+        "module \"example.com/quoted\"\n\ngo 1.22\n\nrequire (\n\t\"example.com/q\" v1.0.0\n)\n",
+    );
+    assert_eq!(ev.units.len(), 1);
+    assert_eq!(ev.units[0].name, "example.com/quoted");
+    assert_eq!(ev.dependencies.len(), 1);
+    assert_eq!(ev.dependencies[0].name, "example.com/q");
+}
+
+#[test]
+fn a_block_of_another_verb_states_nothing_about_this_one() {
+    // One reader answers every verb, so a block must close before the next
+    // opens: an `exclude (` between two `require`s used to leak its contents
+    // into whatever verb was being asked for.
+    let ev = read(
+        "go.mod",
+        "module example.com/blocks\n\ngo 1.22\n\n\
+         require (\n\texample.com/first v1.0.0\n)\n\n\
+         exclude (\n\texample.com/notarequirement v0.9.9\n)\n\n\
+         require example.com/second v1.2.0\n",
+    );
+    let names: Vec<&str> = ev.dependencies.iter().map(|d| d.name.as_str()).collect();
+    assert_eq!(names, ["example.com/first", "example.com/second"]);
+}
+
+/// `go.work` read with the modules it uses beside it, exactly as the engine
+/// hands a reader every manifest's content.
+fn read_workspace(work: &str, modules: &[(&str, &str)]) -> ManifestEvidence {
+    use kndo_contract::adapter::{ResolveContext, SourceFile};
+    use kndo_contract::manifest::ManifestSink;
+    use kndo_contract::plugin::Plugin;
+    use kndo_contract::vocab::ProjectPath;
+    let known: std::collections::BTreeSet<ProjectPath> = Default::default();
+    let manifests: std::collections::BTreeMap<ProjectPath, &[u8]> = modules
+        .iter()
+        .map(|(p, c)| (ProjectPath::new(*p), c.as_bytes()))
+        .collect();
+    let cx = ResolveContext::with_manifests(&known, &manifests);
+    let path = ProjectPath::new("go.work");
+    let mut sink = ManifestSink::new();
+    GoAdapter::new().extract_manifest(
+        &SourceFile {
+            path: &path,
+            content: work.as_bytes(),
+            region: None,
+        },
+        &cx,
+        &mut sink,
+    );
+    sink.finish()
+}
+
+#[test]
+fn a_workspace_aggregates_the_modules_it_uses_and_mentions_what_they_are_called() {
+    // A workspace declares no unit of its own. It says which `go.mod` files the
+    // go tool builds together — so a requirement naming a sibling resolves to
+    // that sibling — and it names each used MODULE, read from that module's own
+    // `module` line: in workspace mode the toolchain resolves a sibling's
+    // packages with no `require` anywhere, and a name the project itself
+    // supplies is not undeclared.
+    let ev = read_workspace(
+        "go 1.22\n\nuse (\n\t./moda\n\t./modb\n\t./gone\n)\n",
+        &[
+            ("moda/go.mod", "module example.com/a\n\ngo 1.22\n"),
+            ("modb/go.mod", "module example.com/b\n\ngo 1.22\n"),
+        ],
+    );
+    assert!(
+        ev.units.is_empty(),
+        "a workspace is not a unit: {:?}",
+        ev.units
+    );
+    let members: Vec<&str> = ev.members.iter().map(|m| m.as_str()).collect();
+    assert_eq!(members, ["moda/go.mod", "modb/go.mod"]);
+    let mentions: Vec<&str> = ev.mentions.iter().map(|m| m.as_str()).collect();
+    assert_eq!(mentions, ["example.com/a", "example.com/b"]);
+    // `./gone` has no `go.mod` under it: a `use` naming nothing names nothing,
+    // and aggregating an absence would put a phantom in the workspace.
+}
+
+#[test]
+fn a_single_line_use_is_the_same_directive_as_a_block() {
+    let ev = read_workspace(
+        "go 1.22\n\nuse ./only\n",
+        &[("only/go.mod", "module example.com/only\n")],
+    );
+    assert_eq!(
+        ev.mentions.iter().map(|m| m.as_str()).collect::<Vec<_>>(),
+        ["example.com/only"]
+    );
+}

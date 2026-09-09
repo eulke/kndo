@@ -1,0 +1,29 @@
+{
+  "producer": {
+    "tool": "go",
+    "version": "go version go1.24.7 linux/amd64",
+    "command": "go work edit -json && go mod edit -json moda/go.mod && go mod edit -json modb/go.mod"
+  },
+  "reading": "whole",
+  "says": [
+    {
+      "declares": {
+        "manifest": "modb/go.mod",
+        "name": "example.com/a",
+        "scope": null
+      }
+    },
+    {
+      "aggregates": {
+        "manifest": "go.work",
+        "member": "moda/go.mod"
+      }
+    },
+    {
+      "aggregates": {
+        "manifest": "go.work",
+        "member": "modb/go.mod"
+      }
+    }
+  ]
+}

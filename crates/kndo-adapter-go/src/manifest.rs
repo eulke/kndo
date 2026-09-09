@@ -6,16 +6,21 @@
 //! Entries need no manifest here: `package main` + `func main` and `_test.go`
 //! are extraction's to see, and a module has no single file the build enters.
 
+use crate::modfile;
 use kndo_contract::adapter::{
     DependencyDeclaration, DependencyScope, PackageEntry, ResolveContext, SourceFile,
 };
 use kndo_contract::manifest::{ManifestSink, Publication, Unit, UnitDep, UnitKind};
+use kndo_contract::vocab::ProjectPath;
 use smol_str::SmolStr;
 
-pub fn structure(manifest: &SourceFile<'_>, _cx: &ResolveContext<'_>, out: &mut ManifestSink) {
+pub fn structure(manifest: &SourceFile<'_>, cx: &ResolveContext<'_>, out: &mut ManifestSink) {
     let Ok(text) = std::str::from_utf8(manifest.content) else {
         return;
     };
+    if manifest.path.as_str().ends_with("go.work") {
+        return workspace(manifest, text, cx, out);
+    }
     let mut depends_on: Vec<SmolStr> = Vec::new();
     for declaration in dependencies_of(text) {
         depends_on.push(declaration.name.clone());
@@ -25,7 +30,7 @@ pub fn structure(manifest: &SourceFile<'_>, _cx: &ResolveContext<'_>, out: &mut 
     depends_on.dedup();
     // A `tool` line names a package whose module the requirements already
     // carry: `go get -tool` writes both, and the tool is used with no import.
-    for tool in directive_values(text, "tool") {
+    for tool in modfile::of(text, "tool").filter_map(|d| d.token(0).map(str::to_string)) {
         out.mention(tool);
     }
     let Some(module) = module_path(text) else {
@@ -61,61 +66,55 @@ pub fn structure(manifest: &SourceFile<'_>, _cx: &ResolveContext<'_>, out: &mut 
     });
 }
 
-/// The `module` directive's path. Two spellings are legal — `module PATH` and a
-/// parenthesised block — and a `//` comment may follow the path on either.
+/// The `module` directive's path.
 fn module_path(text: &str) -> Option<String> {
-    let path = directive_values(text, "module").next()?;
+    let path = modfile::of(text, "module").next()?.token(0)?.to_string();
     (!path.is_empty()).then_some(path)
 }
 
-/// Every value a directive declares, with the line it was read from: go.mod
-/// gives every directive two spellings — `NAME value` and a parenthesised
-/// block — so one reader answers `module`, `tool` and `require` alike, and the
-/// line comes along for the requirements, whose `// indirect` is a comment
-/// that means something.
-fn directive_lines<'a>(
-    text: &'a str,
-    directive: &'a str,
-) -> impl Iterator<Item = (String, &'a str)> + 'a {
-    let mut in_block = false;
-    text.lines().filter_map(move |line| {
-        let body = strip_comment(line.trim());
-        if in_block {
-            if body.starts_with(')') {
-                in_block = false;
-                return None;
-            }
-            return first_word(body).map(|v| (v, line));
+/// `go.work`: a WORKSPACE, which is not a unit of its own. Its `use` lines name
+/// the directories the go tool builds together, and in workspace mode every
+/// module in that set resolves the others' packages with no `require` line
+/// anywhere — which is exactly what made a workspace import read as
+/// `undeclared`.
+///
+/// So the file says two things and declares nothing. Each used directory's
+/// `go.mod` is a MEMBER of this manifest, which is how a requirement naming a
+/// sibling resolves to that sibling's unit rather than to a module of the same
+/// name outside; and each used module's PATH is mentioned here, read from the
+/// `go.mod` the directory holds, because the project supplying a name itself is
+/// what `undeclared` must not accuse.
+fn workspace(
+    manifest: &SourceFile<'_>,
+    text: &str,
+    cx: &ResolveContext<'_>,
+    out: &mut ManifestSink,
+) {
+    let dir = kndo_toolkit::parent_dir(manifest.path.as_str());
+    for used in modfile::of(text, "use").filter_map(|d| d.token(0).map(str::to_string)) {
+        let Some(joined) = kndo_toolkit::join_relative(dir, &used) else {
+            continue;
+        };
+        let member = ProjectPath::new(if joined.is_empty() {
+            "go.mod".to_string()
+        } else {
+            format!("{joined}/go.mod")
+        });
+        // The member's own module line, read through the engine rather than
+        // guessed from the directory: a module path and its directory agree
+        // only by convention, and this reader states no conventions. A `use`
+        // naming a directory with no `go.mod` under it names nothing, and
+        // saying so is more honest than aggregating an absence.
+        let Some(member_text) = cx
+            .manifest(&member)
+            .and_then(|b| std::str::from_utf8(b).ok())
+        else {
+            continue;
+        };
+        out.member(member.clone());
+        if let Some(path) = module_path(member_text) {
+            out.mention(path);
         }
-        let rest = body.strip_prefix(directive)?;
-        if !rest.starts_with([' ', '\t', '(']) {
-            return None;
-        }
-        let rest = rest.trim_start();
-        if let Some(rest) = rest.strip_prefix('(') {
-            in_block = true;
-            // `require (` — the opening line normally carries nothing else.
-            return first_word(rest).map(|v| (v, line));
-        }
-        first_word(rest).map(|v| (v, line))
-    })
-}
-
-fn directive_values<'a>(text: &'a str, directive: &'a str) -> impl Iterator<Item = String> + 'a {
-    directive_lines(text, directive).map(|(value, _)| value)
-}
-
-fn first_word(line: &str) -> Option<String> {
-    let word = line.split_whitespace().next()?;
-    let word = word.trim_matches('"');
-    (!word.is_empty()).then(|| word.to_string())
-}
-
-/// Everything after a `//` is a comment in go.mod, wherever it sits.
-fn strip_comment(line: &str) -> &str {
-    match line.find("//") {
-        Some(i) => line[..i].trim_end(),
-        None => line,
     }
 }
 
@@ -125,13 +124,13 @@ fn strip_comment(line: &str) -> &str {
 /// no scope — go.mod has no sections, which the adapter declares as
 /// `DependencyScoping::Unscoped`.
 fn dependencies_of(text: &str) -> Vec<DependencyDeclaration> {
-    directive_lines(text, "require")
-        .map(|(module, line)| DependencyDeclaration {
-            name: SmolStr::new(module),
-            scope: line
-                .contains("// indirect")
-                .then_some(DependencyScope::Transitive),
-            version_req: None,
+    modfile::of(text, "require")
+        .filter_map(|d| {
+            Some(DependencyDeclaration {
+                name: SmolStr::new(d.token(0)?),
+                scope: d.indirect().then_some(DependencyScope::Transitive),
+                version_req: None,
+            })
         })
         .collect()
 }

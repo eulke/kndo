@@ -1,11 +1,11 @@
-# go-work-phantom-dep: modb imports example.com/a with no `require` line — only go.work's `use` supplies the module.
+# go-work-phantom-dep: modb imports example.com/a with no `require` line — only
+# go.work's `use` supplies the module, which is what the go tool does in
+# workspace mode and what the manifest reader now says.
 
-[[known_gap]]
+[[alive]]
 subject = "dep:modb/go.mod:example.com/a"
-expect = "alive"
 category = "undeclared"
-why = "the pin accuses `undeclared`, but in workspace mode the go toolchain builds modb without the require — go.work's `use` supplies the module"
-fix = "M8.d go (G18)"
+why = "go.work `use`s both directories, so the workspace supplies the module: the file names something the project itself provides, and `undeclared` accuses only what it does not. The workspace mentions each used module's own `module` line, read through the engine from the `go.mod` the directory holds"
 
 [[alive]]
 subject = "moda/api.go#Hello"

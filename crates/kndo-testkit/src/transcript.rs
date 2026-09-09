@@ -220,7 +220,22 @@ impl Tree {
     /// Every manifest in the tree, read by the plugin that claims it.
     fn manifests(&self, plugins: &[Box<dyn Plugin>]) -> Vec<(ProjectPath, ManifestEvidence)> {
         let known = self.paths();
-        let cx = ResolveContext::new(&known);
+        // Every manifest's content beside every other's, as the engine hands a
+        // reader the tree: a build system that composes manifests — a pom and
+        // its parent, a `go.work` and the modules it uses — reads the others
+        // through the context, and a grader that withheld them would grade a
+        // reader the engine never runs.
+        let all: BTreeMap<ProjectPath, &[u8]> = plugins
+            .iter()
+            .filter_map(|p| globs(p.spec().manifests()))
+            .flat_map(|set| {
+                self.files
+                    .iter()
+                    .filter(move |(p, _)| set.is_match(p.as_str()))
+                    .map(|(p, c)| (p.clone(), c.as_slice()))
+            })
+            .collect();
+        let cx = ResolveContext::with_manifests(&known, &all);
         let mut out = Vec::new();
         for plugin in plugins {
             let Some(set) = globs(plugin.spec().manifests()) else {

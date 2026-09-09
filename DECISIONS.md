@@ -7558,3 +7558,63 @@ position by the same rule that makes `qualified_type.name` one. They share one
 reason, and the count is the measurement M8.f's vendoring row can be judged
 against: patch the grammar with an `_expression` supertype and swift's
 inventory collapses to the slots that really reserve a name.
+
+## 2026-09-09 — M8.d go: the modfile is a format, and a workspace supplies what its members import
+
+M8.d's charter names six readers; five are already structural — Cargo and
+pyproject through `toml`, `package.json` through `serde_json`, `Package.swift`
+through tree-sitter-swift, the pom through `roxmltree` — and each is graded by
+its own captured transcript. `go.mod` was the exception: a line scanner, where
+the charter says grammar.
+
+**What the real tool said, asked directly.** `go mod edit -json` is the go
+tool's own parse of the file it is handed, and six spellings of one comment
+were put to it. It calls `// indirect`, `//indirect` and `// indirect; needed
+by a` INDIRECT, and `// indirect dependency`, `// Indirect` and `// see
+https://x/y // indirect` DIRECT: the rule is the line's comment, trimmed and
+cut at its first `;`, equal to `indirect`. Read as the substring `"// indirect"`
+— which is what the scanner did — three of the six came back wrong, in both
+directions: a transitive requirement read as a usage claim, and a direct one
+read as transitive. gin uses only the canonical spelling, so the corpus number
+is ZERO and gin stays byte-identical; the fixture is where a defect the corpus
+does not happen to contain is pinned. The same round taught what NOT to build:
+`require ( path v1.0.0 )` on one line and a `v2` requirement without a `/v2`
+path are both rejected by the tool, so neither is a shape any reader owes.
+
+**`modfile` is one reader for both files.** Directives with tokens, blocks that
+flatten into the verb that opened them, quoted tokens unquoted, and `//`
+recognised only outside a string. A block of another verb between two `require`s
+now closes where the file closes it, and the module path survives its quotes.
+
+**`go.work` becomes a manifest, and G18 closes.** The `go-work-phantom-dep`
+fixture carried a `known_gap` whose `fix` line read "M8.d go (G18)": `modb`
+imports `example.com/a` with no `require` line, because in workspace mode the
+go tool builds every used module and resolves their packages with no
+requirement anywhere. The workspace declares no unit. It says two things, both
+in the vocabulary the engine already has: each used directory's `go.mod` is a
+MEMBER, which is how a requirement naming a sibling resolves to that sibling's
+unit rather than to a module of the same name outside; and each used module's
+own `module` line is MENTIONED, read through `ResolveContext::manifest` from
+the `go.mod` the directory holds rather than guessed from the directory name.
+`undeclared` exempts what any manifest of the chain mentions, and a workspace
+at the root is in every file's chain. The finding is gone and the fixture's gap
+is an `alive` pin.
+
+Two guards were wrong on the way and both are worth the ink. `ResolveContext::contains`
+answers about CLAIMED SOURCE FILES, not about paths: gating a member on it
+skipped every workspace, because a manifest is not claimed. The reader now
+gates on the one question it actually has — is there a manifest there to read —
+so a `use` naming a directory with no `go.mod` under it names nothing, which is
+more honest than aggregating an absence. And `ToolTranscript`'s harness read
+each manifest with the others withheld, so it graded a reader the engine never
+runs; it now hands every manifest's content to every reader, as
+`read_manifests` does.
+
+**The capture states its own environment.** `GOWORK=off` had been set for every
+capture, which is what makes `go list ./...` answer about one module — and
+exactly what would make `go work edit -json` refuse to see the workspace it is
+being asked about. It moved from the runner onto the row that needs it.
+
+`kndo:go` moves 14 → 15: the same source, different evidence. One pinned report
+moves (`go-work-phantom-dep`, losing the false `undeclared`); gin is
+byte-identical; neither the graph semantics nor the fingerprint moves.

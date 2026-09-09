@@ -58,6 +58,12 @@ struct Capture {
     /// The (file, specifier) pairs handed to a RESOLVER, which answers what it
     /// is asked and nothing else. Empty for every other shape.
     asks: &'static [(&'static str, &'static str)],
+    /// Environment the tool needs to answer the question this capture asks.
+    /// Stated per capture and never once for a whole toolchain: `GOWORK=off`
+    /// is what makes `go list ./...` answer about ONE module, and the same
+    /// setting would make `go work edit` refuse to see the workspace it is
+    /// being asked about.
+    env: &'static [(&'static str, &'static str)],
     reading: Reading,
     read: fn(Answers<'_>) -> Result<Vec<ToolClaim>>,
 }
@@ -79,6 +85,7 @@ const CAPTURES: &[Capture] = &[
         asks: &[],
         // `--no-deps` is every target and every dependency table of every
         // package in the workspace, and nothing outside it.
+        env: &[],
         reading: Reading::Whole,
         read: cargo,
     },
@@ -93,8 +100,23 @@ const CAPTURES: &[Capture] = &[
         // `testdata/gen` or of `_scratch/old` builds and runs, while `./...`
         // lists neither — the pattern reaches less than the compiler compiles,
         // so what this command omits is not a claim that go skips it.
+        env: &[],
         reading: Reading::Sampled,
         read: go_list,
+    },
+    Capture {
+        fixture: "crates/kndo-adapter-go/tests/fixtures/go-work-multi-module",
+        tool: "go",
+        version: &["go", "version"],
+        commands: GO_WORKSPACE,
+        prepare: &[],
+        asks: &[],
+        // `edit -json` is the go tool's own parse of the file it is given —
+        // every directive, with `Indirect` already decided — so what it omits
+        // is what the file does not say.
+        env: &[],
+        reading: Reading::Whole,
+        read: go_modfile,
     },
     Capture {
         fixture: "crates/kndo-adapter-java/tests/fixtures/coverage-jacoco",
@@ -105,6 +127,7 @@ const CAPTURES: &[Capture] = &[
         asks: &[],
         // The effective model's source directories are every directory this pom
         // compiles, inherited defaults included.
+        env: &[],
         reading: Reading::Whole,
         read: maven,
     },
@@ -115,6 +138,7 @@ const CAPTURES: &[Capture] = &[
         commands: MAVEN,
         prepare: &[],
         asks: &[],
+        env: &[],
         reading: Reading::Whole,
         read: maven,
     },
@@ -135,6 +159,7 @@ const CAPTURES: &[Capture] = &[
         ],
         // A resolver answers the specifiers it is handed and knows nothing of
         // the ones it is not.
+        env: &[],
         reading: Reading::Sampled,
         read: node_resolve,
     },
@@ -151,6 +176,7 @@ const CAPTURES: &[Capture] = &[
         asks: &[],
         // Every requirement the runtime table declares, and only that table:
         // extras and PEP 735 groups are other tables, under other scopes.
+        env: &[],
         reading: Reading::Whole,
         read: packaging,
     },
@@ -264,19 +290,19 @@ fn take(capture: &Capture, fixture: &Path) -> Result<ToolTranscript> {
     let asks = serde_json::to_string(capture.asks).map_err(|e| e.to_string())?;
     // A tool that prints a paragraph about itself is asked for its first line:
     // the version, not this machine's java home and locale.
-    let version = run_in(&project, capture.version, &asks)?
+    let version = run_in(&project, capture.version, &asks, capture.env)?
         .lines()
         .next()
         .unwrap_or_default()
         .trim()
         .to_string();
     for argv in capture.prepare {
-        run_in(&project, argv, &asks)?;
+        run_in(&project, argv, &asks, capture.env)?;
     }
     let said: Vec<String> = capture
         .commands
         .iter()
-        .map(|argv| run_in(&project, argv, &asks))
+        .map(|argv| run_in(&project, argv, &asks, capture.env))
         .collect::<Result<Vec<String>>>()?;
     let here = std::fs::canonicalize(&project).map_err(|e| e.to_string())?;
     let files = tree_files(&here);
@@ -307,14 +333,17 @@ fn take(capture: &Capture, fixture: &Path) -> Result<ToolTranscript> {
     })
 }
 
-fn run_in(dir: &Path, argv: &[&str], asks: &str) -> Result<String> {
-    let out = Command::new(argv[0])
+fn run_in(dir: &Path, argv: &[&str], asks: &str, env: &[(&str, &str)]) -> Result<String> {
+    let mut command = Command::new(argv[0]);
+    for (k, v) in env {
+        command.env(k, v);
+    }
+    let out = command
         .args(&argv[1..])
         .current_dir(dir)
         // A capture must answer about the tree, never about this machine's
         // caches or workspaces: a stray `go.work` or `CARGO_TARGET_DIR` two
         // levels up would silently change what the tool enumerates.
-        .env("GOWORK", "off")
         .env("GOFLAGS", "-mod=mod")
         .env("CARGO_TARGET_DIR", dir.join("target"))
         .env("KNDO_ASKS", asks)
@@ -422,6 +451,60 @@ fn cargo_kind(kind: &str) -> Option<UnitKind> {
 
 /// `go list -e -json ./...`: every file the go tool compiles into a package,
 /// and which of them are its tests.
+/// `go work edit -json` first, then one `go mod edit -json` per module: the
+/// last word of each command is the manifest that answer is about.
+const GO_WORKSPACE: &[&[&str]] = &[
+    &["go", "work", "edit", "-json"],
+    &["go", "mod", "edit", "-json", "moda/go.mod"],
+    &["go", "mod", "edit", "-json", "modb/go.mod"],
+];
+
+/// `go work edit -json` and one `go mod edit -json` per module: which modules
+/// the workspace builds together, and what each one requires — with `Indirect`
+/// decided by the tool whose rule it is.
+fn go_modfile(answer: Answers<'_>) -> Result<Vec<ToolClaim>> {
+    let mut out = Vec::new();
+    let work: Value = json(&answer.said[0])?;
+    for used in work["Use"].as_array().into_iter().flatten() {
+        let Some(disk) = used["DiskPath"].as_str() else {
+            continue;
+        };
+        let dir = disk.trim_start_matches("./").trim_end_matches('/');
+        out.push(ToolClaim::Aggregates {
+            manifest: ProjectPath::new("go.work"),
+            member: ProjectPath::new(format!("{dir}/go.mod")),
+        });
+    }
+    for (nth, said) in answer.said.iter().enumerate().skip(1) {
+        let module: Value = json(said)?;
+        let manifest = ProjectPath::new(
+            GO_WORKSPACE
+                .get(nth)
+                .and_then(|cmd| cmd.last())
+                .copied()
+                .unwrap_or_default(),
+        );
+        for required in module["Require"].as_array().into_iter().flatten() {
+            let Some(path) = required["Path"].as_str() else {
+                continue;
+            };
+            out.push(ToolClaim::Declares {
+                manifest: manifest.clone(),
+                name: SmolStr::new(path),
+                scope: required["Indirect"]
+                    .as_bool()
+                    .unwrap_or(false)
+                    .then_some(kndo_contract::adapter::DependencyScope::Transitive),
+            });
+        }
+    }
+    Ok(out)
+}
+
+fn json(said: &str) -> Result<Value> {
+    serde_json::from_str(said).map_err(|e| format!("the tool's answer is not json: {e}"))
+}
+
 fn go_list(answer: Answers<'_>) -> Result<Vec<ToolClaim>> {
     let mut out = Vec::new();
     for package in json_stream(&answer.said[0])? {

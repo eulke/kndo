@@ -17,6 +17,7 @@
 
 mod extract;
 mod manifest;
+mod modfile;
 mod resolve;
 
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
@@ -78,9 +79,9 @@ impl GoAdapter {
             // rules read the compilation it lands in.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:go",
-                14,
+                15,
                 &["go"],
-                &["**/go.mod"],
+                &["**/go.mod", "**/go.work"],
                 // The compiler forbids import cycles: one could only be a
                 // resolution artifact here.
                 kndo_contract::plugin::CycleTolerance::Tolerated,
