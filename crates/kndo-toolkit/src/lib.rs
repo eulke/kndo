@@ -5,6 +5,7 @@
 
 pub mod github_actions;
 
+use kndo_contract::evidence::{EvidenceSink, RefKind};
 use kndo_contract::manifest::Version;
 use kndo_contract::vocab::Span;
 use tree_sitter::{Language, Node, Parser, Tree};
@@ -113,6 +114,103 @@ pub fn winnow(token_hashes: &[u64], k: usize, window: usize) -> Vec<u64> {
     out.sort_unstable();
     out.dedup();
     out
+}
+
+/// Every item a container holds, INCLUDING the ones a syntax error swallowed.
+///
+/// tree-sitter recovers from a construct it cannot parse by wrapping it — and,
+/// routinely, everything after it — in an `ERROR` node. A walk over named
+/// children then stops at that node and the declarations on the far side of the
+/// break are simply not there: one `when` guard or one `get` used as an infix
+/// name costs a Kotlin file every declaration it holds, the run finds no root
+/// anywhere, and every colour question is abstained on. Measured on Exposed
+/// under kotlin-ng 1.1.0: 61 of 802 files parse with an error, 81 declarations
+/// sit under one, and 7 files yield nothing at all while holding something.
+///
+/// So an `ERROR` is descended INTO rather than skipped: its own named children
+/// take its place, recursively. What comes out is fragments — a caller's
+/// `match` on the kind ignores what it does not recognise, exactly as it
+/// ignores every other kind it has no rule for — and what a fragment IS, the
+/// grammar still says.
+pub fn items_tolerant<'t>(container: Node<'t>, lift: &[&str]) -> Vec<Node<'t>> {
+    let mut out = Vec::new();
+    let mut cursor = container.walk();
+    for child in container.named_children(&mut cursor) {
+        match child.is_error() {
+            true => out.extend(
+                items_tolerant(child, lift)
+                    .into_iter()
+                    .filter(|n| lift.contains(&n.kind())),
+            ),
+            false => out.push(child),
+        }
+    }
+    out
+}
+
+/// The names in the text a parse DISCARDED — the reference half of
+/// [`items_tolerant`], and the reason the item half is safe to have.
+///
+/// Error recovery does not hand back a partial tree OF the region it failed on:
+/// it keeps some sub-trees and drops the rest of the text on the floor.
+/// Measured on Exposed's `Entity.kt`, whose single `ERROR` spans lines 1..487 —
+/// the whole file: `klass.invalidateEntityInCache(o)` is written at line 311
+/// and occurs ZERO times as a node. The bytes are in the file; no node covers
+/// them. Lifting declarations out of an `ERROR` without this reads that dropped
+/// text as an ABSENCE of uses, and a declaration whose only caller was dropped
+/// is then reported dead — recovery that adds accusable subjects while
+/// withholding the evidence that acquits them.
+///
+/// So every byte no node covers is scanned for identifier-shaped runs, which
+/// become references. In a parse with no error the uncovered bytes are the
+/// whitespace between tokens and this emits nothing: the mechanism is inert
+/// exactly where there is nothing to recover, and needs no flag to say so.
+/// What such a name MEANT is unknowable — hence the weakest kind — and the bias
+/// stays keep-alive, which is the direction dropped text must err in: this can
+/// only ever add uses.
+pub fn unread_references(tree: &Tree, source: &[u8], out: &mut EvidenceSink) {
+    let mut read_to = 0usize;
+    let mut gaps: Vec<(usize, usize)> = Vec::new();
+    walk(tree.root_node(), &mut |n| {
+        if n.child_count() != 0 {
+            return;
+        }
+        if n.start_byte() > read_to {
+            gaps.push((read_to, n.start_byte()));
+        }
+        read_to = read_to.max(n.end_byte());
+    });
+    if read_to < source.len() {
+        gaps.push((read_to, source.len()));
+    }
+    for (from, to) in gaps {
+        names_in(source, from, to, out);
+    }
+}
+
+/// Identifier-shaped runs of `source[from..to]`, as references. A byte above
+/// ASCII counts as part of a name: every language here admits some Unicode in
+/// identifiers, and over-reading a name only ever keeps something alive.
+fn names_in(source: &[u8], from: usize, to: usize, out: &mut EvidenceSink) {
+    let starts = |b: u8| b.is_ascii_alphabetic() || b == b'_' || b >= 0x80;
+    let continues = |b: u8| b.is_ascii_alphanumeric() || b == b'_' || b >= 0x80;
+    let mut i = from;
+    while i < to {
+        // A run whose first byte continues the token before it is that token's
+        // tail, not a name: `1abc` names nothing.
+        if !starts(source[i]) || (i > 0 && continues(source[i - 1])) {
+            i += 1;
+            continue;
+        }
+        let mut end = i;
+        while end < to && continues(source[end]) {
+            end += 1;
+        }
+        if let Ok(name) = std::str::from_utf8(&source[i..end]) {
+            out.reference(name, RefKind::Read, Span::new(i as u32, end as u32));
+        }
+        i = end;
+    }
 }
 
 /// Depth-first walk that never enters the named subtrees — the shared shape of

@@ -14,7 +14,7 @@ use kndo_contract::vocab::Confidence;
 use kndo_toolkit as tk;
 use smol_str::SmolStr;
 use std::collections::{BTreeMap, BTreeSet};
-use tree_sitter::Node;
+use tree_sitter::{Node, Tree};
 
 pub fn extract(
     path: &kndo_contract::vocab::ProjectPath,
@@ -85,7 +85,7 @@ pub fn extract(
     let use_locals = std::mem::take(&mut cx.use_locals);
     let redirects = std::mem::take(&mut cx.redirects);
     macro_template_references(root, source, &free_declarations, out);
-    references_and_comments(root, source, &use_locals, &redirects, out);
+    references_and_comments(tree, source, &use_locals, &redirects, out);
 }
 
 /// Names a `macro_rules!` template mentions are USES of those names, performed
@@ -156,8 +156,7 @@ impl<'a> ItemPass<'a, '_> {
     /// The items of a module body — the file's, or an inline `mod`'s, which is
     /// what `on` names: an inner attribute (`#![…]`) speaks for its container.
     fn items(&mut self, container: Node<'a>, on: MarkerTarget) {
-        let mut cursor = container.walk();
-        let children: Vec<Node<'a>> = container.named_children(&mut cursor).collect();
+        let children: Vec<Node<'a>> = tk::items_tolerant(container, LIFTED);
         for item in children {
             if item.kind() == "inner_attribute_item" {
                 self.marker(item, on.clone());
@@ -935,13 +934,36 @@ fn function_metrics(node: Node<'_>, source: &[u8]) -> kndo_contract::evidence::F
     tk::function_metrics(node, &METRICS, source)
 }
 
+/// The kinds a fragment recovered from an ERROR may be read as: exactly the
+/// items the item pass dispatches on. `use_declaration` rides too — a use
+/// inside a broken module still names what that module imports.
+const LIFTED: &[&str] = &[
+    "function_item",
+    "struct_item",
+    "enum_item",
+    "union_item",
+    "trait_item",
+    "type_item",
+    "const_item",
+    "static_item",
+    "mod_item",
+    "impl_item",
+    "use_declaration",
+    "extern_crate_declaration",
+];
+
 fn references_and_comments(
-    root: Node<'_>,
+    tree: &Tree,
     source: &[u8],
     use_locals: &BTreeSet<String>,
     redirects: &BTreeMap<String, Vec<Vec<String>>>,
     out: &mut EvidenceSink,
 ) {
+    let root = tree.root_node();
+    // The names in whatever text error recovery threw away — without them the
+    // declarations `items_tolerant` lifts out of an ERROR are judged against a
+    // reference stream missing that same region's uses.
+    tk::unread_references(tree, source, out);
     let mut seen_paths: BTreeSet<String> = BTreeSet::new();
     tk::walk_pruned(
         root,

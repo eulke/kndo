@@ -13,7 +13,7 @@ use kndo_contract::evidence::{
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use kndo_toolkit as tk;
 use smol_str::SmolStr;
-use tree_sitter::Node;
+use tree_sitter::{Node, Tree};
 
 const COMMENTS: tk::CommentMarkers<'static> = tk::CommentMarkers {
     line: &["//"],
@@ -93,8 +93,7 @@ pub fn extract(
     tk::mark_generated(source, tk::GENERATED_NEEDLES, &["//", "/*", "*"], out);
 
     let root = tree.root_node();
-    let mut cursor = root.walk();
-    let children: Vec<Node<'_>> = root.named_children(&mut cursor).collect();
+    let children: Vec<Node<'_>> = tk::items_tolerant(root, LIFTED);
     // Two passes: types declare first, so a same-file `extension Foo` can
     // attach its members to Foo's id (a cross-file extension's members stay
     // ownerless — the method pool is name-global either way).
@@ -115,7 +114,7 @@ pub fn extract(
         top_level_item(item, source, &mut type_ids, out);
     }
 
-    references_and_comments(root, source, out);
+    references_and_comments(tree, source, out);
 }
 
 /// `` `default` `` and `default` are ONE identifier: Swift requires the
@@ -235,8 +234,7 @@ fn class_like(item: Node<'_>, source: &[u8], type_ids: &mut TypeIds, out: &mut E
     if let Some(body) =
         tk::child_of_kind(item, "class_body").or_else(|| tk::child_of_kind(item, "enum_class_body"))
     {
-        let mut c = body.walk();
-        let members: Vec<Node<'_>> = body.named_children(&mut c).collect();
+        let members: Vec<Node<'_>> = tk::items_tolerant(body, LIFTED);
         let owner = Owner {
             name: &name,
             id: owner_id,
@@ -268,8 +266,7 @@ fn protocol(item: Node<'_>, source: &[u8], type_ids: &mut TypeIds, out: &mut Evi
     relations_of(item, source, owner_id, out);
     type_ids.insert(name.clone(), owner_id);
     if let Some(body) = tk::child_of_kind(item, "protocol_body") {
-        let mut c = body.walk();
-        let members: Vec<Node<'_>> = body.named_children(&mut c).collect();
+        let members: Vec<Node<'_>> = tk::items_tolerant(body, LIFTED);
         let owner = Owner {
             name: &name,
             id: Some(owner_id),
@@ -607,7 +604,23 @@ const OPERATOR_EXPRESSIONS: &[&str] = &[
 /// argument labels, import segments) never become references. Enum-case
 /// dot-shorthand (`.retry`) lands as a Read of the bare name — the pool-side
 /// counterpart of never declaring the cases.
-fn references_and_comments(root: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
+/// The kinds a fragment recovered from an ERROR may be read as: exactly the
+/// items this file's walks dispatch on. A `property_declaration` is absent —
+/// a `let` inside a function whose header the error swallowed is a LOCAL, and
+/// lifting it would declare a subject the file does not have.
+const LIFTED: &[&str] = &[
+    "class_declaration",
+    "protocol_declaration",
+    "function_declaration",
+    "typealias_declaration",
+];
+
+fn references_and_comments(tree: &Tree, source: &[u8], out: &mut EvidenceSink) {
+    let root = tree.root_node();
+    // The names in whatever text error recovery threw away — without them the
+    // declarations `items_tolerant` lifts out of an ERROR are judged against a
+    // reference stream missing that same region's uses.
+    tk::unread_references(tree, source, out);
     tk::walk_pruned(root, &["import_declaration"], &mut |n| match n.kind() {
         "comment" | "multiline_comment" => {
             tk::comment_evidence(n, source, &COMMENTS, out);

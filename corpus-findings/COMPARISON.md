@@ -2852,3 +2852,90 @@ comparing texts, where `v1.2.0` and `v1.5.0` differ and a Go build has no
 problem at all.
 
 The other eight repositories are byte-identical.
+
+## The ERROR-tolerant walk, and the half nobody writes
+
+Two of the nine repositories move. Both deltas are one mechanism, measured in
+both directions.
+
+`tree-sitter` recovers from a construct it cannot parse by wrapping it — and,
+routinely, everything after it — in an `ERROR` node. A one-level walk over named
+children stops there, so the declarations on the far side are simply not
+extracted. Across the pinned corpus, under the pinned grammars:
+
+| language | files | with a parse error | non-space bytes NO node covers |
+|---|---|---|---|
+| kotlin | 862 | 61 | 147100 |
+| css | 215 | 13 | 2997 |
+| swift | 349 | 35 | 792 |
+| scss | 27 | 5 | 416 |
+| java | 3275 | 13 | 0 |
+| ts | 564 | 5 | 0 |
+| tsx | 1003 | 1 | 0 |
+| go / python / rust | 292 | 0 | 0 |
+
+The last column is the part that decides the design. Inside an `ERROR` the tree
+is not a partial parse OF the region — recovery keeps some sub-trees and drops
+the rest of the text on the floor. In Exposed's `Entity.kt`, whose single
+`ERROR` spans lines 1..487, `klass.invalidateEntityInCache(o)` is written at
+line 311 and occurs ZERO times as a node: the bytes are in the file, nothing
+covers them. So lifting declarations out of an `ERROR` and stopping there reads
+that discarded text as an ABSENCE of uses. It does not find dead code; it
+manufactures it.
+
+Hence the pair: the item walk descends into an `ERROR` and reads the fragments
+recovery kept, and the names in the bytes recovery discarded become references.
+In a file with no parse error the uncovered bytes are the whitespace between
+tokens, so the second half emits nothing — inert exactly where there is nothing
+to recover, with no flag saying so.
+
+**Exposed: 965 → 963.** Four findings move, and the item walk alone would have
+moved only two of them:
+
+- `+1 duplicate` — `exposed-r2dbc/…/Query.kt:withDistinctOn` is a character-for-
+  character clone of `exposed-jdbc/…/Query.kt:withDistinctOn`. The jdbc twin was
+  always visible; the r2dbc one sat under an `ERROR`. A true positive, and one
+  the item half buys on its own: a clone needs only the two bodies.
+- `−1 unused` on `exposed-dao/…/EntityClass.kt:invalidateEntityInCache`. The
+  item walk alone REPORTS it; the pair does not. It is called at
+  `Entity.kt:311` and overridden at `EntityClass.kt:1164`, and neither site is a
+  node. This is the false positive the second half exists to prevent.
+- `−3 unused` that the baseline was ALREADY reporting:
+  `OffsetDateTimeColumnType.kt:MYSQL_OFFSET_DATE_TIME_AS_DEFAULT_FORMATTER`
+  (used 75 lines below its own declaration) and
+  `StatementInterceptorTests.kt:CommitDataInterceptor` twice (constructed inside
+  its own file, in both the jdbc and r2dbc test trees). Their only uses sat in
+  discarded text, so the run before this one accused three live declarations.
+  Reading the bytes is what acquits them.
+
+The trigger is the same one `when-guard-grammar-gap` already pins: bisecting
+`Entity.kt` by lines, the first prefix whose parse drops any text ends at
+`is EntityID<*> if reference.referee<REF>() == …` — a `when` guard, Kotlin 2.1,
+which the pinned `kotlin-ng` 1.1.0 does not know. 178 non-space bytes of that
+one file are discarded because of it.
+
+**vapor: 732 → 747.** Fifteen `unused` findings, all in
+`Tests/VaporTests/ConditionalResponseCompressionTests.swift`: one `@Suite`
+struct and fourteen `@Test` functions recovered from under an `ERROR`. They are
+not a new class. vapor writes 525 swift-testing `@Test` functions, and the
+BASELINE already reports 481 of them as `unused` — no rule pack roots
+`@Test`/`@Suite` yet. With the walk that count is 495. The parse error was
+hiding fourteen instances of a hole this measurement already carried; the pack
+that closes all 495 at once is M8.e's, not this slice's.
+
+**The two Kotlin grammar gaps stay open, and the walk is why they can't close.**
+Both fixtures still report zero findings. Dumping `Insert.kt`'s tree shows what
+recovery left: `identifier [main]`, `function_value_parameters [()]`,
+`property_declaration`, `getter` — a bag of fragments, no `function_declaration`
+anywhere. There is no declaration node to lift. The walk recovers what recovery
+KEPT; it cannot rebuild what recovery destroyed, and each fixture's `fix` line
+already names the remedy that can: the grammar.
+
+**CSS and HTML adopt neither half, and that is not an omission.** `kndo:css`
+walks its whole tree with `tk::walk` — which never stopped at an `ERROR` — and
+emits no declarations and no references at all, only imports and comments; its
+`specifiers` reader already reaches inside error nodes on purpose. There is no
+item walk to make tolerant and no reference stream to complete, so its 2997
+discarded bytes carry no name any analysis reads.
+
+The other seven repositories are byte-identical.

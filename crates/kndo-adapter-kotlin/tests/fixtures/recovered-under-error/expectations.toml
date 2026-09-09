@@ -1,0 +1,37 @@
+# recovered-under-error: what a parse error costs, and what the pair of walks buys back.
+# The `when` guard here is the same Kotlin 2.1 construct `when-guard-grammar-gap` pins, in
+# the shape Exposed's `Entity.kt` has it: recovery ends the class at the guard, so
+# `class Cache` is not a node at all, `invalidate` and `neverCalled` above the break survive
+# as `function_declaration`s under the ERROR, and everything after it — `refresh` and the
+# `invalidate()` call inside it — is text NO node covers.
+#
+# The two survivors are therefore spelled WITHOUT an owner: the class node they were written
+# in no longer exists, so the item walk surfaces them at file level and the sink names them
+# there. That is the honest reading — a fragment is what the grammar still says it is, and
+# nothing left in the tree says whose member it was.
+#
+# Both are invisible without the item walk: the one-level walk stops at the ERROR and the
+# file yields only `cache`. With the item walk ALONE both are reported dead, because the call
+# that keeps one of them alive was never a node. The rows below are the whole argument for
+# reading the discarded text as well: recovering declarations without recovering the uses in
+# the same region does not find dead code, it manufactures it.
+
+[[alive]]
+subject = "src/main/kotlin/demo/Cache.kt#invalidate"
+category = "unused"
+why = "`refresh` calls it, and `refresh` is text the parse discarded — the name survives only in the bytes, and reading them is what tells this apart from the row below"
+
+[[dead]]
+subject = "src/main/kotlin/demo/Cache.kt#invalidate"
+category = "internal-only"
+why = "the engine does not merely fall silent about it: the one use it found is inside the unit, so it says the `internal` is not earned — a positive statement that the recovered reference landed"
+
+[[dead]]
+subject = "src/main/kotlin/demo/Cache.kt#neverCalled"
+category = "unused"
+why = "recovered from under the same ERROR and named nowhere, in a node or in discarded text — the true positive the item walk buys"
+
+[[alive]]
+subject = "src/main/kotlin/demo/Cache.kt#cache"
+category = "unused"
+why = "called from `main`; it sits before the break, so it parses normally and reaches the file"

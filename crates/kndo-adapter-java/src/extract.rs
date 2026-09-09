@@ -32,7 +32,7 @@ use kndo_contract::evidence::{
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use kndo_toolkit as tk;
 use smol_str::SmolStr;
-use tree_sitter::Node;
+use tree_sitter::{Node, Tree};
 
 pub fn extract(
     path: &ProjectPath,
@@ -60,8 +60,7 @@ pub fn extract(
     tk::mark_generated(source, tk::GENERATED_NEEDLES, &["//", "/*", "*"], out);
 
     let root = tree.root_node();
-    let mut cursor = root.walk();
-    let children: Vec<Node<'_>> = root.named_children(&mut cursor).collect();
+    let children: Vec<Node<'_>> = tk::items_tolerant(root, LIFTED);
     for item in children {
         match item.kind() {
             // `package com.foo;` — the namespace this file declares itself
@@ -96,7 +95,7 @@ pub fn extract(
         }
     }
 
-    references_and_comments(root, source, out);
+    references_and_comments(tree, source, out);
 }
 
 /// Member-walk context: the owning type's declaration id, and whether members
@@ -279,8 +278,7 @@ fn handle_type(item: Node<'_>, source: &[u8], ctx: &Ctx, out: &mut EvidenceSink)
 }
 
 fn handle_body(body: Node<'_>, source: &[u8], ctx: &Ctx, out: &mut EvidenceSink) {
-    let mut cursor = body.walk();
-    for member in body.named_children(&mut cursor) {
+    for member in tk::items_tolerant(body, LIFTED) {
         match member.kind() {
             "method_declaration" => handle_method(member, source, ctx, out),
             // The interface-body spelling of a field (JLS 9.3, implicitly
@@ -517,7 +515,27 @@ const COMMENT_MARKERS: tk::CommentMarkers<'static> = tk::CommentMarkers {
     block_doc: b"*",
 };
 
-fn references_and_comments(root: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
+/// The kinds a fragment recovered from an ERROR may be read as: exactly the
+/// items these walks dispatch on, at either level — a member fragment can
+/// surface at file level and a type fragment inside a body, and each walk
+/// ignores what it has no rule for.
+const LIFTED: &[&str] = &[
+    "class_declaration",
+    "interface_declaration",
+    "enum_declaration",
+    "record_declaration",
+    "annotation_type_declaration",
+    "method_declaration",
+    "field_declaration",
+    "constant_declaration",
+];
+
+fn references_and_comments(tree: &Tree, source: &[u8], out: &mut EvidenceSink) {
+    let root = tree.root_node();
+    // The names in whatever text error recovery threw away — without them the
+    // declarations `items_tolerant` lifts out of an ERROR are judged against a
+    // reference stream missing that same region's uses.
+    tk::unread_references(tree, source, out);
     // Import/package paths already became import evidence (or deliberately
     // none); every segment inside would read as a false identifier use.
     tk::walk_pruned(

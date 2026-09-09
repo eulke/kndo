@@ -12,7 +12,7 @@ use kndo_contract::vocab::{Confidence, Span};
 use kndo_toolkit as tk;
 use smol_str::SmolStr;
 use std::collections::BTreeMap;
-use tree_sitter::Node;
+use tree_sitter::{Node, Tree};
 
 /// `mode` is the embedded region's, when the source is one: a classic
 /// script's top-level declarations are the page's globals — reachable from
@@ -33,7 +33,7 @@ pub fn extract(
     declarations(root, source, &aliases, globals, out);
     imports(root, source, out);
     literal_specifiers(root, source, out);
-    references_and_comments(root, source, out);
+    references_and_comments(tree, source, out);
 }
 
 /// Package specifiers spelled inside string and template literals — the code
@@ -127,8 +127,7 @@ fn specifier_shaped(token: &str) -> bool {
 /// their local name.
 fn export_aliases(root: Node<'_>, source: &[u8]) -> BTreeMap<String, String> {
     let mut aliases = BTreeMap::new();
-    let mut cursor = root.walk();
-    for stmt in root.named_children(&mut cursor) {
+    for stmt in tk::items_tolerant(root, LIFTED) {
         if stmt.kind() != "export_statement" || stmt.child_by_field_name("source").is_some() {
             continue;
         }
@@ -161,8 +160,7 @@ fn declarations(
     globals: bool,
     out: &mut EvidenceSink,
 ) {
-    let mut cursor = root.walk();
-    for stmt in root.named_children(&mut cursor) {
+    for stmt in tk::items_tolerant(root, LIFTED) {
         if stmt.kind() == "export_statement" {
             if let Some(decl) = stmt.child_by_field_name("declaration") {
                 let is_default = has_token(stmt, "default");
@@ -498,7 +496,30 @@ const IDENT_KINDS: [&str; 5] = [
     "shorthand_property_identifier",
 ];
 
-fn references_and_comments(root: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
+/// The kinds a fragment recovered from an ERROR may be read as: exactly the
+/// items the declaration pass dispatches on, plus the `export_statement` that
+/// wraps any of them.
+const LIFTED: &[&str] = &[
+    "export_statement",
+    "function_declaration",
+    "generator_function_declaration",
+    "class_declaration",
+    "abstract_class_declaration",
+    "interface_declaration",
+    "type_alias_declaration",
+    "enum_declaration",
+    "internal_module",
+    "module",
+    "lexical_declaration",
+    "variable_declaration",
+];
+
+fn references_and_comments(tree: &Tree, source: &[u8], out: &mut EvidenceSink) {
+    let root = tree.root_node();
+    // The names in whatever text error recovery threw away — without them the
+    // declarations `items_tolerant` lifts out of an ERROR are judged against a
+    // reference stream missing that same region's uses.
+    tk::unread_references(tree, source, out);
     tk::walk(root, &mut |n| {
         if n.kind() == "comment" {
             tk::comment_evidence(n, source, &COMMENT_MARKERS, out);

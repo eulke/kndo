@@ -40,20 +40,20 @@
     ]
   },
   "health": {
-    "implicated": 585,
-    "subjects": 3187,
+    "implicated": 600,
+    "subjects": 3202,
     "by_category": [
       {
         "category": "unused",
-        "findings": 585
+        "findings": 600
       }
     ],
     "by_package": [
       {
         "name": "",
         "manifest": "",
-        "implicated": 585,
-        "subjects": 3187
+        "implicated": 600,
+        "subjects": 3202
       }
     ]
   },
@@ -3419,6 +3419,29 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
+      "id": "kndo-0ef473d5d773",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
+        "selector": {
+          "owner": "ConditionalResponseCompressionParsingTests",
+          "name": "testDecodingOther"
+        },
+        "span": {
+          "start": 3294,
+          "end": 3489
+        }
+      },
+      "lines": {
+        "start": 96,
+        "end": 100
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
       "id": "kndo-18a1fc755307",
       "category": "unused",
       "severity": "warning",
@@ -3437,6 +3460,75 @@
       "lines": {
         "start": 906,
         "end": 906
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-2d365966cb89",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
+        "selector": {
+          "owner": "ConditionalResponseCompressionParsingTests",
+          "name": "testDecodingMultipleValid"
+        },
+        "span": {
+          "start": 3499,
+          "end": 3740
+        }
+      },
+      "lines": {
+        "start": 102,
+        "end": 106
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-313cfb2104d4",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
+        "selector": {
+          "owner": "ConditionalResponseCompressionParsingTests",
+          "name": "testEncodingUseDefault"
+        },
+        "span": {
+          "start": 1011,
+          "end": 1251
+        }
+      },
+      "lines": {
+        "start": 36,
+        "end": 41
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-37b00e278699",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
+        "selector": {
+          "owner": "ConditionalResponseCompressionParsingTests",
+          "name": "testDecodingMultipleLastInvalid"
+        },
+        "span": {
+          "start": 4013,
+          "end": 4263
+        }
+      },
+      "lines": {
+        "start": 114,
+        "end": 118
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -3460,6 +3552,75 @@
       "lines": {
         "start": 819,
         "end": 834
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-45ac37c80c9a",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
+        "selector": {
+          "owner": "ConditionalResponseCompressionParsingTests",
+          "name": "testEncodingEnable"
+        },
+        "span": {
+          "start": 539,
+          "end": 763
+        }
+      },
+      "lines": {
+        "start": 22,
+        "end": 27
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-548c9616e6e2",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
+        "selector": {
+          "owner": "ConditionalResponseCompressionParsingTests",
+          "name": "testEncodingUnset"
+        },
+        "span": {
+          "start": 1261,
+          "end": 1458
+        }
+      },
+      "lines": {
+        "start": 43,
+        "end": 48
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-5711f673604f",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
+        "selector": {
+          "owner": "ConditionalResponseCompressionParsingTests",
+          "name": "testDecodingLiteralUnset"
+        },
+        "span": {
+          "start": 3074,
+          "end": 3284
+        }
+      },
+      "lines": {
+        "start": 90,
+        "end": 94
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -3510,6 +3671,52 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
+      "id": "kndo-80492cda64c0",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
+        "selector": {
+          "owner": "ConditionalResponseCompressionParsingTests",
+          "name": "testDecodingEnabled"
+        },
+        "span": {
+          "start": 2432,
+          "end": 2628
+        }
+      },
+      "lines": {
+        "start": 72,
+        "end": 76
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-84435f85beee",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
+        "selector": {
+          "owner": "ConditionalResponseCompressionParsingTests",
+          "name": "testDecodingUseDefault"
+        },
+        "span": {
+          "start": 2848,
+          "end": 3064
+        }
+      },
+      "lines": {
+        "start": 84,
+        "end": 88
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
       "id": "kndo-86bc71843bfe",
       "category": "unused",
       "severity": "warning",
@@ -3529,6 +3736,51 @@
       "lines": {
         "start": 802,
         "end": 817
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-87a1c4e23d6a",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
+        "selector": {
+          "name": "ConditionalResponseCompressionParsingTests"
+        },
+        "span": {
+          "start": 430,
+          "end": 4269
+        }
+      },
+      "lines": {
+        "start": 20,
+        "end": 119
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-95713baa9388",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
+        "selector": {
+          "owner": "ConditionalResponseCompressionParsingTests",
+          "name": "testDecodingMultipleFirstInvalid"
+        },
+        "span": {
+          "start": 3750,
+          "end": 4003
+        }
+      },
+      "lines": {
+        "start": 108,
+        "end": 112
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -3556,6 +3808,52 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
+      "id": "kndo-b35db626be5f",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
+        "selector": {
+          "owner": "ConditionalResponseCompressionParsingTests",
+          "name": "testEncodingDisable"
+        },
+        "span": {
+          "start": 773,
+          "end": 1001
+        }
+      },
+      "lines": {
+        "start": 29,
+        "end": 34
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-cab0ab3c14e6",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
+        "selector": {
+          "owner": "ConditionalResponseCompressionParsingTests",
+          "name": "testUpdating"
+        },
+        "span": {
+          "start": 1468,
+          "end": 2238
+        }
+      },
+      "lines": {
+        "start": 50,
+        "end": 64
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
       "id": "kndo-e079df07631d",
       "category": "unused",
       "severity": "warning",
@@ -3574,6 +3872,52 @@
       "lines": {
         "start": 908,
         "end": 908
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-ee4d99bbef8d",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
+        "selector": {
+          "owner": "ConditionalResponseCompressionParsingTests",
+          "name": "testDecodingDisabled"
+        },
+        "span": {
+          "start": 2638,
+          "end": 2838
+        }
+      },
+      "lines": {
+        "start": 78,
+        "end": 82
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-f24671f7e8de",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "Tests/VaporTests/ConditionalResponseCompressionTests.swift",
+        "selector": {
+          "owner": "ConditionalResponseCompressionParsingTests",
+          "name": "testDecodingUnset"
+        },
+        "span": {
+          "start": 2248,
+          "end": 2422
+        }
+      },
+      "lines": {
+        "start": 66,
+        "end": 70
       },
       "message": "nothing references, roots, or imports this declaration"
     },

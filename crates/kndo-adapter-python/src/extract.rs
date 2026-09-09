@@ -10,7 +10,7 @@ use kndo_contract::evidence::{
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use kndo_toolkit as tk;
 use smol_str::SmolStr;
-use tree_sitter::Node;
+use tree_sitter::{Node, Tree};
 
 const COMMENTS: tk::CommentMarkers<'static> = tk::CommentMarkers {
     line: &["#"],
@@ -93,13 +93,12 @@ pub fn extract(
     // The generated-module banner, REPORTED: what it means is a rule in the
     // spec and a verdict in the engine.
     tk::mark_generated(source, tk::GENERATED_NEEDLES, &["#"], out);
-    let mut c = root.walk();
-    let items: Vec<Node<'_>> = root.named_children(&mut c).collect();
+    let items: Vec<Node<'_>> = tk::items_tolerant(root, LIFTED);
     for item in items {
         top_level_item(item, source, out);
     }
 
-    references_and_comments(root, source, out);
+    references_and_comments(tree, source, out);
 }
 
 fn has_main_guard(root: Node<'_>, source: &[u8]) -> bool {
@@ -248,8 +247,7 @@ fn class(
     let Some(body) = item.child_by_field_name("body") else {
         return Some(owner_id);
     };
-    let mut c = body.walk();
-    let members: Vec<Node<'_>> = body.named_children(&mut c).collect();
+    let members: Vec<Node<'_>> = tk::items_tolerant(body, LIFTED);
     for m in members {
         match m.kind() {
             "function_definition" => {
@@ -553,7 +551,23 @@ fn imports(item: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
 
 // ---------------------------------------------------------------- references
 
-fn references_and_comments(root: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
+/// The kinds a fragment recovered from an ERROR may be read as: exactly the
+/// items these walks dispatch on. An `expression_statement` rides because
+/// that is how Python writes a module- or class-level binding.
+const LIFTED: &[&str] = &[
+    "function_definition",
+    "class_definition",
+    "decorated_definition",
+    "expression_statement",
+    "type_alias_statement",
+];
+
+fn references_and_comments(tree: &Tree, source: &[u8], out: &mut EvidenceSink) {
+    let root = tree.root_node();
+    // The names in whatever text error recovery threw away — without them the
+    // declarations `items_tolerant` lifts out of an ERROR are judged against a
+    // reference stream missing that same region's uses.
+    tk::unread_references(tree, source, out);
     tk::walk_pruned(
         root,
         &["import_statement", "import_from_statement"],

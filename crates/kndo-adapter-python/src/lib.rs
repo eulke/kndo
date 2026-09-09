@@ -49,7 +49,7 @@ impl PythonAdapter {
             // 3: the generated banner is reported, never concluded.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:python",
-                13,
+                14,
                 &["py"],
                 &[
                     "**/pyproject.toml",

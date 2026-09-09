@@ -18,7 +18,7 @@ use kndo_contract::evidence::{
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use kndo_toolkit as tk;
 use smol_str::SmolStr;
-use tree_sitter::Node;
+use tree_sitter::{Node, Tree};
 
 pub fn extract(
     path: &ProjectPath,
@@ -58,8 +58,7 @@ pub fn extract(
     // means is a rule in the spec and a verdict in the engine.
     mark_generated(source, out);
 
-    let mut cursor = root.walk();
-    let children: Vec<Node<'_>> = root.named_children(&mut cursor).collect();
+    let children: Vec<Node<'_>> = tk::items_tolerant(root, LIFTED);
     for item in children {
         match item.kind() {
             "function_declaration" => {
@@ -161,7 +160,7 @@ pub fn extract(
         }
     }
 
-    references_and_comments(root, source, out);
+    references_and_comments(tree, source, out);
 }
 
 fn package_name(root: Node<'_>, source: &[u8]) -> Option<String> {
@@ -262,7 +261,22 @@ const COMMENT_MARKERS: tk::CommentMarkers<'static> = tk::CommentMarkers {
     block_doc: b"*",
 };
 
-fn references_and_comments(root: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
+/// The kinds a fragment recovered from an ERROR may be read as: exactly the
+/// items the top-level walk dispatches on. `method_declaration` is absent
+/// because it declares nothing here either (see the module doc).
+const LIFTED: &[&str] = &[
+    "function_declaration",
+    "type_declaration",
+    "const_declaration",
+    "var_declaration",
+];
+
+fn references_and_comments(tree: &Tree, source: &[u8], out: &mut EvidenceSink) {
+    let root = tree.root_node();
+    // The names in whatever text error recovery threw away — without them the
+    // declarations `items_tolerant` lifts out of an ERROR are judged against a
+    // reference stream missing that same region's uses.
+    tk::unread_references(tree, source, out);
     // Import declarations bind and rename; their paths already became import
     // evidence.
     tk::walk_pruned(root, &["import_declaration"], &mut |n| {

@@ -27,7 +27,7 @@ use kndo_contract::evidence::{
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use kndo_toolkit as tk;
 use smol_str::SmolStr;
-use tree_sitter::Node;
+use tree_sitter::{Node, Tree};
 
 /// Kotlin's comment markers, declared where its grammar knowledge lives; the
 /// KDoc `/**` star belongs to the marker, so a pragma inside one parses.
@@ -64,8 +64,7 @@ pub fn extract(
     tk::mark_generated(source, tk::GENERATED_NEEDLES, &["//", "/*", "*"], out);
 
     let root = tree.root_node();
-    let mut cursor = root.walk();
-    let children: Vec<Node<'_>> = root.named_children(&mut cursor).collect();
+    let children: Vec<Node<'_>> = tk::items_tolerant(root, LIFTED);
     let top = Ctx { owner: None };
     for item in children {
         match item.kind() {
@@ -90,7 +89,7 @@ pub fn extract(
         }
     }
 
-    references_and_comments(root, source, out);
+    references_and_comments(tree, source, out);
 }
 
 /// Member-walk context: the owning type's declaration id. Companion members
@@ -371,9 +370,19 @@ fn handle_object(item: Node<'_>, source: &[u8], ctx: &Ctx, out: &mut EvidenceSin
     }
 }
 
+/// The kinds a fragment recovered from an ERROR may be read as. A
+/// `property_declaration` is deliberately absent: a `val` inside a function
+/// whose header the error swallowed is a LOCAL, and lifting it would declare a
+/// file-level subject the file does not have.
+const LIFTED: &[&str] = &[
+    "class_declaration",
+    "object_declaration",
+    "function_declaration",
+    "type_alias",
+];
+
 fn handle_body(body: Node<'_>, source: &[u8], ctx: &Ctx, out: &mut EvidenceSink) {
-    let mut cursor = body.walk();
-    for member in body.named_children(&mut cursor) {
+    for member in tk::items_tolerant(body, LIFTED) {
         declaration(member, source, ctx, out);
     }
 }
@@ -477,7 +486,12 @@ fn import_alias<'a>(item: Node<'_>, source: &'a [u8]) -> Option<&'a str> {
     None
 }
 
-fn references_and_comments(root: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
+fn references_and_comments(tree: &Tree, source: &[u8], out: &mut EvidenceSink) {
+    let root = tree.root_node();
+    // The names in whatever text error recovery threw away — without them the
+    // declarations `items_tolerant` lifts out of an ERROR are judged against a
+    // reference stream missing that same region's uses.
+    tk::unread_references(tree, source, out);
     // Import and package paths already became import evidence (or deliberately
     // none); every segment inside would read as a false identifier use.
     tk::walk_pruned(root, &["import", "package_header"], &mut |n| {

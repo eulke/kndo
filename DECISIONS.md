@@ -7732,3 +7732,72 @@ With this M8.d's six readers are all structural and all graded against the real
 tool: cargo, go, npm, setuptools/packaging, maven and gradle each answer in a
 captured transcript, and `Package.swift` carries its ledger row — swiftpm ships
 no second reader of a file only it can evaluate.
+
+## 2026-09-09 — A parse error discards text, so the item walk ships with the reference walk
+
+M8.f's ERROR-tolerant traversal. `tk::items_tolerant` descends into an `ERROR`
+instead of stopping at it, and `tk::unread_references` reads the names in every
+byte no node covers. The two ship together because measuring them apart is what
+showed they cannot be separated.
+
+The measurement that decided it. Under the pinned grammars, across the pinned
+corpus: kotlin 61 of 862 files parse with an error and 147100 non-space bytes
+are covered by NO node; swift 35 of 349 and 792 bytes; css 13 of 215 and 2997;
+scss 5 of 27 and 416; java 13 of 3275, ts 5 of 564, tsx 1 of 1003 — all three
+with ZERO uncovered bytes; go, python and rust with no error at all. That last
+column is the whole design. Inside an `ERROR` the tree is not a partial parse of
+the region: recovery keeps some sub-trees and throws the rest of the text away.
+Exposed's `Entity.kt` is one `ERROR` over lines 1..487, and
+`klass.invalidateEntityInCache(o)` — written at line 311 — occurs zero times as
+a node. Recovering declarations from that region while reading its discarded
+text as an absence of uses does not find dead code, it manufactures it.
+
+Measured in three states on Exposed. Baseline 965. Item walk alone 967: `+1`
+real `duplicate` (`exposed-r2dbc/…/Query.kt:withDistinctOn`, a verbatim clone of
+the jdbc twin that was always visible) and `+1` false `unused` on
+`EntityClass.kt:invalidateEntityInCache`, whose caller and override are both
+text no node covers. Both halves 963: the false positive is gone, the duplicate
+stays, and THREE findings the baseline was already reporting go with it —
+`MYSQL_OFFSET_DATE_TIME_AS_DEFAULT_FORMATTER` and `CommitDataInterceptor` twice,
+each used inside its own file, in bytes the parse discarded. The reference half
+does not merely pay for the item half; it repays a debt the run already had.
+
+vapor 732 → 747, and the delta belongs to another slice. All fifteen are one
+file: a swift-testing `@Suite` struct and fourteen `@Test` functions recovered
+from under an `ERROR`. vapor writes 525 `@Test` functions and the baseline
+already reported 481 of them `unused` — nothing roots `@Test`/`@Suite` yet. The
+parse error was hiding fourteen more instances of a hole already in the number;
+the rule pack that closes all 495 is M8.e's. The other seven repositories are
+byte-identical.
+
+Both Kotlin grammar-gap fixtures stay at zero, and the tree says why: recovery
+leaves `Insert.kt` as `identifier [main]`, `function_value_parameters [()]`, a
+`property_declaration` and a `getter` — no `function_declaration` to lift. The
+walk recovers what recovery kept and cannot rebuild what it destroyed, which is
+exactly the remedy each fixture's `fix` line already names. Bisecting
+`Entity.kt` by lines puts the same construct at the root of Exposed's loss: the
+first prefix that drops any text ends at `is EntityID<*> if …`, a Kotlin 2.1
+`when` guard, and 178 non-space bytes of that file go with it.
+
+The pair is a toolkit floor and every source adapter adopts both halves, because
+one adapter walking differently from the other eight is the divergence the floor
+exists to prevent — and where a grammar never errs the mechanism is provably
+inert: uncovered bytes are the whitespace between tokens, and a scan of
+whitespace emits nothing. `kndo:css` and `kndo:html` adopt neither, and neither
+does that quietly: css walks its whole tree with `tk::walk`, which never stopped
+at an `ERROR`, and emits no declarations and no references at all, so it has no
+item walk to make tolerant and no reference stream to complete.
+
+`recovered-under-error` pins the discrimination on the real construct in the
+real shape: a `when` guard mid-class, `invalidate` and `neverCalled` surviving
+as `function_declaration`s under the ERROR, and `refresh` — with its
+`invalidate()` call — as text no node covers. Without the item walk neither is a
+subject; with the item walk alone both are reported dead; with the pair
+`neverCalled` is `unused` and `invalidate` is `internal-only`, which is the
+engine stating positively that it found the use. The kotlin fixture floor moves
+5 → 6.
+
+Seven adapter versions move — rust 18 → 19, go 16 → 17, java 23 → 24, kotlin
+18 → 19, python 13 → 14, swift 13 → 14, js-ts 15 → 16 — because it is the same
+source producing different evidence, which is the second of the three knobs.
+Neither the graph semantics nor the contract fingerprint moves.

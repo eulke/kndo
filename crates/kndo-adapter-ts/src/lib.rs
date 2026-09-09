@@ -108,10 +108,10 @@ impl TypeScriptAdapter {
     pub fn new() -> Self {
         let spec = kndo_toolkit::source_adapter_builder(
             "kndo:js-ts",
-            // 15: `package.json`'s `imports` and `exports` maps are alias
-            // tables with captures and conditions, so a `#` import and a
-            // package subpath resolve to the file the manifest names.
-            15,
+            // 16: the item walk crosses an `ERROR` and the names in whatever
+            // text recovery discarded become references — see
+            // `kndo_toolkit::items_tolerant` and `unread_references`.
+            16,
             &["ts", "tsx", "js", "jsx", "mjs", "cjs", "mts", "cts"],
             // `tsconfig.json` states the names that are not packages — its
             // `paths` aliases; every other spelling of the file is a variant
