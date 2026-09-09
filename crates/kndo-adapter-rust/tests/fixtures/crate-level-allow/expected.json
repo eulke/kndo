@@ -29,47 +29,19 @@
     ]
   },
   "health": {
-    "implicated": 1,
+    "implicated": 0,
     "subjects": 4,
-    "by_category": [
-      {
-        "category": "unused",
-        "findings": 1
-      }
-    ],
+    "by_category": [],
     "by_package": [
       {
         "name": "cratelevelallow",
         "manifest": "Cargo.toml",
-        "implicated": 1,
+        "implicated": 0,
         "subjects": 4
       }
     ]
   },
-  "findings": [
-    {
-      "id": "kndo-e3684eba7ca9",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "src/inner.rs",
-        "selector": {
-          "name": "stale"
-        },
-        "span": {
-          "start": 0,
-          "end": 13
-        }
-      },
-      "lines": {
-        "start": 1,
-        "end": 1
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    }
-  ],
+  "findings": [],
   "fixed": [],
   "baselined": 0,
   "abstained": [
@@ -125,9 +97,14 @@
   ],
   "diagnostics": [
     {
+      "path": "src/inner.rs",
+      "level": "info",
+      "message": "`allow(dead_code)` at unit level exempts every declaration here (1) from the unused judgment"
+    },
+    {
       "path": "src/lib.rs",
       "level": "info",
-      "message": "`allow(dead_code)` at file level exempts every declaration here (1) from the unused judgment"
+      "message": "`allow(dead_code)` at unit level exempts every declaration here (1) from the unused judgment"
     }
   ]
 }

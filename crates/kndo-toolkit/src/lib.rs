@@ -473,19 +473,14 @@ pub mod jvm_manifest {
             .collect();
         depends_on.sort_unstable();
         depends_on.dedup();
-        let mut test_roots: Vec<SmolStr> = match source_directory(
-            project,
-            path,
-            cx,
-            &resolve,
-            "testSourceDirectory",
-        ) {
-            Some(dir) => vec![SmolStr::new(join(&dir))],
-            None => vec![
-                SmolStr::new(join("src/test/java")),
-                SmolStr::new(join("src/test/kotlin")),
-            ],
-        };
+        let mut test_roots: Vec<SmolStr> =
+            match source_directory(project, path, cx, &resolve, "testSourceDirectory") {
+                Some(dir) => vec![SmolStr::new(join(&dir))],
+                None => vec![
+                    SmolStr::new(join("src/test/java")),
+                    SmolStr::new(join("src/test/kotlin")),
+                ],
+            };
         test_roots.extend(
             helper_added_sources(project, "add-test-source")
                 .into_iter()

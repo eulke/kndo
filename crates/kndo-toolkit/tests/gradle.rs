@@ -108,7 +108,7 @@ fn a_module_is_two_units_and_the_tests_are_the_mains_friend() {
             .depends_on
             .iter()
             .filter(|d| d.grants >= kndo_contract::manifest::Grant::Unit)
-            .map(|d| d.unit.as_str())
+            .map(|d| d.unit.name.as_str())
             .collect::<Vec<_>>(),
         ["core"],
         "Gradle compiles the test set against the main one, which is what \
@@ -190,7 +190,7 @@ fn a_project_dependency_names_a_unit_and_a_catalog_alias_names_a_coordinate() {
     assert_eq!(
         main.depends_on
             .iter()
-            .map(|d| d.unit.as_str())
+            .map(|d| d.unit.name.as_str())
             .collect::<Vec<_>>(),
         ["core"],
         "`project(\":core\")` names a unit of this build, never an artifact"

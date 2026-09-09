@@ -133,9 +133,7 @@ mod external {
                 Err(e) => diagnostics.push(ReportDiagnostic {
                     path: report_path,
                     level: DiagnosticLevel::Warn,
-                    message: format!(
-                        "not a loadable kndo:vocab plugin component — skipped: {e}"
-                    ),
+                    message: format!("not a loadable kndo:vocab plugin component — skipped: {e}"),
                 }),
             }
         }

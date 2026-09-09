@@ -2761,3 +2761,40 @@ trees javac does not compile from this pom.
 one super-source reference before and is empty after. The first reading of this
 delta, recorded earlier the same day, called the 24 false positives without
 asking that question; it was wrong.
+## A crate root's `#![allow(warnings)]` is the crate's, and ripgrep says so (2026-09-09)
+
+| repo | before | after | what moved |
+|---|---|---|---|
+| ripgrep | 143 | 141 | −2 `unused` under one `#![allow(warnings)]` |
+
+`crates/index/src/lib.rs` opens with `#![allow(warnings)]` and then
+`mod index; pub mod literal;`. rustc scopes a crate root's inner attribute to
+the crate, so the author silenced the lint for all three files; v2 silenced it
+for the one that carried the words. `Handle::read_write` and
+`Handle::read_write_mut`, both in `crates/index/src/index.rs`, were the two
+accusations that survived a blanket written to cover them. Two diagnostics
+appear in their place — `index.rs` (23 declarations) and `literal.rs` (71) each
+report the blanket that stands their declarations down, which is the whole point
+of reporting a blanket at all: the exemption is now visible where it applies
+rather than only where it was typed.
+
+The eight other repositories are byte-identical: Alamofire 1484, Exposed 965,
+flask 19, gin 109, guava 8271, lodash 20, vapor 732, vite 712. Nothing but rust
+emits a unit-scoped marker, and cargo's `path =` — the other half of this
+tranche — disambiguates nothing here, because no repository in the corpus
+declares two crates of one name.
+
+The reach is bounded in the direction that matters, and the corpus is why it
+had to be. An `#![allow(dead_code)]` on a MODULE file is that module's, not the
+crate's; ripgrep carries none, but this tree does, and its
+`attribute-dispatch` fixture pins the case: `src/scratch.rs`'s blanket must not
+reach `src/ffi.rs#truly_dead`. It does not, and that fixture's report is
+byte-identical.
+
+`corpus-findings/flask.report.json` also moves, and it is NOT this tranche's:
+measured on the pristine tree before any edit here, flask already differed from
+its committed report. `docs/conf.py` reports as an unused FILE rather than as
+an untested file plus an unused `setup`, and `examples/celery/make_celery.py`
+joins it. The total is 19 either way, which is why the stale pin went unnoticed.
+No python file emits a unit marker and no python manifest emits a `path =`, so
+nothing in this tranche can reach flask.

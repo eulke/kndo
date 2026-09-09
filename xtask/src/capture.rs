@@ -142,7 +142,8 @@ const CAPTURES: &[Capture] = &[
         fixture: "crates/kndo-adapter-python/tests/fixtures/pep508-spellings",
         tool: "packaging",
         version: &[
-            "python3", "-c",
+            "python3",
+            "-c",
             "import packaging; print('packaging', packaging.__version__)",
         ],
         commands: &[&["python3", "-c", REQUIREMENTS]],
@@ -160,14 +161,29 @@ const CAPTURES: &[Capture] = &[
 /// half a pom's own text never states.
 const MAVEN: &[&[&str]] = &[
     &[
-        "mvn", "-o", "-q", "help:evaluate",
-        "-Dexpression=project.build.sourceDirectory", "-DforceStdout",
+        "mvn",
+        "-o",
+        "-q",
+        "help:evaluate",
+        "-Dexpression=project.build.sourceDirectory",
+        "-DforceStdout",
     ],
     &[
-        "mvn", "-o", "-q", "help:evaluate",
-        "-Dexpression=project.build.testSourceDirectory", "-DforceStdout",
+        "mvn",
+        "-o",
+        "-q",
+        "help:evaluate",
+        "-Dexpression=project.build.testSourceDirectory",
+        "-DforceStdout",
     ],
-    &["mvn", "-o", "-q", "help:evaluate", "-Dexpression=project.modules", "-DforceStdout"],
+    &[
+        "mvn",
+        "-o",
+        "-q",
+        "help:evaluate",
+        "-Dexpression=project.modules",
+        "-DforceStdout",
+    ],
 ];
 
 /// Node's own resolver, asked one specifier at a time from the file that writes
@@ -214,7 +230,10 @@ pub fn run(args: &[String]) -> Result<()> {
     let root = workspace_root();
     let mut taken = 0;
     for capture in CAPTURES {
-        if only.as_deref().is_some_and(|o| !capture.fixture.contains(o)) {
+        if only
+            .as_deref()
+            .is_some_and(|o| !capture.fixture.contains(o))
+        {
             continue;
         }
         let fixture = root.join(capture.fixture);
@@ -243,7 +262,7 @@ fn take(capture: &Capture, fixture: &Path) -> Result<ToolTranscript> {
     let project = scratch.path().join("project");
     copy_tree(&fixture.join("project"), &project)?;
     let asks = serde_json::to_string(capture.asks).map_err(|e| e.to_string())?;
-        // A tool that prints a paragraph about itself is asked for its first line:
+    // A tool that prints a paragraph about itself is asked for its first line:
     // the version, not this machine's java home and locale.
     let version = run_in(&project, capture.version, &asks)?
         .lines()
@@ -406,7 +425,10 @@ fn cargo_kind(kind: &str) -> Option<UnitKind> {
 fn go_list(answer: Answers<'_>) -> Result<Vec<ToolClaim>> {
     let mut out = Vec::new();
     for package in json_stream(&answer.said[0])? {
-        let Some(dir) = package["Dir"].as_str().and_then(|d| relative(d, answer.here)) else {
+        let Some(dir) = package["Dir"]
+            .as_str()
+            .and_then(|d| relative(d, answer.here))
+        else {
             continue;
         };
         let under = |file: &str| match dir.as_str().is_empty() {

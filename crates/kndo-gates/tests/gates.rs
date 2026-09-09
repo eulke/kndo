@@ -499,14 +499,12 @@ impl kndo_testkit::expectations::Tree for TheRun<'_> {
 /// The ecosystems no build tool answers for here, and why — a row is a promise
 /// NOT made, not a gap glossed over. The day the tool answers,
 /// `cargo xtask capture` takes the transcript and the row goes.
-const ECOSYSTEMS_WITH_NO_TRANSCRIPT: &[(&str, &str)] = &[
-    (
-        "kndo:swift",
-        "swift ships no toolchain where transcripts are taken, and `Package.swift` \
+const ECOSYSTEMS_WITH_NO_TRANSCRIPT: &[(&str, &str)] = &[(
+    "kndo:swift",
+    "swift ships no toolchain where transcripts are taken, and `Package.swift` \
          is a program only swiftpm can evaluate — there is no second reader of it \
          to grade against",
-    ),
-];
+)];
 
 #[test]
 fn captured_transcripts_hold() {
@@ -553,9 +551,14 @@ fn captured_transcripts_hold() {
         .iter()
         .map(|c| Box::leak(c.clone().into_boxed_str()) as &str)
         .collect();
-    let excused: std::collections::BTreeSet<&str> =
-        ECOSYSTEMS_WITH_NO_TRANSCRIPT.iter().map(|(c, _)| *c).collect();
-    let stale: Vec<&&str> = excused.iter().filter(|c| !ecosystems.contains(*c)).collect();
+    let excused: std::collections::BTreeSet<&str> = ECOSYSTEMS_WITH_NO_TRANSCRIPT
+        .iter()
+        .map(|(c, _)| *c)
+        .collect();
+    let stale: Vec<&&str> = excused
+        .iter()
+        .filter(|c| !ecosystems.contains(*c))
+        .collect();
     assert!(
         stale.is_empty(),
         "the no-transcript ledger names ecosystems that no longer read a manifest: {stale:?}"
@@ -2175,7 +2178,8 @@ fn every_declared_file_role_names_the_paths_its_language_means() {
             .find(|e| e.spec().coordinate() == *coordinate)
             .unwrap_or_else(|| panic!("{coordinate} is a built-in"))
             .spec();
-        let mut got: Vec<RootKind> = spec.roles_for(path)
+        let mut got: Vec<RootKind> = spec
+            .roles_for(path)
             .into_iter()
             .map(|(kind, _)| kind)
             .collect();

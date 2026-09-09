@@ -16,7 +16,7 @@
 use crate::discover::DiscoveredFile;
 use kndo_contract::adapter::{ResolveContext, SourceFile};
 use kndo_contract::manifest::Grant;
-use kndo_contract::manifest::{ManifestEvidence, ManifestSink, UnitKind, UnitRoot};
+use kndo_contract::manifest::{ManifestEvidence, ManifestSink, UnitKind, UnitRef, UnitRoot};
 use kndo_contract::plugin::{Plugin, PluginSpec};
 use kndo_contract::vocab::ProjectPath;
 use serde::{Deserialize, Serialize};
@@ -251,7 +251,7 @@ pub fn read_manifests(
 /// named dependency resolved to the unit it means.
 pub fn assemble(reads: &[ManifestRead]) -> Project {
     let mut units: Vec<ProjectUnit> = Vec::new();
-    let mut named: Vec<Vec<(SmolStr, Grant)>> = Vec::new();
+    let mut named: Vec<Vec<(UnitRef, Grant)>> = Vec::new();
     for read in reads {
         let dir = read
             .manifest
@@ -307,8 +307,8 @@ pub fn assemble(reads: &[ManifestRead]) -> Project {
         }
         r
     };
-    // Both relations a manifest states by NAME resolve the same way: the
-    // unit's own manifest first, then the nearest aggregator above it.
+    // Every unit reference a manifest writes resolves through one rule —
+    // `Aggregators::resolve`, which states it.
     let direct: Vec<Vec<UnitReach>> = {
         let aggregators = Aggregators::of(reads);
         let by_manifest_and_name: BTreeMap<(&ProjectPath, &SmolStr), u32> = units
@@ -320,9 +320,9 @@ pub fn assemble(reads: &[ManifestRead]) -> Project {
             .map(|i| {
                 let mut out: Vec<UnitReach> = named[i]
                     .iter()
-                    .filter_map(|(n, grant)| {
+                    .filter_map(|(reference, grant)| {
                         aggregators
-                            .resolve(&units[i].manifest, n, &by_manifest_and_name)
+                            .resolve(&units[i].manifest, reference, &by_manifest_and_name)
                             .map(|unit| UnitReach {
                                 unit,
                                 grants: *grant,
@@ -384,7 +384,8 @@ fn closure(start: u32, direct: &[Vec<UnitReach>]) -> Vec<UnitReach> {
 }
 
 /// Which manifest aggregates which — Maven's `<modules>`, Cargo's
-/// `workspace.members` — and the resolution that needs it.
+/// `workspace.members`, Gradle's `include` — and [`Aggregators::resolve`], the
+/// one rule that turns a [`UnitRef`] into a unit of this project.
 struct Aggregators {
     /// manifest → the manifest that lists it as a member.
     parent: BTreeMap<ProjectPath, ProjectPath>,
@@ -410,21 +411,40 @@ impl Aggregators {
         Aggregators { parent, members }
     }
 
-    /// The unit `name` means, seen FROM the manifest that named it: its own
-    /// manifest first — one manifest declaring several units lets them name
-    /// each other, which is how a Cargo target names its library or a
-    /// SwiftPM test target names what it exercises — and then the nearest
-    /// aggregator above it that lists a manifest declaring that name. Walking
-    /// up and not merely across is what makes a nested reactor's dependency
-    /// land in its own reactor: guava's `android/guava-tests` means
-    /// `android/guava`, and the root `guava-tests` means `guava`, from the
-    /// same word.
+    /// THE resolution rule, stated once: the unit a [`UnitRef`] means, seen
+    /// FROM the manifest that wrote it.
+    ///
+    /// A reference that names the manifest declaring it
+    /// ([`UnitRef::declared_in`] — a Cargo `path =`) is answered THERE where
+    /// that manifest declares the name: the ecosystem spelled an identity out,
+    /// and no search widens it to a second unit of the same word.
+    ///
+    /// Everything else resolves by NAME, and the NEAREST AGGREGATOR WINS: the
+    /// naming manifest's own units first — one manifest declaring several
+    /// lets them name each other, which is how a Cargo target names its
+    /// library or a SwiftPM test target names what it exercises — and then,
+    /// walking up the aggregation chain, the first aggregator listing a
+    /// manifest that declares the name. Walking UP and not merely across is
+    /// what puts a nested reactor's dependency in its own reactor: guava's
+    /// `android/guava-tests` means `android/guava` and the root `guava-tests`
+    /// means `guava`, from the same word.
+    ///
+    /// A path that names nothing falls through to the by-name walk rather than
+    /// resolving to silence: the manifest still NAMED a unit, and a tree where
+    /// the path leads nowhere (a rename, a manifest no adapter read) is an
+    /// absence, which degrades toward reach and not toward accusation.
     fn resolve(
         &self,
         from: &ProjectPath,
-        name: &SmolStr,
+        reference: &UnitRef,
         units: &BTreeMap<(&ProjectPath, &SmolStr), u32>,
     ) -> Option<u32> {
+        let name = &reference.name;
+        if let Some(declared_in) = &reference.declared_in
+            && let Some(&u) = units.get(&(declared_in, name))
+        {
+            return Some(u);
+        }
         if let Some(&u) = units.get(&(from, name)) {
             return Some(u);
         }
@@ -642,6 +662,92 @@ mod tests {
             project.grants(main, main, Grant::Namespace),
             "a unit sees itself"
         );
+    }
+
+    #[test]
+    fn a_reference_that_names_its_declaring_manifest_is_answered_there() {
+        // The same two reactors, and a third tree whose manifest names `guava`
+        // with a PATH — cargo's `path = "../android/guava"`, the one spelling
+        // that says WHICH of two units of one name. No aggregator lists it
+        // beside either, so the by-name walk answers nothing; the path answers
+        // exactly one thing, and a second reference by name alone still
+        // answers nothing, which is what proves the path did the work.
+        let by_path = |name: &str, manifest: &str| {
+            let mut unit = unit("consumer", UnitKind::Test, &["consumer"], &[]);
+            unit.depends_on = vec![UnitDep::granting(
+                UnitRef::declared_in(name, ProjectPath::new(manifest)),
+                Grant::Namespace,
+            )];
+            unit
+        };
+        let reactors = || {
+            vec![
+                aggregator("pom.xml", &["guava/pom.xml"]),
+                aggregator("android/pom.xml", &["android/guava/pom.xml"]),
+                read(
+                    "guava/pom.xml",
+                    vec![unit("guava", UnitKind::Library, &["guava"], &[])],
+                ),
+                read(
+                    "android/guava/pom.xml",
+                    vec![unit("guava", UnitKind::Library, &["android/guava"], &[])],
+                ),
+            ]
+        };
+        let mut reads = reactors();
+        reads.push(read(
+            "consumer/pom.xml",
+            vec![by_path("guava", "android/guava/pom.xml")],
+        ));
+        let project = assemble(&reads);
+        let consumer = index_of(&project, "consumer/pom.xml");
+        let android = index_of(&project, "android/guava/pom.xml");
+        let root = index_of(&project, "guava/pom.xml");
+        assert!(
+            project.grants(consumer, android, Grant::Namespace),
+            "the path names the manifest that declares it, and it is answered there"
+        );
+        assert!(
+            !project.grants(consumer, root, Grant::Namespace),
+            "the mirror declares the same word and is not what the path named"
+        );
+
+        let mut by_name = reactors();
+        by_name.push(read(
+            "consumer/pom.xml",
+            vec![on_one_classpath(
+                unit("consumer", UnitKind::Test, &["consumer"], &[]),
+                &["guava"],
+            )],
+        ));
+        let nameless = assemble(&by_name);
+        let consumer = index_of(&nameless, "consumer/pom.xml");
+        assert!(
+            nameless.units[consumer as usize]
+                .compiles_against
+                .is_empty(),
+            "no aggregator puts the consumer beside either `guava`: a name alone \
+             cannot choose, and silence is the honest answer"
+        );
+
+        // A path that names nothing is an ABSENCE, and an absence degrades
+        // toward reach: the by-name walk still runs, and the sibling its own
+        // aggregator lists is the answer.
+        let mut dangling = vec![
+            aggregator("pom.xml", &["core/pom.xml", "consumer/pom.xml"]),
+            read(
+                "core/pom.xml",
+                vec![unit("core", UnitKind::Library, &["core"], &[])],
+            ),
+        ];
+        dangling.push(read(
+            "consumer/pom.xml",
+            vec![by_path("core", "nowhere/pom.xml")],
+        ));
+        let project = assemble(&dangling);
+        let consumer = index_of(&project, "consumer/pom.xml");
+        let core = index_of(&project, "core/pom.xml");
+        assert!(project.grants(consumer, core, Grant::Namespace));
     }
 
     #[test]

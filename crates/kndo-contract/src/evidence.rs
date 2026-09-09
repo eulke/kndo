@@ -658,6 +658,17 @@ pub enum MarkerTarget {
     /// The whole file — an inner attribute (`#![…]`), a module-level pragma.
     File,
     Declaration(DeclarationId),
+    /// The whole UNIT — a marker whose scope is the artifact the build
+    /// compiles, not the file that carries it: a crate root's
+    /// `#![allow(dead_code)]`, which rustc reads as the crate's own statement.
+    ///
+    /// A unit speaks through the file the build ENTERS it through, and only
+    /// the engine knows which file that is — extraction reads one file and has
+    /// never seen the manifest. So an adapter states the claim wherever its
+    /// grammar makes it, and the engine bounds it: on a unit's entry the
+    /// marker reaches every file that unit compiles; on any other file of the
+    /// unit it is that file's own and reaches no further than [`Self::File`].
+    Unit,
 }
 
 /// A marker: an attribute, annotation, decorator or pragma the source attaches

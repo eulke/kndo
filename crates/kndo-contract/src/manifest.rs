@@ -273,6 +273,57 @@ impl<T: Into<SmolStr>> From<T> for UnitRoot {
     }
 }
 
+/// A unit as a manifest NAMES it. A name alone is not an identity: unit
+/// identity is (declaring manifest, name), and parallel trees legitimately
+/// give two units one name — guava declares a module called `guava` twice,
+/// once per reactor, so a sibling naming `guava` names one of two things.
+///
+/// Where the naming manifest had to spell WHERE the unit is declared it says
+/// so, and the ambiguity never arises; where the ecosystem resolves on a name
+/// alone it stays silent, and the engine answers with the nearest aggregator
+/// ([`ManifestEvidence::members`] is what makes that resolvable). Both halves
+/// are one type because a reference that carries a path and one that cannot
+/// would be two spellings of a single fact.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+pub struct UnitRef {
+    /// The unit as the manifest SPELLS it.
+    pub name: SmolStr,
+    /// The manifest that had to declare it, where the ecosystem says so: a
+    /// Cargo `path =` dependency names the directory whose `Cargo.toml`
+    /// declares the crate. `None` is by name, wherever it is — Maven's
+    /// reactor, Gradle's project name, an npm workspace's package name, and
+    /// every external artifact.
+    pub declared_in: Option<ProjectPath>,
+}
+
+impl UnitRef {
+    /// By name, wherever it is — what every ecosystem that resolves on a name
+    /// alone spells.
+    pub fn named(name: impl Into<SmolStr>) -> UnitRef {
+        UnitRef {
+            name: name.into(),
+            declared_in: None,
+        }
+    }
+
+    /// By name, in the manifest that had to declare it — see
+    /// [`UnitRef::declared_in`].
+    pub fn declared_in(name: impl Into<SmolStr>, manifest: ProjectPath) -> UnitRef {
+        UnitRef {
+            name: name.into(),
+            declared_in: Some(manifest),
+        }
+    }
+}
+
+impl<T: Into<SmolStr>> From<T> for UnitRef {
+    /// A bare name is [`UnitRef::named`]: the reading of every manifest that
+    /// spells no path.
+    fn from(name: T) -> UnitRef {
+        UnitRef::named(name)
+    }
+}
+
 /// One unit this unit compiles against, and HOW FAR the dependent may reach
 /// into it — the same ladder every declaration is judged on, read from the
 /// other side. One type rather than a list per rung, because a dependency and
@@ -280,11 +331,10 @@ impl<T: Into<SmolStr>> From<T> for UnitRoot {
 /// allowed to disagree.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct UnitDep {
-    /// The unit as the manifest SPELLS it — the engine resolves it to a unit of
-    /// this project, or to nothing for an external artifact. A name alone is
-    /// deliberate: the manifest declaring a dependency has not read the
-    /// manifest declaring the unit, so it cannot spell a path it never saw.
-    pub unit: SmolStr,
+    /// The unit this one compiles against — see [`UnitRef`]. The engine
+    /// resolves it to a unit of this project, or to nothing for an external
+    /// artifact.
+    pub unit: UnitRef,
     /// What this dependency grants the dependent BEYOND the target's public
     /// API — see [`Grant`].
     pub grants: Grant,
@@ -333,7 +383,7 @@ pub enum Grant {
 
 impl UnitDep {
     /// An ordinary dependency: the target's public API and nothing else.
-    pub fn on(unit: impl Into<SmolStr>) -> UnitDep {
+    pub fn on(unit: impl Into<UnitRef>) -> UnitDep {
         UnitDep {
             unit: unit.into(),
             grants: Grant::Exports,
@@ -341,7 +391,7 @@ impl UnitDep {
     }
 
     /// A dependency granting more — see [`Grant`].
-    pub fn granting(unit: impl Into<SmolStr>, grants: Grant) -> UnitDep {
+    pub fn granting(unit: impl Into<UnitRef>, grants: Grant) -> UnitDep {
         UnitDep {
             unit: unit.into(),
             grants,
@@ -349,7 +399,7 @@ impl UnitDep {
     }
 
     /// Friendship: the dependent may use the target's unit-reaching names.
-    pub fn friend(unit: impl Into<SmolStr>) -> UnitDep {
+    pub fn friend(unit: impl Into<UnitRef>) -> UnitDep {
         UnitDep::granting(unit, Grant::Unit)
     }
 }

@@ -1141,7 +1141,9 @@ impl PluginSpec {
                 builder.add(glob);
             }
         }
-        builder.build().unwrap_or_else(|_| globset::GlobSet::empty())
+        builder
+            .build()
+            .unwrap_or_else(|_| globset::GlobSet::empty())
     }
 
     pub fn claims(&self) -> &[SmolStr] {
