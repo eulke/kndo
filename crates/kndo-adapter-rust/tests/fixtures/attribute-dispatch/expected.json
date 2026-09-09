@@ -2,12 +2,12 @@
   "run": {
     "schema": "kndo-v2/m6",
     "mode": "full",
-    "files_discovered": 4,
-    "files_claimed": 3,
+    "files_discovered": 5,
+    "files_claimed": 4,
     "extensions": [
       {
         "id": "kndo:rust",
-        "files": 3,
+        "files": 4,
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
         "dependency_identity": "crate-root",
@@ -30,7 +30,7 @@
   },
   "health": {
     "implicated": 1,
-    "subjects": 13,
+    "subjects": 15,
     "by_category": [
       {
         "category": "unused",
@@ -42,7 +42,7 @@
         "name": "attrdispatch",
         "manifest": "Cargo.toml",
         "implicated": 1,
-        "subjects": 13
+        "subjects": 15
       }
     ]
   },
@@ -118,6 +118,11 @@
       "path": "src/scratch.rs",
       "level": "info",
       "message": "`allow(dead_code)` at file level exempts every declaration here (2) from the unused judgment"
+    },
+    {
+      "path": "src/scratch/inner.rs",
+      "level": "info",
+      "message": "`allow(dead_code)` at enclosing level exempts every declaration here (1) from the unused judgment"
     }
   ]
 }

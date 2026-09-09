@@ -98,49 +98,54 @@ fn a_file_level_exemption_covers_everything_and_is_said_aloud() {
 }
 
 #[test]
-fn a_unit_level_exemption_reaches_the_unit_and_only_from_its_entry() {
-    // A crate root's `#![allow(dead_code)]`: the same word, in two places. On
-    // the file the build ENTERS the unit through it is the unit's statement
-    // and covers every file the unit compiles; on a module file of that same
-    // unit it is that file's own, and its sibling stays accused. Extraction
-    // wrote the identical marker both times — the manifest is what tells them
-    // apart, and only the engine has read it.
+fn a_unit_level_blanket_reaches_what_the_file_that_wrote_it_mounts() {
+    // The same word in two places, and what tells them apart is the mount
+    // chain, not the manifest: a blanket reaches the file that wrote it and
+    // everything mounted under it. At a crate root — the file nothing mounts —
+    // that is the whole unit, which is what the plan asked for; on a module
+    // file it is that module's subtree, which is what the compiler does. A
+    // sibling of the writer is under neither and stays accused.
     let p = TempProject::new();
     p.file(
         "kmock.pkg",
         "unit app library roots=src entries=src/lib.kmock\n\
          unit side library roots=side entries=side/main.kmock\n",
     )
-    // `app` carries the blanket on its ENTRY: `stale`, a file away, is covered.
+    // `app` carries the blanket where nothing mounts it: `stale`, a file away
+    // down the chain, is covered.
     .file(
         "src/lib.kmock",
         "root-file\nmark-unit allow dead_code\nmount inner ./inner\npub fn api\n",
     )
     .file("src/inner.kmock", "fn stale\n")
-    // `side` carries the identical marker on a file the build does not enter
-    // it through: `draft` beside it is covered, `accused` in its unit-mate is
-    // not.
+    // `side` carries the identical marker on a file the build does not enter it
+    // through. `draft` beside it is covered, and so is `buried` BELOW it —
+    // the case a rule keyed on the unit's entry got wrong. `accused`, mounted
+    // by the entry rather than by the writer, is under neither.
     .file(
         "side/main.kmock",
         "root-file\nmount m ./m\nmount other ./other\npub fn go\n",
     )
-    .file("side/m.kmock", "mark-unit allow dead_code\nfn draft\n")
+    .file(
+        "side/m.kmock",
+        "mark-unit allow dead_code\nmount deep ./deep\nfn draft\n",
+    )
+    .file("side/deep.kmock", "fn buried\n")
     .file("side/other.kmock", "fn accused\n");
     let snap = run(&p);
     assert_eq!(
         reported(&snap, &Category::UNUSED),
         ["side/other.kmock — accused"],
-        "a unit speaks through its entry, and nowhere else"
+        "a blanket reaches down its own chain and nowhere sideways"
     );
-    // And the run says which of the two happened, file by file: a blanket the
-    // unit spoke is reported as the unit's, and the one it did not is reported
-    // for what it is.
+    // And the run says, file by file, whether the blanket over it is its own or
+    // one it inherited — the one thing a reader of a per-file note cannot see.
     let report = snap.report();
     let blankets: Vec<(&str, &str)> = report
         .diagnostics
         .iter()
         .filter_map(|d| {
-            let level = ["unit", "file"]
+            let level = ["enclosing", "file"]
                 .into_iter()
                 .find(|l| d.message.contains(&format!("at {l} level")))?;
             Some((d.path.as_str(), level))
@@ -149,9 +154,10 @@ fn a_unit_level_exemption_reaches_the_unit_and_only_from_its_entry() {
     assert_eq!(
         blankets,
         [
+            ("side/deep.kmock", "enclosing"),
             ("side/m.kmock", "file"),
-            ("src/inner.kmock", "unit"),
-            ("src/lib.kmock", "unit"),
+            ("src/inner.kmock", "enclosing"),
+            ("src/lib.kmock", "file"),
         ]
     );
 }

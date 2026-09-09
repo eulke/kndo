@@ -3309,12 +3309,12 @@
     {
       "path": "crates/index/src/index.rs",
       "level": "info",
-      "message": "`allow(warnings)` at unit level exempts every declaration here (23) from the unused judgment"
+      "message": "`allow(warnings)` at enclosing level exempts every declaration here (23) from the unused judgment"
     },
     {
       "path": "crates/index/src/literal.rs",
       "level": "info",
-      "message": "`allow(warnings)` at unit level exempts every declaration here (71) from the unused judgment"
+      "message": "`allow(warnings)` at enclosing level exempts every declaration here (71) from the unused judgment"
     }
   ]
 }

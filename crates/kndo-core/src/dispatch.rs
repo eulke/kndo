@@ -97,56 +97,22 @@ pub struct Dispatched {
     pub witnesses: Vec<Witnessed>,
 }
 
-/// How a file stands to the unit that compiles it — the one thing that decides
-/// how far a [`MarkerTarget::Unit`] marker reaches. The engine's to state, and
-/// only the engine's: extraction reads one file and has never seen the manifest
-/// that says which file the build enters a unit through. One type rather than a
-/// flag beside a list, because "does this file speak for its unit" and "what
-/// its unit said" are halves of one fact and must not be able to disagree.
-pub enum UnitVoice<'m> {
-    /// The build enters a unit here: what this file claims for the unit IS the
-    /// unit's, and reaches every file the unit compiles.
-    Entry,
-    /// Another file the unit compiles, carrying what its entry claimed. A unit
-    /// claim written HERE is this file's own and reaches no further.
-    Member(&'m [Marker]),
-    /// No unit compiles this file: nothing claims over it, and its own unit
-    /// claim is its own.
-    Unstated,
-}
-
-impl<'m> UnitVoice<'m> {
-    fn carried(&self) -> &'m [Marker] {
-        match self {
-            UnitVoice::Member(markers) => markers,
-            _ => &[],
-        }
-    }
-
-    /// The word a blanket this file wrote is reported with: a unit's statement
-    /// on the file the build enters it through, and the file's own anywhere
-    /// else.
-    fn level_of_own(&self) -> &'static str {
-        match self {
-            UnitVoice::Entry => "unit",
-            _ => "file",
-        }
-    }
-}
-
-/// What one file's rules derive from its own markers and from what its unit
-/// said — see [`UnitVoice`]. A file that IS its unit's entry carries none: its own
-/// markers already hold them, and one marker read twice credits two rules to
-/// one declaration.
+/// What one file's rules derive from its own markers and from the ones it
+/// INHERITS: a [`MarkerTarget::Unit`] marker reaches the file that wrote it and
+/// everything mounted under it, which is how a lint attribute actually behaves
+/// — `#![allow(dead_code)]` at a crate root covers the crate because the root is
+/// the top of the mount chain, and the same attribute in a module file covers
+/// that module's subtree and no more. `inherited` is what the files ABOVE this
+/// one in its chain wrote; this file's own are already in its evidence, and
+/// reading one marker twice would credit two rules to one declaration.
 pub fn apply(
     evidence: &FileEvidence,
-    voice: &UnitVoice<'_>,
+    inherited: &[Marker],
     supertypes: &BTreeMap<SmolStr, Vec<SmolStr>>,
     rules: &Rules,
 ) -> Dispatched {
     let mut out = Dispatched::default();
-    let carried = voice.carried();
-    if rules.is_empty() || (evidence.markers.is_empty() && carried.is_empty()) {
+    if rules.is_empty() || (evidence.markers.is_empty() && inherited.is_empty()) {
         return out;
     }
     let cx = DeclarationCx {
@@ -154,12 +120,13 @@ pub fn apply(
         compiled_into: None,
         supertypes,
     };
+    // Where the blanket was WRITTEN, which is the only thing a reader of the
+    // note cannot see for themselves.
     let markers = evidence
         .markers
         .iter()
-        .map(|m| (m, voice.level_of_own()))
-        // What the entry claimed for the unit arrives here already honored.
-        .chain(carried.iter().map(|m| (m, "unit")));
+        .map(|m| (m, "file"))
+        .chain(inherited.iter().map(|m| (m, "enclosing")));
     for (marker, level) in markers {
         for (id, rule) in rules.iter() {
             if !rule.when.matches(&cx, marker) {
@@ -463,12 +430,7 @@ mod tests {
             Span::new(20, 28),
         );
         s.marker(MarkerTarget::File, "test", vec![], Span::new(0, 0));
-        let d = apply(
-            &s.finish(),
-            &UnitVoice::Unstated,
-            &BTreeMap::new(),
-            &rules(),
-        );
+        let d = apply(&s.finish(), &[], &BTreeMap::new(), &rules());
         assert_eq!(d.roots.len(), 2, "{:?}", d.roots);
         // Two attributes, one root — credited to the EARLIER rule, so the
         // derivation is a function of the rule list and not of the source's
@@ -515,7 +477,7 @@ mod tests {
             Span::new(0, 5),
         );
         let ev = s.finish();
-        let d = apply(&ev, &UnitVoice::Unstated, &BTreeMap::new(), &rules());
+        let d = apply(&ev, &[], &BTreeMap::new(), &rules());
         assert_eq!(exempted(&d), [outer.index() as u32, inner.index() as u32]);
         assert!(!exempted(&d).contains(&(beside.index() as u32)));
         assert!(d.exempt.iter().all(|e| e.by.to_string() == "kndo:mock#2"));
@@ -530,12 +492,7 @@ mod tests {
             args(&["dead_code", "unused_imports"]),
             Span::new(0, 5),
         );
-        let d = apply(
-            &s.finish(),
-            &UnitVoice::Unstated,
-            &BTreeMap::new(),
-            &rules(),
-        );
+        let d = apply(&s.finish(), &[], &BTreeMap::new(), &rules());
         assert_eq!(exempted(&d), [0, 1]);
         assert_eq!(
             d.notes,
@@ -556,15 +513,10 @@ mod tests {
             Span::new(0, 7),
         );
         let ev = s.finish();
-        let d = apply(
-            &ev,
-            &UnitVoice::Unstated,
-            &BTreeMap::new(),
-            &Rules::default(),
-        );
+        let d = apply(&ev, &[], &BTreeMap::new(), &Rules::default());
         assert!(d.roots.is_empty() && d.exempt.is_empty());
         let bare = sink().finish();
-        let d = apply(&bare, &UnitVoice::Unstated, &BTreeMap::new(), &rules());
+        let d = apply(&bare, &[], &BTreeMap::new(), &rules());
         assert!(d.roots.is_empty() && d.exempt.is_empty() && d.notes.is_empty());
     }
 }

@@ -7355,3 +7355,57 @@ working tree holds, not what the repository ships, so a fixture file an ignore
 eats is invisible to every one of them. The check that would catch it is a clean
 checkout, which is what CI is; it has not run since the billing hold (M0). Named
 here, not fixed here.
+
+## 2026-09-09 — `UnitVoice` dissolves: a blanket reaches what the file that wrote it mounts
+
+**The owner's instinct, and what was under it.** `UnitVoice` was landed hours
+earlier to bound a `MarkerTarget::Unit` marker — the entry of a unit speaks for
+the unit, any other file speaks only for itself. The name read as borrowed, and
+it was: the type reached for the MANIFEST's vocabulary (unit, entry) to state a
+fact the language makes through its own module tree.
+
+**Measured against rustc.** A scratch crate — `src/main.rs` mounting
+`src/scratch.rs`, which opens `#![allow(dead_code)]` and mounts
+`src/scratch/inner.rs` holding one unreferenced `fn`:
+
+| | rustc | kndo with `UnitVoice` |
+|---|---|---|
+| `src/scratch.rs`'s own declarations | silenced | silenced |
+| `src/scratch/inner.rs#buried` | **silenced** | **`unused`** |
+
+A lint attribute reaches the module it is written in and everything under it.
+`UnitVoice`'s rule — entry or nothing — has no third state for "a module with
+children", and the fixture that pinned it (`attribute-dispatch`) had a
+`scratch.rs` with no submodule, so nothing failed.
+
+**The plan already had the shape.** Mounts. `mounted_by`, `mount_cap` and
+`tree_root` were resolved before dispatch ran, and the rule that covers both
+cases is one sentence: **a `MarkerTarget::Unit` marker reaches the file that
+wrote it and everything mounted under it.** At a crate root — the file nothing
+mounts — that is the whole unit, which is what the plan asked for. On a module
+file it is that module's subtree, which is what the compiler does. The
+entry/member/unstated trichotomy has nothing left to distinguish, so the type is
+gone and `dispatch::apply` takes the markers a file INHERITS from the files
+above it in its chain. The `enters` computation that fed it goes too, and with
+it `dispatch_files`' `project` parameter.
+
+**The note's word changed with the rule.** It said "at unit level" / "at file
+level", where "unit" meant the entry wrote it. Under the subtree rule the honest
+distinction is whether the blanket is the file's own or one it inherited, so the
+words are `file` and `enclosing`. Two pinned reports move for it —
+`crate-level-allow` (its root now reads `file`, its mounted file `enclosing`)
+and `attribute-dispatch`, whose `src/scratch/inner.rs#buried` is new to the
+fixture and silenced. `src/ffi.rs#truly_dead` stays accused: a sibling of the
+writer is under neither chain, which is the true accusation the earlier
+measurement protected and this rule still protects.
+
+**Numbers.** All nine corpus repositories byte-identical to the run before it —
+Alamofire 1484, Exposed 965, flask 19, gin 109, guava 8235, lodash 20,
+ripgrep 141, vapor 732, vite 712. The rule reproduces every corpus verdict and
+fixes a case no corpus repository happens to contain, which is exactly what a
+fixture is for.
+
+**Knobs.** The evidence is unchanged — rust emits the same marker — and the
+contract is unchanged; what changed is how the assembly reads it, so
+`GRAPH_SEMANTICS_VERSION` moves 39 → 40 and nothing else does. The fingerprint
+stays put.

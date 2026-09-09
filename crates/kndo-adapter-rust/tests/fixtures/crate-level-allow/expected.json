@@ -99,12 +99,12 @@
     {
       "path": "src/inner.rs",
       "level": "info",
-      "message": "`allow(dead_code)` at unit level exempts every declaration here (1) from the unused judgment"
+      "message": "`allow(dead_code)` at enclosing level exempts every declaration here (1) from the unused judgment"
     },
     {
       "path": "src/lib.rs",
       "level": "info",
-      "message": "`allow(dead_code)` at unit level exempts every declaration here (1) from the unused judgment"
+      "message": "`allow(dead_code)` at file level exempts every declaration here (1) from the unused judgment"
     }
   ]
 }
