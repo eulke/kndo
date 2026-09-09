@@ -1,4 +1,4 @@
-grammar = "tree-sitter-kotlin-ng 1.1 (vendored, + the Kotlin 2.1 `when` guard and the 2.0 multi-dollar string)"
+grammar = "tree-sitter-kotlin-ng 1.1 (vendored, + the Kotlin 2.1 `when` guard, the 2.0 multi-dollar string and a bodyless accessor that carries modifiers)"
 names = [
     "identifier",
     "qualified_identifier",

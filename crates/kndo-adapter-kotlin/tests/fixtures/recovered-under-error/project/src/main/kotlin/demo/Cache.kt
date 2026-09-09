@@ -9,22 +9,16 @@ internal class Cache(val name: String) {
 
     internal fun neverCalled() {}
 
-    // `get` as an INFIX function name after a trailing lambda — the shape
-    // `infix-get-grammar-gap` pins, and Exposed's own quick-start spelling.
-    // Kotlin writes accessors with the soft keyword `get`, the pinned grammar
-    // prefers that reading here, and recovery ends its reading of the class:
-    // `invalidate` and `neverCalled` above survive as nodes under the ERROR,
+    // A context parameter (Kotlin 2.2). The pinned grammar does not know the
+    // clause, and recovery ends its reading of the class here: `invalidate` and
+    // `neverCalled` above survive as `function_declaration`s under the ERROR,
     // while everything from this point on is text no node covers.
-    fun label(rows: Rows): String {
-        val label = rows.take { it } get name
-        return label
-    }
+    context(logger: Logger)
+    fun label(): String = name
 
     fun refresh() {
         invalidate()
     }
 }
 
-internal class Rows {
-    fun take(f: (String) -> String): Rows = this
-}
+internal interface Logger

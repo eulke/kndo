@@ -322,21 +322,28 @@ module.exports = grammar({
       $.primary_expression,
     ),
 
-    getter: $ => prec.right(seq(
-      optional($.modifiers),
-      'get',
-      optional(seq(
+    // A BODYLESS accessor carries modifiers, because that is the only thing it
+    // can be saying: `private set` narrows the setter and nothing else. With
+    // the modifiers optional, a bare `get` was a complete getter, and Kotlin's
+    // `get`/`set` are ordinary identifiers everywhere else — so `T.insert { … }
+    // get T.id`, the infix spelling Exposed's own quick start uses, read as a
+    // property with a getter and cost the file its parse from there on.
+    getter: $ => prec.right(choice(
+      seq(
+        optional($.modifiers),
+        'get',
         '(',
         ')',
         optional(seq(':', $.type)),
         $.function_body,
-      )),
+      ),
+      seq($.modifiers, 'get'),
     )),
 
-    setter: $ => prec.right(seq(
-      optional($.modifiers),
-      'set',
-      optional(seq(
+    setter: $ => prec.right(choice(
+      seq(
+        optional($.modifiers),
+        'set',
         '(',
         optional($.parameter_modifiers),
         $.identifier,
@@ -345,7 +352,8 @@ module.exports = grammar({
         ')',
         optional(seq(':', $.type)),
         $.function_body,
-      )),
+      ),
+      seq($.modifiers, 'set'),
     )),
 
     function_body: $ => choice(

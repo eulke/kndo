@@ -3048,3 +3048,54 @@ string. Their test methods are now visible and pair with the jdbc/r2dbc twins;
 the one `duplicate` that leaves is `testJsonContains` re-identified with its
 owner, because the class it belongs to is a node now. The other eight
 repositories are byte-identical.
+
+## A bodyless accessor carries modifiers: half the discarded text, and one named cost
+
+The construct the last section identified as what remained. `get` and `set` are
+Kotlin's accessor soft keywords, and the pinned grammar's `getter` rule made the
+`( )` and the body OPTIONAL — so a bare `get` was already a complete getter.
+`T.insert { … } get T.id`, the infix spelling Exposed's own quick start uses,
+therefore read as a property with a getter, and recovery gave up on the rest of
+the file from there.
+
+The rule now says what a bodyless accessor can actually be saying: `private
+set` — nothing but a visibility. So the bodyless form requires modifiers, and
+`get`/`set` are ordinary identifiers everywhere else, as Kotlin has it. Eight
+regression cases are pinned beside it and all parse: `private set`, `protected
+get` with a `private set`, `get() = …`, `get() { … }`, `set(v) { … }`, an
+annotated `@JvmName("s") private set`, `map.get("k")` and `list[0]`.
+
+Over Exposed's 860 files: **96870 discarded non-space bytes → 48013**, 22731
+declaration nodes → **23049**. The error-file count does not move, and that is
+the honest shape of the result: **the gap is contained, not closed.** Dumping
+`infix-get-grammar-gap`'s tree shows `get Rows` is still an `ERROR` node — what
+changed is that the ERROR is now LOCAL to those two tokens instead of swallowing
+the file after them. `main` is a declaration again, the tree has a root, and the
+run judges where it used to abstain whole-run. The fixture keeps its name and its
+`known_gap`, and now pins the smaller wrong that remains: `Rows.get` is called
+from `main` in the infix spelling and still reads as dead.
+
+**Exposed: 984 → 998.** Most of the movement is re-identification: 23 `duplicate`
+arrive and 15 leave, and the leavers are largely the same findings without an
+owner — `UuidColumnTypeTests.insertReadUuid` and its kin become
+`UuidColumnTypeTests.insertReadUuid` now that the class they belong to is a node.
+Six `internal-only` arrive and two leave for the same reason.
+
+Two `unused` arrive that are false, and the cause is worth naming because it is
+not the one that looks obvious. `StatementInterceptorTests.kt` constructs
+`CommitDataInterceptor` at line 308, and the file reports it dead — twice, once
+per test tree. The name occurs exactly ONCE as a leaf in the parse, at its
+declaration. Asking what covers byte 10680 answers it: a `string_content` leaf
+whose span runs from line 308 into line 320. The parser, having gone wrong
+earlier in the file, mis-lexed a quote and swallowed the region as the inside of
+a string literal. So this text is not UNREAD — `unread_references` correctly sees
+it as covered — it is MISREAD, which no scan of uncovered bytes can reach. It was
+plainly unread before this patch, which is why the same two findings were
+acquitted two sections above and return here.
+
+(A childless `ERROR` node counting as a leaf that read its span was the first
+hypothesis, and it is wrong: making one count as unread changed no repository by
+a single finding, so the change was reverted rather than shipped with a
+measurement it did not produce.)
+
+The other eight repositories are byte-identical.

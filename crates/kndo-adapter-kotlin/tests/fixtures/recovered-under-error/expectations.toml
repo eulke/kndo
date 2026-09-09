@@ -1,10 +1,13 @@
 # recovered-under-error: what a parse error costs, and what the pair of walks buys back.
-# The break here is `get` used as an INFIX function name after a trailing lambda — the shape
-# `infix-get-grammar-gap` pins, and Exposed's own quick-start spelling — in the arrangement
-# Exposed's `Entity.kt` has it: recovery ends the class at the break, so `class Cache` is not
-# a node at all, `invalidate` and `neverCalled` above it survive as `function_declaration`s
-# under the ERROR, and everything after it — `refresh` and the `invalidate()` call inside it
-# — is text NO node covers.
+# The break here is a context parameter (Kotlin 2.2), a clause the pinned grammar does not
+# know, in the arrangement Exposed's `Entity.kt` has it: recovery ends the class at the
+# break, so `class Cache` is not a node at all, `invalidate` and `neverCalled` above it
+# survive as `function_declaration`s under the ERROR, and everything after it — `refresh`
+# and the `invalidate()` call inside it — is text NO node covers.
+#
+# The break has moved twice, and that is the fixture working. It was a `when` guard, then an
+# infix `get`; each time the grammar learned the construct, this file stopped erroring and
+# stopped testing anything, and had to be re-pointed at one the grammar still gets wrong.
 #
 # The two survivors are therefore spelled WITHOUT an owner: the class node they were written
 # in no longer exists, so the item walk surfaces them at file level and the sink names them

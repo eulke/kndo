@@ -7978,3 +7978,53 @@ declaration nodes → 22731. Findings 977 → 984: nine `duplicate` move, all in
 now and pair with their jdbc/r2dbc twins — and one of them merely re-identified
 with an owner, because its class is a node. The other eight repositories are
 byte-identical. `kndo:kotlin` moves 20 → 21; the kotlin fixture floor 6 → 7.
+
+## 2026-09-09 — A bodyless accessor carries modifiers, and the gap is contained rather than closed
+
+The third grammar patch, on the construct the corrected attribution named.
+
+`getter` made the `( )` and the body optional, so a bare `get` was a complete
+getter — and `T.insert { … } get T.id`, the infix spelling Exposed's own quick
+start uses, read as a property with a getter, ending the parse of everything
+after it. A BODYLESS accessor now requires modifiers, because `private set` is
+the only thing a bodyless one can be saying. Eight regression cases pinned and
+green: `private set`, `protected get` beside a `private set`, `get() = …`,
+`get() { … }`, `set(v) { … }`, `@JvmName("s") private set`, `map.get("k")`,
+`list[0]`.
+
+Measured on Exposed: 96870 discarded non-space bytes → 48013, 22731 declaration
+nodes → 23049. The error-file count does not move, and the tree says why: `get
+Rows` is still an `ERROR`. **The gap is contained, not closed** — the ERROR is
+local to two tokens instead of swallowing the file after them, so `main` is a
+declaration again and the run judges instead of abstaining whole-run.
+`infix-get-grammar-gap` keeps its name and its `known_gap`, now pinning the
+smaller wrong: `Rows.get` is called in the infix spelling and still reads as
+dead. I first read the corpus number as a fix and had to correct that from the
+tree; a byte count falling by half is not a construct parsing.
+
+Findings 984 → 998, mostly re-identification (+23/−15 `duplicate`, +6/−2
+`internal-only`) as classes become nodes and their members gain owners. Two
+`unused` arrive that are FALSE, and the cause is specific: the use of
+`CommitDataInterceptor` at `StatementInterceptorTests.kt:308` is covered by a
+`string_content` leaf running to line 320. Having gone wrong earlier in the file,
+the parser mis-lexed a quote and swallowed the region as the inside of a string.
+That text is not unread — `unread_references` correctly sees it as covered — it
+is MISREAD, and no scan of uncovered bytes can reach it. It was plainly unread
+before this patch, which is why the same two findings were acquitted by the
+tolerant walk and return now. A real cost, stated rather than hidden, and its own
+slice to fix.
+
+One hypothesis was tried and rejected on its number: a childless `ERROR` node
+counting as a leaf that READ its span. Making it count as unread changed no
+repository by a single finding, so it was reverted rather than shipped with a
+doc-comment claiming a measurement it did not produce.
+
+`recovered-under-error` moves its break for the second time — from the `when`
+guard to infix `get` to a context parameter (Kotlin 2.2). That is the fixture
+working: each time the grammar learns the construct it was pinned on, the file
+stops erroring and stops testing anything, and must be re-pointed at one the
+grammar still gets wrong.
+
+`kndo:kotlin` moves 21 → 22. Across the three patches: Exposed's 61 error files
+are 45, its 147100 discarded non-space bytes are 48013, and its 21809 declaration
+nodes are 23049.
