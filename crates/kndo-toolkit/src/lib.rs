@@ -587,7 +587,7 @@ pub mod jvm_manifest {
         // nothing and a `//` inside a URL is not a comment.
         let code = blank_gradle_comments(text);
         match file {
-            "settings.gradle" | "settings.gradle.kts" => settings_structure(path, &code, out),
+            "settings.gradle" | "settings.gradle.kts" => settings_structure(path, &code, cx, out),
             "build.gradle" | "build.gradle.kts" => {
                 build_script_structure(path, &code, cx, out);
             }
@@ -602,7 +602,12 @@ pub mod jvm_manifest {
     /// PARENTHESES bound the reading rather than the line — `gradle` resolves
     /// the captured build's `include(\n    "app",\n)` to a project, and a
     /// line scanner does not.
-    fn settings_structure(path: &str, code: &str, out: &mut kndo_contract::manifest::ManifestSink) {
+    fn settings_structure(
+        path: &str,
+        code: &str,
+        cx: &kndo_contract::adapter::ResolveContext<'_>,
+        out: &mut kndo_contract::manifest::ManifestSink,
+    ) {
         let dir = path.rsplit_once('/').map_or("", |(d, _)| d);
         let join = |rel: &str| -> String {
             if dir.is_empty() {
@@ -636,10 +641,15 @@ pub mod jvm_manifest {
                 });
                 // A module's own build script states its units; naming it here
                 // is how two same-named modules in different builds stay apart.
+                // The one spelling the tree HAS: naming both put a script that
+                // does not exist in the aggregation, and the context can say
+                // which of the two is there.
                 for script in ["build.gradle.kts", "build.gradle"] {
-                    out.member(kndo_contract::vocab::ProjectPath::new(join(&format!(
-                        "{rel}/{script}"
-                    ))));
+                    let member =
+                        kndo_contract::vocab::ProjectPath::new(join(&format!("{rel}/{script}")));
+                    if cx.manifest(&member).is_some() {
+                        out.member(member);
+                    }
                 }
             }
         }
@@ -701,9 +711,8 @@ pub mod jvm_manifest {
                 continue;
             }
             for coordinate in gradle_coordinates(&argument, &catalog) {
-                if let Some((group, artifact)) = coordinate.split_once(':') {
-                    declared.push((SmolStr::new(format!("{group}:{artifact}")), scope));
-                    declared.push((SmolStr::new(artifact), scope));
+                if coordinate.contains(':') {
+                    declared.push((SmolStr::new(coordinate), scope));
                 }
             }
         }
@@ -1292,13 +1301,12 @@ pub mod jvm_manifest {
                 .map(text_of)
                 .filter(|s| s.trim() == "test")
                 .map(|_| DependencyScope::Dev);
-            if let Some(group) = child(dependency, "groupId").map(text_of) {
-                let group = group.trim();
-                if !group.is_empty() {
-                    declared.push((SmolStr::new(format!("{group}:{artifact}")), scope));
-                }
-            }
-            declared.push((SmolStr::new(&artifact), scope));
+            let group = child(dependency, "groupId").map(text_of);
+            let group = group.as_deref().map(str::trim).unwrap_or_default();
+            declared.push(match group.is_empty() {
+                true => (SmolStr::new(&artifact), scope),
+                false => (SmolStr::new(format!("{group}:{artifact}")), scope),
+            });
         }
         declared.sort_by(|a, b| {
             (a.0.as_str(), a.1.map(|s| s as u8)).cmp(&(b.0.as_str(), b.1.map(|s| s as u8)))

@@ -1,0 +1,175 @@
+{
+  "run": {
+    "schema": "kndo-v2/m6",
+    "mode": "full",
+    "files_discovered": 9,
+    "files_claimed": 4,
+    "extensions": [
+      {
+        "id": "kndo:java",
+        "files": 4,
+        "import_cycles": "tolerated",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "underivable",
+        "ladder": [
+          {
+            "rung": "owner",
+            "word": "private",
+            "bearer": "member"
+          },
+          {
+            "rung": "namespace",
+            "word": "package-private"
+          },
+          {
+            "rung": "heirs",
+            "word": "protected",
+            "bearer": "member"
+          },
+          {
+            "rung": "exported",
+            "word": "public"
+          }
+        ]
+      }
+    ]
+  },
+  "health": {
+    "implicated": 0,
+    "subjects": 13,
+    "by_category": [],
+    "by_package": [
+      {
+        "name": "app",
+        "manifest": "app/build.gradle.kts",
+        "implicated": 0,
+        "subjects": 6
+      },
+      {
+        "name": "core",
+        "manifest": "core/build.gradle.kts",
+        "implicated": 0,
+        "subjects": 7
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "kndo-532403d473b3",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "core/src/main/java/demo/core/Api.java",
+        "selector": {
+          "owner": "Api",
+          "name": "helper",
+          "signature": "()"
+        },
+        "span": {
+          "start": 116,
+          "end": 167
+        }
+      },
+      "lines": {
+        "start": 8,
+        "end": 10
+      },
+      "message": "declared `package-private`, but every use is within `Api` — `private` would suffice for this method"
+    },
+    {
+      "id": "kndo-0c2974d06bd4",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "app/src/generated/java/demo/app/Generated.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-e624d6c26be5",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "file",
+        "path": "app/src/main/java/demo/app/Main.java"
+      },
+      "message": "production-reachable, but no test reaches this file"
+    }
+  ],
+  "fixed": [],
+  "baselined": 0,
+  "abstained": [
+    {
+      "category": "unused",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 4
+        }
+      }
+    },
+    {
+      "category": "test-only",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 4
+        }
+      }
+    },
+    {
+      "category": "undeclared",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 4
+        }
+      }
+    },
+    {
+      "category": "crap",
+      "reason": "no-coverage-ingested",
+      "scope": "whole-run"
+    }
+  ],
+  "suppressed": {
+    "total": 0,
+    "by_category": []
+  },
+  "plugins": [
+    {
+      "coordinate": "kndo:coverage-lcov",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-cobertura",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-jacoco",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-go",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    }
+  ],
+  "diagnostics": []
+}

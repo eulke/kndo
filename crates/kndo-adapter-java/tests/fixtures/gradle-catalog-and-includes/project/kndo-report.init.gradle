@@ -1,0 +1,29 @@
+// The question `cargo xtask capture` asks Gradle, applied with `--init-script`
+// so the build scripts beside it stay exactly what a real build reads. It
+// prints, from inside a configured build: which projects the settings file
+// produced, what each declares as a dependency and on which configuration, and
+// the source directories each project's java plugin ends up with.
+gradle.projectsEvaluated { g ->
+    def out = [projects: [], dependencies: [], sources: []]
+    g.rootProject.allprojects.each { p ->
+        out.projects << [path: p.path, dir: p.projectDir.absolutePath]
+        p.configurations.each { c ->
+            c.dependencies.each { d ->
+                out.dependencies << [
+                    project: p.path,
+                    configuration: c.name,
+                    kind: d instanceof org.gradle.api.artifacts.ProjectDependency ? 'project' : 'external',
+                    coordinate: "${d.group}:${d.name}:${d.version}".toString(),
+                ]
+            }
+        }
+        p.plugins.withId('java') {
+            p.sourceSets.each { s ->
+                s.java.srcDirs.each { dir ->
+                    out.sources << [project: p.path, sourceSet: s.name, dir: dir.absolutePath]
+                }
+            }
+        }
+    }
+    println groovy.json.JsonOutput.toJson(out)
+}

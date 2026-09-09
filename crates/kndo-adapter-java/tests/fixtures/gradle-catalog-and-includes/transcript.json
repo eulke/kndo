@@ -1,0 +1,74 @@
+{
+  "producer": {
+    "tool": "gradle",
+    "version": "Gradle 8.14.3",
+    "command": "gradle -q --offline --init-script kndo-report.init.gradle help"
+  },
+  "reading": "whole",
+  "says": [
+    {
+      "compiles": {
+        "file": "app/src/generated/java/demo/app/Generated.java",
+        "kind": "production"
+      }
+    },
+    {
+      "compiles": {
+        "file": "app/src/main/java/demo/app/Main.java",
+        "kind": "production"
+      }
+    },
+    {
+      "compiles": {
+        "file": "core/src/main/java/demo/core/Api.java",
+        "kind": "production"
+      }
+    },
+    {
+      "compiles": {
+        "file": "core/src/test/java/demo/core/ApiTest.java",
+        "kind": "test"
+      }
+    },
+    {
+      "declares": {
+        "manifest": "app/build.gradle.kts",
+        "name": "com.google.guava:guava",
+        "scope": "prod"
+      }
+    },
+    {
+      "declares": {
+        "manifest": "app/build.gradle.kts",
+        "name": "junit:junit",
+        "scope": "dev"
+      }
+    },
+    {
+      "declares": {
+        "manifest": "core/build.gradle.kts",
+        "name": "junit:junit",
+        "scope": "dev"
+      }
+    },
+    {
+      "declares": {
+        "manifest": "core/build.gradle.kts",
+        "name": "org.slf4j:slf4j-api",
+        "scope": "prod"
+      }
+    },
+    {
+      "aggregates": {
+        "manifest": "settings.gradle.kts",
+        "member": "app/build.gradle.kts"
+      }
+    },
+    {
+      "aggregates": {
+        "manifest": "settings.gradle.kts",
+        "member": "core/build.gradle.kts"
+      }
+    }
+  ]
+}

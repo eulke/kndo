@@ -7618,3 +7618,66 @@ being asked about. It moved from the runner onto the row that needs it.
 `kndo:go` moves 14 → 15: the same source, different evidence. One pinned report
 moves (`go-work-phantom-dep`, losing the false `undeclared`); gin is
 byte-identical; neither the graph semantics nor the fingerprint moves.
+
+## 2026-09-09 — M8.d gradle: one captured build, one capture mechanism, and three things Gradle found
+
+Gradle was already graded against Gradle — `crates/kndo-toolkit/tests/captured/gradle.json`, a
+`kndoReport` printed from inside Gradle 8.14.3 over four loose script files. What
+it was not was the mechanism the plan grew afterwards: a transcript `cargo xtask
+capture` can retake, replayed by the one gate, with a ledger row for whatever has
+none. Two capture mechanisms for one job is the sticker; this closes it.
+
+**The captured build becomes a fixture.** `gradle-catalog-and-includes` is those
+same four scripts at their real paths, with java sources under them, plus the
+init script the capture asks Gradle with — recorded in the transcript's command,
+so the question is reproducible from the fixture alone. Core plugins only, and
+measured: `gradle -q --offline` configures the whole build with no repository,
+while the same fixture written with `kotlin("jvm")` cannot even be evaluated
+offline and is rate-limited online. What the capture asks for is what the SCRIPTS
+say; resolving artifacts would answer a different question.
+
+**Three disagreements, and Gradle was right about all three.**
+
+1. **A nested manifest's roots were being joined to its own directory.** The
+   testkit's transcript harness read `Unit::roots` as manifest-relative when the
+   engine reads them from the project root, so `app/src/main/java` became
+   `app/app/src/main/java` and app's production files matched no unit at all. It
+   was invisible while every fixture that claimed a compiled file kept its
+   manifest at the tree root — maven's two do — and wrong the moment a Gradle
+   module one directory down named its own source set. A harness that grades the
+   engine's readers must read them as the engine does.
+
+2. **A member that does not exist.** The settings reader named BOTH
+   `build.gradle.kts` and `build.gradle` for every included module, so half of
+   every aggregation pointed at a file the tree does not have. The context can
+   say which one is there, and now does.
+
+3. **The bare artifact was a second spelling nobody reads.** Both JVM halves
+   declared `guava` beside `com.google.guava:guava` so that "a usage judgment
+   abstains on both rather than picking one to be wrong about" — but `kndo:java`
+   and `kndo:kotlin` declare `DependencyIdentity::Underivable`, which abstains
+   structurally: no dependency of theirs is ever judged by name, so the second
+   spelling was never read by anything. Ablated: guava 8235 and Exposed 965, both
+   byte-identical. It is gone, and the reader now says what Gradle and Maven say —
+   the coordinate, and an artifact alone only where the pom gives no group.
+
+**What the transcript grades and what stays a unit test.** The transcript's
+vocabulary covers the modules the settings file includes (`aggregates`), the
+source directories each set ends up with (`compiles`), and the coordinate a
+catalog alias means with the scope its configuration states (`declares`) — and,
+because the reading is WHOLE, that a commented-out include or dependency declares
+nothing: a module the reader invented would be an `aggregates` claim Gradle never
+made. Two of the retired file's five tests said things the claim vocabulary has
+no word for — the two units a module is with their friendship, and a
+`project(":core")` naming a unit rather than an artifact — and those moved to
+`kndo-adapter-java/tests/gradle.rs`, over the fixture. `crates/kndo-toolkit/tests/gradle.rs`
+and all five `captured/gradle*` files are gone.
+
+**A capture states its own environment, and a producer is never blank.** The
+version line is now the first line that says anything: Gradle opens its banner
+with a blank line and a rule, and an empty producer is a broken record.
+
+`kndo:java` moves 22 → 23 and `kndo:kotlin` 17 → 18: the same source, different
+manifest evidence. No pinned report moves, and the JVM corpus is byte-identical;
+the java fixture floor moves 6 → 7. Neither the graph semantics nor the
+fingerprint moves.

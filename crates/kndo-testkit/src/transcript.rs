@@ -411,10 +411,15 @@ fn compiles(
     unit: &kndo_contract::manifest::Unit,
     file: &ProjectPath,
 ) -> Option<usize> {
+    // A root and an exclude are stated as the engine reads them: paths from
+    // the PROJECT root, never from the manifest's directory. Joining them to
+    // the manifest was invisible while every fixture that claimed a compiled
+    // file kept its manifest at the root, and wrong the moment a Gradle module
+    // one directory down named its own source set.
     if unit
         .excludes
         .iter()
-        .any(|e| under(file.as_str(), &joined(manifest, e)).is_some())
+        .any(|e| under(file.as_str(), e).is_some())
     {
         return None;
     }
@@ -427,9 +432,8 @@ fn compiles(
     unit.roots
         .iter()
         .filter_map(|root| {
-            let dir = joined(manifest, &root.path);
-            let rest = under(file.as_str(), &dir)?;
-            (root.recursive || !rest.contains('/')).then_some(dir.len())
+            let rest = under(file.as_str(), &root.path)?;
+            (root.recursive || !rest.contains('/')).then_some(root.path.len())
         })
         .max()
 }

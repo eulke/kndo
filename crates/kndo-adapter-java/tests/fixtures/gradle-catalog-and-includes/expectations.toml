@@ -1,0 +1,26 @@
+# gradle-catalog-and-includes: the build `cargo xtask capture` runs Gradle on,
+# and the one place the reader and Gradle read the same tree. Its three shapes
+# are the ones a line scanner gets wrong — an `include(` across lines, a
+# commented-out include, and a dependency the script names only through the
+# version catalog — plus a source set that adds a directory the layout does not
+# imply. `kndo-report.init.gradle` beside them is the question the capture asks
+# Gradle with; nothing claims it, and Gradle applies it only when named.
+
+[[dead]]
+subject = "app/src/generated/java/demo/app/Generated.java"
+category = "untested"
+why = "under `src/generated/java`, which only the `srcDirs` line puts on the path — it is compiled production code, and no test reaches it"
+
+[[dead]]
+subject = "app/src/main/java/demo/app/Main.java"
+category = "untested"
+why = "app has no test source set at all, so its production files are untested"
+
+[[dead]]
+subject = "core/src/main/java/demo/core/Api.java#Api.helper()"
+category = "internal-only"
+why = "package-private already, and named only from `Api.greet` in its own file"
+
+[[alive]]
+subject = "core/src/main/java/demo/core/Api.java#Api.greet()"
+why = "called from app's Main and from core's own test"

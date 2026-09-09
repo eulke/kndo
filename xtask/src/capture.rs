@@ -119,6 +119,31 @@ const CAPTURES: &[Capture] = &[
         read: go_modfile,
     },
     Capture {
+        fixture: "crates/kndo-adapter-java/tests/fixtures/gradle-catalog-and-includes",
+        tool: "gradle",
+        version: &["gradle", "--version"],
+        commands: &[&[
+            "gradle",
+            "-q",
+            "--offline",
+            "--init-script",
+            "kndo-report.init.gradle",
+            "help",
+        ]],
+        prepare: &[],
+        asks: &[],
+        // Core plugins only, so a configured build needs no repository: the
+        // question is what the SCRIPTS say, and resolving artifacts would
+        // answer a different one.
+        env: &[],
+        // A configured Gradle build is every project the settings file made,
+        // every dependency each one declares and every source directory each
+        // java plugin ended up with — so what it omits, the build does not
+        // have.
+        reading: Reading::Whole,
+        read: gradle_report,
+    },
+    Capture {
         fixture: "crates/kndo-adapter-java/tests/fixtures/coverage-jacoco",
         tool: "maven",
         version: &["mvn", "--version"],
@@ -290,11 +315,13 @@ fn take(capture: &Capture, fixture: &Path) -> Result<ToolTranscript> {
     let asks = serde_json::to_string(capture.asks).map_err(|e| e.to_string())?;
     // A tool that prints a paragraph about itself is asked for its first line:
     // the version, not this machine's java home and locale.
+    // The first line that says anything: a tool may open its version banner
+    // with a blank line or a rule, and an empty producer is a broken record.
     let version = run_in(&project, capture.version, &asks, capture.env)?
         .lines()
-        .next()
+        .map(str::trim)
+        .find(|l| l.chars().any(|c| c.is_alphanumeric()))
         .unwrap_or_default()
-        .trim()
         .to_string();
     for argv in capture.prepare {
         run_in(&project, argv, &asks, capture.env)?;
@@ -496,6 +523,104 @@ fn go_modfile(answer: Answers<'_>) -> Result<Vec<ToolClaim>> {
                     .unwrap_or(false)
                     .then_some(kndo_contract::adapter::DependencyScope::Transitive),
             });
+        }
+    }
+    Ok(out)
+}
+
+/// Gradle's own model of the configured build, printed by the init script the
+/// command names: the projects the settings file produced, the dependencies
+/// each declares on which configuration, and the source directories each
+/// java plugin ended up with.
+fn gradle_report(answer: Answers<'_>) -> Result<Vec<ToolClaim>> {
+    let said = answer
+        .said
+        .first()
+        .and_then(|s| s.lines().find(|l| l.starts_with('{')))
+        .ok_or("gradle printed no report line")?;
+    let report: Value = json(said)?;
+    let dir_of = |path: &str| -> Option<String> {
+        report["projects"]
+            .as_array()?
+            .iter()
+            .find(|p| p["path"].as_str() == Some(path))
+            .and_then(|p| p["dir"].as_str())
+            .and_then(|d| relative(d, answer.here))
+            .map(|d| d.as_str().to_string())
+    };
+    let build_file = |dir: &str| -> Option<ProjectPath> {
+        let under = |name: &str| match dir.is_empty() {
+            true => name.to_string(),
+            false => format!("{dir}/{name}"),
+        };
+        ["build.gradle.kts", "build.gradle"]
+            .into_iter()
+            .map(|n| ProjectPath::new(under(n)))
+            .find(|p| answer.files.contains(p))
+    };
+    let mut out = Vec::new();
+    for project in report["projects"].as_array().into_iter().flatten() {
+        let Some(path) = project["path"].as_str() else {
+            continue;
+        };
+        if path == ":" {
+            continue;
+        }
+        let Some(member) = dir_of(path).as_deref().and_then(build_file) else {
+            continue;
+        };
+        out.push(ToolClaim::Aggregates {
+            manifest: ProjectPath::new("settings.gradle.kts"),
+            member,
+        });
+    }
+    for declared in report["dependencies"].as_array().into_iter().flatten() {
+        if declared["kind"].as_str() != Some("external") {
+            continue;
+        }
+        let (Some(path), Some(configuration), Some(coordinate)) = (
+            declared["project"].as_str(),
+            declared["configuration"].as_str(),
+            declared["coordinate"].as_str(),
+        ) else {
+            continue;
+        };
+        let Some(manifest) = dir_of(path).as_deref().and_then(build_file) else {
+            continue;
+        };
+        let name: String = coordinate.split(':').take(2).collect::<Vec<_>>().join(":");
+        out.push(ToolClaim::Declares {
+            manifest,
+            name: SmolStr::new(name),
+            // Gradle's own word: the `test*` configurations never ship.
+            scope: Some(match configuration.starts_with("test") {
+                true => kndo_contract::adapter::DependencyScope::Dev,
+                false => kndo_contract::adapter::DependencyScope::Prod,
+            }),
+        });
+    }
+    for source in report["sources"].as_array().into_iter().flatten() {
+        let (Some(set), Some(dir)) = (source["sourceSet"].as_str(), source["dir"].as_str()) else {
+            continue;
+        };
+        let Some(dir) = relative(dir, answer.here) else {
+            continue;
+        };
+        let kind = match set {
+            "test" => RootKind::Test,
+            _ => RootKind::Production,
+        };
+        let prefix = match dir.as_str().is_empty() {
+            true => String::new(),
+            false => format!("{}/", dir.as_str()),
+        };
+        for file in answer.files {
+            if file.as_str().starts_with(&prefix) && file.as_str().ends_with(".java") {
+                out.push(ToolClaim::Compiles {
+                    file: file.clone(),
+                    kind,
+                });
+            }
         }
     }
     Ok(out)

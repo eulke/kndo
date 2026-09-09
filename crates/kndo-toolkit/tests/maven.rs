@@ -51,10 +51,14 @@ fn the_declared_dependencies_are_mavens_own() {
         .as_array()
         .expect("dependencies")
         .iter()
-        .flat_map(|d| {
+        .map(|d| {
+            // The coordinate and only the coordinate: a JVM import spells
+            // neither half of it, which is why `kndo:java` declares
+            // `DependencyIdentity::Underivable` and no name here is ever
+            // matched against one.
             let group = d["groupId"].as_str().expect("groupId");
             let artifact = d["artifactId"].as_str().expect("artifactId");
-            [format!("{group}:{artifact}"), artifact.to_string()]
+            format!("{group}:{artifact}")
         })
         .collect();
     want.sort();
@@ -131,7 +135,7 @@ fn a_managed_version_alone_declares_nothing() {
         read_child()
             .dependencies
             .iter()
-            .any(|d| d.name == "managed-only")
+            .any(|d| d.name == "com.managed:managed-only")
     );
 }
 
@@ -170,12 +174,12 @@ fn the_scope_a_dependency_states_is_the_scope_it_gets() {
             .scope
     };
     assert_eq!(
-        scope("junit"),
+        scope("junit:junit"),
         Some(DependencyScope::Dev),
         "<scope>test</scope>"
     );
     assert_eq!(
-        scope("managed-only"),
+        scope("com.managed:managed-only"),
         None,
         "Maven's effective scope is `compile`, which the pom itself never wrote"
     );

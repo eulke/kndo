@@ -100,10 +100,13 @@ fn third_party_packages_stay_unresolved() {
 }
 
 #[test]
-fn declared_dependencies_carry_both_spellings() {
-    // A JVM coordinate is `group:artifact`, and code imports neither — so both
-    // spellings are declared and a usage judgment abstains on both rather than
-    // picking one to be wrong about.
+fn a_declared_dependency_is_its_coordinate_and_nothing_else() {
+    // A JVM coordinate is `group:artifact`, and no import spells it — which is
+    // why `kndo:java` declares `DependencyIdentity::Underivable` and no
+    // dependency here is ever judged by name. The bare artifact was declared
+    // beside the coordinate as a second chance at a match that the identity
+    // already refuses to attempt; Gradle's own model names the coordinate and
+    // only the coordinate, and the transcript grades the reader against it.
     let deps = kndo_testkit::manifest_evidence(
         &JavaAdapter::new(),
         "pom.xml",
@@ -111,8 +114,10 @@ fn declared_dependencies_carry_both_spellings() {
         &[],
     )
     .dependencies;
-    assert!(deps.iter().any(|d| d.name == "com.squareup.okhttp3:okhttp"));
-    assert!(deps.iter().any(|d| d.name == "okhttp"));
+    assert_eq!(
+        deps.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(),
+        ["com.squareup.okhttp3:okhttp"]
+    );
 
     let deps = kndo_testkit::manifest_evidence(
         &JavaAdapter::new(),
@@ -121,6 +126,22 @@ fn declared_dependencies_carry_both_spellings() {
         &[],
     )
     .dependencies;
-    assert!(deps.iter().any(|d| d.name == "io.vertx:vertx-core"));
-    assert!(deps.iter().any(|d| d.name == "vertx-core"));
+    assert_eq!(
+        deps.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(),
+        ["io.vertx:vertx-core"]
+    );
+
+    // A `<dependency>` with no group is the one shape that has no coordinate
+    // to give, and the artifact alone is what the manifest said.
+    let deps = kndo_testkit::manifest_evidence(
+        &JavaAdapter::new(),
+        "pom.xml",
+        "<project><dependencies>\n  <dependency>\n    <artifactId>lonely</artifactId>\n  </dependency>\n</dependencies></project>",
+        &[],
+    )
+    .dependencies;
+    assert_eq!(
+        deps.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(),
+        ["lonely"]
+    );
 }
