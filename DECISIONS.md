@@ -7801,3 +7801,83 @@ Seven adapter versions move — rust 18 → 19, go 16 → 17, java 23 → 24, ko
 18 → 19, python 13 → 14, swift 13 → 14, js-ts 15 → 16 — because it is the same
 source producing different evidence, which is the second of the three knobs.
 Neither the graph semantics nor the contract fingerprint moves.
+
+## 2026-09-09 — A vendored tree states what it is, and a gate reads it back
+
+M8.f's vendoring-with-patches. `vendor/tree-sitter-scss/` was upstream "verbatim but
+for one line of `bindings/rust/build.rs`" — true, and stated only in a README where
+nothing could check it. A second vendored grammar was about to make that prose the
+place two facts live, which is the shape this repo does not keep.
+
+So the sentence becomes data. `cargo xtask vendor --crate C --version V` reads the
+release archive out of the local registry cache and writes
+`vendor/<crate>.provenance.toml`: every file's upstream digest, and for each file the
+tree changes, both digests plus a `why` — and it keeps the upstream copy of every
+changed file under `vendor/upstream/<crate>/`. The diff a reviewer reads is then
+`diff -u` between two files that both exist. No `.patch` is stored, deliberately: a
+stored diff can come to disagree with the tree it describes, and two files cannot. A
+regeneration carries every `why` forward, because the digests are the command's to
+state and the reasons are a person's.
+
+`vendored_trees_are_upstream_plus_patches` reads the record back with no archive and no
+network — CI checks the claim on every run, not only where a crate happens to be
+cached. Proven against its four failure modes on copies: a silently edited `grammar.js`,
+a deleted upstream copy, an emptied `why`, and a file the record does not name each
+fail it, and the tree restores clean. The vendor README now carries only what no
+record can: why kndo vendors a grammar at all.
+
+The 29th gate, and the mechanism the Kotlin bake-off's verdict needs before it can
+land.
+
+## 2026-09-09 — The Kotlin bake-off: the pinned grammar loses 2382 of Exposed's declarations
+
+M8.f's bake-off. Five Kotlin grammars resolve against crates.io; two more exist and are
+disqualified before any measurement, by the runtime this repo pins: fwcd's
+`tree-sitter-kotlin 0.3.8` and `tree-sitter-kotlin-sqry 31.0.0` both require
+`tree-sitter >=0.21, <0.23`.
+
+The first run of this bake-off was wrong, and the way it was wrong is the reason to
+write it down. Linking all five grammars into one binary makes four of them the same
+grammar: `tree-sitter-kotlin-ng`, `-sg`, `-codanna` and `-updated` each export the C
+symbol `tree_sitter_kotlin`, so the linker picks one and four rows report it. Only
+`brokk-tree-sitter-kotlin`, which renames its symbol, was itself. Every row below comes
+from its own binary with one grammar linked.
+
+Over Exposed's 860 `.kt`/`.kts` files, under `tree-sitter 0.25`:
+
+| grammar | files with a parse error | non-space bytes no node covers | `when` guard | infix `get`/`set` | context parameter |
+|---|---|---|---|---|---|
+| tree-sitter-kotlin-ng 1.1.0 (pinned) | 61 | 147100 | no | no | no |
+| brokk-tree-sitter-kotlin 0.4.6 | 17 | 3392 | yes | yes | yes |
+| tree-sitter-kotlin-sg 0.4.1 | 17 | 5892 | yes | yes | no |
+| tree-sitter-kotlin-codanna 0.3.9 | 45 | 5087 | no | yes | no |
+| tree-sitter-kotlin-updated 0.1.0 | 45 | 5087 | no | yes | no |
+
+Parse statistics are not the quantity the engine consumes, so the deciding number is
+declarations. Counting the five kinds both vocabularies spell identically
+(`class_declaration`, `object_declaration`, `function_declaration`,
+`property_declaration`, `type_alias`), the pinned grammar sees 21809 declaration nodes
+in Exposed with 907 of them under an `ERROR`; brokk sees 24602 with none.
+
+That gap could have been tree shape rather than coverage, so it has a control: on the
+799 files BOTH parse without error the two agree — 20387 against 20402, a difference of
+15 across 11 files — which makes the counts comparable. brokk's 17 error files are a
+strict subset of the pinned grammar's 61: there is no file brokk fails and the incumbent
+reads. And in the 44 files only the incumbent fails, it loses **2382 declarations** that
+brokk reads cleanly — a tenth of the repository's structure, for nothing.
+
+Both Kotlin gaps this repo already pins are the same fact: `when-guard-grammar-gap` and
+`infix-get-grammar-gap` are constructs every fwcd-lineage grammar parses and the pinned
+one does not, and bisecting `Entity.kt` puts a `when` guard at the root of the 147100
+bytes it discards.
+
+Provenance says the incumbent is the canonical one — `tree-sitter-grammars/tree-sitter-kotlin`
+— and the four that beat it are forks: `ast-grep/`, `BrokkAi/`, `bartolli/`. Under
+vendoring that weighs less than it looks: what lands is one MIT snapshot carried in this
+repository with its changes recorded, not a dependency on anyone's release cadence, and
+the snapshot to take is the best one measured today.
+
+The verdict: the pinned grammar loses. The swap is its own slice — a grammar change is a
+vocabulary change (`simple_identifier` for `identifier`, a `statements` wrapper, six
+renamed kinds), so it lands with the adapter ported, the ledger regenerated, the six
+fixtures replayed and Exposed re-measured, not as a one-line dependency edit.

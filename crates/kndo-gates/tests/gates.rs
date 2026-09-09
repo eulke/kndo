@@ -2794,3 +2794,170 @@ fn collect_files(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
         }
     }
 }
+
+#[test]
+fn vendored_trees_are_upstream_plus_patches() {
+    use std::collections::BTreeMap;
+    use std::path::PathBuf;
+    // A vendored tree is upstream plus a named change — a sentence that lived in
+    // prose until it became data. `cargo xtask vendor --crate C --version V` writes
+    // the record from the release archive; this reads it back with no archive at
+    // all, so CI checks the claim without a network. What it cannot check is that
+    // the reason is a good one, which is why the reason is a person's to write.
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../vendor");
+    let mut records: Vec<PathBuf> = std::fs::read_dir(&root)
+        .unwrap_or_else(|e| panic!("{}: {e}", root.display()))
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.to_string_lossy().ends_with(".provenance.toml"))
+        .collect();
+    records.sort();
+    assert!(!records.is_empty(), "vendor/ holds no provenance record");
+    let mut failures: Vec<String> = Vec::new();
+    for record in &records {
+        let text = std::fs::read_to_string(record).unwrap();
+        let doc: toml::Value =
+            toml::from_str(&text).unwrap_or_else(|e| panic!("{}: {e}", record.display()));
+        let name = doc["crate"].as_str().unwrap().to_string();
+        let tree = root.join(&name);
+        let upstream_dir = root.join("upstream").join(&name);
+        let changed: BTreeMap<String, (String, String)> = doc
+            .get("changed")
+            .and_then(|c| c.as_array())
+            .map(|rows| {
+                rows.iter()
+                    .map(|r| {
+                        let path = r["path"].as_str().unwrap().to_string();
+                        let why = r["why"].as_str().unwrap_or("").trim().to_string();
+                        if why.is_empty() {
+                            failures
+                                .push(format!("{name}: `{path}` changes upstream with no reason"));
+                        }
+                        (
+                            path,
+                            (
+                                r["upstream"].as_str().unwrap().to_string(),
+                                r["vendored"].as_str().unwrap().to_string(),
+                            ),
+                        )
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let files = doc["files"].as_table().unwrap();
+
+        let mut on_disk: Vec<String> = Vec::new();
+        let mut stack = vec![tree.clone()];
+        while let Some(d) = stack.pop() {
+            for entry in std::fs::read_dir(&d).unwrap() {
+                let p = entry.unwrap().path();
+                if p.is_dir() {
+                    stack.push(p);
+                    continue;
+                }
+                on_disk.push(
+                    p.strip_prefix(&tree)
+                        .unwrap()
+                        .to_string_lossy()
+                        .replace('\\', "/"),
+                );
+            }
+        }
+        on_disk.sort();
+        for path in &on_disk {
+            let Some(recorded) = files.get(path).and_then(|v| v.as_str()) else {
+                failures.push(format!(
+                    "{name}: `{path}` is in the tree but not in the record"
+                ));
+                continue;
+            };
+            let bytes = std::fs::read(tree.join(path)).unwrap();
+            let got = sha256(&bytes);
+            match changed.get(path) {
+                // A file the record says the tree changes: it must hash to the
+                // recorded vendored digest, its upstream copy must be kept beside
+                // it, and that copy must be the release's.
+                Some((up, vendored)) => {
+                    if &got != vendored {
+                        failures.push(format!(
+                            "{name}: `{path}` is neither its recorded change nor upstream — regenerate the record or revert"
+                        ));
+                    }
+                    let beside = upstream_dir.join(path);
+                    match std::fs::read(&beside) {
+                        Ok(b) if &sha256(&b) == up => {}
+                        Ok(_) => failures.push(format!(
+                            "{name}: `{path}`'s kept upstream copy is not the release's"
+                        )),
+                        Err(_) => failures.push(format!(
+                            "{name}: `{path}` is changed but {} is missing — the diff a reviewer reads needs both halves",
+                            beside.display()
+                        )),
+                    }
+                    if recorded != up {
+                        failures.push(format!("{name}: `{path}`'s two upstream digests disagree"));
+                    }
+                }
+                // Every other file is upstream, byte for byte.
+                None if got != recorded => failures.push(format!(
+                    "{name}: `{path}` differs from {} {} and the record does not say so",
+                    name,
+                    doc["version"].as_str().unwrap()
+                )),
+                None => {}
+            }
+        }
+        for path in files.keys() {
+            if !on_disk.contains(path) {
+                failures.push(format!(
+                    "{name}: the record names `{path}`, which the tree does not hold"
+                ));
+            }
+        }
+        // Nothing may sit under `vendor/upstream/<crate>/` but the changed files.
+        let mut kept: Vec<String> = Vec::new();
+        let mut stack = vec![upstream_dir.clone()];
+        while let Some(d) = stack.pop() {
+            let Ok(rd) = std::fs::read_dir(&d) else {
+                continue;
+            };
+            for entry in rd {
+                let p = entry.unwrap().path();
+                if p.is_dir() {
+                    stack.push(p);
+                    continue;
+                }
+                kept.push(
+                    p.strip_prefix(&upstream_dir)
+                        .unwrap()
+                        .to_string_lossy()
+                        .replace('\\', "/"),
+                );
+            }
+        }
+        for path in kept {
+            if !changed.contains_key(&path) {
+                failures.push(format!(
+                    "{name}: vendor/upstream/{name}/{path} is kept for a file the record does not change"
+                ));
+            }
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "vendored trees are not upstream plus their recorded changes:\n  {}",
+        failures.join("\n  ")
+    );
+}
+
+fn sha256(bytes: &[u8]) -> String {
+    // The one digest the provenance record speaks, computed the way `cargo xtask
+    // vendor` computes it.
+    use std::fmt::Write;
+    let mut hasher = <sha2::Sha256 as sha2::Digest>::new();
+    sha2::Digest::update(&mut hasher, bytes);
+    let out = sha2::Digest::finalize(hasher);
+    out.iter().fold(String::new(), |mut s, b| {
+        let _ = write!(s, "{b:02x}");
+        s
+    })
+}

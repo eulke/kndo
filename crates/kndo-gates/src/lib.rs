@@ -67,6 +67,10 @@ pub const GATES: &[Gate] = &[
         invariant: "every adapter's grammar.toml holds: every place the grammar puts a name has a verdict, every absence is argued for, and the run bears the claims out",
     },
     Gate {
+        name: "vendored_trees_are_upstream_plus_patches",
+        invariant: "every vendored crate hashes to its release except the files its provenance record names, each with a reason and its upstream copy",
+    },
+    Gate {
         name: "finding_identity_is_unique",
         invariant: "no two findings in any pinned report share an identity — every subject a file can hold twice carries its position",
     },

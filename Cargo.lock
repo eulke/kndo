@@ -1163,6 +1163,7 @@ dependencies = [
  "kndo-host-wasm",
  "kndo-testkit",
  "serde_json",
+ "sha2",
  "smol_str",
  "toml",
  "tree-sitter",
