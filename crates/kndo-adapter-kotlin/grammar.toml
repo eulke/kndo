@@ -1,0 +1,19 @@
+grammar = "tree-sitter-kotlin-ng 1.1"
+names = [
+    "identifier",
+    "qualified_identifier",
+]
+visited = [
+    "class_declaration.name",
+    "function_declaration.name",
+    "object_declaration.name",
+]
+
+[reasons]
+
+[seat]
+"companion_object.name" = "a companion object declares nothing of its own: its members attribute to the enclosing class, because `Widget.factory()` is how the language addresses them. The companion's own name binds a scope, and nothing in the graph stands for that scope."
+
+[ignored]
+"return_expression.label" = "the label of `return@name`. Kotlin spells a label with the ordinary identifier kind, so the reference walk reads it as a use of whatever shares the spelling — usually the enclosing lambda's function, `return@forEach`. Keeping it is the safe direction: a label names something that is running, so the thing it names is alive by construction."
+"type_alias.type" = "the right-hand side of `typealias A = B` — a use of `B`, which is what makes an alias keep its target alive."

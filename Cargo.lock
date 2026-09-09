@@ -1165,6 +1165,16 @@ dependencies = [
  "serde_json",
  "smol_str",
  "toml",
+ "tree-sitter",
+ "tree-sitter-css",
+ "tree-sitter-go",
+ "tree-sitter-java",
+ "tree-sitter-kotlin-ng",
+ "tree-sitter-python",
+ "tree-sitter-rust",
+ "tree-sitter-scss",
+ "tree-sitter-swift",
+ "tree-sitter-typescript",
 ]
 
 [[package]]
@@ -1218,6 +1228,7 @@ dependencies = [
  "smol_str",
  "tempfile",
  "toml",
+ "tree-sitter",
 ]
 
 [[package]]

@@ -84,7 +84,7 @@ jobs:
           set -eu
           cargo test -p kndo-gates --test gates -- --list > /tmp/gate-list.txt
           missing=""
-          for name in generated_ci_is_current contract_fingerprint_is_intentional dogfood_kndo_reports_nothing_on_itself warm_and_cold_runs_are_byte_identical threads_one_and_many_are_byte_identical incremental_and_full_assembly_are_byte_identical a_shared_cache_is_read_and_warmed_across_trees a_pinned_base_side_reports_the_bytes_of_a_fresh_one adapter_conformance_fixtures_are_byte_identical fixture_expectations_hold captured_transcripts_hold finding_identity_is_unique contract_changes_are_loud dogfood_zero_means_measured report_schema_is_generated_and_valid agent_format_matches_its_committed_golden query_contract_is_generated_and_pinned frontends_import_only_the_facade builtin_plugin_proofs extension_dependency_implication abi_compat_matrix every_relative_markdown_link_resolves a_retired_mechanism_stays_retired; do
+          for name in generated_ci_is_current contract_fingerprint_is_intentional dogfood_kndo_reports_nothing_on_itself warm_and_cold_runs_are_byte_identical threads_one_and_many_are_byte_identical incremental_and_full_assembly_are_byte_identical a_shared_cache_is_read_and_warmed_across_trees a_pinned_base_side_reports_the_bytes_of_a_fresh_one adapter_conformance_fixtures_are_byte_identical fixture_expectations_hold captured_transcripts_hold grammar_ledgers_hold finding_identity_is_unique contract_changes_are_loud dogfood_zero_means_measured report_schema_is_generated_and_valid agent_format_matches_its_committed_golden query_contract_is_generated_and_pinned frontends_import_only_the_facade builtin_plugin_proofs extension_dependency_implication abi_compat_matrix every_relative_markdown_link_resolves a_retired_mechanism_stays_retired; do
             grep -q "$name" /tmp/gate-list.txt || missing="$missing $name"
           done
           [ -z "$missing" ] || { echo "named gates missing from the harness:$missing"; exit 1; }
@@ -110,6 +110,8 @@ jobs:
         run: cargo test -p kndo-gates --test gates -- --exact fixture_expectations_hold
       - name: gate — captured_transcripts_hold (every fixture's transcript.json holds: the build tool that owns the manifest and the adapter that reads it answer the same)
         run: cargo test -p kndo-gates --test gates -- --exact captured_transcripts_hold
+      - name: gate — grammar_ledgers_hold (every adapter's grammar.toml holds: every place the grammar puts a name has a verdict, every absence is argued for, and the run bears the claims out)
+        run: cargo test -p kndo-gates --test gates -- --exact grammar_ledgers_hold
       - name: gate — finding_identity_is_unique (no two findings in any pinned report share an identity — every subject a file can hold twice carries its position)
         run: cargo test -p kndo-gates --test gates -- --exact finding_identity_is_unique
       - name: gate — contract_changes_are_loud (a changed pinned report, fingerprint or graph semantics version is named in DECISIONS.md by the same commits)

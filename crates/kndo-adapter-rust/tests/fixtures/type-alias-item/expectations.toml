@@ -1,0 +1,14 @@
+# type-alias-item: a top-level `type` alias is a declaration, and one nobody
+# names is dead. The `type Item = Live;` inside the impl is the SAME grammar
+# kind read the other way — a member of the impl it completes — so it is not a
+# subject at all and cannot be claimed here either way; the grammar ledger's
+# `type_item.name` row is where that reading is written down.
+
+[[dead]]
+subject = "src/aliases.rs#Forgotten"
+category = "unused"
+why = "a `type_item` at item level declares its name; this one is reached from nowhere"
+
+[[alive]]
+subject = "src/aliases.rs#Live"
+why = "lib.rs names it as the return type of a published function"

@@ -18,3 +18,13 @@ kndo-host-wasm = { path = "../kndo-host-wasm" }
 kndo-testkit = { path = "../kndo-testkit" }
 smol_str = "0.3"
 toml = "0.8"
+tree-sitter = "0.25"
+tree-sitter-rust = "0.24"
+tree-sitter-go = "0.25"
+tree-sitter-java = "0.23"
+tree-sitter-kotlin-ng = "1.1"
+tree-sitter-python = "0.25"
+tree-sitter-swift = "0.7"
+tree-sitter-typescript = "0.23"
+tree-sitter-css = "0.25"
+tree-sitter-scss = "1.0"

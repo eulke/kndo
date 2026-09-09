@@ -311,11 +311,7 @@ fn is_use(n: Node<'_>, parent: Node<'_>) -> bool {
     if parent.kind() == "package_clause" {
         return false;
     }
-    let mut c = parent.walk();
-    if parent
-        .children_by_field_name("name", &mut c)
-        .any(|f| f == n)
-    {
+    if SEATS.binds(n) {
         return false;
     }
     if binds_a_local(parent) {
@@ -323,6 +319,28 @@ fn is_use(n: Node<'_>, parent: Node<'_>) -> bool {
     }
     !in_receiver_type(n)
 }
+
+/// The (kind, field) pairs whose name BINDS. Go spells nearly every binder's
+/// name in a `name` field, and reading the field alone was wrong for exactly
+/// one kind: `qualified_type` puts the TYPE in `name` and the package in
+/// `package`, so `fmt.Stringer` bound `Stringer` and the use never happened —
+/// a type another package exports and this one names could not be reached, and
+/// nothing said so. The seat names the kind as well as the field, which is the
+/// same shape swift and python needed.
+const SEATS: tk::Seats = tk::Seats(&[
+    ("const_spec", "name"),
+    ("field_declaration", "name"),
+    ("function_declaration", "name"),
+    ("import_spec", "name"),
+    ("method_declaration", "name"),
+    ("method_elem", "name"),
+    ("parameter_declaration", "name"),
+    ("type_alias", "name"),
+    ("type_parameter_declaration", "name"),
+    ("type_spec", "name"),
+    ("var_spec", "name"),
+    ("variadic_parameter_declaration", "name"),
+]);
 
 /// Is this name's list the left side of a `:=` — a short declaration, a range
 /// clause or a receive? An `=` in the same place is an assignment, whose names

@@ -89,6 +89,7 @@
 //! ```
 
 pub mod expectations;
+pub mod grammar;
 pub mod transcript;
 
 use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};

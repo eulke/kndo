@@ -1,0 +1,29 @@
+grammar = "tree-sitter-css 0.25 and tree-sitter-scss 1.0"
+names = [
+    "attribute_name",
+    "class_name",
+    "feature_name",
+    "function_name",
+    "id_name",
+    "identifier",
+    "keyframes_name",
+    "namespace_name",
+    "property_name",
+    "tag_name",
+]
+visited = []
+
+[reasons]
+scss_control_value = "a value inside an SCSS control statement. kndo:css reads a stylesheet for what it PULLS IN — `@use`, `@import`, `@forward` and the urls a declaration names — and never for what a variable holds; a name here is one of those values and no analysis asks about it."
+
+[seat]
+"function_statement.name" = "the name of an SCSS `@function`. kndo:css declares no stylesheet-internal subjects: what it reports about a sheet is what the sheet imports and what it points at, so a function's name binds a scope nothing in the graph stands for. `@include`/a call of it is silent on the same grounds, which is why neither side can accuse the other."
+"mixin_statement.name" = "the name of an SCSS `@mixin`, on the same footing as `@function`: declared nowhere, called nowhere, and therefore never half-seen."
+
+[ignored]
+"argument.value" = "@scss_control_value"
+"else_if_clause.condition" = "@scss_control_value"
+"for_statement.from" = "@scss_control_value"
+"for_statement.through" = "@scss_control_value"
+"if_statement.condition" = "@scss_control_value"
+"parameter.default" = "@scss_control_value"

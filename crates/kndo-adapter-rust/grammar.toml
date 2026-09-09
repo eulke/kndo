@@ -1,0 +1,85 @@
+grammar = "tree-sitter-rust 0.24"
+names = [
+    "field_identifier",
+    "identifier",
+    "scoped_identifier",
+    "scoped_type_identifier",
+    "shorthand_field_identifier",
+    "string_content",
+    "type_identifier",
+]
+visited = [
+    "const_item.name",
+    "enum_item.name",
+    "function_item.name",
+    "function_signature_item.name",
+    "impl_item.trait",
+    "mod_item.name",
+    "scoped_identifier.name",
+    "scoped_identifier.path",
+    "scoped_use_list.path",
+    "static_item.name",
+    "struct_item.name",
+    "trait_item.name",
+    "type_item.name",
+    "union_item.name",
+    "use_as_clause.alias",
+    "use_as_clause.path",
+    "use_declaration.argument",
+]
+
+[reasons]
+not_an_item = "a name inside an item's shape rather than an item of its own. kndo:rust declares what `mod`, `fn`, `struct`, `enum`, `union`, `trait`, `type`, `const` and `static` name at item level; a field, a variant, an associated item or a generic parameter travels with the item that holds it and is judged with it."
+operand = "an operand of an expression. Rust's grammar allows any expression here, and a bare name standing in one is read — a local, a constant, a function about to be called. Nothing tells these positions apart, so they share this row rather than repeating it."
+pattern_binds = "a pattern binds a local. Nothing outside the body can name it, so it is never a subject, and the body's mentions are uses of the binding rather than of anything declared."
+type_use = "a type named where a type is written. A path in type position resolves the same way a path in value position does, and the reference walk takes it whole; `scoped_type_identifier` is where a qualified one is split."
+
+[seat]
+"const_parameter.name" = "@not_an_item"
+"enum_variant.name" = "@not_an_item"
+"extern_crate_declaration.name" = "`extern crate foo;` names a dependency, not a subject of this file. A unit's dependencies come from its manifest, where they can be checked against what the crate actually declares."
+"field_declaration.name" = "@not_an_item"
+"field_initializer.field" = "the field a struct literal sets: a member of the type being built, and members are the type's — `@not_an_item` in one word."
+"for_expression.pattern" = "@pattern_binds"
+"let_declaration.pattern" = "@pattern_binds"
+"macro_definition.name" = "a `macro_rules!` name. Rust declares no macro subject: a macro's body is a TEMPLATE, its names resolve at every expansion site rather than where they are written, and `Performed::Elsewhere` is how those uses travel. Declaring the template too would make a macro nobody expands look alive by its own text."
+"parameter.pattern" = "@pattern_binds"
+
+[ignored]
+"abstract_type.trait" = "@type_use"
+"associated_type.name" = "the name of an associated type in a trait or impl. It is a member, so nothing declares it (`@not_an_item` governs the seats); read as a use it names the trait's own item where one exists and nothing where it does not, which keeps rather than accuses."
+"call_expression.function" = "@operand"
+"const_parameter.value" = "@operand"
+"dynamic_type.trait" = "@type_use"
+"extern_crate_declaration.alias" = "the local name `extern crate foo as bar;` binds. Rust seats the crate's own name and not the alias, so the alias is read as a use — of nothing, in every tree where `bar` names no item."
+"field_declaration.type" = "@type_use"
+"field_expression.field" = "the member half of `x.f`. Rust resolves it against a type this file may never name, so the walk keeps it as a use and the pool matches by name — the keep-alive direction."
+"field_expression.value" = "@operand"
+"field_initializer.value" = "@operand"
+"field_pattern.name" = "the field a struct pattern destructures. It names a member of the type being matched, and reading it keeps that member alive — the same direction as `field_expression.field`."
+"function_item.return_type" = "@type_use"
+"function_type.trait" = "@type_use"
+"generic_function.function" = "@operand"
+"generic_type.type" = "@type_use"
+"generic_type_with_turbofish.type" = "@type_use"
+"impl_item.type" = "@type_use"
+"let_declaration.type" = "@type_use"
+"let_declaration.value" = "@operand"
+"macro_invocation.macro" = "the macro being expanded: a use of whatever declares it — another crate's export, or a `macro_rules!` this file does not declare, in which case it resolves to nothing and costs nothing."
+"parameter.type" = "@type_use"
+"range_pattern.left" = "@operand"
+"range_pattern.right" = "@operand"
+"reference_expression.value" = "@operand"
+"reference_type.type" = "@type_use"
+"scoped_type_identifier.name" = "@type_use"
+"scoped_type_identifier.path" = "@type_use"
+"static_item.type" = "@type_use"
+"static_item.value" = "@operand"
+"struct_expression.name" = "the type a struct literal builds — a use of it, and often the only one a constructor-shaped expression gives."
+"struct_pattern.type" = "@type_use"
+"tuple_struct_pattern.type" = "@type_use"
+"type_binding.name" = "the associated type an `Iterator<Item = u8>` bound names. It is a member of the trait beside it and reading it keeps that member alive, on the same footing as `associated_type.name`."
+"type_cast_expression.value" = "@operand"
+"type_item.type" = "@type_use"
+"type_parameter.name" = "a generic parameter's name. Rust does not seat it, so `T` is read as a use — and where a type named `T` exists in scope, a parameter that has nothing to do with it keeps that type alive. The cost is a keep, never an accusation; seating it needs the scope forest to carry per-signature bindings, which no analysis asks for yet."
+"where_predicate.left" = "@type_use"

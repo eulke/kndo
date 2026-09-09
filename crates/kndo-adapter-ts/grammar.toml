@@ -1,0 +1,88 @@
+grammar = "tree-sitter-typescript 0.23 (typescript and tsx)"
+names = [
+    "computed_property_name",
+    "identifier",
+    "jsx_namespace_name",
+    "nested_identifier",
+    "nested_type_identifier",
+    "private_property_identifier",
+    "property_identifier",
+    "shorthand_property_identifier",
+    "statement_identifier",
+    "type_identifier",
+]
+visited = [
+    "abstract_class_declaration.name",
+    "class_declaration.name",
+    "enum_declaration.name",
+    "export_specifier.alias",
+    "export_specifier.name",
+    "function_declaration.name",
+    "generator_function_declaration.name",
+    "import_specifier.alias",
+    "import_specifier.name",
+    "interface_declaration.name",
+    "internal_module.name",
+    "module.name",
+    "type_alias_declaration.name",
+    "variable_declarator.name",
+]
+
+[reasons]
+binds_a_local = "a name that binds a local — a parameter, a catch binding, a destructuring key. Nothing outside the function can name it, so it is never a subject; the walk reads it as a use of whatever shares the spelling, which keeps and never accuses."
+label = "a statement label. TypeScript spells one with a kind of its own, and `break`/`continue` name something that is running by definition, so reading it as a use keeps and never accuses."
+member = "a member's name, and kndo:js-ts declares no members: what a module publishes is its exports, and a property of a class or an interface travels with the type that holds it. The name binds that member and nothing in the graph stands for it."
+operand = "an operand of an expression. The grammar allows any expression here, and a bare name standing in one is read — a binding, an import, a function about to be called. Nothing tells these positions apart, so they share this row."
+type_use = "a type named where a type is written, and a use of it like any other. TypeScript erases these at run time; `Timing::Erased` is where that is said, and it changes which edges a cycle counts, never whether the name was read."
+
+[seat]
+"arrow_function.parameter" = "@binds_a_local"
+"catch_clause.parameter" = "@binds_a_local"
+"enum_assignment.name" = "@member"
+"enum_body.name" = "@member"
+"function_expression.name" = "the optional name of a function expression, which is in scope only inside its own body — a binding no importer can reach."
+"method_definition.name" = "@member"
+"method_signature.name" = "@member"
+"pair.key" = "the key of an object literal. It names a property of the object being built, not anything declared, and the value beside it is where the use is."
+"property_signature.name" = "@member"
+"public_field_definition.name" = "@member"
+"required_parameter.pattern" = "@binds_a_local"
+
+[ignored]
+"abstract_method_signature.name" = "@member"
+"arrow_function.body" = "@operand"
+"assignment_expression.left" = "@operand"
+"augmented_assignment_expression.left" = "@operand"
+"binary_expression.left" = "@operand"
+"binary_expression.right" = "@operand"
+"break_statement.label" = "@label"
+"call_expression.function" = "@operand"
+"class.name" = "the optional name of a class expression. It is in scope only inside its own body, and reading it as a use keeps whatever shares the spelling — the keep-alive direction for a binding nothing can import."
+"continue_statement.label" = "@label"
+"extends_type_clause.type" = "@type_use"
+"for_in_statement.left" = "@operand"
+"for_in_statement.right" = "@operand"
+"function_signature.name" = "the name of an ambient `declare function`. It states that something exists elsewhere rather than declaring it here; read as a use it keeps whatever a `.d.ts` and its implementation share, which is the direction an ambient declaration should push."
+"generator_function.name" = "the optional name of a generator function expression, on the same footing as a class expression's."
+"generic_type.name" = "@type_use"
+"index_signature.name" = "@member"
+"instantiation_expression.function" = "@operand"
+"jsx_closing_element.name" = "the closing half of a JSX element, naming the same component its opening tag does."
+"jsx_opening_element.name" = "the component or tag a JSX element names. A capitalized one is a use of the component in scope — often the only use an imported component gets — and a lowercase one resolves to nothing, which costs nothing."
+"jsx_self_closing_element.name" = "a JSX element written without a body, naming its component exactly as an opening tag does."
+"labeled_statement.label" = "@label"
+"mapped_type_clause.name" = "the binding of a mapped type, `{ [K in Keys]: T }`. Like a generic parameter it names something that exists for the length of one type, and reading it keeps rather than accuses."
+"member_expression.object" = "@operand"
+"member_expression.property" = "the member half of `x.f`, on an expression whose type this file may never name. Pooled matching by name is the keep-alive direction, so the walk reads it."
+"nested_identifier.object" = "@operand"
+"nested_identifier.property" = "@operand"
+"nested_type_identifier.module" = "@type_use"
+"nested_type_identifier.name" = "@type_use"
+"optional_parameter.name" = "@binds_a_local"
+"pair_pattern.key" = "the key half of a destructuring pattern: `const { a: b } = x` reads `a` off `x` and binds `b`. The key is a use of a property, and the walk is right about it."
+"required_parameter.name" = "@binds_a_local"
+"subscript_expression.object" = "@operand"
+"ternary_expression.consequence" = "@operand"
+"type_parameter.name" = "a generic parameter's name. It is not seated, so `T` is read as a use — and where a type named `T` is in scope, a parameter unrelated to it keeps it alive. The cost is a keep, never an accusation."
+"type_predicate.name" = "the parameter a type predicate narrows, `x is Foo`. It names a parameter this signature already binds, so the use resolves to nothing outside and costs nothing."
+"unary_expression.argument" = "@operand"

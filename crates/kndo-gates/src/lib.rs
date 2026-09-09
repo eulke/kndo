@@ -63,6 +63,10 @@ pub const GATES: &[Gate] = &[
         invariant: "every fixture's transcript.json holds: the build tool that owns the manifest and the adapter that reads it answer the same",
     },
     Gate {
+        name: "grammar_ledgers_hold",
+        invariant: "every adapter's grammar.toml holds: every place the grammar puts a name has a verdict, every absence is argued for, and the run bears the claims out",
+    },
+    Gate {
         name: "finding_identity_is_unique",
         invariant: "no two findings in any pinned report share an identity — every subject a file can hold twice carries its position",
     },

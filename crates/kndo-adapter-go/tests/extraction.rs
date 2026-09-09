@@ -398,3 +398,28 @@ fn a_test_file_belongs_to_its_package_in_test_builds_alone() {
     let e = extract("pkg/server.go", "package pkg\n\nfunc Run() {}\n");
     assert_eq!(e.attachment, Attachment::Regular);
 }
+
+#[test]
+fn a_qualified_type_names_the_type_as_well_as_the_package() {
+    // `qualified_type` puts the TYPE in its `name` field and the package in
+    // `package`. Reading `name` as a binder — which every other kind's `name`
+    // field is — bound `Stringer` and left the use unsaid: the one place a Go
+    // file names a type another package exports said nothing about it. The
+    // seat names the kind beside the field, so only the twelve kinds that
+    // really bind do.
+    let ev = extract(
+        "pkg/holder.go",
+        "package pkg\n\nimport \"fmt\"\n\ntype Holder struct{ s fmt.Stringer }\n",
+    );
+    let refs: Vec<&str> = ev.references.iter().map(|r| r.name.as_str()).collect();
+    assert!(refs.contains(&"fmt"), "the package is named: {refs:?}");
+    assert!(refs.contains(&"Stringer"), "so is the type: {refs:?}");
+    // And the twelve that do bind still do: a declared name is not a use of
+    // itself.
+    let ev = extract("pkg/holder.go", "package pkg\n\ntype Holder struct{}\n");
+    assert!(
+        ev.references.is_empty(),
+        "a type spec's own name binds: {:?}",
+        ev.references
+    );
+}

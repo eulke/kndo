@@ -1,0 +1,47 @@
+grammar = "tree-sitter-go 0.25"
+names = [
+    "blank_identifier",
+    "field_identifier",
+    "identifier",
+    "label_name",
+    "package_identifier",
+    "type_identifier",
+]
+visited = [
+    "const_spec.name",
+    "function_declaration.name",
+    "import_spec.name",
+    "type_alias.name",
+    "type_spec.name",
+    "var_spec.name",
+]
+
+[reasons]
+member_of_a_type = "a member of a type, and kndo:go declares no members: a struct field and an interface method are part of their type's shape, judged with it and never apart from it. The name binds that member; nothing in the graph stands for it, so nothing reads the name either."
+operand = "an operand of an expression. Go's grammar allows any expression here, and a bare name standing in one is read — a variable, a constant, a function about to be called. Nothing distinguishes these positions from one another, so they share this row rather than repeating it."
+type_use = "a type named where a type is written. Go has one namespace per package and no shadowing of a type by a value, so the name here is read exactly as any other use is, and the reference walk takes it with no per-position rule."
+
+[seat]
+"field_declaration.name" = "@member_of_a_type"
+"labeled_statement.label" = "a label binds a name in a namespace of its own — `break L` can only ever mean the label — and the grammar gives it a kind of its own, `label_name`, which the reference walk does not match. Nothing here can collide with a declaration, so nothing is reported either way."
+"method_declaration.name" = "a method's name. Go requires a method's receiver base type to be declared in the same package, so a method travels with its type and is judged with it; kndo:go declares the type and never the method, and the name binds nothing the graph holds."
+"method_elem.name" = "@member_of_a_type"
+"parameter_declaration.name" = "a parameter binds a local. Nothing outside the function body can name it, so it is never a subject and the body's mention of it is a use of the binding, not of anything declared."
+"type_parameter_declaration.name" = "a type parameter binds a name for the length of one signature. `T` inside that signature is the parameter, never a package-level type that happens to share the spelling, so declaring the binding is what keeps the two apart."
+"variadic_parameter_declaration.name" = "the same local a `parameter_declaration` binds, spelled with `...`."
+
+[ignored]
+"binary_expression.left" = "@operand"
+"binary_expression.right" = "@operand"
+"call_expression.function" = "@operand"
+"composite_literal.type" = "@type_use"
+"field_declaration.type" = "@type_use"
+"function_declaration.result" = "@type_use"
+"generic_type.type" = "@type_use"
+"parameter_declaration.type" = "@type_use"
+"qualified_type.name" = "the TYPE of `pkg.Type`, which the grammar puts in `name` and the package in `package`. Reading `name` as a binder — as it is for the twelve kinds that really bind — threw this away, so the one place a file names a type another package exports said nothing. It is a use like any other, and `Seats` names the kind beside the field so only the binders bind."
+"qualified_type.package" = "the package half of `pkg.Type`, and a use of the import that bound it: an import Go compiles only because something names it."
+"selector_expression.field" = "the member half of `x.F`, and the only mention a package's exported function or field gets from outside. A receiver's own declaration is somewhere else entirely, so the name here is read, never bound."
+"selector_expression.operand" = "@operand"
+"unary_expression.operand" = "@operand"
+"var_spec.type" = "@type_use"

@@ -1,0 +1,99 @@
+grammar = "tree-sitter-swift 0.7"
+names = [
+    "identifier",
+    "simple_identifier",
+    "type_identifier",
+]
+visited = [
+    "class_declaration.name",
+    "enum_entry.name",
+    "function_declaration.name",
+    "pattern.bound_identifier",
+    "protocol_declaration.name",
+    "protocol_function_declaration.name",
+    "typealias_declaration.name",
+]
+
+[reasons]
+binds_a_local = "a name that binds a local — a closure parameter, a capture, a condition binding. Nothing outside the body can name it, so it is never a subject; swift does not seat it, and the walk reads it as a use of whatever shares the spelling, which keeps and never accuses."
+constraint_type = "the type a generic constraint names in a `where` clause. It is a use of that type, and the reference walk takes it whole."
+member = "a member's name, and one swift addresses through a value rather than through the file that declares it. Read as a use it pools by name against every declaration that spells it, which is the keep-alive direction for a language whose call sites rarely say which type they mean."
+operand = "an operand of an expression. tree-sitter-swift declares no expression supertype, so every one of these fields lists `simple_identifier` outright among some ninety alternatives, and each is a place any expression may stand. A bare name standing in one is read — a local, a property, a function about to be called — and there is nothing per-position to decide. Sixty-odd rows share this reason, and the day the grammar is vendored with an `_expression` supertype (M8.f's charter) the inventory collapses to the slots that really reserve a name."
+
+[seat]
+"parameter.external_name" = "the ARGUMENT LABEL a caller writes. It is part of the function's own selector — `(_:with:)` — which travels on the declaration's signature, not as a name of its own."
+"parameter.name" = "a parameter binds a local. Nothing outside the body can name it, so it is never a subject, and the body's mentions are uses of the binding."
+
+[ignored]
+"additive_expression.lhs" = "@operand"
+"additive_expression.rhs" = "@operand"
+"array_literal.element" = "@operand"
+"as_expression.expr" = "@operand"
+"assignment.result" = "@operand"
+"associatedtype_declaration.name" = "the name of a protocol's associated type. It is a member of the protocol, so nothing declares it; read as a use it names whatever concrete type shares the spelling, which keeps and never accuses."
+"await_expression.expr" = "@operand"
+"bitwise_operation.lhs" = "@operand"
+"bitwise_operation.rhs" = "@operand"
+"call_suffix.name" = "@member"
+"capture_list_item.name" = "@binds_a_local"
+"capture_list_item.value" = "@binds_a_local"
+"check_expression.target" = "@operand"
+"comparison_expression.lhs" = "@operand"
+"comparison_expression.rhs" = "@operand"
+"conjunction_expression.lhs" = "@operand"
+"conjunction_expression.rhs" = "@operand"
+"constructor_suffix.name" = "@member"
+"consume_expression.expr" = "@operand"
+"control_transfer_statement.result" = "@operand"
+"dictionary_literal.key" = "@operand"
+"dictionary_literal.value" = "@operand"
+"disjunction_expression.lhs" = "@operand"
+"disjunction_expression.rhs" = "@operand"
+"enum_entry.raw_value" = "@operand"
+"equality_constraint.constrained_type" = "@constraint_type"
+"equality_expression.lhs" = "@operand"
+"equality_expression.rhs" = "@operand"
+"for_statement.collection" = "@operand"
+"function_declaration.default_value" = "@operand"
+"guard_statement.bound_identifier" = "@binds_a_local"
+"guard_statement.condition" = "@operand"
+"if_statement.bound_identifier" = "@binds_a_local"
+"if_statement.condition" = "@operand"
+"infix_expression.lhs" = "@operand"
+"infix_expression.rhs" = "@operand"
+"inheritance_constraint.constrained_type" = "@constraint_type"
+"init_declaration.default_value" = "@operand"
+"interpolated_expression.value" = "@operand"
+"lambda_parameter.external_name" = "@binds_a_local"
+"lambda_parameter.name" = "@binds_a_local"
+"macro_declaration.default_value" = "@operand"
+"macro_definition.body" = "the body of a macro definition, which names the macro implementation the compiler expands to. It is a use of that implementation wherever the module declares one."
+"multiplicative_expression.lhs" = "@operand"
+"multiplicative_expression.rhs" = "@operand"
+"navigation_expression.target" = "@operand"
+"navigation_suffix.suffix" = "@member"
+"nil_coalescing_expression.if_nil" = "@operand"
+"nil_coalescing_expression.value" = "@operand"
+"open_end_range_expression.start" = "@operand"
+"open_start_range_expression.end" = "@operand"
+"postfix_expression.target" = "@operand"
+"prefix_expression.target" = "@operand"
+"property_declaration.value" = "@operand"
+"protocol_function_declaration.default_value" = "@operand"
+"range_expression.end" = "@operand"
+"range_expression.start" = "@operand"
+"repeat_while_statement.bound_identifier" = "@binds_a_local"
+"repeat_while_statement.condition" = "@operand"
+"subscript_declaration.default_value" = "@operand"
+"suppressed_constraint.suppressed" = "@constraint_type"
+"switch_statement.expr" = "@operand"
+"ternary_expression.condition" = "@operand"
+"ternary_expression.if_false" = "@operand"
+"ternary_expression.if_true" = "@operand"
+"try_expression.expr" = "@operand"
+"tuple_expression.name" = "@member"
+"tuple_expression.value" = "@operand"
+"tuple_type_item.name" = "the label of a tuple element. It names a position inside a type rather than anything declared, and reading it costs a use that resolves to nothing."
+"value_argument.value" = "@operand"
+"while_statement.bound_identifier" = "@binds_a_local"
+"while_statement.condition" = "@operand"

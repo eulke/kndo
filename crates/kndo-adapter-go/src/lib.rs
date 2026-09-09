@@ -78,7 +78,7 @@ impl GoAdapter {
             // rules read the compilation it lands in.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:go",
-                13,
+                14,
                 &["go"],
                 &["**/go.mod"],
                 // The compiler forbids import cycles: one could only be a

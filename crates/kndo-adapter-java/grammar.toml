@@ -1,0 +1,65 @@
+grammar = "tree-sitter-java 0.23"
+names = [
+    "identifier",
+    "scoped_identifier",
+    "scoped_type_identifier",
+    "type_identifier",
+]
+visited = [
+    "annotation.name",
+    "annotation_type_declaration.name",
+    "annotation_type_element_declaration.name",
+    "class_declaration.name",
+    "constructor_declaration.name",
+    "enum_declaration.name",
+    "formal_parameter.type",
+    "interface_declaration.name",
+    "local_variable_declaration.type",
+    "marker_annotation.name",
+    "method_declaration.name",
+    "method_invocation.name",
+    "object_creation_expression.type",
+    "record_declaration.name",
+    "scoped_identifier.name",
+    "scoped_identifier.scope",
+    "variable_declarator.name",
+]
+
+[reasons]
+binds_a_local = "a name that binds a local. Nothing outside the block can name it, so it is never a subject; kndo:java leaves it in the reference walk, which reads it as a use of whatever shares the spelling — a keep, never an accusation."
+module_info = "a name inside a `module-info.java` directive. kndo:java reads a unit and its dependencies from the BUILD — a pom or a Gradle script, checked against a real tool's reading of it — and never from the JPMS descriptor, whose names are read here as ordinary uses."
+operand = "an operand of an expression. Java's grammar allows any expression here, and a bare name standing in one is read — a field, a local, a class about to be qualified. Nothing tells these positions apart, so they share this row."
+type_use = "a type named where a type is written, and a use of it like any other. A qualified one is split by `scoped_type_identifier`, where the JLS case convention separates package spelling from the outer class."
+
+[seat]
+"catch_formal_parameter.name" = "@binds_a_local"
+"enum_constant.name" = "an enum constant. `values()`, `valueOf(..)` and `EnumSet.allOf(..)` reach every constant with no line naming it, so no file can prove one dead; kndo:java declares none of them and a constant's liveness is its enum's."
+"formal_parameter.name" = "@binds_a_local"
+
+[ignored]
+"annotation_type_element_declaration.type" = "@type_use"
+"array_type.element" = "@type_use"
+"assignment_expression.left" = "@operand"
+"assignment_expression.right" = "@operand"
+"binary_expression.left" = "@operand"
+"binary_expression.right" = "@operand"
+"cast_expression.value" = "@operand"
+"compact_constructor_declaration.name" = "a record's compact constructor repeats the record's own name. Read as a use it names the record — alive by construction wherever its constructor is written — so nothing is gained by seating it and nothing lost by not."
+"element_value_pair.key" = "the element an annotation sets: `@Retention(value = RUNTIME)` names `Retention`'s own method. Reading it keeps that method alive, which is right — an element nobody writes is what `unused` should be free to accuse, and one somebody writes must not be."
+"enhanced_for_statement.name" = "@binds_a_local"
+"exports_module_directive.modules" = "@module_info"
+"exports_module_directive.package" = "@module_info"
+"field_access.field" = "the member half of `x.f`, on an arbitrary expression whose type this file may never name. Pooled matching by name is the keep-alive direction, so the walk reads it."
+"field_access.object" = "@operand"
+"instanceof_expression.name" = "@binds_a_local"
+"lambda_expression.parameters" = "@binds_a_local"
+"method_declaration.type" = "@type_use"
+"method_invocation.object" = "@operand"
+"module_declaration.name" = "@module_info"
+"opens_module_directive.modules" = "@module_info"
+"opens_module_directive.package" = "@module_info"
+"provides_module_directive.provided" = "@module_info"
+"provides_module_directive.provider" = "@module_info"
+"requires_module_directive.module" = "@module_info"
+"resource.name" = "@binds_a_local"
+"uses_module_directive.type" = "@module_info"

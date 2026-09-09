@@ -7479,3 +7479,82 @@ defaults to `Here`. `GRAPH_SEMANTICS_VERSION` does not move — the assembly is
 unchanged, the evidence entering it is not. Two pinned reports move
 (`macro-template-names`, `macro-use-mod`), both losing the finding their
 `known_gap` predicted.
+
+## 2026-09-09 — the grammar states where names go, and every place has a verdict
+
+The seventh and last item of the approved extension, and the one M8.f names
+`P9`. An adapter reads a tree the grammar shapes; where the two disagree the
+disagreement is SILENT — a name the grammar puts somewhere the extractor never
+looks enters no stream, and the run reports one finding fewer with nothing
+anywhere saying so. Six of the nine-adapter audit's findings were exactly that
+and none of them had a gate.
+
+**The unit is a name position, not a kind.** The plan's line was "a test walks
+`node-types.json` and demands an entry for each kind": measured, that is 1,146
+named kinds across the eight grammars, of which 741 no adapter mentions —
+`block`, `binary_expression`, `argument_list`, kinds with no name to lose. A
+reason written for each would be 741 sentences nobody could mean. What the
+grammar actually states, and what an adapter can silently disagree with, is a
+FIELD whose declared types include a name kind: the grammar saying "a name goes
+here". That is 262 positions, and the run adds the ones a grammar hides behind
+a supertype (`_type`, `_expression`) but a fixture writes anyway — 318 in all,
+every one a place a name stands and a decision an adapter made.
+
+**Three verdicts, and only one explains itself.** `Visited` is confirmed
+positively — evidence came out of the position carrying the name — so it needs
+no prose. `Seat` (the name binds and states nothing) and `Ignored` (the name
+reaches the reference walk as a use) are absences of evidence, and an absence
+is what every silence the audit found looked like from outside; each carries
+its argument, and a reason two positions share is written once under
+`[reasons]` and named `@key`, per this file's own promote-on-the-second-copy
+rule — which the gate enforces from both sides, since a reason only one
+position names belongs in that row.
+
+**Three readers, not two.** `expectations.toml` says what the RUN must report,
+`transcript.json` what the BUILD TOOL says a manifest means, and now
+`grammar.toml` what the GRAMMAR says about a file's shape. The gate holds the
+grammars itself — `kndo-gates` dev-depends on all nine — rather than asking the
+adapter which one it reads: a second reader is only a second reader while it
+reads for itself. It then runs each adapter over its own fixtures and grades
+every claim the fixtures reach: `Visited` must produce evidence, `Seat` must
+never appear in the reference stream, `Ignored` must appear in it. 156 of the
+318 positions are graded that way today; the rest are listed, argued for, and
+ungraded until a fixture writes one. `names` is authored per grammar and
+checked from both ends — every entry must be a kind the grammar has, and every
+kind a reference was actually read from must be listed.
+
+**`kndo:html` has no grammar and says so.** It reads a stylesheet-and-tag
+scanner, not a tree-sitter grammar with a node inventory, so it carries a row
+in `ADAPTERS_WITH_NO_GRAMMAR` instead of a ledger — the same shape as swift's
+row in the no-transcript ledger, and the gate fails the day the row outlives
+its reason or an adapter has neither.
+
+**What the first run found, and the number is zero.** `qualified_type.name` in
+Go: the adapter seated the `name` field of EVERY kind, and `qualified_type`
+puts the TYPE there and the package in `package`, so `fmt.Stringer` bound
+`Stringer` and the use was never said — the one place a Go file names a type
+another package exports was silent. It is the same shape as audit findings S5
+and P3, and the same fix: `tk::Seats` names the kind beside the field, so only
+the twelve kinds that really bind do. Measured: gin is byte-identical, and no
+fixture shape moves either, because a Go namespace import keeps its target
+package's whole surface alive and no analysis reads the reference yet. It ships
+anyway and not as a findings claim: the ledger cannot record `Seat` — "this
+name binds" — for a position that binds nothing, and the row would be a lie
+where the fix is a sentence. `kndo:go` moves 13 → 14; an extraction test pins
+both halves. Neither the graph semantics nor the fingerprint moves.
+
+**A fixture the ledger asked for.** `type_item.name` is `Visited` — rust
+declares a top-level `type` alias — but the fixtures only ever wrote the
+associated form inside an `impl`, where the same kind is a MEMBER and declares
+nothing, so the run could not bear the claim out. `type-alias-item` writes both
+and pins the dead alias; the rust floor moves 26 → 27. That is the ledger
+working the way it is meant to: a claim the corpus cannot reach is a fixture
+that is missing.
+
+**Swift's 72 ignored rows are an argument for a grammar patch.**
+tree-sitter-swift declares no expression supertype, so every operand slot lists
+`simple_identifier` outright among some ninety alternatives and each is a name
+position by the same rule that makes `qualified_type.name` one. They share one
+reason, and the count is the measurement M8.f's vendoring row can be judged
+against: patch the grammar with an `_expression` supertype and swift's
+inventory collapses to the slots that really reserve a name.

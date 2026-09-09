@@ -1,0 +1,40 @@
+grammar = "tree-sitter-python 0.25"
+names = [
+    "dotted_name",
+    "identifier",
+    "string_content",
+]
+visited = [
+    "aliased_import.alias",
+    "aliased_import.name",
+    "attribute.attribute",
+    "class_definition.name",
+    "function_definition.name",
+    "import_from_statement.module_name",
+    "import_from_statement.name",
+    "import_statement.name",
+]
+
+[reasons]
+operand = "an operand of an expression. Python's grammar allows any expression here, and a bare name standing in one is read at run time — a module member, a builtin, a local. There is nothing per-position to decide, so these rows share one reason instead of repeating it. An assignment TARGET is in this family on purpose: rebinding a name uses the binding it overwrites, and this language's evidence errs keep-alive."
+
+[seat]
+"default_parameter.name" = "the parameter half of `a=D`. Naming the whole kind was the bug audit finding P3 records — it threw the DEFAULT away with the binding — so the seat names the field, and `D` beside it stays a use."
+"keyword_argument.name" = "the parameter a call names at a call site: `f(timeout=1)` names `f`'s parameter, which nothing declares as a subject, and the value beside it is a use."
+"typed_default_parameter.name" = "the parameter half of `a: int = D`, seated by field for the same reason as `default_parameter`."
+
+[ignored]
+"assignment.left" = "@operand"
+"attribute.object" = "@operand"
+"binary_operator.left" = "@operand"
+"binary_operator.right" = "@operand"
+"call.function" = "@operand"
+"default_parameter.value" = "@operand"
+"dict_pattern.key" = "a key inside a `match` pattern. A bare name here is read, not bound — the binding in a mapping pattern is the VALUE beside the key — so the walk is right."
+"exec_statement.code" = "the argument of Python 2's `exec`. The grammar still parses it; a name there is read at run time exactly as the walk reads it now."
+"future_import_statement.name" = "the feature named by `from __future__ import annotations`. It is a compiler directive rather than a module member, so the use resolves to nothing and costs nothing — and reading it as a binder would be worse, since `annotations` is also an ordinary name."
+"if_statement.condition" = "@operand"
+"keyword_argument.value" = "@operand"
+"named_expression.name" = "the walrus `(x := 1)` binds a local, and kndo:python leaves it in the reference stream under the rule that governs assignment targets: rebinding a name is a use of the binding it overwrites, and this language's evidence errs keep-alive."
+"pair.value" = "@operand"
+"typed_default_parameter.value" = "@operand"

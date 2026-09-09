@@ -407,7 +407,7 @@ fn fixture_corpora() -> Vec<(std::path::PathBuf, usize)> {
     let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
     vec![
         (manifest.join("../kndo-adapter-ts/tests/fixtures"), 25),
-        (manifest.join("../kndo-adapter-rust/tests/fixtures"), 26),
+        (manifest.join("../kndo-adapter-rust/tests/fixtures"), 27),
         (manifest.join("../kndo-adapter-go/tests/fixtures"), 8),
         (manifest.join("../kndo-adapter-java/tests/fixtures"), 6),
         (manifest.join("../kndo-adapter-kotlin/tests/fixtures"), 5),
@@ -2544,4 +2544,253 @@ fn every_dispatch_rule_fires_in_some_fixture() {
         "RULES_WITHOUT_A_FIXTURE names rules no extension declares — a rule \
          moved or left, and the ledger's indices are stale: {gone:?}"
     );
+}
+
+/// An adapter with no grammar to inventory, and why. `kndo:html` parses with a
+/// hand-written scanner over tags rather than a tree-sitter grammar, so there
+/// is no `node-types.json` stating where names go — nothing to grade against,
+/// and the day it gets one this row goes.
+const ADAPTERS_WITH_NO_GRAMMAR: &[(&str, &str)] = &[(
+    "kndo:html",
+    "html is read by a tag scanner, not by a grammar that publishes a node \
+     inventory — there is no second reader of the file's shape to grade against",
+)];
+
+/// One adapter's grammars, held by the GATE: the language it parses a path
+/// with, and the inventories those languages publish. Held here and not asked
+/// of the adapter, because a second reader is only a second reader while it
+/// reads for itself.
+struct Grammars {
+    /// The crate directory under `crates/`, which is where its ledger lives.
+    krate: &'static str,
+    language: fn(&str) -> tree_sitter::Language,
+    node_types: &'static [&'static str],
+}
+
+fn grammars_of(coordinate: &str) -> Option<Grammars> {
+    Some(match coordinate {
+        "kndo:rust" => Grammars {
+            krate: "kndo-adapter-rust",
+            language: |_| tree_sitter_rust::LANGUAGE.into(),
+            node_types: &[tree_sitter_rust::NODE_TYPES],
+        },
+        "kndo:go" => Grammars {
+            krate: "kndo-adapter-go",
+            language: |_| tree_sitter_go::LANGUAGE.into(),
+            node_types: &[tree_sitter_go::NODE_TYPES],
+        },
+        "kndo:java" => Grammars {
+            krate: "kndo-adapter-java",
+            language: |_| tree_sitter_java::LANGUAGE.into(),
+            node_types: &[tree_sitter_java::NODE_TYPES],
+        },
+        "kndo:kotlin" => Grammars {
+            krate: "kndo-adapter-kotlin",
+            language: |_| tree_sitter_kotlin_ng::LANGUAGE.into(),
+            node_types: &[tree_sitter_kotlin_ng::NODE_TYPES],
+        },
+        "kndo:python" => Grammars {
+            krate: "kndo-adapter-python",
+            language: |_| tree_sitter_python::LANGUAGE.into(),
+            node_types: &[tree_sitter_python::NODE_TYPES],
+        },
+        "kndo:swift" => Grammars {
+            krate: "kndo-adapter-swift",
+            language: |_| tree_sitter_swift::LANGUAGE.into(),
+            node_types: &[tree_sitter_swift::NODE_TYPES],
+        },
+        // The adapter's own rule, which the gate must read the same way: the
+        // TypeScript grammar for a `ts` suffix, the TSX one for every other.
+        "kndo:js-ts" => Grammars {
+            krate: "kndo-adapter-ts",
+            language: |path| {
+                if path.ends_with(".ts") {
+                    tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into()
+                } else {
+                    tree_sitter_typescript::LANGUAGE_TSX.into()
+                }
+            },
+            node_types: &[
+                tree_sitter_typescript::TYPESCRIPT_NODE_TYPES,
+                tree_sitter_typescript::TSX_NODE_TYPES,
+            ],
+        },
+        "kndo:css" => Grammars {
+            krate: "kndo-adapter-css",
+            language: |path| {
+                if path.ends_with(".scss") {
+                    tree_sitter_scss::language()
+                } else {
+                    tree_sitter_css::LANGUAGE.into()
+                }
+            },
+            node_types: &[tree_sitter_css::NODE_TYPES, tree_sitter_scss::NODE_TYPES],
+        },
+        _ => return None,
+    })
+}
+
+#[test]
+fn grammar_ledgers_hold() {
+    // The third reader beside `expectations.toml` (what the RUN must report) and
+    // `transcript.json` (what the BUILD TOOL says a manifest means): what the
+    // GRAMMAR says about the file's shape. Its `node-types.json` states every
+    // place a name goes; `grammar.toml` states what the adapter does at each of
+    // them; and a run over the adapter's own fixtures grades the statement. A
+    // silence — a name position nothing reads and nothing explains — is what six
+    // of the nine-adapter audit's findings were, with no gate to catch them.
+    use kndo_testkit::grammar::{Coverage, GrammarLedger, Witness};
+    let plugins = kndo::default_plugins();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let overwrite = std::env::var("KNDO_LEDGER").as_deref() == Ok("overwrite");
+    let mut failures: Vec<String> = Vec::new();
+    let mut graded: Vec<String> = Vec::new();
+    let mut with_grammar: std::collections::BTreeSet<String> = Default::default();
+
+    for plugin in &plugins {
+        let spec = plugin.spec();
+        let coordinate = spec.coordinate().to_string();
+        let Some(grammars) = grammars_of(&coordinate) else {
+            continue;
+        };
+        with_grammar.insert(coordinate.clone());
+        let ledger_path = root.join(grammars.krate).join("grammar.toml");
+        let mut ledger = GrammarLedger::read(&ledger_path);
+
+        // Every file this adapter claims, under its own fixtures: the tree the
+        // grammar builds beside the evidence the adapter drew from the same
+        // bytes.
+        let mut witness = Witness::default();
+        let mut files: Vec<std::path::PathBuf> = Vec::new();
+        let fixtures = root.join(grammars.krate).join("tests/fixtures");
+        collect_files(&fixtures, &mut files);
+        files.sort();
+        let mut read = 0;
+        for file in &files {
+            let rel = file
+                .strip_prefix(&root)
+                .unwrap_or(file)
+                .to_string_lossy()
+                .to_string();
+            let suffix = rel.rsplit('.').next().unwrap_or("");
+            if !spec.suffixes().iter().any(|s| s == suffix) {
+                continue;
+            }
+            let Ok(source) = std::fs::read_to_string(file) else {
+                continue;
+            };
+            let evidence = kndo_testkit::extract_evidence(plugin.as_ref(), &rel, &source);
+            let mut parser = tree_sitter::Parser::new();
+            parser
+                .set_language(&(grammars.language)(&rel))
+                .expect("the gate's grammar loads");
+            let Some(tree) = parser.parse(source.as_bytes(), None) else {
+                continue;
+            };
+            witness.read(tree.root_node(), source.as_bytes(), &evidence, &ledger);
+            read += 1;
+        }
+
+        if overwrite {
+            let mut offered = GrammarLedger::offered(grammars.node_types, &ledger.names);
+            let observed = witness.observed();
+            offered.extend(observed.keys().cloned());
+            let kept = std::mem::take(&mut ledger.positions);
+            ledger.positions = offered
+                .into_iter()
+                .map(|position| {
+                    let coverage = kept
+                        .get(&position)
+                        .cloned()
+                        .or_else(|| observed.get(&position).cloned())
+                        .unwrap_or(Coverage::Ignored {
+                            because: String::new(),
+                        });
+                    (position, coverage)
+                })
+                .collect();
+            ledger.write(&ledger_path);
+            println!("--- {coordinate}: {read} files");
+            for (position, seen) in witness.seen() {
+                println!(
+                    "  {position:<48} occurrences={:<5} use={:<5} evidence={}",
+                    seen.occurrences, seen.as_use, seen.as_evidence
+                );
+            }
+            continue;
+        }
+
+        for silence in ledger
+            .check(grammars.node_types, &witness)
+            .iter()
+            .map(|s| s.to_string())
+        {
+            failures.push(format!("{coordinate}: {silence}"));
+        }
+        // Printed on the way past, not only on the way down: how much of the
+        // inventory a fixture actually reaches is the ledger's own coverage,
+        // and a number nobody sees is a number nobody defends.
+        let line = format!(
+            "{coordinate}: {} positions, {} of them witnessed over {read} files",
+            ledger.positions.len(),
+            witness.witnessed()
+        );
+        println!("{line}");
+        graded.push(line);
+    }
+
+    if overwrite {
+        panic!("ledgers rewritten — rerun without KNDO_LEDGER to grade them");
+    }
+
+    // The excuse ledger cannot rot: a row for an adapter that grew a grammar
+    // is a row that must go, and an adapter with neither grammar nor row is a
+    // silence of its own.
+    let coordinates: std::collections::BTreeSet<String> = plugins
+        .iter()
+        .filter(|p| !p.spec().suffixes().is_empty())
+        .map(|p| p.spec().coordinate().to_string())
+        .collect();
+    let excused: std::collections::BTreeSet<String> = ADAPTERS_WITH_NO_GRAMMAR
+        .iter()
+        .map(|(c, _)| (*c).to_string())
+        .collect();
+    let stale: Vec<&String> = excused
+        .iter()
+        .filter(|c| with_grammar.contains(*c))
+        .collect();
+    assert!(
+        stale.is_empty(),
+        "the no-grammar ledger names adapters that now have one: {stale:?}"
+    );
+    let unaccounted: Vec<&String> = coordinates
+        .iter()
+        .filter(|c| !with_grammar.contains(*c) && !excused.contains(*c))
+        .collect();
+    assert!(
+        unaccounted.is_empty(),
+        "these adapters read files and neither hold a grammar ledger nor sit in \
+         ADAPTERS_WITH_NO_GRAMMAR: {unaccounted:?}"
+    );
+    assert!(
+        failures.is_empty(),
+        "{}\nthe grammar and the adapter disagree:\n  {}",
+        graded.join("\n"),
+        failures.join("\n  ")
+    );
+}
+
+/// Every file under `dir`, recursively.
+fn collect_files(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.filter_map(|e| e.ok()) {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_files(&path, out);
+        } else {
+            out.push(path);
+        }
+    }
 }
