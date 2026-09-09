@@ -10,7 +10,9 @@ use crate::modfile;
 use kndo_contract::adapter::{
     DependencyDeclaration, DependencyScope, PackageEntry, ResolveContext, SourceFile,
 };
-use kndo_contract::manifest::{ManifestSink, Publication, Unit, UnitDep, UnitKind};
+use kndo_contract::manifest::{
+    ManifestSink, Publication, Unit, UnitDep, UnitKind, Version, VersionReq,
+};
 use kndo_contract::vocab::ProjectPath;
 use smol_str::SmolStr;
 
@@ -118,6 +120,26 @@ fn workspace(
     }
 }
 
+/// What a `require` asks of a version: the MINIMUM the build must use, and an
+/// upper bound the module path itself states. Go puts the major version in the
+/// path from v2 on — `example.com/x` is v0 and v1, `example.com/x/v2` is v2
+/// alone — so a requirement is the half-open range from the version written to
+/// the first major that would be a different module. Two requirements of one
+/// module path therefore never conflict, which is the truth minimal version
+/// selection implements: the build takes the highest, and neither line is
+/// wrong.
+fn requirement(module: &str, version: &str) -> Option<VersionReq> {
+    let low = Version::parse(version.trim_start_matches('v'))?;
+    let major = module
+        .rsplit_once("/v")
+        .and_then(|(_, suffix)| suffix.parse::<u64>().ok())
+        .unwrap_or(1);
+    Some(VersionReq {
+        spelled: SmolStr::new(version),
+        range: Some((low, Version::new(major + 1, 0, 0))),
+    })
+}
+
 /// The module paths this `go.mod` requires. A `// indirect` requirement is
 /// still in the build (activation's `ManifestDependency` rules see it) but
 /// states no usage claim: it declares `Transitive`. Direct requirements carry
@@ -126,10 +148,11 @@ fn workspace(
 fn dependencies_of(text: &str) -> Vec<DependencyDeclaration> {
     modfile::of(text, "require")
         .filter_map(|d| {
+            let module = d.token(0)?;
             Some(DependencyDeclaration {
-                name: SmolStr::new(d.token(0)?),
+                name: SmolStr::new(module),
                 scope: d.indirect().then_some(DependencyScope::Transitive),
-                version_req: None,
+                version_req: d.token(1).and_then(|v| requirement(module, v)),
             })
         })
         .collect()

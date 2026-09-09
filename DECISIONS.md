@@ -7681,3 +7681,54 @@ with a blank line and a rule, and an empty producer is a broken record.
 manifest evidence. No pinned report moves, and the JVM corpus is byte-identical;
 the java fixture floor moves 6 → 7. Neither the graph semantics nor the
 fingerprint moves.
+
+## 2026-09-09 — M8.d closes: what a requirement asks, per ecosystem
+
+The last of M8.d's six readers. `kndo:python` and `kndo:go` had sent
+`version_req: None` since they were written, so `version-skew` — the only
+analysis that reads it — abstained on both ecosystems entirely. The charter says
+the requirement is normalized per ecosystem, and measured, the two ecosystems
+answer very differently.
+
+**Python: three findings, one drift.** A PEP 508 specifier set is a real
+constraint, and flask's `examples/celery/requirements.txt` is a `pip-compile`
+output that has fallen behind the `pyproject.toml` beside it: `werkzeug`
+(`>=3.1.0` vs `==2.3.3`), `blinker` (`>=1.9.0` vs `==1.6.2`) and `itsdangerous`
+(`>=2.2.0` vs `==2.1.2`) name ranges that cannot both hold. flask 19 → 22, all
+`info`, health unmoved. Five other names appear in both files and stay silent
+for two different right reasons: `click`, `jinja2` and `markupsafe` pin exactly
+what the floor admits, and `flask` and `celery[redis]` are named with NO
+specifier — a requirement that asks nothing is compared with nothing.
+
+PEP 440's two bumps are stated once, because they are not the same bump:
+`==1.4.*` releases the last segment WRITTEN (1.5.0), and `~=` the one before it,
+so `~=1.4` reaches 2.0.0 while `~=1.4.2` reaches 1.5.0. A clause the reader
+cannot map keeps its text and refuses the range, which is what stops a
+comparison nobody can perform.
+
+**Go: zero, and the reason is the interesting half.** A `require` states a
+MINIMUM, and Go puts the major version in the module path from v2 on — so a
+requirement is the half-open range from the version written to the first major
+that would be a different module, and two requirements of one path can never be
+disjoint. That is exactly what minimal version selection implements: the build
+takes the highest and neither line is wrong. gin is byte-identical and would
+stay so in a workspace of twenty modules. It ships anyway, for the same reason
+`qualified_type.name` did: the evidence becomes true. And leaving it `None` was
+not neutral — the divergence rule falls through to comparing TEXTS where no
+range exists, and `v1.2.0` beside `v1.5.0` would have been reported as a
+conflict a Go build does not have.
+
+`requirement-ranges` pins the python half end to end — the one skew reported,
+the compatible pin silent, and the specifier-less requirement silent — because
+no fixture had two manifests naming one dependency and the unit tests grade the
+ranges, not the finding. The python floor moves 8 → 9.
+
+`kndo:go` moves 15 → 16 and `kndo:python` 12 → 13: the same source, different
+manifest evidence. One corpus report moves (flask, +3), COMPARISON decomposes
+it, and the other eight are byte-identical. Neither the graph semantics nor the
+fingerprint moves.
+
+With this M8.d's six readers are all structural and all graded against the real
+tool: cargo, go, npm, setuptools/packaging, maven and gradle each answer in a
+captured transcript, and `Package.swift` carries its ledger row — swiftpm ships
+no second reader of a file only it can evaluate.

@@ -1,0 +1,116 @@
+{
+  "run": {
+    "schema": "kndo-v2/m6",
+    "mode": "full",
+    "files_discovered": 3,
+    "files_claimed": 1,
+    "extensions": [
+      {
+        "id": "kndo:python",
+        "files": 1,
+        "import_cycles": "hazard",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "underivable"
+      }
+    ]
+  },
+  "health": {
+    "implicated": 0,
+    "subjects": 2,
+    "by_category": [],
+    "by_package": [
+      {
+        "name": "app",
+        "manifest": "pyproject.toml",
+        "implicated": 0,
+        "subjects": 2
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "kndo-336bc4a1ad31",
+      "category": "version-skew",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "dependency",
+        "owner_manifest": "pyproject.toml",
+        "name": "werkzeug"
+      },
+      "message": "declared with diverging version requirements: pyproject.toml (>=3.1.0), requirements.txt (==2.3.3)"
+    }
+  ],
+  "fixed": [],
+  "baselined": 0,
+  "abstained": [
+    {
+      "category": "unused",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 2
+        }
+      }
+    },
+    {
+      "category": "test-only",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    },
+    {
+      "category": "untested",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    },
+    {
+      "category": "undeclared",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 2
+        }
+      }
+    },
+    {
+      "category": "crap",
+      "reason": "no-coverage-ingested",
+      "scope": "whole-run"
+    }
+  ],
+  "suppressed": {
+    "total": 0,
+    "by_category": []
+  },
+  "plugins": [
+    {
+      "coordinate": "kndo:coverage-lcov",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-cobertura",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-jacoco",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-go",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    }
+  ],
+  "diagnostics": []
+}

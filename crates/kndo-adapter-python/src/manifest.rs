@@ -21,7 +21,9 @@
 use kndo_contract::adapter::{
     DependencyDeclaration, DependencyScope, PackageEntry, ResolveContext,
 };
-use kndo_contract::manifest::{ManifestSink, Publication, Unit, UnitKind, UnitRoot};
+use kndo_contract::manifest::{
+    ManifestSink, Publication, Unit, UnitKind, UnitRoot, Version, VersionReq,
+};
 use kndo_contract::vocab::ProjectPath;
 use smol_str::SmolStr;
 use toml::Value;
@@ -550,8 +552,89 @@ fn declare(out: &mut ManifestSink, spec: &str, scope: Option<DependencyScope>) {
         out.dependency(DependencyDeclaration {
             name: SmolStr::new(name),
             scope,
-            version_req: None,
+            version_req: requirement(spec),
         });
+    }
+}
+
+/// What a PEP 508 requirement asks of a version: the specifier set as written,
+/// and the half-open range `[lo, hi)` it reads as where every clause of it can
+/// be read. A requirement with no specifier asks nothing and states no
+/// requirement at all; one whose clauses this cannot map keeps its text and no
+/// range, which is what stops a comparison nobody can perform.
+fn requirement(spec: &str) -> Option<VersionReq> {
+    let body = spec.split(';').next().unwrap_or_default();
+    let name = dependency_name(body)?;
+    let rest = body[name.len()..].trim_start();
+    // Extras belong to the name, not to the version: `celery[redis]==5.2.7`
+    // asks the same of the version as `celery==5.2.7`.
+    let rest = match rest.strip_prefix('[') {
+        Some(after) => after.split_once(']').map_or("", |(_, r)| r).trim_start(),
+        None => rest,
+    };
+    let rest = rest.trim();
+    if rest.is_empty() || rest.starts_with('@') {
+        return None;
+    }
+    let mut lo = Version::new(0, 0, 0);
+    let mut hi = Version::new(u64::MAX, u64::MAX, u64::MAX);
+    let mut mapped = true;
+    for clause in rest.split(',') {
+        let clause = clause.trim();
+        let (operator, text) = clause.split_at(
+            clause
+                .find(|c: char| c.is_ascii_digit() || c == '*')
+                .unwrap_or(clause.len()),
+        );
+        let text = text.trim();
+        let wildcard = text.ends_with(".*");
+        let core = text.trim_end_matches(".*");
+        let Some(version) = Version::parse(core) else {
+            mapped = false;
+            continue;
+        };
+        match (operator.trim(), wildcard) {
+            (">=", _) | (">", _) => lo = lo.max(version),
+            ("<=", _) | ("<", _) => hi = hi.min(version),
+            // `==1.4.*` is every 1.4 release: the bound bumps the last
+            // segment WRITTEN. `~=1.4.2` is every 1.4 release from 1.4.2 and
+            // `~=1.4` every 1.x from 1.4 — PEP 440's compatible release bumps
+            // the second-to-last instead, which is a different segment.
+            ("==", true) => {
+                lo = lo.max(version);
+                hi = hi.min(after(core, version, 0));
+            }
+            ("~=", _) => {
+                lo = lo.max(version);
+                hi = hi.min(after(core, version, 1));
+            }
+            ("==", false) => {
+                lo = lo.max(version);
+                hi = hi.min(Version::new(
+                    version.major,
+                    version.minor,
+                    version.patch + 1,
+                ));
+            }
+            // `!=` bounds nothing, and anything else this does not model.
+            ("!=", _) => {}
+            _ => mapped = false,
+        }
+    }
+    Some(VersionReq {
+        spelled: SmolStr::new(rest),
+        range: (mapped && lo < hi).then_some((lo, hi)),
+    })
+}
+
+/// The version a clause stops at: the segment `back` places before the last one
+/// WRITTEN, bumped. `==1.4.*` releases the last (`back` 0, so 1.5.0) and `~=`
+/// the one before it (`back` 1, so `~=1.4` reaches 2.0.0 and `~=1.4.2` reaches
+/// 1.5.0), which is PEP 440's rule stated once for both.
+fn after(core: &str, version: Version, back: usize) -> Version {
+    match core.matches('.').count().saturating_sub(back) {
+        0 => Version::new(version.major + 1, 0, 0),
+        _ => Version::new(version.major, version.minor + 1, 0),
     }
 }
 

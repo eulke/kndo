@@ -297,3 +297,38 @@ fn a_single_line_use_is_the_same_directive_as_a_block() {
         ["example.com/only"]
     );
 }
+
+#[test]
+fn a_requirement_is_a_minimum_and_the_module_path_states_its_ceiling() {
+    // Go puts the major version in the path from v2 on, so `example.com/x` is
+    // v0 and v1 and `example.com/x/v3` is v3 alone. A requirement is therefore
+    // the half-open range from the version written to the first major that
+    // would be a different module — which is why two requirements of one path
+    // can never conflict, exactly as minimal version selection resolves them.
+    let ev = read(
+        "go.mod",
+        "module example.com/m\n\ngo 1.22\n\nrequire (\n\texample.com/x v1.2.0\n\texample.com/y/v3 v3.1.4\n)\n",
+    );
+    let req = |name: &str| {
+        ev.dependencies
+            .iter()
+            .find(|d| d.name == name)
+            .unwrap_or_else(|| panic!("{name} declared"))
+            .version_req
+            .clone()
+            .unwrap_or_else(|| panic!("{name} states a version"))
+    };
+    let v = kndo_contract::manifest::Version::new;
+    assert_eq!(req("example.com/x").spelled, "v1.2.0");
+    assert_eq!(req("example.com/x").range, Some((v(1, 2, 0), v(2, 0, 0))));
+    assert_eq!(
+        req("example.com/y/v3").range,
+        Some((v(3, 1, 4), v(4, 0, 0)))
+    );
+    assert!(
+        req("example.com/x")
+            .disjoint(&req("example.com/y/v3"))
+            .is_some(),
+        "both state a range, so a comparison is possible at all"
+    );
+}

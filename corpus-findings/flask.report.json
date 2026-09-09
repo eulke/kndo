@@ -419,6 +419,42 @@
         "path": "examples/celery/src/task_app/views.py"
       },
       "message": "production-reachable, but no test reaches this file"
+    },
+    {
+      "id": "kndo-29b7754e5613",
+      "category": "version-skew",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "dependency",
+        "owner_manifest": "examples/celery/requirements.txt",
+        "name": "werkzeug"
+      },
+      "message": "declared with diverging version requirements: examples/celery/requirements.txt (==2.3.3), pyproject.toml (>=3.1.0)"
+    },
+    {
+      "id": "kndo-2c4021db4901",
+      "category": "version-skew",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "dependency",
+        "owner_manifest": "examples/celery/requirements.txt",
+        "name": "blinker"
+      },
+      "message": "declared with diverging version requirements: examples/celery/requirements.txt (==1.6.2), pyproject.toml (>=1.9.0)"
+    },
+    {
+      "id": "kndo-758dec3a8f0a",
+      "category": "version-skew",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "dependency",
+        "owner_manifest": "examples/celery/requirements.txt",
+        "name": "itsdangerous"
+      },
+      "message": "declared with diverging version requirements: examples/celery/requirements.txt (==2.1.2), pyproject.toml (>=2.2.0)"
     }
   ],
   "fixed": [],

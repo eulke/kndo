@@ -412,7 +412,7 @@ fn fixture_corpora() -> Vec<(std::path::PathBuf, usize)> {
         (manifest.join("../kndo-adapter-java/tests/fixtures"), 7),
         (manifest.join("../kndo-adapter-kotlin/tests/fixtures"), 5),
         (manifest.join("../kndo-adapter-swift/tests/fixtures"), 4),
-        (manifest.join("../kndo-adapter-python/tests/fixtures"), 8),
+        (manifest.join("../kndo-adapter-python/tests/fixtures"), 9),
         (manifest.join("../kndo-adapter-html/tests/fixtures"), 1),
         (manifest.join("../kndo-adapter-css/tests/fixtures"), 4),
         (manifest.join("../kndo-apple/tests/fixtures"), 1),

@@ -374,3 +374,62 @@ fn a_distribution_answers_to_every_spelling_pep_503_normalizes() {
     );
     assert!(e.packages[0].aliases.is_empty());
 }
+
+#[test]
+fn a_requirement_is_its_specifier_and_the_range_that_specifier_reads_as() {
+    // What `version-skew` compares. A clause this cannot map keeps its text and
+    // no range, and a requirement with no specifier at all states nothing —
+    // both stop a comparison rather than inventing one.
+    let read = |spec: &str| {
+        let evidence = kndo_testkit::manifest_evidence(
+            &PythonAdapter::new(),
+            "pyproject.toml",
+            &format!("[project]\nname = \"d\"\ndependencies = [\"{spec}\"]\n"),
+            &[],
+        );
+        evidence.dependencies.first().cloned().expect("declared")
+    };
+    let range = |spec: &str| read(spec).version_req.and_then(|r| r.range);
+    let v = kndo_contract::manifest::Version::new;
+
+    assert_eq!(
+        range("d>=2.0").map(|r| r.0),
+        Some(v(2, 0, 0)),
+        ">= is a floor"
+    );
+    assert_eq!(
+        range("d<3").map(|r| r.1),
+        Some(v(3, 0, 0)),
+        "< is a ceiling"
+    );
+    // `==1.4.*` is every 1.4 release; `==1.4.2` is that release alone.
+    assert_eq!(range("d==1.4.*"), Some((v(1, 4, 0), v(1, 5, 0))));
+    assert_eq!(range("d==1.4.2"), Some((v(1, 4, 2), v(1, 4, 3))));
+    // PEP 440's compatible release: `~=1.4.2` admits 1.4.x from 1.4.2 on.
+    assert_eq!(range("d~=1.4.2"), Some((v(1, 4, 2), v(1, 5, 0))));
+    assert_eq!(range("d~=1.4"), Some((v(1, 4, 0), v(2, 0, 0))));
+    assert_eq!(range("d>=2.0,<3"), Some((v(2, 0, 0), v(3, 0, 0))));
+
+    // Extras belong to the name and a marker to the environment: neither asks
+    // anything of the version.
+    assert_eq!(range("d[redis]==5.2.7"), Some((v(5, 2, 7), v(5, 2, 8))));
+    assert_eq!(
+        range("d>=1.0 ; python_version < '3.9'"),
+        Some((v(1, 0, 0), v(u64::MAX, u64::MAX, u64::MAX)))
+    );
+
+    // Nothing to compare: a bare name, and a direct URL reference.
+    assert!(read("d").version_req.is_none());
+    assert!(
+        read("d @ https://example.invalid/d.whl")
+            .version_req
+            .is_none()
+    );
+    // A clause with no bound keeps the text and refuses the range.
+    let excluded = read("d!=2.0").version_req.expect("spelled");
+    assert_eq!(excluded.spelled, "!=2.0");
+    assert_eq!(
+        excluded.range,
+        Some((v(0, 0, 0), v(u64::MAX, u64::MAX, u64::MAX)))
+    );
+}

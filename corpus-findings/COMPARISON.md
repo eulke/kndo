@@ -2813,3 +2813,42 @@ retire, nothing is added, and the eight other repositories are byte-identical.
 `crates/matcher/tests/util.rs#RegexCaptures` — the repository's third
 `internal-only` — is ordinary code and stays accused, which is the precision
 half of the same measurement.
+
+## flask 19 → 22: three requirements that cannot both hold (2026-09-09)
+
+`kndo:python` and `kndo:go` had sent `version_req: None` since they were
+written, so `version-skew` — the one analysis that reads it — abstained on both
+ecosystems entirely. M8.d's charter says the requirement is normalized per
+ecosystem, and the two ecosystems answer very differently.
+
+**Python earns three findings, and all three are the same drift.**
+`examples/celery/requirements.txt` is a `pip-compile` output, pinned when it was
+generated; `pyproject.toml` has moved on. Read as ranges, three pairs cannot
+both hold:
+
+| dependency | pyproject.toml | examples/celery/requirements.txt |
+|---|---|---|
+| `werkzeug` | `>=3.1.0` | `==2.3.3` |
+| `blinker` | `>=1.9.0` | `==1.6.2` |
+| `itsdangerous` | `>=2.2.0` | `==2.1.2` |
+
+Five more names appear in both files and are correctly silent: `click`,
+`jinja2` and `markupsafe` pin exactly what the floor admits, and `flask` and
+`celery[redis]` are named in the example's `pyproject.toml` with NO specifier,
+which asks nothing and is compared with nothing. Severity `info`, so health does
+not move — the divergence is a fact, and whether it bites is the packaging
+tool's business.
+
+**Go earns nothing, and the reason is the interesting half.** A `require` line
+states a MINIMUM, and Go puts the major version in the module path from v2 on —
+`example.com/x` is v0 and v1, `example.com/x/v2` is a different module. So a
+requirement is the half-open range from the version written to the first major
+that would be another module, and two requirements of one path can never be
+disjoint: minimal version selection takes the highest and neither line is wrong.
+gin is byte-identical, and it would stay byte-identical in a workspace of twenty
+modules. The field is populated anyway because the evidence is then TRUE — and
+because leaving it `None` would have let the divergence rule fall through to
+comparing texts, where `v1.2.0` and `v1.5.0` differ and a Go build has no
+problem at all.
+
+The other eight repositories are byte-identical.
