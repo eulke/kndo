@@ -14,6 +14,7 @@ why = "only lib's test file imports this package, and its own test file's init a
 [[alive]]
 subject = "internal/testutil/util_test.go#TestWant"
 category = "unused"
+because = "rule:kndo:go#1"
 why = "`go test` runs it by name — and it is under `internal/`, so the fence caps its reach and nothing else could keep it"
 
 [[alive]]

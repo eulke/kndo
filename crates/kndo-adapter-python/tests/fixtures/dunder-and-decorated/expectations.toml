@@ -7,10 +7,12 @@ why = "module-private by convention and referenced by nothing: the one rung Pyth
 
 [[alive]]
 subject = "src/app.py#Money.__eq__"
+because = "witness:*:rule:kndo:python#7"
 why = "the runtime protocol calls this (a == b) — no source line ever will"
 
 [[alive]]
 subject = "src/app.py#handler"
+because = "rule:kndo:python#3"
 why = "`@d def f` IS `f = d(f)`: handed to its decorator by the language"
 
 [[alive]]

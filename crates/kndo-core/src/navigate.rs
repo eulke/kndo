@@ -16,6 +16,7 @@
 use crate::analysis::Reachability;
 use crate::graph::Graph;
 use kndo_contract::evidence::{ImportShape, Reach, RootKind, RootTarget, SymbolKind};
+use kndo_contract::plugin::RuleId;
 use kndo_contract::vocab::{Confidence, Span};
 use smol_str::SmolStr;
 use std::collections::{BTreeMap, BTreeSet};
@@ -134,11 +135,12 @@ pub enum Keeper {
     /// A root anchoring the declaration itself (or its owner).
     Root { kind: RootKind },
     /// A root the engine's dispatch derived from a marker on the declaration
-    /// (or its owner), under the language's rules.
-    Dispatch { kind: RootKind },
+    /// (or its owner), under the language's rules — `by` names the rule, so
+    /// the answer survives the question "which rule, exactly".
+    Dispatch { kind: RootKind, by: RuleId },
     /// The source itself exempts the declaration from the unused judgment (an
     /// `allow(dead_code)`-class marker, dispatched).
-    Exempt,
+    Exempt { by: RuleId },
     /// A whole-file entry hands out the exported surface this rides.
     EntrySurface,
     /// An importer takes the file's whole surface (namespace/side-effect).
@@ -150,8 +152,10 @@ pub enum Keeper {
     /// no call site can be required to exist, because the caller holds the
     /// SUPERTYPE. `of` names it: the supertype the graph resolved, or — where
     /// the base is outside the project — the base or marker the language's
-    /// own rule named.
-    Witness { of: SmolStr },
+    /// own rule named, in which case `by` is the rule that named it. A
+    /// witness the graph's own relations resolved consulted no rule and
+    /// carries none.
+    Witness { of: SmolStr, by: Option<RuleId> },
     /// The unit compiling this file publishes its exported API, and this
     /// declaration is on it: the outside world is the consumer no call site
     /// can show.
@@ -546,7 +550,9 @@ pub fn keepers(
         Pool::Files(r) => (false, Some(r)),
         Pool::Own => (false, None),
     };
-    if f.exempt.binary_search(&(decl as u32)).is_ok() && kept.push(Keeper::Exempt) {
+    if let Some(e) = f.exemption(decl)
+        && kept.push(Keeper::Exempt { by: e.by.clone() })
+    {
         return kept.out;
     }
     let entry_surface = f.roots().any(|r| matches!(r.target, RootTarget::WholeFile));
@@ -573,8 +579,13 @@ pub fn keepers(
             return kept.out;
         }
     }
-    for r in &f.dispatched {
-        if anchors(r) && kept.push(Keeper::Dispatch { kind: r.kind }) {
+    for d in &f.dispatched {
+        if anchors(&d.root)
+            && kept.push(Keeper::Dispatch {
+                kind: d.root.kind,
+                by: d.by.clone(),
+            })
+        {
             return kept.out;
         }
     }
@@ -590,12 +601,15 @@ pub fn keepers(
                 f.evidence.declarations[owner.index()].name.as_str(),
                 d.name.as_str(),
             )
-            && kept.push(Keeper::Witness { of })
+            && kept.push(Keeper::Witness { of, by: None })
         {
             return kept.out;
         }
-        if let Some(of) = f.stated_witness(decl)
-            && kept.push(Keeper::Witness { of: of.clone() })
+        if let Some(w) = f.stated_witness(decl)
+            && kept.push(Keeper::Witness {
+                of: w.base.clone(),
+                by: Some(w.by.clone()),
+            })
         {
             return kept.out;
         }

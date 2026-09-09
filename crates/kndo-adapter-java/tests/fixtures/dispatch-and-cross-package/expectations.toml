@@ -2,6 +2,7 @@
 
 [[alive]]
 subject = "src/main/java/com/foo/Impl.java#Impl.go()"
+because = "witness:Override:rule:kndo:java#2"
 why = "called only through dispatch (Runner never names go directly) — the @Override rooting rule keeps it alive, not a duck-typed fallback hit"
 
 [[alive]]

@@ -9,6 +9,7 @@
 [[alive]]
 subject = "build.rs#main"
 category = "unused"
+because = "rule:kndo:rust#25"
 why = "cargo runs the build script through it; nothing in the crate ever names it"
 
 [[alive]]
@@ -23,6 +24,7 @@ why = "the binary target's entry"
 [[alive]]
 subject = "examples/demo.rs#main"
 category = "unused"
+because = "rule:kndo:rust#26"
 why = "the example target's entry — tooling, and still an entry"
 
 [[alive]]

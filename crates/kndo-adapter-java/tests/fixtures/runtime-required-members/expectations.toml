@@ -9,16 +9,19 @@
 [[alive]]
 subject = "src/main/java/com/foo/Ticket.java#Ticket.compareTo(Ticket)"
 category = "unused"
+because = "witness:Comparable:rule:kndo:java#4"
 why = "Comparable requires it; no call site names it and no supertype in this project declares it"
 
 [[alive]]
 subject = "src/main/java/com/foo/Ticket.java#Ticket.writeObject(ObjectOutputStream)"
 category = "unused"
+because = "witness:Serializable:rule:kndo:java#13"
 why = "the serialization runtime calls it reflectively — private, so nothing else could keep it"
 
 [[alive]]
 subject = "src/main/java/com/foo/Ticket.java#Ticket.readObject(ObjectInputStream)"
 category = "unused"
+because = "witness:Serializable:rule:kndo:java#13"
 why = "the same hook, the other direction"
 
 [[dead]]

@@ -8,13 +8,14 @@
 
 use crate::cache::EvidenceCache;
 use crate::discover::DiscoveredFile;
+use crate::dispatch::{DerivedRoot, Exemption, Witnessed};
 use crate::extract::ClaimedFile;
 use kndo_contract::adapter::{PackageEntry, Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{
     Attachment, FileEvidence, ImportShape, ImportTarget, Reach, Root, RootKind, RootTarget,
 };
 use kndo_contract::manifest::UnitKind;
-use kndo_contract::plugin::{DispatchRule, Plugin, PluginSpec, PublishedSurface};
+use kndo_contract::plugin::{Plugin, PluginSpec, PublishedSurface};
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
@@ -23,7 +24,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Bump when the SAME evidence assembles into a DIFFERENT graph — resolution
 /// candidate changes, reachability semantics, new assembled fields. Folded into the
 /// graph cache key beside the contract fingerprint and the adapter set.
-pub const GRAPH_SEMANTICS_VERSION: u32 = 37;
+pub const GRAPH_SEMANTICS_VERSION: u32 = 38;
 
 #[derive(Serialize, Deserialize)]
 pub struct GraphFile {
@@ -70,10 +71,12 @@ pub struct GraphFile {
     /// claiming extension's rules ([`crate::dispatch`]) — apart from
     /// `evidence.roots` (the adapter's own statements, cached by content) so a
     /// rule change re-dispatches without re-extracting; sorted, deduplicated.
-    pub dispatched: Vec<Root>,
+    /// Each names the rule that derived it, so `kndo describe` and a fixture's
+    /// `because` can say WHICH rule keeps a declaration alive.
+    pub dispatched: Vec<DerivedRoot>,
     /// Declarations the source itself exempts from the unused judgment (an
     /// `allow(dead_code)`-class marker, dispatched), by index; sorted.
-    pub exempt: Vec<u32>,
+    pub exempt: Vec<Exemption>,
     /// What dispatch wants the run to say about this file (a blanket
     /// exemption) — reported as diagnostics.
     pub dispatch_notes: Vec<String>,
@@ -85,7 +88,7 @@ pub struct GraphFile {
     /// base whose surface it satisfies — the half of
     /// [`crate::navigate::Keeper::Witness`] a language STATES, beside the half
     /// the graph's own relations resolve.
-    pub witnesses: Vec<(u32, SmolStr)>,
+    pub witnesses: Vec<Witnessed>,
     /// The unit compiling this file, as an index into `Graph::project`'s units
     /// — [`crate::project::Project::unit_of`]. `None` until the claiming
     /// adapter reports its manifest's units, which is what every consumer
@@ -124,7 +127,7 @@ impl GraphFile {
         self.evidence
             .roots
             .iter()
-            .chain(&self.dispatched)
+            .chain(self.dispatched.iter().map(|d| &d.root))
             .chain(&self.anchored)
     }
 
@@ -132,11 +135,20 @@ impl GraphFile {
     /// language STATED one — the half of a witness the graph's own relations
     /// cannot resolve, because the base is outside the project. Every
     /// judgment that stands down for a resolved witness reads this beside it.
-    pub fn stated_witness(&self, decl: usize) -> Option<&SmolStr> {
+    pub fn stated_witness(&self, decl: usize) -> Option<&Witnessed> {
         self.witnesses
-            .binary_search_by_key(&(decl as u32), |(ix, _)| *ix)
+            .binary_search_by_key(&(decl as u32), |w| w.decl)
             .ok()
-            .map(|i| &self.witnesses[i].1)
+            .map(|i| &self.witnesses[i])
+    }
+
+    /// The rule that exempted this declaration from the unused judgment, where
+    /// one did.
+    pub fn exemption(&self, decl: usize) -> Option<&Exemption> {
+        self.exempt
+            .binary_search_by_key(&(decl as u32), |e| e.decl)
+            .ok()
+            .map(|i| &self.exempt[i])
     }
 
     /// How this file belongs to the namespace it declared — see
@@ -866,64 +878,53 @@ fn dispatch_files(
         .collect();
     // One combined list per claiming adapter, built once: the adapter's own
     // rules first, in composition order, so the applied set is a pure function
-    // of the composition and not of the file order.
-    let combined: BTreeMap<SmolStr, Vec<DispatchRule>> = adapters
+    // of the composition and not of the file order. Each rule carries the
+    // coordinate of the spec that DECLARES it, not of the adapter it rides
+    // into — which is what makes the pack's share countable below without
+    // dispatching the tree a second time.
+    let combined: BTreeMap<SmolStr, crate::dispatch::Rules> = adapters
         .iter()
         .filter(|a| !a.spec().suffixes().is_empty())
         .map(|a| {
             let spec = a.spec();
-            let mut rules = spec.dispatch_rules().to_vec();
-            rules.extend(
-                packs
-                    .iter()
-                    .flat_map(|p| p.dispatch_rules().iter().cloned()),
-            );
+            let mut rules = crate::dispatch::Rules::of(spec);
+            for pack in &packs {
+                rules.extend(pack);
+            }
             (SmolStr::new(spec.coordinate()), rules)
         })
         .collect();
-    let none: Vec<DispatchRule> = Vec::new();
+    let none = crate::dispatch::Rules::default();
     let supertypes = crate::dispatch::supertype_edges(files.iter().map(|f| &f.evidence));
+    // What each active pack ASSERTED, from the attribution itself: a derived
+    // root credited to a pack's coordinate is that pack's claim, and a root
+    // the language would have derived anyway is credited to the language,
+    // because the language's rules come first and the earlier rule wins.
+    let mut pack_roots: BTreeMap<SmolStr, u32> = packs
+        .iter()
+        .map(|p| (SmolStr::new(p.coordinate()), 0))
+        .collect();
     for f in files.iter_mut() {
-        let rules = combined.get(&f.adapter).unwrap_or(&none).as_slice();
+        let rules = combined.get(&f.adapter).unwrap_or(&none);
         let mut d = crate::dispatch::apply(&f.evidence, &supertypes, rules);
         let (roots, witnesses) =
             crate::dispatch::declaration_effects(&f.evidence, f.compiled_into, &supertypes, rules);
         d.roots.extend(roots);
         crate::dispatch::sort_roots(&mut d.roots);
         d.witnesses.extend(witnesses);
-        d.witnesses.sort();
-        d.witnesses.dedup_by_key(|(ix, _)| *ix);
+        crate::dispatch::sort_witnesses(&mut d.witnesses);
+        for r in &d.roots {
+            if let Some(n) = pack_roots.get_mut(&r.by.plugin) {
+                *n += 1;
+            }
+        }
         f.dispatched = d.roots;
         f.exempt = d.exempt;
         f.dispatch_notes = d.notes;
         f.generated = d.generated;
         f.witnesses = d.witnesses;
     }
-    // What each pack ASSERTED, counted from its own rules alone — the same
-    // question a plugin answers through its sink, asked of data. A second pass
-    // rather than attribution threaded through `apply`: it runs only for packs
-    // the project actually activated, and it is the pack's claim on its own,
-    // not whatever the language would have derived anyway.
-    packs
-        .iter()
-        .map(|pack| {
-            let rules = pack.dispatch_rules();
-            let n: u32 = files
-                .iter()
-                .map(|f| {
-                    let d = crate::dispatch::apply(&f.evidence, &supertypes, rules);
-                    let (roots, _) = crate::dispatch::declaration_effects(
-                        &f.evidence,
-                        f.compiled_into,
-                        &supertypes,
-                        rules,
-                    );
-                    (d.roots.len() + roots.len()) as u32
-                })
-                .sum();
-            (SmolStr::new(pack.coordinate()), n)
-        })
-        .collect()
+    pack_roots
 }
 
 fn publish_surfaces(

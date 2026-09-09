@@ -45,7 +45,7 @@ fn a_rooting_marker_is_an_entry_of_its_color() {
     let snap = run(&p);
     assert!(reported(&snap, &Category::UNUSED).is_empty());
     assert_eq!(reported(&snap, &Category::TEST_ONLY), ["lib.kmock"]);
-    assert_eq!(keeper_kinds(&snap, "check.kmock#check"), ["dispatch:test"]);
+    assert_eq!(keeper_kinds(&snap, "check.kmock#check"), ["rule:kmock#0"]);
 
     // The same marker with no rule for it derives nothing: the file has no
     // root, so the run abstains from judging it at all.
@@ -75,7 +75,7 @@ fn an_exempting_marker_stands_the_unused_judgment_down() {
         reported(&snap, &Category::UNUSED),
         ["main.kmock — noted", "main.kmock — stale"]
     );
-    assert_eq!(keeper_kinds(&snap, "main.kmock#kept"), ["exempt"]);
+    assert_eq!(keeper_kinds(&snap, "main.kmock#kept"), ["rule:kmock#1"]);
     assert!(snap.report().diagnostics.is_empty());
 }
 
@@ -182,20 +182,20 @@ fn a_name_rule_reads_the_kind_of_compilation_the_file_lands_in() {
     // the one that compilation implies.
     assert_eq!(
         keeper_kinds(&snap, "tests/check.kmock#CheckOne"),
-        ["dispatch:test"]
+        ["rule:kmock#0"]
     );
     assert_eq!(
         keeper_kinds(&snap, "tests/check.kmock#boot"),
-        ["dispatch:test"]
+        ["rule:kmock#1"]
     );
     assert_eq!(
         keeper_kinds(&snap, "src/inline.kmock#CheckThree"),
-        ["dispatch:test"]
+        ["rule:kmock#0"]
     );
-    assert_eq!(
-        keeper_kinds(&snap, "src/app.kmock#boot"),
-        ["dispatch:production"]
-    );
+    // The SAME name, a different rule: `boot` in the library compilation is
+    // rule 2 and in the test one rule 1 — which the keeper now says out loud,
+    // so deleting either rule fails this assertion by name.
+    assert_eq!(keeper_kinds(&snap, "src/app.kmock#boot"), ["rule:kmock#2"]);
 
     // And nowhere else. `CheckKind` is a type, not the function the rule
     // names; `Fixture.CheckTwo` is a MEMBER, dispatched by its owner and not
@@ -246,11 +246,11 @@ fn a_witness_is_kept_by_the_surface_its_owner_promised_and_by_no_color() {
     // The base names it: kept, and the keeper SAYS which base.
     assert_eq!(
         keeper_kinds(&snap, "app.kmock#Handle.shut"),
-        ["witness:Closer"]
+        ["witness:Closer:rule:kmock#0"]
     );
     assert_eq!(
         keeper_kinds(&snap, "app.kmock#Sub.render"),
-        ["witness:Override"]
+        ["witness:Override:rule:kmock#1"]
     );
     // A witness is not a root: no color rides on it, so the file's own
     // production root is the only thing coloring anything here.
@@ -313,9 +313,9 @@ fn a_rule_can_name_a_base_and_its_requirement_separately() {
 
     assert_eq!(
         keeper_kinds(&snap, "app.kmock#Handle.shutdown"),
-        ["witness:Closer"]
+        ["witness:Closer:rule:kmock#0"]
     );
-    assert_eq!(keeper_kinds(&snap, "app.kmock#Heir"), ["dispatch:test"]);
+    assert_eq!(keeper_kinds(&snap, "app.kmock#Heir"), ["rule:kmock#1"]);
     // `open` is not the name; `Inherits` promised Closer with the OTHER kind
     // of relation, and a rule that named one kind does not read the other.
     assert_eq!(
@@ -342,10 +342,7 @@ fn a_marker_rule_can_name_the_kind_it_means() {
         "root-file\nfn run\nmark run Entry\ntype Holder\nmark Holder Entry\n",
     );
     let snap = common::analyze(&p, vec![Box::new(MockPlugin::dispatching(rules))]);
-    assert_eq!(
-        keeper_kinds(&snap, "app.kmock#run"),
-        ["dispatch:production"]
-    );
+    assert_eq!(keeper_kinds(&snap, "app.kmock#run"), ["rule:kmock#0"]);
     // Same marker, wrong kind: the rule said what it meant.
     assert_eq!(reported(&snap, &Category::UNUSED), ["app.kmock — Holder"]);
 }

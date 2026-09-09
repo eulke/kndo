@@ -231,8 +231,8 @@ fn markers_timing_and_rules_cross_the_wire() {
             _ => panic!("used-by {selector}: not an answer"),
         }
     };
-    assert_eq!(keepers("app.kmini#parked"), ["exempt"]);
-    assert_eq!(keepers("app.kmini#check"), ["dispatch:test"]);
+    assert_eq!(keepers("app.kmini#parked"), ["rule:kmini#1"]);
+    assert_eq!(keepers("app.kmini#check"), ["rule:kmini#0"]);
 }
 
 #[test]

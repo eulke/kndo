@@ -2,6 +2,7 @@
 
 [[alive]]
 subject = "src/main/kotlin/com/foo/Impl.kt#Impl.go"
+because = "witness:override:rule:kndo:kotlin#1"
 why = "an override reached only through the Greeter supertype; the override dispatch root keeps it, no call site spells Impl.go"
 
 [[alive]]

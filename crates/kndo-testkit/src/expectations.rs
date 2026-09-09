@@ -12,6 +12,7 @@
 //! [[alive]]                   # must NOT be reported by unused/internal-only
 //! subject = "src/handlers/alpha.ts"
 //! category = "unused"         # optional: narrows the categories checked
+//! because = "rule:kndo:python#3"  # optional: the MECHANISM that keeps it
 //! why = "alive only through the narrowed dynamic import"
 //!
 //! [[known_gap]]               # what should hold once fixed, held open on purpose
@@ -60,6 +61,14 @@ pub struct Alive {
     pub subject: String,
     #[serde(default)]
     pub category: Option<String>,
+    /// The MECHANISM this fixture exists to pin, spelled the way `kndo
+    /// used-by` spells it: `rule:kndo:python#3`, `witness:Comparable`,
+    /// `entry-surface`, `published`, `binding`. Without it a fixture claims
+    /// only that a subject is alive, which every OTHER keeper also satisfies —
+    /// so the rule it was written for can be deleted and the claim still
+    /// pass. With it, the ablation is the gate.
+    #[serde(default)]
+    pub because: Option<String>,
     pub why: String,
 }
 
@@ -142,6 +151,14 @@ pub enum Violation {
     },
     /// A subject no file or declaration of the fixture spells.
     UnknownSubject { subject: String },
+    /// An `alive` claim whose `because` names a ground the run did not derive:
+    /// the mechanism the fixture exists to pin is gone, or was never the one
+    /// carrying it.
+    BecauseAbsent {
+        subject: String,
+        because: String,
+        grounds: Vec<String>,
+    },
 }
 
 impl std::fmt::Display for Violation {
@@ -170,8 +187,28 @@ impl std::fmt::Display for Violation {
             Violation::UnknownSubject { subject } => {
                 write!(f, "`{subject}` names nothing the fixture declares")
             }
+            Violation::BecauseAbsent {
+                subject,
+                because,
+                grounds,
+            } => write!(
+                f,
+                "`{subject}` claims `{because}` keeps it — the run derived [{}]",
+                grounds.join(", ")
+            ),
         }
     }
+}
+
+/// What a claim may ask of the run — the same two questions `kndo describe`
+/// and `kndo used-by` answer, so a fixture pins what a reader would have read
+/// and never a private view of the engine.
+pub trait Tree {
+    /// Whether this spelling names one thing the fixture's graph holds.
+    fn names_something(&self, subject: &str) -> bool;
+    /// Why the run holds this subject alive, most direct first — the `kind` of
+    /// every edge `used-by` lists. Empty for a subject nothing keeps.
+    fn grounds(&self, subject: &str) -> Vec<String>;
 }
 
 impl Expectations {
@@ -179,16 +216,15 @@ impl Expectations {
         toml::from_str(text).map_err(|e| e.to_string())
     }
 
-    /// Every claim against the run. `exists` answers whether a subject spelling
-    /// names something the fixture's graph holds (a file, a declaration); a
-    /// dependency spelling is trusted as written.
-    pub fn check(&self, reported: &[Reported], exists: &dyn Fn(&str) -> bool) -> Vec<Violation> {
+    /// Every claim against the run.
+    pub fn check(&self, reported: &[Reported], tree: &dyn Tree) -> Vec<Violation> {
         let mut out = Vec::new();
         // Manifest-, directory- and import-addressed subjects are trusted as
         // written: only files and declarations have a graph to check against.
         let trusted = ["dep:", "pkg:", "dir:", "import:", "suppression:"];
-        let known =
-            |subject: &str| trusted.iter().any(|p| subject.starts_with(p)) || exists(subject);
+        let known = |subject: &str| {
+            trusted.iter().any(|p| subject.starts_with(p)) || tree.names_something(subject)
+        };
         let hit = |subject: &str, category: Option<&str>, defaults: &[&str]| {
             reported.iter().any(|r| {
                 r.subject == subject
@@ -232,6 +268,20 @@ impl Expectations {
                     category: r.category.clone(),
                     why: a.why.clone(),
                 });
+                continue;
+            }
+            // Alive, and alive FOR THE STATED REASON: the claim names the
+            // mechanism, so deleting that mechanism fails this fixture by
+            // name instead of leaving the run byte-identical.
+            if let Some(because) = &a.because {
+                let grounds = tree.grounds(&a.subject);
+                if !grounds.iter().any(|g| g == because) {
+                    out.push(Violation::BecauseAbsent {
+                        subject: a.subject.clone(),
+                        because: because.clone(),
+                        grounds,
+                    });
+                }
             }
         }
         for g in &self.known_gap {
@@ -266,6 +316,30 @@ impl Expectations {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A tree that holds everything and keeps nothing by any stated mechanism.
+    struct Anything;
+
+    /// A tree that holds nothing — every subject spelling is a typo.
+    struct Nothing;
+
+    impl Tree for Nothing {
+        fn names_something(&self, _: &str) -> bool {
+            false
+        }
+        fn grounds(&self, _: &str) -> Vec<String> {
+            Vec::new()
+        }
+    }
+
+    impl Tree for Anything {
+        fn names_something(&self, _: &str) -> bool {
+            true
+        }
+        fn grounds(&self, _: &str) -> Vec<String> {
+            Vec::new()
+        }
+    }
 
     fn reported(pairs: &[(&str, &str)]) -> Vec<Reported> {
         pairs
@@ -303,7 +377,7 @@ fix = "M8.b"
 "#,
         )
         .expect("parses");
-        let all_exist = |_: &str| true;
+        let all_exist = Anything;
         // The tree as the ledger describes it: no violations.
         let now = reported(&[("unused", "src/a.ts#dead"), ("unused", "src/d.ts#wrongly")]);
         assert!(e.check(&now, &all_exist).is_empty());
@@ -340,7 +414,7 @@ fix = "M8.b"
     fn unknown_subjects_and_unknown_keys_are_refused() {
         let e = Expectations::parse("[[alive]]\nsubject = \"src/x.ts#nope\"\nwhy = \"typo\"\n")
             .expect("parses");
-        let v = e.check(&[], &|_| false);
+        let v = e.check(&[], &Nothing);
         assert!(
             matches!(&v[0], Violation::UnknownSubject { subject } if subject == "src/x.ts#nope")
         );
@@ -354,12 +428,42 @@ fix = "M8.b"
     }
 
     #[test]
+    fn because_pins_the_mechanism_not_merely_the_verdict() {
+        struct KeptBy(&'static [&'static str]);
+        impl Tree for KeptBy {
+            fn names_something(&self, _: &str) -> bool {
+                true
+            }
+            fn grounds(&self, _: &str) -> Vec<String> {
+                self.0.iter().map(|g| g.to_string()).collect()
+            }
+        }
+        let e = Expectations::parse(
+            "[[alive]]\nsubject = \"a.py#helper\"\nbecause = \"rule:kndo:python#3\"\n\
+             why = \"the runner collects it\"\n",
+        )
+        .expect("parses");
+        // Alive for the stated reason: nothing to say.
+        assert!(
+            e.check(&[], &KeptBy(&["rule:kndo:python#3", "reference"]))
+                .is_empty()
+        );
+        // Still alive — but something ELSE is carrying it, which is exactly
+        // what a fixture without `because` could never tell you.
+        let v = e.check(&[], &KeptBy(&["reference"]));
+        assert!(
+            matches!(&v[0], Violation::BecauseAbsent { because, .. } if because == "rule:kndo:python#3"),
+            "{v:?}"
+        );
+    }
+
+    #[test]
     fn a_dependency_subject_is_trusted_as_written() {
         let e = Expectations::parse(
             "[[dead]]\nsubject = \"dep:package.json:lodash\"\nwhy = \"never imported\"\n",
         )
         .expect("parses");
         let now = reported(&[("unused", "dep:package.json:lodash")]);
-        assert!(e.check(&now, &|_| false).is_empty());
+        assert!(e.check(&now, &Nothing).is_empty());
     }
 }

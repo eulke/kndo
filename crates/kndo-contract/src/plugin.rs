@@ -953,6 +953,37 @@ pub struct DispatchRule {
     pub confidence: Confidence,
 }
 
+/// WHICH rule derived a fact: the plugin whose spec declares it, and the
+/// rule's position in THAT spec's own list — never in the combined list a
+/// language is dispatched with, so a pack's rule keeps one identity whatever
+/// language it rides into. Spelled `kndo:xctest#0`.
+///
+/// Every derived root, exemption and witness names its rule, and that name
+/// reaches the surface: `kndo describe` prints it and a fixture's `because`
+/// pins it. Which makes ablation a gate — delete a rule and the fixtures that
+/// were standing on it go red by name, instead of the run coming back
+/// byte-identical and the fixture having pinned nothing.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, serde::Deserialize)]
+pub struct RuleId {
+    pub plugin: SmolStr,
+    pub index: u32,
+}
+
+impl RuleId {
+    pub fn new(plugin: impl Into<SmolStr>, index: u32) -> RuleId {
+        RuleId {
+            plugin: plugin.into(),
+            index,
+        }
+    }
+}
+
+impl std::fmt::Display for RuleId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}#{}", self.plugin, self.index)
+    }
+}
+
 /// What an extension IS, as data — the one manifest for every capability. Fields
 /// come in three clusters with one gate each: extraction (gated by `claims`),
 /// conduct (gated by `activation` + `mutates_graph`), ingestion (gated by

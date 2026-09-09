@@ -20,7 +20,7 @@ use crate::graph::Graph;
 pub use crate::navigate::ReachColor;
 use crate::navigate::{self, Index, Keeper};
 use crate::session::Snapshot;
-use kndo_contract::evidence::DeclarationId;
+use kndo_contract::evidence::{DeclarationId, RootKind};
 use kndo_contract::finding::LineSpan;
 use kndo_contract::vocab::{ProjectPath, Span};
 use serde::{Deserialize, Serialize};
@@ -458,6 +458,51 @@ pub fn selector_exists(graph: &Graph, raw: &str) -> bool {
         .any(|(id, _)| evidence.selector_of(id).render() == symbol)
 }
 
+/// Why the run holds `raw` alive, most direct first — the same grounds
+/// `used-by` lists, in the same spelling ([`ground`]). Empty for a subject
+/// nothing keeps and for a spelling the graph does not hold. What a fixture's
+/// `because` is checked against, so a claim pins what a reader would read.
+pub fn grounds(graph: &Graph, index: &navigate::Index, raw: &str) -> Vec<SmolStr> {
+    let Resolve::Hit(hit) = resolve(graph, raw) else {
+        return Vec::new();
+    };
+    let (file, decl) = match hit {
+        Selector::File(file) => (file, None),
+        Selector::Symbol { file, decl } => (file, Some(decl)),
+    };
+    match decl {
+        Some(decl) => navigate::keepers(graph, index, file, decl, usize::MAX)
+            .iter()
+            .map(ground)
+            .collect(),
+        // A file has no keepers: what anchors it is its ROOTS and the surface
+        // it is on. A file reachable only through imports names no single
+        // mechanism, and answers with none rather than inventing one.
+        None => {
+            let f = &graph.files[file];
+            let mut out: Vec<SmolStr> = f
+                .evidence
+                .roots
+                .iter()
+                .chain(&f.anchored)
+                .map(|r| ground(&Keeper::Root { kind: r.kind }))
+                .chain(f.dispatched.iter().map(|d| {
+                    ground(&Keeper::Dispatch {
+                        kind: d.root.kind,
+                        by: d.by.clone(),
+                    })
+                }))
+                .collect();
+            if f.published {
+                out.push(SmolStr::new_static("published"));
+            }
+            out.sort();
+            out.dedup();
+            out
+        }
+    }
+}
+
 fn resolve(graph: &Graph, raw: &str) -> Resolve {
     let (path, symbol) = match raw.split_once('#') {
         None => (raw, None),
@@ -572,15 +617,31 @@ struct QueryContext<'a> {
 }
 
 impl Snapshot {
-    /// The one door: CLI verbs and serve tools alike build a [`Request`] and
-    /// read a [`Response`].
-    pub fn query(&self, request: &Request) -> Response {
-        let (reach, index) = self.navigation.get_or_init(|| {
+    /// Why the run holds `subject` alive, most direct first — the grounds
+    /// `used-by` lists, in the same spelling. A fixture's `because` is
+    /// checked against this, so a claim pins the mechanism a reader would
+    /// have read, never a private view of the engine.
+    pub fn grounds(&self, subject: &str) -> Vec<SmolStr> {
+        let (_, index) = self.navigate();
+        grounds(&self.graph, index, subject)
+    }
+
+    /// Reachability and the navigation index, built once per snapshot: a pure
+    /// function of the graph and the declared capabilities, both fixed for
+    /// its lifetime.
+    fn navigate(&self) -> &(Reachability, Index) {
+        self.navigation.get_or_init(|| {
             let scopes = crate::scopes::Scopes::build(&self.graph, &self.capabilities);
             let reach = Reachability::compute(&self.graph, &scopes);
             let index = Index::build(&self.graph, &reach, scopes);
             (reach, index)
-        });
+        })
+    }
+
+    /// The one door: CLI verbs and serve tools alike build a [`Request`] and
+    /// read a [`Response`].
+    pub fn query(&self, request: &Request) -> Response {
+        let (reach, index) = self.navigate();
         let cx = QueryContext {
             graph: &self.graph,
             reach,
@@ -681,39 +742,40 @@ fn node_ref(cx: &QueryContext<'_>, file: usize, decl: Option<usize>) -> NodeRef 
     }
 }
 
-fn edge_ref(cx: &QueryContext<'_>, keeper: &Keeper) -> EdgeRef {
-    let (kind, site): (SmolStr, _) = match keeper {
-        Keeper::Reference { site } => (SmolStr::new_static("reference"), Some(*site)),
-        Keeper::Binding { site } => (SmolStr::new_static("binding"), Some(*site)),
-        Keeper::Root { kind } => (
-            SmolStr::new_static(match kind {
-                kndo_contract::evidence::RootKind::Production => "root:production",
-                kndo_contract::evidence::RootKind::Test => "root:test",
-                kndo_contract::evidence::RootKind::Tooling => "root:tooling",
-            }),
-            None,
-        ),
-        Keeper::Dispatch { kind } => (
-            SmolStr::new_static(match kind {
-                kndo_contract::evidence::RootKind::Production => "dispatch:production",
-                kndo_contract::evidence::RootKind::Test => "dispatch:test",
-                kndo_contract::evidence::RootKind::Tooling => "dispatch:tooling",
-            }),
-            None,
-        ),
-        Keeper::Exempt => (SmolStr::new_static("exempt"), None),
-        // The base is the whole of the answer to "why is this alive": a
-        // reader who sees `witness:Comparable` needs no second question.
-        Keeper::Witness { of } => (SmolStr::new(format!("witness:{of}")), None),
-        Keeper::EntrySurface => (SmolStr::new_static("entry-surface"), None),
-        Keeper::Published { .. } => (SmolStr::new_static("published"), None),
-        Keeper::SurfaceImport { site } => (SmolStr::new_static("surface-import"), Some(*site)),
-        Keeper::OwnerBinding { site } => (SmolStr::new_static("owner-binding"), Some(*site)),
-        Keeper::Qualified { site } => (SmolStr::new_static("qualified"), Some(*site)),
+/// The one spelling of WHY something is alive: the mechanism, never the site.
+/// `kndo describe` prints it and a fixture's `because` pins it, so a claim is
+/// checked against the string a reader would have read. A ground a rule
+/// derived names the RULE — `rule:kndo:xctest#0` — because "dispatch" was
+/// never the interesting half of that answer: which rule is.
+pub fn ground(keeper: &Keeper) -> SmolStr {
+    let color = |kind: &RootKind| match kind {
+        RootKind::Production => "root:production",
+        RootKind::Test => "root:test",
+        RootKind::Tooling => "root:tooling",
     };
+    match keeper {
+        Keeper::Reference { .. } => SmolStr::new_static("reference"),
+        Keeper::Binding { .. } => SmolStr::new_static("binding"),
+        Keeper::Root { kind } => SmolStr::new_static(color(kind)),
+        Keeper::Dispatch { by, .. } | Keeper::Exempt { by } => SmolStr::new(format!("rule:{by}")),
+        // The base is the whole of the answer to "why is this alive": a
+        // reader who sees `witness:Comparable` needs no second question. A
+        // witness a RULE named says which rule too, because that one is
+        // ablatable and the resolved supertype is not.
+        Keeper::Witness { of, by: None } => SmolStr::new(format!("witness:{of}")),
+        Keeper::Witness { of, by: Some(by) } => SmolStr::new(format!("witness:{of}:rule:{by}")),
+        Keeper::EntrySurface => SmolStr::new_static("entry-surface"),
+        Keeper::Published { .. } => SmolStr::new_static("published"),
+        Keeper::SurfaceImport { .. } => SmolStr::new_static("surface-import"),
+        Keeper::OwnerBinding { .. } => SmolStr::new_static("owner-binding"),
+        Keeper::Qualified { .. } => SmolStr::new_static("qualified"),
+    }
+}
+
+fn edge_ref(cx: &QueryContext<'_>, keeper: &Keeper) -> EdgeRef {
     EdgeRef {
-        kind,
-        site: site.map(|s| {
+        kind: ground(keeper),
+        site: keeper_site(keeper).map(|s| {
             let path = &cx.graph.files[s.file as usize].path;
             SiteRef {
                 path: path.clone(),
@@ -1040,8 +1102,14 @@ fn used_by(cx: &QueryContext<'_>, selector: Selector, limit: usize) -> Answer {
                 }
             }
             for r in &f.dispatched {
-                if whole_file(r) {
-                    kept_by.push(edge_ref(cx, &Keeper::Dispatch { kind: r.kind }));
+                if whole_file(&r.root) {
+                    kept_by.push(edge_ref(
+                        cx,
+                        &Keeper::Dispatch {
+                            kind: r.root.kind,
+                            by: r.by.clone(),
+                        },
+                    ));
                 }
             }
             let mut by_color: BTreeMap<&'static str, u32> = BTreeMap::new();
@@ -1075,7 +1143,7 @@ fn keeper_site(keeper: &Keeper) -> Option<navigate::Site> {
         | Keeper::OwnerBinding { site } => Some(*site),
         Keeper::Root { .. }
         | Keeper::Dispatch { .. }
-        | Keeper::Exempt
+        | Keeper::Exempt { .. }
         | Keeper::Witness { .. }
         | Keeper::EntrySurface
         | Keeper::Published { .. } => None,

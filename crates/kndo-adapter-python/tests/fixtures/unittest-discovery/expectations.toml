@@ -10,8 +10,9 @@
 # Inside a rooted test file the entry surface is the runner's own door: it
 # enters the module and reaches everything exported there, so `setUp` needs no
 # framework knowledge to stay alive. What the `test*` rule adds is a SECOND
-# keeper on `test_add` (`dispatch:test`); what the underscore takes away is the
-# first, which is why the two private leftovers are still answerable.
+# keeper on `test_add`, and `because` pins WHICH rule that is, so deleting it
+# fails this fixture by name; what the underscore takes away is the first,
+# which is why the two private leftovers are still answerable.
 
 [[alive]]
 subject = "tests/support.py"
@@ -31,7 +32,8 @@ why = "the control: being inside a rooted test file does not keep what the file 
 [[alive]]
 subject = "tests/test_calc.py#CalcTest.test_add"
 category = "unused"
-why = "a `test*` member of a type in a Test unit — the runner's own dispatch, stated as a rule; `describe` shows it kept by `dispatch:test` ahead of `entry-surface`"
+because = "rule:kndo:python#6"
+why = "a `test*` member of a type in a Test unit — the runner's own dispatch, stated as a rule, ahead of the `entry-surface` its neighbours ride"
 
 [[alive]]
 subject = "tests/test_calc.py#CalcTest.setUp"

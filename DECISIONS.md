@@ -6688,3 +6688,74 @@ guests) and the plugin-contributed categories in the conformance fixtures.
 The cost was symmetric — whichever word won, exactly one of (ABI, schema key)
 had to break. The ABI is pre-1.0 with a compat matrix built to make this
 visible; the schema key was already `plugins`.
+
+## 2026-09-09 — a keeper names the rule that made it, and 44 rules name no fixture
+
+The first of the plan's seven extensions ("Las formas que faltan", the artifact
+that captured what the plan did not design). `Derivation`'s load-bearing half:
+a derived root, exemption or witness now carries **which rule derived it**.
+
+`kndo_contract::plugin::RuleId { plugin, index }` — the coordinate of the spec
+that DECLARES a rule, and its position in that spec's own list, never in the
+combined list a language is dispatched with. So a pack's rule is `kndo:xctest#0`
+whichever language it rides into. `kndo-core::dispatch` grew `Rules` (the
+attributed list), `DerivedRoot`, `Exemption` and `Witnessed`; `GraphFile` holds
+those instead of bare `Root`/`u32`/`(u32, SmolStr)`; `Keeper::Dispatch`,
+`Keeper::Exempt` and `Keeper::Witness` carry the `RuleId`.
+
+**One spelling, three consumers.** `kndo_core::query::ground` is the single
+render of "why is this alive", and `EdgeRef.kind` IS that string: `kndo
+describe` prints it, `kndo used-by` lists it, and a fixture's new
+`because = "..."` pins it. The old `dispatch:test` / `exempt` spellings are
+gone — "dispatch" was never the interesting half of that answer. A rule-derived
+ground reads `rule:kndo:python#6`; a witness a rule named reads
+`witness:Comparable:rule:kndo:java#4`; a witness the graph's own relations
+resolved carries no rule and reads `witness:Comparable`, because there is no
+rule to ablate.
+
+**The fixture vocabulary gained `because`, and the testkit gained a seam.**
+`Expectations::check` took two closures' worth of questions and now takes one
+`Tree` — `names_something` and `grounds`, the same two questions the query
+verbs answer. `Violation::BecauseAbsent` is the new failure. Pinned in this
+commit: `unittest-discovery` (`rule:kndo:python#6`), `dunder-and-decorated`
+(`witness:*:rule:kndo:python#7`, `rule:kndo:python#3`),
+`runtime-required-members` (`witness:Comparable:rule:kndo:java#4`,
+`witness:Serializable:rule:kndo:java#13` twice), `dispatch-and-cross-package`
+in java and kotlin, `attribute-dispatch` (`rule:kndo:rust#7`, `#17`, `#21`),
+`main-in-every-target` (`#25`, `#26`), `global-allocator` (`#9`),
+`test-file-init` (`rule:kndo:go#1`), `apple-bundles` (`rule:kndo:swift#1`).
+
+**Measured, and it is the point of the whole thing: 73 of 100 dispatch rules
+fire in NO fixture.** 29 of those are `kndo:spring`'s, which activation gates
+and `builtin_plugin_proofs` covers separately. The remaining **44 belong to
+claiming adapters and are exercised by nothing** — `#[bench]`, `#[proc_macro]`,
+`allow(unused)`, go's `Benchmark*`/`Example*`/`Fuzz*`, java's `Runnable`,
+`Callable`, `AutoCloseable` witnesses, every adapter's `generated` marker. A
+rule no tree fires is a claim about a language this repo has never watched hold:
+it can be wrong, or deleted, and the run is byte-identical either way. That
+silence is exactly what `RuleId` exists to break, so the 44 are enumerated in
+`RULES_WITHOUT_A_FIXTURE` and the gate `every_dispatch_rule_fires_in_some_fixture`
+holds the list from three sides — a new cold rule fails, a row that warmed up
+fails, and a row naming a rule no extension declares fails. The list only
+shrinks; each row is a fixture owed.
+
+**The ablation was verified, not asserted.** Deleting python's rule 6 (the
+`test*`-member rule) from a file copy turns `unittest-discovery` red with
+"`tests/test_calc.py#CalcTest.test_add` claims `rule:kndo:python#6` keeps it —
+the run derived [entry-surface]". That is the same diagnosis I previously had to
+reach by hand, three separate times, on a run that came back byte-identical.
+The same ablation also reddened `dunder-and-decorated`, whose pin named rule 7:
+positions renumber, and the ledger is deliberately loud about it.
+
+`GRAPH_SEMANTICS_VERSION` 37 → 38: `GraphFile`'s dispatch fields changed shape,
+so a cached graph from before this commit must not be read back. The contract
+fingerprint did NOT move — `RuleId` is the engine's attribution, not evidence an
+adapter writes. No `expected.json` moved: the findings are identical, and only
+their explanation gained a name.
+
+**Retired in the same commit:** the second dispatch pass in
+`graph::dispatch_files` that re-ran every pack's rules over every file to count
+`pack_roots`. The attribution answers it directly — a derived root credited to a
+pack's coordinate is that pack's claim — and the language-first ordering means a
+root the language would have derived anyway is credited to the language, which
+is what the second pass was approximating.

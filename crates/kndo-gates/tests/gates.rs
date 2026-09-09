@@ -477,6 +477,25 @@ fn adapter_conformance_fixtures_are_byte_identical() {
     );
 }
 
+/// The run a fixture's claims are checked against — the same two questions
+/// `kndo describe` and `kndo used-by` answer, through the facade every
+/// frontend uses.
+struct TheRun<'a>(&'a kndo::Snapshot);
+
+impl kndo_testkit::expectations::Tree for TheRun<'_> {
+    fn names_something(&self, subject: &str) -> bool {
+        kndo::query::selector_exists(&self.0.graph, subject)
+    }
+
+    fn grounds(&self, subject: &str) -> Vec<String> {
+        self.0
+            .grounds(subject)
+            .iter()
+            .map(|g| g.to_string())
+            .collect()
+    }
+}
+
 #[test]
 fn fixture_expectations_hold() {
     // A fixture's claims are data (`expectations.toml`, see kndo_testkit::expectations):
@@ -510,8 +529,7 @@ fn fixture_expectations_hold() {
         }
         let report = snapshot.report();
         let reported: Vec<Reported> = report.findings.iter().map(Reported::of).collect();
-        let exists = |raw: &str| kndo::query::selector_exists(&snapshot.graph, raw);
-        for v in expectations.check(&reported, &exists) {
+        for v in expectations.check(&reported, &TheRun(snapshot)) {
             failures.push(format!("{name}: {v}"));
         }
     });
@@ -2340,4 +2358,117 @@ fn rust_and_wit_sources(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>
             out.push(path);
         }
     }
+}
+
+/// Dispatch rules no fixture exercises — a claim about a language this tree
+/// has never watched hold. Such a rule can be wrong, or gone, and nothing goes
+/// red: the run is byte-identical either way, which is exactly the silence
+/// `RuleId` exists to break. Every row is a FIXTURE OWED, never a permanent
+/// exemption, and the list only shrinks.
+///
+/// A rule PACK's rules are not here: activation gates them, so no fixture
+/// project reaches them, and `builtin_plugin_proofs` runs each pack against a
+/// project that does activate it.
+const RULES_WITHOUT_A_FIXTURE: &[&str] = &[
+    "kndo:js-ts#0",
+    "kndo:js-ts#1",
+    "kndo:rust#0",
+    "kndo:rust#2",
+    "kndo:rust#3",
+    "kndo:rust#4",
+    "kndo:rust#6",
+    "kndo:rust#8",
+    "kndo:rust#10",
+    "kndo:rust#11",
+    "kndo:rust#12",
+    "kndo:rust#13",
+    "kndo:rust#14",
+    "kndo:rust#15",
+    "kndo:rust#16",
+    "kndo:rust#18",
+    "kndo:rust#19",
+    "kndo:rust#20",
+    "kndo:rust#22",
+    "kndo:rust#24",
+    "kndo:rust#27",
+    "kndo:rust#28",
+    "kndo:go#0",
+    "kndo:go#2",
+    "kndo:go#3",
+    "kndo:go#4",
+    "kndo:java#0",
+    "kndo:java#3",
+    "kndo:java#5",
+    "kndo:java#6",
+    "kndo:java#7",
+    "kndo:java#8",
+    "kndo:java#9",
+    "kndo:java#10",
+    "kndo:java#11",
+    "kndo:java#12",
+    "kndo:kotlin#0",
+    "kndo:kotlin#2",
+    "kndo:python#0",
+    "kndo:python#2",
+    "kndo:python#4",
+    "kndo:python#8",
+    "kndo:swift#0",
+    "kndo:css#0",
+];
+
+#[test]
+fn every_dispatch_rule_fires_in_some_fixture() {
+    use std::collections::BTreeSet;
+    let mut fired: BTreeSet<String> = BTreeSet::new();
+    for_each_fixture(|_, _, snapshot| {
+        for f in &snapshot.graph.files {
+            let by = f
+                .dispatched
+                .iter()
+                .map(|d| &d.by)
+                .chain(f.exempt.iter().map(|e| &e.by))
+                .chain(f.witnesses.iter().map(|w| &w.by));
+            fired.extend(by.map(|id| id.to_string()));
+        }
+    });
+    let owed: BTreeSet<&str> = RULES_WITHOUT_A_FIXTURE.iter().copied().collect();
+    let mut cold: Vec<String> = Vec::new();
+    let mut warm_but_listed: Vec<String> = Vec::new();
+    let mut declared: BTreeSet<String> = BTreeSet::new();
+    for plugin in kndo::default_extensions() {
+        let spec = plugin.spec();
+        // Only a CLAIMING extension's rules: see the doc-comment above.
+        if spec.suffixes().is_empty() {
+            continue;
+        }
+        for i in 0..spec.dispatch_rules().len() {
+            let id = format!("{}#{i}", spec.coordinate());
+            let listed = owed.contains(id.as_str());
+            match (fired.contains(&id), listed) {
+                (false, false) => cold.push(id.clone()),
+                (true, true) => warm_but_listed.push(id.clone()),
+                _ => {}
+            }
+            declared.insert(id);
+        }
+    }
+    let gone: Vec<&&str> = RULES_WITHOUT_A_FIXTURE
+        .iter()
+        .filter(|id| !declared.contains(**id))
+        .collect();
+    assert!(
+        cold.is_empty(),
+        "these dispatch rules fire in no fixture — write the case that proves \
+         each one, or delete the rule: {cold:?}"
+    );
+    assert!(
+        warm_but_listed.is_empty(),
+        "these rules now HAVE a fixture — drop their rows from \
+         RULES_WITHOUT_A_FIXTURE in this commit: {warm_but_listed:?}"
+    );
+    assert!(
+        gone.is_empty(),
+        "RULES_WITHOUT_A_FIXTURE names rules no extension declares — a rule \
+         moved or left, and the ledger's indices are stale: {gone:?}"
+    );
 }

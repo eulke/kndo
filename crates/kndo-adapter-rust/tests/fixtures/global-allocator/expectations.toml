@@ -2,6 +2,7 @@
 
 [[alive]]
 subject = "src/main.rs#ALLOC"
+because = "rule:kndo:rust#9"
 why = "#[global_allocator] makes the static a runtime root, cfg or not"
 
 [[alive]]

@@ -7,14 +7,17 @@ why = "nothing calls it and no attribute speaks for it"
 
 [[alive]]
 subject = "src/ffi.rs#exported_symbol"
+because = "rule:kndo:rust#7"
 why = "#[unsafe(no_mangle)] unwraps to no_mangle: the linker exports it — a dispatched Production root"
 
 [[alive]]
 subject = "src/ffi.rs#kept_on_purpose"
+because = "rule:kndo:rust#17"
 why = "#[allow(dead_code)] exempts it: the source already answered the question"
 
 [[alive]]
 subject = "src/ffi.rs#expected_unused"
+because = "rule:kndo:rust#21"
 why = "#[expect(unused)] exempts it: the author asked the compiler for exactly this lint"
 
 [[alive]]

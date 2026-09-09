@@ -6,37 +6,101 @@
 //! A pure function of (evidence, rules): recomputed whenever a file's
 //! evidence moves, stored on the graph beside the manifest anchors and never
 //! in the evidence cache, so a rule change never has to re-extract anything.
+//!
+//! Everything derived here names the rule that derived it ([`RuleId`]). That
+//! attribution is not a diagnostic: it reaches `kndo describe` and a fixture's
+//! `because`, which is what makes ablation a gate — remove a rule, and the
+//! claims standing on it fail by name.
 
 use kndo_contract::evidence::{FileEvidence, Marker, MarkerTarget, Root, RootTarget};
 use kndo_contract::manifest::UnitKind;
-use kndo_contract::plugin::{DeclarationCx, DispatchRule, Effect};
+use kndo_contract::plugin::{DeclarationCx, DispatchRule, Effect, PluginSpec, RuleId};
 use smol_str::SmolStr;
 use std::collections::BTreeMap;
+
+/// The rules one claiming plugin is dispatched with: its own, in its own
+/// order, then every ACTIVE rule pack's, in composition order. Each keeps the
+/// identity of the spec that declares it, so a pack's rule is `kndo:xctest#0`
+/// whichever language it rides into.
+#[derive(Debug, Default, Clone)]
+pub struct Rules(Vec<(RuleId, DispatchRule)>);
+
+impl Rules {
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Every rule a spec declares, in the order the spec writes them.
+    pub fn of(spec: &PluginSpec) -> Rules {
+        let mut rules = Rules::default();
+        rules.extend(spec);
+        rules
+    }
+
+    pub fn extend(&mut self, spec: &PluginSpec) {
+        self.declared_by(spec.coordinate(), spec.dispatch_rules());
+    }
+
+    fn declared_by(&mut self, coordinate: &str, rules: &[DispatchRule]) {
+        self.0.extend(
+            rules
+                .iter()
+                .enumerate()
+                .map(|(i, r)| (RuleId::new(coordinate, i as u32), r.clone())),
+        );
+    }
+
+    fn iter(&self) -> impl Iterator<Item = &(RuleId, DispatchRule)> {
+        self.0.iter()
+    }
+}
+
+/// A root a rule derived, beside the rule that derived it.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct DerivedRoot {
+    pub root: Root,
+    pub by: RuleId,
+}
+
+/// A declaration a rule lifts out of the unused judgment.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Exemption {
+    pub decl: u32,
+    pub by: RuleId,
+}
+
+/// A declaration a rule made a witness, with the base whose surface it
+/// satisfies as the rule spells it — see
+/// [`kndo_contract::plugin::Effect::Witness`].
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Witnessed {
+    pub decl: u32,
+    pub base: SmolStr,
+    pub by: RuleId,
+}
 
 /// What the rules derived for one file.
 #[derive(Debug, Default)]
 pub struct Dispatched {
     /// Roots the rules derived, sorted and deduplicated like manifest anchors.
-    pub roots: Vec<Root>,
+    pub roots: Vec<DerivedRoot>,
     /// Declarations the source exempts from the unused judgment, by index,
     /// sorted and deduplicated.
-    pub exempt: Vec<u32>,
+    pub exempt: Vec<Exemption>,
     /// What the run should say about this file: a blanket exemption is a fact
     /// worth a line in the report, never a silent hole in the findings.
     pub notes: Vec<String>,
     /// A generator owns this file — see
     /// [`kndo_contract::plugin::Effect::Generated`].
     pub generated: bool,
-    /// Declarations a rule made witnesses, by index, each with the base whose
-    /// surface it satisfies as the rule spells it — see
-    /// [`kndo_contract::plugin::Effect::Witness`]. Sorted by index.
-    pub witnesses: Vec<(u32, SmolStr)>,
+    /// Declarations a rule made witnesses, sorted by index.
+    pub witnesses: Vec<Witnessed>,
 }
 
 pub fn apply(
     evidence: &FileEvidence,
     supertypes: &BTreeMap<SmolStr, Vec<SmolStr>>,
-    rules: &[DispatchRule],
+    rules: &Rules,
 ) -> Dispatched {
     let mut out = Dispatched::default();
     if rules.is_empty() || evidence.markers.is_empty() {
@@ -48,7 +112,7 @@ pub fn apply(
         supertypes,
     };
     for marker in &evidence.markers {
-        for rule in rules {
+        for (id, rule) in rules.iter() {
             if !rule.when.matches(&cx, marker) {
                 continue;
             }
@@ -59,10 +123,13 @@ pub fn apply(
                         MarkerTarget::Declaration(id) => RootTarget::Declaration(*id),
                         _ => continue,
                     };
-                    out.roots.push(Root {
-                        target,
-                        kind,
-                        confidence: rule.confidence,
+                    out.roots.push(DerivedRoot {
+                        root: Root {
+                            target,
+                            kind,
+                            confidence: rule.confidence,
+                        },
+                        by: id.clone(),
                     });
                 }
                 Effect::Generated => {
@@ -79,8 +146,12 @@ pub fn apply(
                     }
                 }
                 Effect::Witness => {
-                    if let MarkerTarget::Declaration(id) = &marker.on {
-                        out.witnesses.push((id.index() as u32, spell_path(marker)));
+                    if let MarkerTarget::Declaration(decl) = &marker.on {
+                        out.witnesses.push(Witnessed {
+                            decl: decl.index() as u32,
+                            base: spell_path(marker),
+                            by: id.clone(),
+                        });
                     }
                 }
                 Effect::Exempt => match &marker.on {
@@ -89,7 +160,10 @@ pub fn apply(
                         if n == 0 {
                             continue;
                         }
-                        out.exempt.extend(0..n as u32);
+                        out.exempt.extend((0..n as u32).map(|decl| Exemption {
+                            decl,
+                            by: id.clone(),
+                        }));
                         out.notes.push(format!(
                             "`{}` at file level exempts every declaration here ({n}) from \
                              the unused judgment",
@@ -98,12 +172,15 @@ pub fn apply(
                     }
                     // Lexically scoped, as lint attributes are: the marked
                     // declaration and everything declared within its extent.
-                    MarkerTarget::Declaration(id) => {
-                        let outer = evidence.declarations[id.index()].span;
+                    MarkerTarget::Declaration(decl) => {
+                        let outer = evidence.declarations[decl.index()].span;
                         for (j, d) in evidence.declarations.iter().enumerate() {
                             let inside = d.span.start >= outer.start && d.span.end <= outer.end;
-                            if j == id.index() || inside {
-                                out.exempt.push(j as u32);
+                            if j == decl.index() || inside {
+                                out.exempt.push(Exemption {
+                                    decl: j as u32,
+                                    by: id.clone(),
+                                });
                             }
                         }
                     }
@@ -113,8 +190,7 @@ pub fn apply(
         }
     }
     sort_roots(&mut out.roots);
-    out.exempt.sort_unstable();
-    out.exempt.dedup();
+    sort_exemptions(&mut out.exempt);
     sort_witnesses(&mut out.witnesses);
     out
 }
@@ -144,14 +220,13 @@ pub fn supertype_edges<'a>(
 /// runtime calls, witnesses from a surface an owner promised. Separate from
 /// [`apply`] because the qualifier these rules read is the file's ROLE, which
 /// the project states and only the assembled graph knows: what a unit's kind
-/// and a declared file role say lands as a root on the file, and `colors` is
-/// what those roots carry (sorted and deduplicated).
+/// and a declared file role say lands as a root on the file.
 pub fn declaration_effects(
     evidence: &FileEvidence,
     compiled_into: Option<UnitKind>,
     supertypes: &BTreeMap<SmolStr, Vec<SmolStr>>,
-    rules: &[DispatchRule],
-) -> (Vec<Root>, Vec<(u32, SmolStr)>) {
+    rules: &Rules,
+) -> (Vec<DerivedRoot>, Vec<Witnessed>) {
     let mut roots = Vec::new();
     let mut witnesses = Vec::new();
     if rules.is_empty() {
@@ -162,20 +237,25 @@ pub fn declaration_effects(
         compiled_into,
         supertypes,
     };
-    for (id, _) in evidence.declarations_with_ids() {
-        for rule in rules {
-            if !rule.when.matches_declaration(&cx, id) {
+    for (decl, _) in evidence.declarations_with_ids() {
+        for (id, rule) in rules.iter() {
+            if !rule.when.matches_declaration(&cx, decl) {
                 continue;
             }
             match rule.then {
-                Effect::Root(kind) => roots.push(Root {
-                    target: RootTarget::Declaration(id),
-                    kind,
-                    confidence: rule.confidence,
+                Effect::Root(kind) => roots.push(DerivedRoot {
+                    root: Root {
+                        target: RootTarget::Declaration(decl),
+                        kind,
+                        confidence: rule.confidence,
+                    },
+                    by: id.clone(),
                 }),
-                Effect::Witness => {
-                    witnesses.push((id.index() as u32, witness_base(&rule.when)));
-                }
+                Effect::Witness => witnesses.push(Witnessed {
+                    decl: decl.index() as u32,
+                    base: witness_base(&rule.when),
+                    by: id.clone(),
+                }),
                 Effect::Exempt | Effect::Generated => {}
             }
         }
@@ -201,22 +281,40 @@ fn witness_base(trigger: &kndo_contract::plugin::Trigger) -> SmolStr {
     }
 }
 
-fn sort_witnesses(witnesses: &mut Vec<(u32, SmolStr)>) {
-    witnesses.sort();
-    witnesses.dedup_by_key(|(ix, _)| *ix);
+/// One witness per declaration, and the same one however the rules were
+/// ordered: by index, then by the base's spelling, then by the rule — the
+/// first survives.
+pub fn sort_witnesses(witnesses: &mut Vec<Witnessed>) {
+    witnesses.sort_by(|a, b| (a.decl, &a.base, &a.by).cmp(&(b.decl, &b.base, &b.by)));
+    witnesses.dedup_by_key(|w| w.decl);
+}
+
+/// One exemption per declaration: the earliest rule that lifted it out.
+fn sort_exemptions(exempt: &mut Vec<Exemption>) {
+    exempt.sort_by_key(|e| e.decl);
+    exempt.dedup_by_key(|e| e.decl);
 }
 
 /// The one order derived roots are held in — by target, then color, then
 /// strongest confidence first — so a graph is byte-identical however its
-/// roots were derived.
-pub fn sort_roots(roots: &mut Vec<Root>) {
-    let target_key = |r: &Root| match &r.target {
+/// roots were derived. The rule is NOT part of the key: two rules deriving
+/// the same root are one root, credited to the earlier rule.
+pub fn sort_roots(roots: &mut Vec<DerivedRoot>) {
+    let target_key = |r: &DerivedRoot| match &r.root.target {
         RootTarget::Declaration(id) => id.index() as u32,
         _ => u32::MAX,
     };
-    roots.sort_by_key(|r| (target_key(r), r.kind as u8, std::cmp::Reverse(r.confidence)));
+    roots.sort_by_key(|r| {
+        (
+            target_key(r),
+            r.root.kind as u8,
+            std::cmp::Reverse(r.root.confidence),
+        )
+    });
     roots.dedup_by(|a, b| {
-        target_key(a) == target_key(b) && a.kind == b.kind && a.confidence == b.confidence
+        target_key(a) == target_key(b)
+            && a.root.kind == b.root.kind
+            && a.root.confidence == b.root.confidence
     });
 }
 
@@ -245,24 +343,29 @@ mod tests {
     use kndo_contract::vocab::{Confidence, Span};
     use smol_str::SmolStr;
 
-    fn rules() -> Vec<DispatchRule> {
-        vec![
-            DispatchRule {
-                when: Trigger::marker("test"),
-                then: Effect::Root(RootKind::Test),
-                confidence: Confidence::Certain,
-            },
-            DispatchRule {
-                when: Trigger::marker("*::test"),
-                then: Effect::Root(RootKind::Test),
-                confidence: Confidence::Certain,
-            },
-            DispatchRule {
-                when: Trigger::marker_with("allow", "dead_code"),
-                then: Effect::Exempt,
-                confidence: Confidence::Certain,
-            },
-        ]
+    fn rules() -> Rules {
+        let mut out = Rules::default();
+        out.declared_by(
+            "kndo:mock",
+            &[
+                DispatchRule {
+                    when: Trigger::marker("test"),
+                    then: Effect::Root(RootKind::Test),
+                    confidence: Confidence::Certain,
+                },
+                DispatchRule {
+                    when: Trigger::marker("*::test"),
+                    then: Effect::Root(RootKind::Test),
+                    confidence: Confidence::Certain,
+                },
+                DispatchRule {
+                    when: Trigger::marker_with("allow", "dead_code"),
+                    then: Effect::Exempt,
+                    confidence: Confidence::Certain,
+                },
+            ],
+        );
+        out
     }
 
     fn sink() -> EvidenceSink {
@@ -271,6 +374,10 @@ mod tests {
 
     fn args(list: &[&str]) -> Vec<SmolStr> {
         list.iter().map(SmolStr::new).collect()
+    }
+
+    fn exempted(d: &Dispatched) -> Vec<u32> {
+        d.exempt.iter().map(|e| e.decl).collect()
     }
 
     #[test]
@@ -305,15 +412,22 @@ mod tests {
         s.marker(MarkerTarget::File, "test", vec![], Span::new(0, 0));
         let d = apply(&s.finish(), &BTreeMap::new(), &rules());
         assert_eq!(d.roots.len(), 2, "{:?}", d.roots);
+        // Two attributes, one root — credited to the EARLIER rule, so the
+        // derivation is a function of the rule list and not of the source's
+        // attribute order.
         assert!(matches!(
             &d.roots[0],
-            Root { target: RootTarget::Declaration(id), kind: RootKind::Test, .. } if *id == unit
+            DerivedRoot { root: Root { target: RootTarget::Declaration(id), kind: RootKind::Test, .. }, by }
+                if *id == unit && by.to_string() == "kndo:mock#0"
         ));
         assert!(matches!(
             &d.roots[1],
-            Root {
-                target: RootTarget::WholeFile,
-                kind: RootKind::Test,
+            DerivedRoot {
+                root: Root {
+                    target: RootTarget::WholeFile,
+                    kind: RootKind::Test,
+                    ..
+                },
                 ..
             }
         ));
@@ -344,8 +458,9 @@ mod tests {
         );
         let ev = s.finish();
         let d = apply(&ev, &BTreeMap::new(), &rules());
-        assert_eq!(d.exempt, [outer.index() as u32, inner.index() as u32]);
-        assert!(!d.exempt.contains(&(beside.index() as u32)));
+        assert_eq!(exempted(&d), [outer.index() as u32, inner.index() as u32]);
+        assert!(!exempted(&d).contains(&(beside.index() as u32)));
+        assert!(d.exempt.iter().all(|e| e.by.to_string() == "kndo:mock#2"));
         assert!(d.notes.is_empty());
 
         let mut s = sink();
@@ -358,7 +473,7 @@ mod tests {
             Span::new(0, 5),
         );
         let d = apply(&s.finish(), &BTreeMap::new(), &rules());
-        assert_eq!(d.exempt, [0, 1]);
+        assert_eq!(exempted(&d), [0, 1]);
         assert_eq!(
             d.notes,
             [
@@ -378,7 +493,7 @@ mod tests {
             Span::new(0, 7),
         );
         let ev = s.finish();
-        let d = apply(&ev, &BTreeMap::new(), &[]);
+        let d = apply(&ev, &BTreeMap::new(), &Rules::default());
         assert!(d.roots.is_empty() && d.exempt.is_empty());
         let bare = sink().finish();
         let d = apply(&bare, &BTreeMap::new(), &rules());

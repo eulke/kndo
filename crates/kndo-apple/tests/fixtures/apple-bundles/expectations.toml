@@ -22,6 +22,7 @@ why = "named by the extension's Info.plist under WKExtensionDelegateClassName â€
 
 [[alive]]
 subject = "Example/Source/AppDelegate.swift#AppDelegate"
+because = "rule:kndo:swift#1"
 why = "the @main type is the executable's entry root"
 
 [[known_gap]]
