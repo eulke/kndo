@@ -33,6 +33,12 @@ A killed idea's deliverable is a `DECISIONS.md` entry with its number, so nobody
 rediscovers and rebuilds it. A design without a measurement attached is a guess wearing a
 spec's clothes: measure, then design around what you measured.
 
+The explanation is part of the measurement. A delta's cause is named from what the engine
+SAYS — `used-by`, `explain`, `grounds` on one of the subjects that moved — never from
+memory of how the engine works, which is the same guess wearing a measurement's clothes.
+It binds hardest when the explanation argues for NOT shipping: a change that lands is
+re-checked by every gate it passes, and one that doesn't is checked by nobody.
+
 ## Which knob
 
 Two deliberate version knobs exist; shape changes use neither.
@@ -154,6 +160,11 @@ Deliver the plan at its stated scope. A milestone, gate, or design piece is cut 
 the owner's explicit decision, recorded in `DECISIONS.md` — never quietly by whoever
 builds it. Too big? Say so and propose the cut; a half-shipped feature nobody decided to
 halve is worse than either whole or absent.
+
+Recording a cut is not making one: the entry carries the owner's decision, it never
+stands in for it. And a shape the plan LACKS is not a cut at all — it is the next thing
+to design, in the plan's own idiom, and show. Blocked mid-item is a reason to design and
+ask, never a reason to hold: hold work only when the owner says hold.
 
 ## Hygiene
 
