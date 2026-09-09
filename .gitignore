@@ -23,6 +23,10 @@ coverage/
 
 # `cargo xtask package` output — release artifacts are built by CI, never committed.
 dist/
+# …except a fixture's own tree: `src-layout-roots` names its distribution `dist`,
+# and this line ate the two modules its pinned report is OF — the same trap the
+# coverage note above names, one directory further down.
+!crates/*/tests/fixtures/**/dist/
 
 # Claude Code's own tooling state (session worktrees for parallel-agent workflows, etc.) —
 # local to the machine running the session, never repo content. `skills/` is the one exception:

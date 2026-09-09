@@ -29,7 +29,7 @@
     ]
   },
   "health": {
-    "implicated": 7,
+    "implicated": 8,
     "subjects": 1228,
     "by_category": [
       {
@@ -38,7 +38,7 @@
       },
       {
         "category": "unused",
-        "findings": 5
+        "findings": 6
       }
     ],
     "by_package": [
@@ -51,7 +51,7 @@
       {
         "name": "flask-example-celery",
         "manifest": "examples/celery/pyproject.toml",
-        "implicated": 0,
+        "implicated": 1,
         "subjects": 18
       },
       {
@@ -92,26 +92,26 @@
       "message": "9 files form an import cycle: src/flask/__init__.py → src/flask/app.py → src/flask/__init__.py"
     },
     {
-      "id": "kndo-4d64d964475a",
+      "id": "kndo-dbe4c933098d",
       "category": "unused",
       "severity": "warning",
       "confidence": "certain",
       "subject": {
-        "kind": "symbol",
-        "path": "docs/conf.py",
-        "selector": {
-          "name": "setup"
-        },
-        "span": {
-          "start": 3334,
-          "end": 3385
-        }
+        "kind": "file",
+        "path": "docs/conf.py"
       },
-      "lines": {
-        "start": 100,
-        "end": 101
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-42b0827e9950",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "examples/celery/make_celery.py"
       },
-      "message": "nothing references, roots, or imports this declaration"
+      "message": "no root anchors this file and no reachable file imports it"
     },
     {
       "id": "kndo-b48bc44863cd",
@@ -397,17 +397,6 @@
         "end": 110
       },
       "message": "structural clone of tests/test_templating.py:test_escaping"
-    },
-    {
-      "id": "kndo-fafb1d5a0d15",
-      "category": "untested",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "file",
-        "path": "docs/conf.py"
-      },
-      "message": "production-reachable, but no test reaches this file"
     },
     {
       "id": "kndo-ac26eed80e7a",

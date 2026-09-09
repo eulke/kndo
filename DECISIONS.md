@@ -7114,3 +7114,102 @@ globs are spec data and two crates asked for them.
 was `plugin, con todo incluido`; the facade's one composition list, the gate
 registry's invariant text, the README and one CLI diagnostic still said
 `extension`.
+
+## 2026-09-09 — a unit name is not a unit identity, and a crate root speaks for its crate
+
+**Two shapes, one sentence each.** A manifest naming a unit was naming a
+`SmolStr`, and guava declares a module called `guava` twice — once per reactor —
+so the word alone names one of two things. `UnitRef { name, declared_in }`
+replaces it on `UnitDep`: the name as the manifest spells it, plus the manifest
+that HAD to declare it where the ecosystem says so. And `MarkerTarget` had two
+targets where a language has three: a crate root's `#![allow(dead_code)]` is
+rustc's statement about the whole crate, and `MarkerTarget::Unit` is where it
+now lands.
+
+**The resolution rule is one function, and it grew one clause.** It lives on
+`Aggregators::resolve` in `crates/kndo-core/src/project.rs`, the only place a
+unit reference becomes a unit: a reference naming its declaring manifest is
+answered THERE and nowhere else; everything else resolves by name, and the
+NEAREST AGGREGATOR WINS — the naming manifest's own units first, then the first
+aggregator up the chain listing a manifest that declares the name.
+`ManifestEvidence::members` is the aggregation edge that makes the walk
+possible, and it keeps that name. A `declared_in` that names nothing falls
+THROUGH to the by-name walk rather than resolving to silence: a path that leads
+nowhere is an absence, and an absence degrades toward reach, never toward
+accusation. Three assertions in
+`a_reference_that_names_its_declaring_manifest_is_answered_there` pin all three
+readings.
+
+**Who can honestly write `declared_in`, and who cannot.** Cargo's
+`path = "../util"` names the directory whose `Cargo.toml` declares the crate:
+`kndo:rust` now emits it, joined through `kndo_toolkit::join_relative` so `..`
+climbs before `Cargo.toml` is appended, and every non-library target of a
+manifest names ITS OWN manifest as the declarer of the library it compiles
+against. Maven's reactor does NOT spell one — a `<dependency>` carries a
+groupId and an artifactId and no path — so the JVM reader keeps writing
+`UnitRef::named` and guava keeps resolving through the aggregator walk, which is
+what that walk was built for. Reading the reactor's own resolution as a path
+would have been inventing a coordinate the pom never wrote.
+
+**`MarkerTarget::Unit` is claimed by the adapter and BOUNDED by the engine, and
+the corpus is why.** `Plugin::extract` sees one file and no manifest — the
+manifest read happens after extraction — so an adapter cannot tell a crate root
+from any other module file. It therefore states the claim its grammar makes, and
+`dispatch::UnitVoice` bounds it: `Entry` (the file the build enters the unit
+through) makes the claim the unit's and broadcasts it to every file the unit
+compiles under the SAME plugin — a marker is a sentence in one language, and a
+file another plugin claims never read it; `Member` and `Unstated` read it as the
+file's own, exactly as `MarkerTarget::File`. The report says which happened, per
+file: "at unit level" or "at file level".
+
+The measured alternative was to honor the claim unconditionally, and this tree
+already refutes it. rustc scopes a lint attribute LEXICALLY: `#![allow(dead_code)]`
+in `src/scratch.rs` covers module `scratch`, not the crate. The
+`attribute-dispatch` fixture pins that exact tree — a file-top blanket in
+`src/scratch.rs`, and `src/ffi.rs#truly_dead` expected dead — so an unbounded
+reading would have silenced a true accusation to buy a numeric win. Its pinned
+report is byte-identical after this change.
+
+**ripgrep 143 → 141, and the other eight are byte-identical.**
+`crates/index/src/lib.rs` opens `#![allow(warnings)]` over `mod index; pub mod
+literal;`. `Handle::read_write` and `Handle::read_write_mut` in
+`crates/index/src/index.rs` retire — both were accused under a blanket written
+to cover them. Two diagnostics appear where they were: `index.rs` (23
+declarations) and `literal.rs` (71) each report the exemption that now applies
+to them. Alamofire 1484, Exposed 965, flask 19, gin 109, guava 8271, lodash 20,
+vapor 732, vite 712 — unchanged. `path =` disambiguates nothing on this corpus:
+no repository in it declares two crates of one name, which is precisely why the
+guarantee had to come from the shape rather than from a number.
+
+**Fixtures.** `crate-level-allow` moves: its `known_gap` on
+`src/inner.rs#stale` — "M8.b units: a unit root's file-level markers dispatch
+over the unit" — is closed and is now an `[[alive]]` claim, and both files
+report the blanket at unit level. `attribute-dispatch`'s report does not move;
+its `expectations.toml` gains the sentence naming why `truly_dead` stays dead.
+The new `kmock` engine test
+`a_unit_level_exemption_reaches_the_unit_and_only_from_its_entry` pins both
+halves in one project; ablating the broadcast fails it and `crate-level-allow`
+together, which is what makes it a gate.
+
+**`src-layout-roots` was broken before this work, and this repairs it.** The
+root `.gitignore`'s `dist/` line — `cargo xtask package` output — silently ate
+`crates/kndo-adapter-python/tests/fixtures/src-layout-roots/project/src/dist/`
+when the fixture landed: `git ls-files` holds its `pyproject.toml` and its test
+and neither module, and the project as committed discovers 2 files where its
+pinned report is of 5. That is the same "green locally, absent from CI" trap the
+`coverage/` note three lines above it names, and it gets the same negation:
+`!crates/*/tests/fixtures/**/dist/`. The two modules are rebuilt from the
+fixture's own `expectations.toml`, which survived: every count in the pinned
+report is reproduced exactly — 5 discovered, 4 claimed, 8 subjects, one `unused`
+finding on `src/dist/helpers.py#_never_named`, and the same finding id — and the
+one thing that could not be recovered is the BODY of `_never_named`, so its span
+narrows from 26..118 to 26..58 and its report moves by those two numbers alone.
+Fitting a docstring to the missing 60 bytes would have been fabricating fixture
+content to match a fingerprint, and the fixture's claims are what test it.
+
+**Knobs.** `kndo:rust` 16 → 17: the same source, different evidence — a file-top
+`#![…]` now targets the unit, and a `path =` dependency carries its declarer.
+`GRAPH_SEMANTICS_VERSION` 38 → 39: `ManifestEvidence` changed shape, which
+manifest evidence moves rather than the fingerprint. The contract fingerprint
+moves on its own, for `MarkerTarget`'s third variant. The report schema and the
+gate registry do not move.

@@ -99,11 +99,11 @@ fn dispatch_rules() -> Vec<DispatchRule> {
 impl RustAdapter {
     pub fn new() -> Self {
         RustAdapter {
-            // 15: `fn main`'s color is the kind of the cargo target the
-            // manifest says holds it.
+            // 17: a file-top `#![…]` claims the UNIT, and a `path =`
+            // dependency names the manifest that declares the crate.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:rust",
-                16,
+                17,
                 &["rs"],
                 &["**/Cargo.toml"],
                 // Modules within a crate reference each other freely — legal,

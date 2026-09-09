@@ -261,7 +261,10 @@ fn roots(unit: &kndo_contract::manifest::Unit) -> Vec<&str> {
 
 /// Every unit it compiles against, friendships included.
 fn depends_on(unit: &kndo_contract::manifest::Unit) -> Vec<&str> {
-    unit.depends_on.iter().map(|d| d.unit.as_str()).collect()
+    unit.depends_on
+        .iter()
+        .map(|d| d.unit.name.as_str())
+        .collect()
 }
 
 /// The half of those the build system compiles the unit WITH, not merely
@@ -270,6 +273,6 @@ fn friends(unit: &kndo_contract::manifest::Unit) -> Vec<&str> {
     unit.depends_on
         .iter()
         .filter(|d| d.grants >= kndo_contract::manifest::Grant::Unit)
-        .map(|d| d.unit.as_str())
+        .map(|d| d.unit.name.as_str())
         .collect()
 }

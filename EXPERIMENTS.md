@@ -30,6 +30,19 @@ of them `untested` on the .html files themselves — a pre-existing gap multipli
 Fixed only by adding `declares_units_of_testing`. Lesson generalized: a new adapter's
 first corpus run gates its ship, not its fixtures.
 
+### An unbounded `MarkerTarget::Unit` (2026-09-09)
+Question: should a file-top `#![…]` claiming the unit be honored from any file of it,
+rather than only from the file the build enters the unit through?
+Measurement: refuted before the corpus, by a fixture already in the tree.
+`attribute-dispatch` carries `#![allow(dead_code)]` in `src/scratch.rs` — a module
+file, not the crate root — and expects `src/ffi.rs#truly_dead` DEAD. rustc scopes a
+lint attribute lexically to the module that carries it, so honoring the claim from
+any file would silence a true accusation for a numeric win. The bounded reading ships
+(`dispatch::UnitVoice`) and that fixture's report is byte-identical; ripgrep 143 → 141
+from the crate-root case alone.
+Reopen only with: a language whose grammar says "the artifact" rather than "this
+module", and a spelling an adapter can recognize without the manifest.
+
 ## Deferred with data
 
 ### Incremental analysis (recolor on dirty regions)

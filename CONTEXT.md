@@ -65,8 +65,11 @@ privately mounted module puts around everything under it. Folded into the effect
 reach, so nothing under it is published surface.
 
 **Marker**:
-An attribute, annotation, decorator, modifier or directive on a declaration or a
-file, with its path and arguments. What a marker MEANS is a dispatch rule's business.
+An attribute, annotation, decorator, modifier or directive on a declaration, a file
+or a UNIT, with its path and arguments. What a marker MEANS is a dispatch rule's
+business; how far a unit marker REACHES is the engine's, since only it has read the
+manifest that says which file the build enters a unit through — the claim is the
+unit's from there, and the file's own anywhere else.
 _Avoid_: attribute table, root attribute
 
 **Relation**:
@@ -113,8 +116,16 @@ resolves what it imports.
 What the build system compiles as one artifact: a Cargo target, a SwiftPM target, a
 Maven or Gradle source set of one module, an npm workspace package, a Python
 distribution, a Go module. It has a kind (library, executable, test, bench, example,
-tooling), roots, excludes, entries, dependencies and a publication.
+tooling), roots, excludes, entries, dependencies and a publication. Its IDENTITY is
+(declaring manifest, name) — parallel trees legitimately give two units one name.
 _Avoid_: package (that word names the identity a bare specifier resolves to), module
+
+**Unit reference**:
+A unit as a manifest NAMES it, plus the manifest that had to declare it where the
+ecosystem says so (a Cargo `path =`). Stated silent, it resolves by name and the
+NEAREST AGGREGATOR wins: the naming manifest's own units first, then the first
+aggregator up the chain listing a manifest that declares the name.
+_Avoid_: dependency name (a name is not an identity)
 
 **Friend**:
 A unit allowed to use another unit's unit-reaching names: a Kotlin test source set

@@ -334,7 +334,10 @@ pub(crate) fn manifest_evidence(
                 .depends_on
                 .into_iter()
                 .map(|d| UnitDep {
-                    unit: SmolStr::new(d.unit),
+                    unit: kndo_contract::manifest::UnitRef {
+                        name: SmolStr::new(d.unit.name),
+                        declared_in: d.unit.declared_in.map(ProjectPath::new),
+                    },
                     grants: match d.grants {
                         awire::Grant::Exports => kndo_contract::manifest::Grant::Exports,
                         awire::Grant::Namespace => kndo_contract::manifest::Grant::Namespace,
@@ -648,6 +651,7 @@ pub(crate) fn replay_evidence(evidence: awire::FileEvidence, sink: &mut Evidence
                     continue;
                 }
             },
+            awire::MarkerTarget::Unit => ev::MarkerTarget::Unit,
         };
         sink.marker(
             on,

@@ -12,7 +12,8 @@ use crate::dispatch::{DerivedRoot, Exemption, Witnessed};
 use crate::extract::ClaimedFile;
 use kndo_contract::adapter::{PackageEntry, Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{
-    Attachment, FileEvidence, ImportShape, ImportTarget, Reach, Root, RootKind, RootTarget,
+    Attachment, FileEvidence, ImportShape, ImportTarget, Marker, MarkerTarget, Reach, Root,
+    RootKind, RootTarget,
 };
 use kndo_contract::manifest::UnitKind;
 use kndo_contract::plugin::{Plugin, PluginSpec};
@@ -24,7 +25,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Bump when the SAME evidence assembles into a DIFFERENT graph — resolution
 /// candidate changes, reachability semantics, new assembled fields. Folded into the
 /// graph cache key beside the contract fingerprint and the adapter set.
-pub const GRAPH_SEMANTICS_VERSION: u32 = 38;
+pub const GRAPH_SEMANTICS_VERSION: u32 = 39;
 
 #[derive(Serialize, Deserialize)]
 pub struct GraphFile {
@@ -609,7 +610,7 @@ pub fn assemble(
     }
     mount_and_own(&mut graph_files, &project);
     anchor_manifest_roots(adapters, &project, &reads, &mut graph_files);
-    let pack_roots = dispatch_files(&mut graph_files, adapters, active);
+    let pack_roots = dispatch_files(&mut graph_files, adapters, active, &project);
     publish_surfaces(&mut graph_files, &project);
 
     let manifest_declarations = collect_manifest_declarations(&reads);
@@ -857,6 +858,7 @@ fn dispatch_files(
     files: &mut [GraphFile],
     adapters: &[Box<dyn Plugin>],
     active: &BTreeSet<SmolStr>,
+    project: &crate::project::Project,
 ) -> BTreeMap<SmolStr, u32> {
     // A RULE PACK is a conduct extension that claims no files and declares
     // nothing but rules: what a FRAMEWORK means, which is no language's to own
@@ -904,9 +906,64 @@ fn dispatch_files(
         .iter()
         .map(|p| (SmolStr::new(p.coordinate()), 0))
         .collect();
-    for f in files.iter_mut() {
+    // What each unit's ENTRY says about the whole unit. A unit speaks through
+    // the file the build enters it through — a crate root's
+    // `#![allow(dead_code)]` is the crate's own statement, the same attribute
+    // on a module file is that module's — and only here is that knowable: the
+    // manifest named the entry, and extraction never saw the manifest. Keyed
+    // by (unit, claiming plugin) because a marker is a sentence in ONE
+    // language: a file another plugin claims never read it, and matching it
+    // against that plugin's rules would be reading a word out of its grammar.
+    let enters: Vec<bool> = files
+        .iter()
+        .map(|f| {
+            f.unit
+                .is_some_and(|u| project.units[u as usize].entries.contains(&f.path))
+        })
+        .collect();
+    let unit_markers: BTreeMap<(u32, &SmolStr), Vec<Marker>> = {
+        let mut out: BTreeMap<(u32, &SmolStr), Vec<Marker>> = BTreeMap::new();
+        for (f, enters) in files.iter().zip(&enters) {
+            let Some(unit) = f.unit.filter(|_| *enters) else {
+                continue;
+            };
+            let speaks = f
+                .evidence
+                .markers
+                .iter()
+                .filter(|m| matches!(m.on, MarkerTarget::Unit))
+                .cloned();
+            out.entry((unit, &f.adapter)).or_default().extend(speaks);
+        }
+        out.retain(|_, markers| !markers.is_empty());
+        out
+    };
+    // The entry's own copy stays where it is: `apply` reads it from the
+    // evidence, and handing it back would credit one declaration twice.
+    let carried: Vec<Vec<Marker>> = files
+        .iter()
+        .zip(&enters)
+        .map(|(f, enters)| match f.unit {
+            Some(u) if !enters => unit_markers
+                .get(&(u, &f.adapter))
+                .cloned()
+                .unwrap_or_default(),
+            _ => Vec::new(),
+        })
+        .collect();
+    let voice: Vec<crate::dispatch::UnitVoice<'_>> = files
+        .iter()
+        .zip(&enters)
+        .zip(&carried)
+        .map(|((f, enters), carried)| match (f.unit, enters) {
+            (None, _) => crate::dispatch::UnitVoice::Unstated,
+            (Some(_), true) => crate::dispatch::UnitVoice::Entry,
+            (Some(_), false) => crate::dispatch::UnitVoice::Member(carried),
+        })
+        .collect();
+    for (f, voice) in files.iter_mut().zip(&voice) {
         let rules = combined.get(&f.adapter).unwrap_or(&none);
-        let mut d = crate::dispatch::apply(&f.evidence, &supertypes, rules);
+        let mut d = crate::dispatch::apply(&f.evidence, voice, &supertypes, rules);
         let (roots, witnesses) =
             crate::dispatch::declaration_effects(&f.evidence, f.compiled_into, &supertypes, rules);
         d.roots.extend(roots);
@@ -1199,7 +1256,7 @@ pub fn patch(
     }
     let project = std::mem::take(&mut prev.project);
     mount_and_own(&mut prev.files, &project);
-    prev.pack_roots = dispatch_files(&mut prev.files, adapters, active);
+    prev.pack_roots = dispatch_files(&mut prev.files, adapters, active, &project);
     publish_surfaces(&mut prev.files, &project);
     prev.project = project;
     Some(prev)

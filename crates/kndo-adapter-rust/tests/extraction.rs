@@ -300,14 +300,21 @@ fn plain() {}
         "{:?}",
         ev.roots
     );
-    // An inner attribute at the top of the file marks the file.
-    let file_markers: Vec<(&str, Vec<&str>)> = ev
+    // An inner attribute at the top of the file speaks for that file's MODULE,
+    // and the module a crate root declares is the crate: the claim is the
+    // UNIT's, and the engine — which alone knows whether the build enters a
+    // unit here — is what bounds it back to the file when it is not.
+    let unit_markers: Vec<(&str, Vec<&str>)> = ev
         .markers
         .iter()
-        .filter(|m| m.on == MarkerTarget::File)
+        .filter(|m| m.on == MarkerTarget::Unit)
         .map(|m| (m.path.as_str(), m.args.iter().map(|a| a.as_str()).collect()))
         .collect();
-    assert_eq!(file_markers, [("allow", vec!["dead_code"])]);
+    assert_eq!(unit_markers, [("allow", vec!["dead_code"])]);
+    assert!(
+        !ev.markers.iter().any(|m| m.on == MarkerTarget::File),
+        "extraction states the claim its grammar makes and no narrower one"
+    );
     assert_eq!(markers_on(&ev, "unit"), [("test", vec![])]);
     // Arguments come as written, whitespace runs collapsed, split at the
     // top-level commas only.

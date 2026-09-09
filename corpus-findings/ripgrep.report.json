@@ -29,12 +29,12 @@
     ]
   },
   "health": {
-    "implicated": 3,
+    "implicated": 1,
     "subjects": 2618,
     "by_category": [
       {
         "category": "unused",
-        "findings": 3
+        "findings": 1
       }
     ],
     "by_package": [
@@ -65,7 +65,7 @@
       {
         "name": "grep_index",
         "manifest": "crates/index/Cargo.toml",
-        "implicated": 3,
+        "implicated": 1,
         "subjects": 102
       },
       {
@@ -124,52 +124,6 @@
         "name": "fst"
       },
       "message": "declared as a production dependency, but no file imports it and the manifest never names it"
-    },
-    {
-      "id": "kndo-82e55f9f24dc",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "crates/index/src/index.rs",
-        "selector": {
-          "owner": "Handle",
-          "name": "read_write_mut"
-        },
-        "span": {
-          "start": 5354,
-          "end": 5622
-        }
-      },
-      "lines": {
-        "start": 200,
-        "end": 207
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-dbfee5610a1d",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "crates/index/src/index.rs",
-        "selector": {
-          "owner": "Handle",
-          "name": "read_write"
-        },
-        "span": {
-          "start": 5092,
-          "end": 5348
-        }
-      },
-      "lines": {
-        "start": 191,
-        "end": 198
-      },
-      "message": "nothing references, roots, or imports this declaration"
     },
     {
       "id": "kndo-021633cfda56",
@@ -3351,5 +3305,16 @@
       "content_budget_cut": false
     }
   ],
-  "diagnostics": []
+  "diagnostics": [
+    {
+      "path": "crates/index/src/index.rs",
+      "level": "info",
+      "message": "`allow(warnings)` at unit level exempts every declaration here (23) from the unused judgment"
+    },
+    {
+      "path": "crates/index/src/literal.rs",
+      "level": "info",
+      "message": "`allow(warnings)` at unit level exempts every declaration here (71) from the unused judgment"
+    }
+  ]
 }

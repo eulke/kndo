@@ -98,6 +98,65 @@ fn a_file_level_exemption_covers_everything_and_is_said_aloud() {
 }
 
 #[test]
+fn a_unit_level_exemption_reaches_the_unit_and_only_from_its_entry() {
+    // A crate root's `#![allow(dead_code)]`: the same word, in two places. On
+    // the file the build ENTERS the unit through it is the unit's statement
+    // and covers every file the unit compiles; on a module file of that same
+    // unit it is that file's own, and its sibling stays accused. Extraction
+    // wrote the identical marker both times — the manifest is what tells them
+    // apart, and only the engine has read it.
+    let p = TempProject::new();
+    p.file(
+        "kmock.pkg",
+        "unit app library roots=src entries=src/lib.kmock\n\
+         unit side library roots=side entries=side/main.kmock\n",
+    )
+    // `app` carries the blanket on its ENTRY: `stale`, a file away, is covered.
+    .file(
+        "src/lib.kmock",
+        "root-file\nmark-unit allow dead_code\nmount inner ./inner\npub fn api\n",
+    )
+    .file("src/inner.kmock", "fn stale\n")
+    // `side` carries the identical marker on a file the build does not enter
+    // it through: `draft` beside it is covered, `accused` in its unit-mate is
+    // not.
+    .file(
+        "side/main.kmock",
+        "root-file\nmount m ./m\nmount other ./other\npub fn go\n",
+    )
+    .file("side/m.kmock", "mark-unit allow dead_code\nfn draft\n")
+    .file("side/other.kmock", "fn accused\n");
+    let snap = run(&p);
+    assert_eq!(
+        reported(&snap, &Category::UNUSED),
+        ["side/other.kmock — accused"],
+        "a unit speaks through its entry, and nowhere else"
+    );
+    // And the run says which of the two happened, file by file: a blanket the
+    // unit spoke is reported as the unit's, and the one it did not is reported
+    // for what it is.
+    let report = snap.report();
+    let blankets: Vec<(&str, &str)> = report
+        .diagnostics
+        .iter()
+        .filter_map(|d| {
+            let level = ["unit", "file"]
+                .into_iter()
+                .find(|l| d.message.contains(&format!("at {l} level")))?;
+            Some((d.path.as_str(), level))
+        })
+        .collect();
+    assert_eq!(
+        blankets,
+        [
+            ("side/m.kmock", "file"),
+            ("src/inner.kmock", "unit"),
+            ("src/lib.kmock", "unit"),
+        ]
+    );
+}
+
+#[test]
 fn a_generators_output_declares_nothing_this_project_answers_for() {
     let p = TempProject::new();
     // `codegen.kmock` is a generator's output that the app imports: the names

@@ -3,7 +3,7 @@
 [[dead]]
 subject = "src/ffi.rs#truly_dead"
 category = "unused"
-why = "nothing calls it and no attribute speaks for it"
+why = "nothing calls it and no attribute speaks for it — `src/scratch.rs`'s file-top blanket claims the unit, but cargo enters this unit through `src/main.rs`, so the claim stops at the file that wrote it"
 
 [[alive]]
 subject = "src/ffi.rs#exported_symbol"
@@ -26,7 +26,7 @@ why = "#[test] roots it Test — a dispatched root, and a member of the cfg(test
 
 [[alive]]
 subject = "src/scratch.rs#draft_one"
-why = "#![allow(dead_code)] at file level exempts every declaration in the file; the run reports the blanket as a diagnostic"
+why = "#![allow(dead_code)] at the top of a module file exempts every declaration in it; the run reports the blanket as a diagnostic"
 
 [[alive]]
 subject = "src/scratch.rs#draft_two"

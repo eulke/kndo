@@ -41,7 +41,13 @@ pub fn extract(
         owner: None,
         out,
     };
-    cx.items(root, MarkerTarget::File);
+    // A `#![…]` at the top of a file speaks for that file's MODULE, and the
+    // module a crate root declares is the crate: `#![allow(dead_code)]` in
+    // `src/lib.rs` is rustc's statement about the whole crate. Which file is a
+    // crate root, extraction cannot know — it has read one file and never the
+    // manifest — so it states the claim its grammar makes, and the engine,
+    // which knows where cargo enters each target, is what bounds it.
+    cx.items(root, MarkerTarget::Unit);
     cx.nested_uses(root);
     let impls = std::mem::take(&mut cx.impls);
     for node in impls {

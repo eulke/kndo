@@ -38,7 +38,7 @@
 //! would grade our renaming rather than our reading. Publication and package
 //! identity stay with the hand-written manifest tests for the same reason.
 
-use kndo_contract::adapter::{DependencyScope, ResolveContext, Resolution, SourceFile};
+use kndo_contract::adapter::{DependencyScope, Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::RootKind;
 use kndo_contract::manifest::{ManifestEvidence, ManifestSink, UnitKind};
 use kndo_contract::plugin::Plugin;
@@ -127,7 +127,10 @@ pub enum ToolClaim {
     /// is an answer, and the one an alias table states most deliberately; our
     /// side says it as [`Resolution::Unresolved`], which for a specifier the
     /// project's own manifest maps means exactly this.
-    Refuses { from: ProjectPath, specifier: SmolStr },
+    Refuses {
+        from: ProjectPath,
+        specifier: SmolStr,
+    },
 }
 
 impl ToolClaim {
@@ -162,8 +165,8 @@ impl std::fmt::Display for Disagreement {
 impl ToolTranscript {
     /// Read a transcript from a fixture directory's `transcript.json`.
     pub fn read(path: &Path) -> ToolTranscript {
-        let text = std::fs::read_to_string(path)
-            .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        let text =
+            std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
         serde_json::from_str(&text).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
     }
 
@@ -284,10 +287,14 @@ impl Tree {
         // applies, so a `go.mod` (claimed by nobody as source) and a
         // `vendor/` copy (ignored by the tool that owns it) are not units'
         // files however deep under a root they sit.
-        let claimed: Vec<globset::GlobSet> =
-            plugins.iter().filter_map(|p| globs(p.spec().claims())).collect();
-        let ignored: Vec<globset::GlobSet> =
-            plugins.iter().filter_map(|p| globs(p.spec().ignores())).collect();
+        let claimed: Vec<globset::GlobSet> = plugins
+            .iter()
+            .filter_map(|p| globs(p.spec().claims()))
+            .collect();
+        let ignored: Vec<globset::GlobSet> = plugins
+            .iter()
+            .filter_map(|p| globs(p.spec().ignores()))
+            .collect();
         for file in self.files.keys() {
             let path = file.as_str();
             if !claimed.iter().any(|set| set.is_match(path))
@@ -355,9 +362,7 @@ impl Tree {
             }),
             // A refusal must be unanimous AND asked: nobody claimed the file is
             // silence, not agreement.
-            None => {
-                asked.peek().is_some() && asked.all(|r| matches!(r, Resolution::Unresolved))
-            }
+            None => asked.peek().is_some() && asked.all(|r| matches!(r, Resolution::Unresolved)),
         }
     }
 }

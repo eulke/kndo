@@ -177,10 +177,13 @@ interface types {
     }
 
     /// Mirrors `MarkerTarget`; `declaration` is the same index spelling as
-    /// `owner`.
+    /// `owner`. `unit` claims the whole compiled artifact — honored on the
+    /// file the build enters the unit through, and read as `file` anywhere
+    /// else, because only the engine knows which file that is.
     variant marker-target {
         file,
         declaration(u32),
+        unit,
     }
 
     /// Mirrors `Marker`: an attribute, annotation, decorator or pragma as
@@ -569,10 +572,18 @@ interface types {
         unit,
     }
 
+    /// Mirrors `UnitRef` — a unit as a manifest NAMES it, and the manifest
+    /// that had to declare it where the ecosystem says so (a Cargo `path =`).
+    /// `declared-in` absent is by name, wherever it is.
+    record unit-ref {
+        name: string,
+        declared-in: option<string>,
+    }
+
     /// Mirrors `UnitDep`: a unit this one compiles against, and what that
     /// dependency grants the dependent.
     record unit-dep {
-        unit: string,
+        unit: unit-ref,
         grants: grant,
     }
 

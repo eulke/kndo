@@ -3,7 +3,8 @@
 //! tables, and degradation on dangling or broken manifests.
 
 use kndo_adapter_rust::RustAdapter;
-use kndo_contract::manifest::{ManifestEvidence, Publication, UnitDep, UnitKind};
+use kndo_contract::manifest::{ManifestEvidence, Publication, UnitDep, UnitKind, UnitRef};
+use kndo_contract::vocab::ProjectPath;
 
 fn read(manifest_path: &str, manifest: &str, files: &[&str]) -> ManifestEvidence {
     kndo_testkit::manifest_evidence(&RustAdapter::new(), manifest_path, manifest, files)
@@ -162,9 +163,15 @@ fn every_other_target_compiles_against_the_library() {
             .unwrap_or_else(|| panic!("no unit {name}"))
     };
     assert_eq!(unit("demo").depends_on, [UnitDep::on("serde")]);
+    // `serde` is a registry name and stays one; the library every other target
+    // compiles against is declared by THIS manifest, and saying so is what
+    // keeps a workspace's second `demo` out of the answer.
     assert_eq!(
         unit("test:api").depends_on,
-        [UnitDep::on("serde"), UnitDep::on("demo")]
+        [
+            UnitDep::on("serde"),
+            UnitDep::on(UnitRef::declared_in("demo", ProjectPath::new("Cargo.toml"))),
+        ]
     );
     // Cargo never says an integration test may read what its library keeps
     // private, because it may not: it is a separate crate — so not one of the
@@ -199,6 +206,42 @@ fn nested_package_units_stay_under_its_directory() {
                 "test:api".to_string(),
                 "crates/core/tests/api.rs".to_string()
             ),
+        ]
+    );
+}
+
+#[test]
+fn a_path_dependency_names_the_manifest_that_declares_the_crate() {
+    // Cargo's `path =` is the one spelling that says WHICH crate of a name —
+    // and it is written relative to the naming manifest, so `..` climbs out of
+    // its directory before the `Cargo.toml` is joined on. A registry
+    // dependency spells no path and stays a name, wherever it is.
+    let evidence = read(
+        "crates/core/Cargo.toml",
+        "[package]\nname = \"core\"\n\
+         [dependencies]\n\
+         util = { path = \"../util\" }\n\
+         vendored = { path = \"vendor/fork\" }\n\
+         serde = \"1\"\n",
+        &["crates/core/src/lib.rs"],
+    );
+    let unit = evidence
+        .units
+        .iter()
+        .find(|u| u.name == "core")
+        .expect("the library unit");
+    assert_eq!(
+        unit.depends_on,
+        [
+            UnitDep::on("serde"),
+            UnitDep::on(UnitRef::declared_in(
+                "util",
+                ProjectPath::new("crates/util/Cargo.toml")
+            )),
+            UnitDep::on(UnitRef::declared_in(
+                "vendored",
+                ProjectPath::new("crates/core/vendor/fork/Cargo.toml")
+            )),
         ]
     );
 }

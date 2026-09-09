@@ -42,6 +42,9 @@
 //! test-file            whole-file test root: this file IS a test
 //! mark name path a,b   a marker `path(a, b)` on the declaration `name`
 //! mark-file path a,b   a marker on the whole file
+//! mark-unit path a,b   a marker on the whole UNIT — honored from the file the
+//!                      build enters the unit through, read as `mark-file`
+//!                      anywhere else
 //! # text               a comment (the Comments stream, declared)
 //! ```
 //!
@@ -66,7 +69,8 @@
 //! namespace-reaching ones — the JVM's rule, which is a fact about the EDGE
 //! and never about a language. The engine resolves each name among the
 //! manifests this one's aggregator lists, which is how two units of one name
-//! stay apart.
+//! stay apart — and a name spelled `o@sub/kmock.pkg` names the unit THAT
+//! manifest declares, skipping the search the way a Cargo `path =` does.
 //!
 //! `publish=no|by-name|by-entry` states the unit's publication AND how its
 //! consumers address it: `by-name` hands out every export of every file, like
@@ -473,6 +477,9 @@ impl Plugin for MockPlugin {
             } else if let Some(rest) = line.strip_prefix("mark-file ") {
                 let (path, args) = marker_parts(rest);
                 out.marker(MarkerTarget::File, path, args, span);
+            } else if let Some(rest) = line.strip_prefix("mark-unit ") {
+                let (path, args) = marker_parts(rest);
+                out.marker(MarkerTarget::Unit, path, args, span);
             } else if let Some(rest) = line.strip_prefix("mark ") {
                 let (name, rest) = rest.trim().split_once(' ').unwrap_or((rest.trim(), ""));
                 let (path, args) = marker_parts(rest);
@@ -600,12 +607,14 @@ impl Plugin for MockPlugin {
                 ("classpath=", Grant::Namespace),
                 ("needs=", Grant::Exports),
             ];
+            // `name` is by name, wherever it is; `name@manifest` is the unit
+            // that manifest declares — a Cargo `path =`, spelled.
             let mut depends_on: Vec<UnitDep> = grants
                 .iter()
                 .flat_map(|(key, grant)| {
                     list(key)
                         .into_iter()
-                        .map(move |n| UnitDep::granting(n, *grant))
+                        .map(move |n| UnitDep::granting(unit_ref(n), *grant))
                 })
                 .collect();
             depends_on.dedup_by(|a, b| a.unit == b.unit);
@@ -775,6 +784,22 @@ fn unit_kind(word: &str) -> Option<UnitKind> {
         "tooling" => UnitKind::Tooling,
         _ => return None,
     })
+}
+
+/// `name` or `name@manifest` — a unit reference, by name alone or in the
+/// manifest that had to declare it. The LAST `@` separates, and a leading one
+/// never does: `@scope/pkg` is a name npm writes and not a reference to a
+/// manifest called `scope/pkg`.
+fn unit_ref(spelled: &str) -> kndo_contract::manifest::UnitRef {
+    match spelled
+        .rsplit_once('@')
+        .filter(|(name, _)| !name.is_empty())
+    {
+        Some((name, manifest)) => {
+            kndo_contract::manifest::UnitRef::declared_in(name, ProjectPath::new(manifest))
+        }
+        None => kndo_contract::manifest::UnitRef::named(spelled),
+    }
 }
 
 /// `path a,b` — a marker's path and its comma-separated arguments.

@@ -17,7 +17,7 @@ use kndo_contract::adapter::{
     DependencyDeclaration, DependencyScope, PackageEntry, ResolveContext, SourceFile,
 };
 use kndo_contract::manifest::{
-    ManifestSink, Publication, Unit, UnitDep, UnitKind, UnitRoot, VersionReq,
+    ManifestSink, Publication, Unit, UnitDep, UnitKind, UnitRef, UnitRoot, VersionReq,
 };
 use kndo_contract::vocab::ProjectPath;
 use smol_str::SmolStr;
@@ -54,14 +54,30 @@ pub fn structure(manifest: &SourceFile<'_>, cx: &ResolveContext<'_>, out: &mut M
         Some(toml::Value::Array(a)) if a.is_empty() => Publication::Unpublished,
         _ => Publication::ByName,
     };
-    let mut declared: Vec<SmolStr> = dependencies(manifest).into_iter().map(|d| d.name).collect();
+    // A `path =` dependency names the DIRECTORY whose `Cargo.toml` declares
+    // the crate — cargo's own answer to "which one", and the answer a name
+    // alone cannot give in a tree where two workspaces declare a crate of one
+    // name. A registry or git dependency carries no path and stays a name.
+    let mut declared: Vec<UnitRef> = declarations(manifest)
+        .into_iter()
+        .map(
+            |(declaration, path)| match path.and_then(|p| kndo_toolkit::join_relative(&dir, &p)) {
+                Some(at) => UnitRef::declared_in(declaration.name, join(&at, "Cargo.toml")),
+                None => UnitRef::named(declaration.name),
+            },
+        )
+        .collect();
     declared.sort();
     declared.dedup();
     for (name, kind, entry) in targets(&toml, &dir, package_name, cx) {
         let mut depends_on = declared.clone();
         if kind != UnitKind::Library {
-            // Every other target compiles against the crate's own library.
-            depends_on.push(SmolStr::new(package_name));
+            // Every other target compiles against the crate's own library,
+            // which this very manifest declares.
+            depends_on.push(UnitRef::declared_in(
+                package_name,
+                ProjectPath::new(manifest.path.as_str()),
+            ));
         }
         out.unit(Unit {
             name,
@@ -233,6 +249,14 @@ fn packages(manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<PackageEn
 /// sections under each `[target.…]`. Names are the table keys (what the project's
 /// code refers to). Activation evidence for plugin `ManifestDependency` rules.
 fn dependencies(manifest: &SourceFile<'_>) -> Vec<DependencyDeclaration> {
+    declarations(manifest).into_iter().map(|(d, _)| d).collect()
+}
+
+/// The same walk, with each declaration's `path =` — the directory, relative to
+/// this manifest, whose own `Cargo.toml` declares the crate. One walk and not
+/// two, because a second reader of these tables is a second answer waiting to
+/// disagree with the first.
+fn declarations(manifest: &SourceFile<'_>) -> Vec<(DependencyDeclaration, Option<String>)> {
     const SECTIONS: [(&str, DependencyScope); 3] = [
         ("dependencies", DependencyScope::Prod),
         ("dev-dependencies", DependencyScope::Dev),
@@ -251,15 +275,20 @@ fn dependencies(manifest: &SourceFile<'_>) -> Vec<DependencyDeclaration> {
                     .get("optional")
                     .and_then(toml::Value::as_bool)
                     .unwrap_or(false);
-                out.push(DependencyDeclaration {
-                    name: SmolStr::new(name),
-                    scope: if optional {
-                        Some(DependencyScope::Optional)
-                    } else {
-                        scope
+                out.push((
+                    DependencyDeclaration {
+                        name: SmolStr::new(name),
+                        scope: if optional {
+                            Some(DependencyScope::Optional)
+                        } else {
+                            scope
+                        },
+                        version_req: comparable_req(spec),
                     },
-                    version_req: comparable_req(spec),
-                });
+                    spec.get("path")
+                        .and_then(toml::Value::as_str)
+                        .map(str::to_string),
+                ));
             }
         }
     };

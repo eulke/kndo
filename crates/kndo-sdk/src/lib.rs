@@ -472,6 +472,7 @@ pub fn evidence_to_wire(evidence: &FileEvidence) -> wire::FileEvidence {
                     ev::MarkerTarget::Declaration(id) => {
                         wire::MarkerTarget::Declaration(id.index() as u32)
                     }
+                    ev::MarkerTarget::Unit => wire::MarkerTarget::Unit,
                     // A target this SDK build predates marks the file: the
                     // rules see it, and a file marker can only add roots or a
                     // reported blanket — never an accusation.
@@ -638,7 +639,14 @@ pub fn manifest_evidence_to_wire(
                         .depends_on
                         .iter()
                         .map(|d| wire::UnitDep {
-                            unit: d.unit.to_string(),
+                            unit: wire::UnitRef {
+                                name: d.unit.name.to_string(),
+                                declared_in: d
+                                    .unit
+                                    .declared_in
+                                    .as_ref()
+                                    .map(|m| m.as_str().to_string()),
+                            },
                             grants: match d.grants {
                                 kndo_contract::manifest::Grant::Exports => wire::Grant::Exports,
                                 kndo_contract::manifest::Grant::Namespace => wire::Grant::Namespace,
