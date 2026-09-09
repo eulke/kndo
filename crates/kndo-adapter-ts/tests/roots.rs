@@ -78,8 +78,13 @@ fn entries_resolve_like_imports() {
     assert_eq!(files, ["pkg/src/entry.ts", "pkg/src/index.ts"]);
 }
 
+/// `exports` anchors and `imports` does not: the first is the published
+/// surface, whose targets are entries whether or not this project names them,
+/// and the second is the package talking to ITSELF — a `#flag` target is
+/// reached through the alias table or not at all, and rooting it would anchor
+/// every internal file a package happens to alias.
 #[test]
-fn wildcard_exports_imports_scripts_and_companions_anchor() {
+fn exports_scripts_and_companions_anchor_but_imports_do_not() {
     let roots = manifest_roots(
         "pkg/package.json",
         r##"{
@@ -100,8 +105,6 @@ fn wildcard_exports_imports_scripts_and_companions_anchor() {
     assert_eq!(
         files,
         [
-            ("pkg/misc/false.d.ts", RootKind::Production),
-            ("pkg/misc/false.js", RootKind::Production),
             ("pkg/types/a.d.ts", RootKind::Production),
             ("pkg/types/deep/b.d.ts", RootKind::Production),
             ("pkg/scripts/generate.ts", RootKind::Tooling),

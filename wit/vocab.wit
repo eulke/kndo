@@ -540,6 +540,9 @@ interface types {
         entry: option<string>,
         dir: string,
         aliases: list<string>,
+        /// The subpaths this package hands out, spelled as a CONSUMER writes
+        /// them — npm's `exports` map.
+        subpaths: list<path-alias>,
     }
 
     /// Mirrors `Publication` — what a manifest says about a unit's consumers
@@ -616,9 +619,20 @@ interface types {
 
     /// Mirrors `PathAlias` — a specifier prefix the build system rewrites to
     /// directories, in the order the build tries them.
+    /// Mirrors `AliasTarget`: where a rewriting lands and what must hold for
+    /// it. An EMPTY template is a deliberate refusal (npm's `null` subpath),
+    /// not an omission.
+    record alias-target {
+        template: string,
+        conditions: list<string>,
+    }
+
+    /// Mirrors `PathAlias`. The pattern carries at most one `*`, and it
+    /// captures; a pattern without one is a prefix and the capture is
+    /// everything past it.
     record path-alias {
-        prefix: string,
-        targets: list<string>,
+        pattern: string,
+        targets: list<alias-target>,
     }
 
     /// Mirrors `ManifestEvidence` — everything ONE manifest states about the

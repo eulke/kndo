@@ -90,6 +90,7 @@ fn workspace_bare_specifiers_link_to_their_package() {
             entry: Some(ProjectPath::new("packages/core/src/index.ts")),
             dir: SmolStr::new("packages/core"),
             aliases: Vec::new(),
+            subpaths: Vec::new(),
         },
     );
     let cx = ResolveContext::with_packages(&known, &packages);

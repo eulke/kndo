@@ -238,6 +238,7 @@ impl Plugin for KminiAdapter {
                 entry: entries.first().cloned(),
                 dir: SmolStr::new(dir),
                 aliases: Vec::new(),
+                subpaths: Vec::new(),
             });
             out.unit(kndo_contract::manifest::Unit {
                 name: SmolStr::new(name),

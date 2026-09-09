@@ -108,9 +108,10 @@ impl TypeScriptAdapter {
     pub fn new() -> Self {
         let spec = kndo_toolkit::source_adapter_builder(
             "kndo:js-ts",
-            // 13: `package.json` states a unit and `tsconfig.json` states the
-            // aliases that are not packages, both through the one door.
-            14,
+            // 15: `package.json`'s `imports` and `exports` maps are alias
+            // tables with captures and conditions, so a `#` import and a
+            // package subpath resolve to the file the manifest names.
+            15,
             &["ts", "tsx", "js", "jsx", "mjs", "cjs", "mts", "cts"],
             // `tsconfig.json` states the names that are not packages — its
             // `paths` aliases; every other spelling of the file is a variant

@@ -82,6 +82,7 @@ fn pyproject(text: &str, dir: &str, cx: &ResolveContext<'_>, out: &mut ManifestS
         entry: None,
         dir: SmolStr::new(dir),
         aliases: distribution_aliases(name),
+        subpaths: Vec::new(),
     });
     out.unit(Unit {
         name: SmolStr::new(name),
@@ -467,6 +468,7 @@ fn setup_cfg(text: &str, dir: &str, cx: &ResolveContext<'_>, out: &mut ManifestS
         entry: None,
         dir: SmolStr::new(dir),
         aliases: distribution_aliases(&name),
+        subpaths: Vec::new(),
     });
     out.unit(Unit {
         name: SmolStr::new(&name),

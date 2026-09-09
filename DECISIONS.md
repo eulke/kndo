@@ -6812,3 +6812,67 @@ repo's stated ideal, which made two untested derivations feel like law. The
 ideal is real, but it is a reason to TRY the derivation, never to assume it
 holds. The remaining five proposals get the same treatment — the number decides,
 in whichever direction it points.
+
+## 2026-09-09 — an alias is a pattern with conditions, and npm's two tables are read apart
+
+The third of the plan's extensions, and the one the plan's own js-ts row asked
+for in prose: "`exports`/`imports` with conditions (real subpath and
+self-reference resolution)". Nothing could express it, because `PathAlias` was
+`{ prefix, targets: Vec<SmolStr> }` — no capture, no template, no conditions,
+no way to say "refused".
+
+**The shape.** `PathAlias { pattern, targets: Vec<AliasTarget> }` with
+`AliasTarget { template, conditions }`. The pattern carries at most one `*` and
+it CAPTURES; a pattern without one is a prefix and everything past it is the
+capture, which is how the old directory form keeps working unchanged. The
+template's `*` receives the capture, and a template with none takes it appended.
+An EMPTY template is a deliberate dead end — npm's `null` subpath — because "the
+manifest refused this specifier" is a different fact from "no alias named it":
+the first stops the search, the second falls through. `PathAlias::rewrite` is
+the one matcher, and `Project::alias` calls it rather than carrying a second.
+
+**Conditions do not filter, and that is the design, not a shortcut.** The engine
+cannot know a runtime, so every condition's target is a possible resolution and
+all of them are offered in declaration order — the keep-alive direction, stated
+once instead of guessed per call site. What conditions buy is that the caller
+can SEE which branch it took: `Project::alias_targets` hands back the conditions
+and the refusals, and a target reached only under `types` is a declaration file
+the runtime never loads. The consumer that reads them is owed; the fact is
+carried now because the alternative is flattening the map and losing it.
+
+**Two tables, read apart — which is where the old code was wrong.**
+`package.json`'s `exports` is what a CONSUMER may name, so it lands on
+`PackageEntry.subpaths` with its keys spelled as one writes them (`.` is the
+package name, `./client` is `<name>/client`) and applies to whoever names the
+package, from anywhere. `imports` is the package talking to ITSELF, so it lands
+on the manifest's own dir-scoped alias table and only files under that manifest
+may spell `#shapes/payload`. Before this commit both were flattened into one bag
+of ENTRY strings: every `#` target was rooted as a published entry, which rooted
+every internal type a package happens to alias. `entry_fields` now keeps
+`exports` (the published surface really is entries) and drops `imports`.
+
+**Measured on vite.** Unresolved `#` imports **91 → 8** (the 8 left are
+playground specifiers a vite config aliases, not `package.json`); scoped
+subpaths **81 → 63**; bare subpaths **461 → 459**. Import edges **2,447 →
+2,549, +102**. Findings: **byte-identical, all nine repos** — the 102 new edges
+reach files that were already alive by a relative import, so the graph gained
+edges and the verdicts did not move. That is the honest result and the reason to
+report the edge count rather than a finding count: `uses`, `used-by`, `trace`
+and `impact` answer differently now, and a future analysis over subpath cycles
+has something to run on.
+
+**The conformance case, and what it caught.** `conditional-subpaths` is a
+workspace of two packages: a conditional `.` (both `import` and `require`
+branches alive), a `./client` the directory layout does not mirror, a `./tools/*`
+capture, a `null`-refused `./internal/*`, and a `#shapes/*` internal table.
+Ablating the subpath map turns it red — but only through `because`: with the map
+gone, `connect` and `probe` are still kept, by `entry-surface`, because an
+`exports` target is an entry either way. An `[[alive]]` claim alone would have
+passed. That is the previous tranche's `Derivation` earning its keep two days
+later, on the first fixture written after it.
+
+`kndo:js-ts` 14 → 15. The ABI moved (`path-alias` gained `alias-target`,
+`package-entry` gained `subpaths`) and all four compat guests were re-pinned.
+The contract fingerprint did not move — it is structural over the evidence
+types, and an alias table is manifest evidence the engine assembles, not
+evidence an extraction writes.

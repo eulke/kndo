@@ -133,15 +133,122 @@ impl VersionReq {
     }
 }
 
-/// A specifier prefix the build system rewrites to directories: `tsconfig`
-/// paths and `baseUrl`, Sass `loadPaths`, a go.mod `replace`, a page's
+/// A specifier the build system rewrites: `tsconfig` paths and `baseUrl`, an
+/// npm `exports`/`imports` map, Sass `loadPaths`, a go.mod `replace`, a page's
 /// importmap. Consulted by `resolve` through the project context.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct PathAlias {
-    /// The specifier prefix, as the manifest writes it (`@app/`, `~`).
-    pub prefix: SmolStr,
-    /// The directories it resolves against, in the order the build tries them.
-    pub targets: Vec<SmolStr>,
+    /// The specifier this rewrites, as the manifest writes it. At most one
+    /// `*`, and it CAPTURES: `#types/*`, `@app/*`, `./dist/client/*`. A
+    /// pattern with no `*` is a bare prefix and whatever follows it is the
+    /// capture — which is how `@app/` → `src/app` keeps working, and why
+    /// `~` alone still rewrites `~/x`.
+    pub pattern: SmolStr,
+    /// What it rewrites to, in the order the build tries them.
+    pub targets: Vec<AliasTarget>,
+}
+
+/// One rewriting a [`PathAlias`] offers, and the conditions it holds under.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+pub struct AliasTarget {
+    /// Where the pattern rewrites to, as a PROJECT path — the declaring
+    /// adapter joins its manifest's directory, because only it knows whether
+    /// the table's paths were written relative to the manifest, to a source
+    /// root, or to the project. A `*` receives whatever the pattern
+    /// captured — `#types/*` →
+    /// `./types/*.d.ts` sends `#types/hot` to `types/hot.d.ts`; a template
+    /// with no `*` takes the capture appended, which is the directory form
+    /// (`@app/` → `src/app` answers `src/app/x`).
+    ///
+    /// EMPTY is a deliberate dead end, not an omission: npm's `null` target
+    /// says a subpath is NOT exported, and "the manifest refused this
+    /// specifier" is a different fact from "no alias named it" — the first
+    /// stops the search, the second falls through.
+    pub template: SmolStr,
+    /// Every condition that must hold for this target, in the manifest's own
+    /// spelling (`import`, `require`, `types`, `node`, `browser`). Empty
+    /// applies always — npm's `default`, and every alias table that has no
+    /// conditions at all.
+    ///
+    /// The engine does NOT pick a runtime: it cannot know one, so every
+    /// condition's target is a possible resolution and all of them are
+    /// offered, in declaration order. What the conditions buy is that the
+    /// caller can SEE which branch it took — a target reached only under
+    /// `types` resolves to a declaration file the runtime never loads.
+    pub conditions: Vec<SmolStr>,
+}
+
+impl PathAlias {
+    /// What this alias rewrites `specifier` to, in the order the build tries
+    /// them — empty where the pattern does not name it. Each pair is the
+    /// target as declared (its conditions readable) and the path it rewrites
+    /// to, which is EMPTY for a refusing target.
+    ///
+    /// The one implementation: a manifest's own alias table and a package's
+    /// subpath map are the same matching, and a second copy of it would be a
+    /// second answer.
+    pub fn rewrite(&self, specifier: &str) -> Vec<(&AliasTarget, SmolStr)> {
+        let Some(captured) = self.capture(specifier) else {
+            return Vec::new();
+        };
+        self.targets
+            .iter()
+            .map(|target| (target, fill(&target.template, captured)))
+            .collect()
+    }
+
+    /// What the pattern captures from `specifier`, or `None` where it does not
+    /// match. A pattern with a `*` captures what stands there; one without is
+    /// a prefix, and the capture is everything past it — the directory form
+    /// every alias table wrote before conditional subpaths existed.
+    pub fn capture<'s>(&self, specifier: &'s str) -> Option<&'s str> {
+        match self.pattern.split_once('*') {
+            Some((head, tail)) => specifier
+                .strip_prefix(head)?
+                .strip_suffix(tail)
+                .filter(|_| specifier.len() >= head.len() + tail.len()),
+            None => specifier.strip_prefix(self.pattern.as_str()),
+        }
+    }
+}
+
+/// The template with its `*` filled by the capture — or, where it has none,
+/// the capture joined onto it as a directory. An empty template stays empty:
+/// a refusal rewrites to nothing.
+fn fill(template: &str, captured: &str) -> SmolStr {
+    if template.is_empty() {
+        return SmolStr::default();
+    }
+    match template.split_once('*') {
+        Some((head, tail)) => SmolStr::new(format!("{head}{captured}{tail}")),
+        None if captured.is_empty() => SmolStr::new(template),
+        None => SmolStr::new(format!(
+            "{}/{}",
+            template.trim_end_matches('/'),
+            captured.trim_start_matches('/')
+        )),
+    }
+}
+
+impl AliasTarget {
+    /// The unconditional form — what every alias table without conditions
+    /// writes.
+    pub fn always(template: impl Into<SmolStr>) -> AliasTarget {
+        AliasTarget {
+            template: template.into(),
+            conditions: Vec::new(),
+        }
+    }
+
+    /// A dead end: the manifest names this specifier and refuses it.
+    pub fn refused() -> AliasTarget {
+        AliasTarget::always("")
+    }
+
+    /// Whether this target resolves to anything at all — see `template`.
+    pub fn refuses(&self) -> bool {
+        self.template.is_empty()
+    }
 }
 
 /// One directory a unit compiles, and whether the unit takes what is nested
@@ -335,14 +442,14 @@ impl ManifestSink {
         self.out.roots.push(root);
     }
 
-    /// A specifier prefix this manifest rewrites — see [`PathAlias`]. An alias
+    /// A specifier this manifest rewrites — see [`PathAlias`]. An alias
     /// with no target rewrites to nothing, so it is dropped: resolution would
     /// read it as "this prefix resolves", and the honest answer is silence.
     pub fn alias(&mut self, alias: PathAlias) {
-        if alias.prefix.is_empty() || alias.targets.is_empty() {
+        if alias.pattern.is_empty() || alias.targets.is_empty() {
             self.diagnostic(
                 DiagnosticLevel::Warn,
-                "path alias with no prefix or no target dropped (adapter defect)",
+                "path alias with no pattern or no target dropped (adapter defect)",
             );
             return;
         }

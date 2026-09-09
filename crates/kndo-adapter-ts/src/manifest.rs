@@ -28,7 +28,9 @@ use kndo_contract::adapter::{
     DependencyDeclaration, DependencyScope, PackageEntry, ProjectRoot, ResolveContext, SourceFile,
 };
 use kndo_contract::evidence::RootKind;
-use kndo_contract::manifest::{ManifestSink, Publication, Unit, UnitDep, UnitKind, VersionReq};
+use kndo_contract::manifest::{
+    AliasTarget, ManifestSink, PathAlias, Publication, Unit, UnitDep, UnitKind, VersionReq,
+};
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use kndo_toolkit::github_actions::{self, Launcher};
 use smol_str::SmolStr;
@@ -71,6 +73,16 @@ fn package(
     };
     let dir = kndo_toolkit::parent_dir(manifest.path.as_str());
     let entries: Vec<ProjectPath> = entry_roots(&json, dir, cx, exts).into_iter().collect();
+    // `imports` is the package's INTERNAL alias table: only its own files may
+    // spell `#types/hot`, and the sink's table is dir-scoped, which is exactly
+    // that rule. `exports` is the other direction and rides the package entry.
+    if let Some(imports) = json.get("imports") {
+        for alias in alias_map(imports, dir, |key| {
+            key.starts_with('#').then(|| SmolStr::new(key))
+        }) {
+            out.alias(alias);
+        }
+    }
     let declared = json.get("name").and_then(|v| v.as_str());
     let named = declared
         .or_else(|| dir.rsplit('/').next().filter(|s| !s.is_empty()))
@@ -176,6 +188,7 @@ fn tsconfig(
                     entry: None,
                     dir: SmolStr::new(under),
                     aliases: Vec::new(),
+                    subpaths: Vec::new(),
                 });
             }
             (None, None) => {
@@ -185,6 +198,7 @@ fn tsconfig(
                         entry: Some(entry),
                         dir: SmolStr::new(&base),
                         aliases: Vec::new(),
+                        subpaths: Vec::new(),
                     });
                 }
             }
@@ -386,9 +400,15 @@ fn resolve_entry(
     resolve_in_dir(dir, &format!("src/{rest}"), cx, exts)
 }
 
-/// Every entry-declaring string in the manifest: `main`/`module`/`browser`, `bin`
-/// values, and the string leaves of `exports` and `imports` (the internal `#alias`
-/// map — its targets are entries of this package all the same).
+/// Every entry-declaring string in the manifest: `main`/`module`/`browser`,
+/// `bin` values, and the string leaves of `exports`.
+///
+/// `imports` is NOT here, and the difference is the whole point of reading the
+/// two tables apart: `exports` names the published surface, so its targets are
+/// entries whether or not anything in the project imports them, while
+/// `imports` is the package talking to ITSELF — a `#shapes/*` target is
+/// reached through the alias table or not at all, and calling it an entry
+/// would root every internal type this package happens to alias.
 fn entry_fields(json: &serde_json::Value) -> Vec<String> {
     let mut entries: Vec<String> = Vec::new();
     for key in ["main", "module", "browser"] {
@@ -403,10 +423,8 @@ fn entry_fields(json: &serde_json::Value) -> Vec<String> {
         }
         _ => {}
     }
-    for key in ["exports", "imports"] {
-        if let Some(v) = json.get(key) {
-            export_leaves(v, &mut entries);
-        }
+    if let Some(v) = json.get("exports") {
+        export_leaves(v, &mut entries);
     }
     entries
 }
@@ -428,14 +446,29 @@ fn packages(
     let entry = entry_fields(&json)
         .iter()
         .find_map(|e| resolve_entry(dir, e, cx, exts));
-    match entry {
-        Some(entry) => vec![PackageEntry {
+    // `exports` is what a CONSUMER may name, so its keys are spelled the way
+    // one writes them: `.` is the package name and `./client` is
+    // `<name>/client`. A package with no map hands out its entry under its own
+    // name and nothing else.
+    let subpaths = json
+        .get("exports")
+        .map(|v| {
+            alias_map(v, dir, |key| match key.strip_prefix('.') {
+                Some("") => Some(SmolStr::new(name)),
+                Some(rest) => Some(SmolStr::new(format!("{name}{rest}"))),
+                None => None,
+            })
+        })
+        .unwrap_or_default();
+    match (entry, subpaths.is_empty()) {
+        (None, true) => Vec::new(),
+        (entry, _) => vec![PackageEntry {
             name: SmolStr::new(name),
-            entry: Some(entry),
+            entry,
             dir: SmolStr::new(dir),
             aliases: Vec::new(),
+            subpaths,
         }],
-        None => Vec::new(),
     }
 }
 
@@ -601,6 +634,77 @@ fn export_leaves(value: &serde_json::Value, out: &mut Vec<String>) {
         serde_json::Value::Array(a) => {
             for v in a {
                 export_leaves(v, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Every rewriting an `exports` or `imports` map declares, flattened to
+/// [`PathAlias`]: one per subpath key, its targets carrying the conditions
+/// they stood beneath. `spell` turns the map's own key into the specifier a
+/// CONSUMER writes — verbatim for `imports` (`#types/*` is spelled `#types/*`
+/// by the files that use it), and the package name joined for `exports`
+/// (`./client` under `vite` is spelled `vite/client`).
+fn alias_map(
+    value: &serde_json::Value,
+    dir: &str,
+    spell: impl Fn(&str) -> Option<SmolStr>,
+) -> Vec<PathAlias> {
+    subpath_entries(value)
+        .into_iter()
+        .filter_map(|(key, v)| {
+            let pattern = spell(key)?;
+            let mut targets = Vec::new();
+            alias_targets(v, dir, &mut Vec::new(), &mut targets);
+            (!targets.is_empty()).then_some(PathAlias { pattern, targets })
+        })
+        .collect()
+}
+
+/// The map's subpath keys, or the whole value under `.` — npm's two sugars,
+/// where `"exports": "./x.js"` and `"exports": { "import": … }` both describe
+/// the root subpath and only a key starting with `.` or `#` opens a new one.
+fn subpath_entries(value: &serde_json::Value) -> Vec<(&str, &serde_json::Value)> {
+    match value {
+        serde_json::Value::Object(m)
+            if !m.is_empty() && m.keys().all(|k| k.starts_with(['.', '#'])) =>
+        {
+            m.iter().map(|(k, v)| (k.as_str(), v)).collect()
+        }
+        _ => vec![(".", value)],
+    }
+}
+
+/// Every target under one subpath, with the conditions it stood beneath and
+/// the manifest's directory joined. `null` is npm's refusal and lands as an
+/// empty template, which is a different answer from no target at all.
+fn alias_targets(
+    value: &serde_json::Value,
+    dir: &str,
+    under: &mut Vec<SmolStr>,
+    out: &mut Vec<AliasTarget>,
+) {
+    match value {
+        serde_json::Value::String(s) => out.push(AliasTarget {
+            template: SmolStr::new(kndo_toolkit::join_relative(dir, s).unwrap_or_default()),
+            conditions: under.clone(),
+        }),
+        serde_json::Value::Null => out.push(AliasTarget {
+            template: SmolStr::default(),
+            conditions: under.clone(),
+        }),
+        // An array is npm's fallback list, tried in order.
+        serde_json::Value::Array(a) => {
+            for v in a {
+                alias_targets(v, dir, under, out);
+            }
+        }
+        serde_json::Value::Object(m) => {
+            for (condition, v) in m {
+                under.push(SmolStr::new(condition));
+                alias_targets(v, dir, under, out);
+                under.pop();
             }
         }
         _ => {}

@@ -36,6 +36,7 @@ pub fn structure(manifest: &SourceFile<'_>, _cx: &ResolveContext<'_>, out: &mut 
         entry: None,
         dir: SmolStr::new(kndo_toolkit::parent_dir(manifest.path.as_str())),
         aliases: Vec::new(),
+        subpaths: Vec::new(),
     });
     out.unit(Unit {
         name: SmolStr::new(&module),

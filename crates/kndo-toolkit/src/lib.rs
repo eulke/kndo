@@ -589,6 +589,7 @@ pub mod jvm_manifest {
                     entry: None,
                     dir: SmolStr::new(join(&rel)),
                     aliases: Vec::new(),
+                    subpaths: Vec::new(),
                 });
                 // A module's own build script states its units; naming it here
                 // is how two same-named modules in different builds stay apart.
@@ -1295,6 +1296,7 @@ pub mod jvm_manifest {
             entry: None,
             dir: SmolStr::new(path.rsplit_once('/').map_or("", |(d, _)| d)),
             aliases: Vec::new(),
+            subpaths: Vec::new(),
         });
     }
 

@@ -584,6 +584,37 @@ pub fn package_entry_to_wire(entry: &PackageEntry) -> wire::PackageEntry {
         entry: entry.entry.as_ref().map(|p| p.as_str().to_string()),
         dir: entry.dir.to_string(),
         aliases: entry.aliases.iter().map(SmolStr::to_string).collect(),
+        subpaths: entry.subpaths.iter().map(path_alias_to_wire).collect(),
+    }
+}
+
+/// A path alias off the wire, with its conditions.
+fn path_alias(a: wire::PathAlias) -> kndo_contract::manifest::PathAlias {
+    kndo_contract::manifest::PathAlias {
+        pattern: SmolStr::new(a.pattern),
+        targets: a
+            .targets
+            .into_iter()
+            .map(|t| kndo_contract::manifest::AliasTarget {
+                template: SmolStr::new(t.template),
+                conditions: t.conditions.into_iter().map(SmolStr::new).collect(),
+            })
+            .collect(),
+    }
+}
+
+/// A path alias to the wire, with its conditions.
+fn path_alias_to_wire(a: &kndo_contract::manifest::PathAlias) -> wire::PathAlias {
+    wire::PathAlias {
+        pattern: a.pattern.to_string(),
+        targets: a
+            .targets
+            .iter()
+            .map(|t| wire::AliasTarget {
+                template: t.template.to_string(),
+                conditions: t.conditions.iter().map(SmolStr::to_string).collect(),
+            })
+            .collect(),
     }
 }
 
@@ -645,14 +676,7 @@ pub fn manifest_evidence_to_wire(
             })
             .collect(),
         mentions: read.mentions.iter().map(|m| m.to_string()).collect(),
-        aliases: read
-            .aliases
-            .iter()
-            .map(|a| wire::PathAlias {
-                prefix: a.prefix.to_string(),
-                targets: a.targets.iter().map(SmolStr::to_string).collect(),
-            })
-            .collect(),
+        aliases: read.aliases.iter().map(path_alias_to_wire).collect(),
         roots: read.roots.iter().map(project_root_to_wire).collect(),
         ignores: read.ignores.iter().map(SmolStr::to_string).collect(),
         members: read
@@ -711,6 +735,7 @@ fn package_entry_from_wire(entry: wire::PackageEntry) -> PackageEntry {
         entry: entry.entry.map(ProjectPath::new),
         dir: SmolStr::new(entry.dir),
         aliases: entry.aliases.into_iter().map(SmolStr::new).collect(),
+        subpaths: entry.subpaths.into_iter().map(path_alias).collect(),
     }
 }
 

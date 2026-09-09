@@ -221,6 +221,7 @@ fn packages(manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<PackageEn
         entry,
         dir: SmolStr::new(dir),
         aliases,
+        subpaths: Vec::new(),
     }]
 }
 

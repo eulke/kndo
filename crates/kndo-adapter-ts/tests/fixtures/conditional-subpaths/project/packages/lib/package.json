@@ -1,0 +1,13 @@
+{
+  "name": "@demo/lib",
+  "version": "1.0.0",
+  "exports": {
+    ".": { "import": "./src/index.js", "require": "./src/index.cjs" },
+    "./client": { "types": "./types/client.d.ts", "default": "./src/client.js" },
+    "./tools/*": "./src/tools/*.js",
+    "./internal/*": null
+  },
+  "imports": {
+    "#shapes/*": "./types/*.d.ts"
+  }
+}

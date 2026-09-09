@@ -560,8 +560,10 @@ impl Plugin for MockPlugin {
                 let mut words = rest.split_whitespace();
                 if let Some(prefix) = words.next() {
                     out.alias(kndo_contract::manifest::PathAlias {
-                        prefix: prefix.into(),
-                        targets: words.map(Into::into).collect(),
+                        pattern: prefix.into(),
+                        targets: words
+                            .map(kndo_contract::manifest::AliasTarget::always)
+                            .collect(),
                     });
                 }
                 continue;

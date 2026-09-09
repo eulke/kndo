@@ -1,0 +1,47 @@
+# conditional-subpaths: npm's two alias tables, read as tables and not as a
+# bag of entry strings.
+#
+# `exports` is what a CONSUMER may name, so its keys are spelled the way one
+# writes them (`@demo/lib/client`), its `*` CAPTURES (`./tools/*` sends
+# `tools/probe` to `src/tools/probe.js`), and its `null` REFUSES — which is a
+# different answer from silence, and the reason `secret` stays accused while
+# `probe` does not. `imports` is the package's own (`#shapes/payload`), scoped
+# to the files under the declaring manifest.
+#
+# Conditions do not filter: the engine cannot know a runtime, so `import` and
+# `require` are both possible resolutions and both files stay alive. That is
+# the keep-alive direction, stated once rather than guessed per call.
+
+[[alive]]
+subject = "packages/lib/src/index.js#open"
+category = "unused"
+because = "binding"
+why = "the `.` subpath under the `import` condition — the app names the package and this is where one of the two branches lands"
+
+[[alive]]
+subject = "packages/lib/src/index.cjs"
+category = "unused"
+why = "the OTHER branch of the same subpath: `require` is a resolution this run cannot rule out, so the file it names is alive"
+
+[[alive]]
+subject = "packages/lib/src/client.js#connect"
+category = "unused"
+because = "binding"
+why = "`@demo/lib/client` under `default` — a subpath key the directory layout does not mirror, which is the whole reason the map has to be read"
+
+[[alive]]
+subject = "packages/lib/src/tools/probe.js#probe"
+category = "unused"
+because = "binding"
+why = "`./tools/*` captures `probe` and the template fills it: one pattern, every tool"
+
+[[alive]]
+subject = "packages/lib/types/payload.d.ts#Payload"
+category = "unused"
+because = "binding"
+why = "`#shapes/*` is the package's INTERNAL table, and `uses-hash.ts` is under the manifest that declares it"
+
+[[dead]]
+subject = "packages/lib/src/internal/secret.js"
+category = "unused"
+why = "`./internal/*` is `null`: the manifest names the subpath and REFUSES it, so the app's import resolves to nothing, no entry names the file, and nothing else reaches it — the control that a refusal is not the same as an absent key"

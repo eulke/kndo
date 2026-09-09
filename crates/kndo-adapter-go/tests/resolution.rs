@@ -55,6 +55,7 @@ fn module_paths_map_to_directories() {
             entry: None,
             dir: SmolStr::new(""),
             aliases: Vec::new(),
+            subpaths: Vec::new(),
         },
     );
     let cx = ResolveContext::with_packages(&known, &packages);
@@ -96,6 +97,7 @@ fn longest_module_prefix_wins_across_a_workspace() {
                 entry: None,
                 dir: SmolStr::new(dir),
                 aliases: Vec::new(),
+                subpaths: Vec::new(),
             },
         );
     }

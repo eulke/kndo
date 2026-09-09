@@ -37,6 +37,17 @@ pub struct PackageEntry {
     /// go.mod `replace`. A specifier spelling an alias resolves to this entry,
     /// and a dependency declaration spelling one is in use.
     pub aliases: Vec<SmolStr>,
+    /// The SUBPATHS this package hands out, as its manifest declares them —
+    /// npm's `exports` map. Patterns are spelled the way a CONSUMER writes
+    /// them (`pkg`, `pkg/client`, `pkg/dist/*`), because a consumer is who
+    /// asks; targets are relative to `dir`. A package with no map hands out
+    /// `entry` under its own name and nothing else, which is the empty list.
+    ///
+    /// Distinct from a manifest's own [`crate::manifest::PathAlias`] table:
+    /// that one is INTERNAL (npm's `#` imports, tsconfig `paths`) and applies
+    /// to files under the declaring directory, this one applies to whoever
+    /// names the package, from anywhere.
+    pub subpaths: Vec<crate::manifest::PathAlias>,
 }
 
 /// The manifest section a dependency declaration sits in, translated to the
@@ -182,51 +193,57 @@ impl<'a> ProjectView<'a> {
         self.unit_of(path).map_or(&[], |u| &u.roots)
     }
 
-    /// The directories a specifier rewrites to, in the order the build tries
-    /// them — `tsconfig` paths, Sass `loadPaths`, a go.mod `replace`. The
-    /// prefix is replaced, the rest kept: `@app/x` under `@app/ → src/app`
-    /// answers `src/app/x`. Empty where no alias names it.
+    /// What a specifier rewrites to, in the order the build tries them —
+    /// `tsconfig` paths, an npm `exports`/`imports` map, Sass `loadPaths`, a
+    /// go.mod `replace`. The pattern's capture fills each target's `*`, or is
+    /// appended where the target has none: `@app/x` under `@app/ → src/app`
+    /// answers `src/app/x`, and `#types/hot` under `#types/* → ./types/*.d.ts`
+    /// answers `types/hot.d.ts`.
+    ///
+    /// Empty means NO alias named the specifier. An alias that names it and
+    /// REFUSES it (npm's `null` subpath) answers with one refusing target, so
+    /// a caller can tell "the manifest said no" from "the manifest said
+    /// nothing" — see [`crate::manifest::AliasTarget::refuses`].
     ///
     /// `from` decides WHICH declaration applies when several match: the one
     /// declared nearest above the resolving file.
     pub fn alias(&self, from: &ProjectPath, specifier: &str) -> Vec<SmolStr> {
+        self.alias_targets(from, specifier)
+            .iter()
+            .filter(|(t, _)| !t.refuses())
+            .map(|(_, path)| path.clone())
+            .collect()
+    }
+
+    /// [`alias`](Self::alias) with the conditions each rewriting held under,
+    /// and the refusals kept — what a caller reads when it needs to know
+    /// WHICH branch of a conditional table it took, or that the table refused
+    /// the specifier outright. The path of a refusing target is empty.
+    pub fn alias_targets(
+        &self,
+        from: &ProjectPath,
+        specifier: &str,
+    ) -> Vec<(&'a crate::manifest::AliasTarget, SmolStr)> {
         let mut best: Option<(usize, usize, &crate::manifest::PathAlias)> = None;
         for (dir, alias) in self.aliases {
             if !crate::vocab::is_under(dir, from.as_str()) {
                 continue;
             }
-            let Some(rest) = specifier.strip_prefix(alias.prefix.as_str()) else {
+            if alias.capture(specifier).is_none() {
                 continue;
-            };
-            // The longest prefix wins first, and the nearest manifest breaks
-            // a tie — two aliases spelling one prefix are two build
+            }
+            // The longest pattern wins first, and the nearest manifest breaks
+            // a tie — two aliases spelling one pattern are two build
             // configurations, and the inner one is the one in force.
-            let key = (alias.prefix.len(), dir.len());
+            let key = (alias.pattern.len(), dir.len());
             if best.is_none_or(|(p, d, _)| (p, d) < key) {
-                let _ = rest;
                 best = Some((key.0, key.1, alias));
             }
         }
-        let alias = match best {
-            Some((_, _, alias)) => alias,
-            None => return Vec::new(),
+        let Some((_, _, alias)) = best else {
+            return Vec::new();
         };
-        let rest = specifier
-            .strip_prefix(alias.prefix.as_str())
-            .unwrap_or_default();
-        alias
-            .targets
-            .iter()
-            .map(|target| match (target.is_empty(), rest.is_empty()) {
-                (true, _) => SmolStr::new(rest),
-                (false, true) => target.clone(),
-                (false, false) => SmolStr::new(format!(
-                    "{}/{}",
-                    target.trim_end_matches('/'),
-                    rest.trim_start_matches('/')
-                )),
-            })
-            .collect()
+        alias.rewrite(specifier)
     }
 
     /// The namespace a file declared, as its own clause spelled it — empty for
@@ -396,7 +413,7 @@ pub struct ProjectRoot {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::manifest::{PathAlias, UnitKind, UnitRoot};
+    use crate::manifest::{AliasTarget, PathAlias, UnitKind, UnitRoot};
     use std::collections::BTreeMap;
 
     /// One unit rooted at `src`, two aliases — the outer manifest's and a
@@ -410,9 +427,9 @@ mod tests {
     }
 
     fn fixture() -> Fixture {
-        let alias = |prefix: &str, targets: &[&str]| PathAlias {
-            prefix: prefix.into(),
-            targets: targets.iter().map(|t| SmolStr::new(*t)).collect(),
+        let alias = |pattern: &str, targets: &[&str]| PathAlias {
+            pattern: pattern.into(),
+            targets: targets.iter().map(|t| AliasTarget::always(*t)).collect(),
         };
         Fixture {
             units: vec![UnitView {
@@ -431,7 +448,7 @@ mod tests {
                 ),
                 (SmolStr::default(), alias("@app/deep/", &["src/deep"])),
                 (SmolStr::new("inner"), alias("@app/", &["inner/own"])),
-                (SmolStr::default(), alias("~", &[""])),
+                (SmolStr::default(), alias("~", &["*"])),
             ],
             namespaces: [
                 (ProjectPath::new("src/a.ts"), vec![SmolStr::new("com")]),
@@ -503,7 +520,7 @@ mod tests {
             ["src/app/lib", "src/vendor/lib"],
             "the nested declaration covers only the files under it"
         );
-        // An empty target rewrites to the rest alone — `~x` at the root.
+        // A bare `*` template rewrites to the capture alone — `~x` at the root.
         assert_eq!(at("main.ts", "~x"), ["x"]);
         // A specifier no alias names rewrites to nothing, which is silence.
         assert!(at("main.ts", "./sibling").is_empty());

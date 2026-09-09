@@ -13,7 +13,7 @@ use kndo_contract::evidence::{
     self as ev, DiagnosticLevel, EmbeddedRegion, EvidenceSink, EvidenceStream, EvidenceStreams,
     RegionMode, RootKind,
 };
-use kndo_contract::manifest::UnitKind;
+use kndo_contract::manifest::{PathAlias, UnitKind};
 use kndo_contract::plugin::{
     Activation, ActivationRule, Bearer, CycleTolerance, DeclaredSymbol, DependencyBuiltins,
     DependencyIdentity, DependencyScoping, DispatchRule, Effect, FileRole, Ladder, NamespaceSpan,
@@ -323,7 +323,7 @@ pub(crate) fn manifest_evidence(
     read: awire::ManifestEvidence,
     out: &mut kndo_contract::manifest::ManifestSink,
 ) {
-    use kndo_contract::manifest::{PathAlias, Publication, Unit, UnitDep, UnitRoot};
+    use kndo_contract::manifest::{Publication, Unit, UnitDep, UnitRoot};
     for unit in read.units {
         out.unit(Unit {
             name: SmolStr::new(unit.name),
@@ -368,10 +368,7 @@ pub(crate) fn manifest_evidence(
         out.mention(name);
     }
     for alias in read.aliases {
-        out.alias(PathAlias {
-            prefix: SmolStr::new(alias.prefix),
-            targets: alias.targets.into_iter().map(SmolStr::new).collect(),
-        });
+        out.alias(path_alias(alias));
     }
     for root in read.roots {
         out.root(project_root(root));
@@ -446,6 +443,37 @@ pub(crate) fn package_entry(entry: awire::PackageEntry) -> PackageEntry {
         entry: entry.entry.map(ProjectPath::new),
         dir: SmolStr::new(entry.dir),
         aliases: entry.aliases.into_iter().map(SmolStr::new).collect(),
+        subpaths: entry.subpaths.into_iter().map(path_alias).collect(),
+    }
+}
+
+/// A path alias off the wire, with its conditions.
+fn path_alias(a: awire::PathAlias) -> PathAlias {
+    PathAlias {
+        pattern: SmolStr::new(a.pattern),
+        targets: a
+            .targets
+            .into_iter()
+            .map(|t| kndo_contract::manifest::AliasTarget {
+                template: SmolStr::new(t.template),
+                conditions: t.conditions.into_iter().map(SmolStr::new).collect(),
+            })
+            .collect(),
+    }
+}
+
+/// The same, back to the wire.
+fn path_alias_to_wire(a: &PathAlias) -> awire::PathAlias {
+    awire::PathAlias {
+        pattern: a.pattern.to_string(),
+        targets: a
+            .targets
+            .iter()
+            .map(|t| awire::AliasTarget {
+                template: t.template.to_string(),
+                conditions: t.conditions.iter().map(SmolStr::to_string).collect(),
+            })
+            .collect(),
     }
 }
 
@@ -455,6 +483,7 @@ pub(crate) fn package_entry_to_wire(entry: &PackageEntry) -> awire::PackageEntry
         entry: entry.entry.as_ref().map(|p| p.as_str().to_string()),
         dir: entry.dir.to_string(),
         aliases: entry.aliases.iter().map(SmolStr::to_string).collect(),
+        subpaths: entry.subpaths.iter().map(path_alias_to_wire).collect(),
     }
 }
 
