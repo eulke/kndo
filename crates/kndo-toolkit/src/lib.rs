@@ -27,10 +27,11 @@ pub fn parse(language: &Language, source: &[u8]) -> Option<Tree> {
 /// the one place absence means nothing — and the engine had no way to hear it.
 /// It reports [`UnreadName`] now, which is a fact, and the diagnostic is gone.
 ///
-/// Two kinds of text go unread, and [`unread`] states the rule for each: the
-/// bytes no leaf covers, because recovery drops text on the floor; and the
-/// bytes an `ERROR` covers that none of its PLACED children do, because an
-/// `ERROR` is the parser saying it could not put this text anywhere.
+/// **Only two nodes are asked what their children leave uncovered**: an
+/// `ERROR`, which is the parser saying it could not place this text, and the
+/// root, where recovery can drop a whole top-level item. Inside a node the
+/// parser BUILT, uncovered bytes are that node's own text and the reader read
+/// them — see [`visit`], which is the whole rule.
 ///
 /// Measured on the corpus: Exposed loses four accusations, and all four are
 /// false positives the reader could not see it was making —
@@ -41,16 +42,17 @@ pub fn parse(language: &Language, source: &[u8]) -> Option<Tree> {
 /// which is the whole point: a grammar gap becomes an abstention rather than a
 /// false verdict, and no patch to the grammar was needed to get there.
 ///
-/// Three exemptions keep the rules from doubting what the reader DID read, and
-/// each is worth a number. Subtrees under an `ERROR`: vapor's 49 swift-testing
-/// methods are recovered from under one by the item walk, and calling their own
-/// text unread withheld every one of them. `extra` nodes under an `ERROR`: a
-/// comment belongs nowhere in the structure by the grammar's own declaration,
-/// so an `ERROR` around it says nothing about it. And an `extra` covers its
-/// whole span in the leaf rule too, without descending: several grammars give
-/// the text inside a comment no node of its own, so descending reads the prose
-/// as unread — 18658 of ripgrep's 19393 names were the words in its comments,
-/// and a comment that merely NAMES a declaration would doubt it.
+/// Two narrower rules came first and each cost a measurement. Everything from
+/// the first `ERROR` to end of file withheld 49 of vapor's declarations, all of
+/// them swift-testing methods the item walk had RECOVERED from under one — so a
+/// subtree under an `ERROR` is placed, and so is an `extra`, which the grammar
+/// itself declares placeless. Asking every node what its leaves leave uncovered
+/// read the inside of tokens as unread: ripgrep 19393 names, of which 18658
+/// were the words in its comments (`tree-sitter-rust` gives a `line_comment`'s
+/// text no node), 735 the `r` of a raw string; python 197, all docstring prose;
+/// css 470, the digits of its colours. Under the rule above those are 0, 0 and
+/// 15, the corpus reports are byte-identical, and what is left in every
+/// language is code its grammar could not read.
 ///
 /// What this does not reach is text a leaf covers but MISREADS — a
 /// `string_content` absorbing twelve lines of statements, measured in Exposed's
@@ -74,44 +76,46 @@ pub fn parse_reporting(
 /// The names in text this parse did not account for — see
 /// [`parse_reporting`] for what that means and why.
 fn unread(tree: &Tree, source: &[u8], out: &mut kndo_contract::evidence::EvidenceSink) {
-    let mut read_to = 0usize;
     let mut gaps: Vec<(usize, usize)> = Vec::new();
-    visit(tree.root_node(), &mut read_to, &mut gaps);
-    if read_to < source.len() {
-        gaps.push((read_to, source.len()));
+    let root = tree.root_node();
+    visit(root, true, &mut gaps);
+    // Text past the tree's own end is text no node covers.
+    if root.end_byte() < source.len() {
+        gaps.push((root.end_byte(), source.len()));
     }
-    // Document order: the two rules interleave, and a reader of the evidence
-    // reads spans in the order the file has them.
+    // Document order: a reader of the evidence reads spans in the order the
+    // file has them.
     gaps.sort_unstable();
     for (from, to) in gaps {
         names_in(source, from, to, out);
     }
 }
 
-/// One pass, two rules — see [`parse_reporting`] for why each is what it is.
-fn visit(n: Node<'_>, read_to: &mut usize, gaps: &mut Vec<(usize, usize)>) {
-    // An `extra` is a node the grammar itself declares placeless: a comment
-    // belongs nowhere in the structure. Its whole span is read — adapters read
-    // comments wherever they sit, and several grammars give the text inside a
-    // comment no node of its own, so descending would call the prose unread.
-    let placeless = n.is_extra() && !n.is_error();
-    if placeless || n.child_count() == 0 {
-        if n.start_byte() > *read_to {
-            gaps.push((*read_to, n.start_byte()));
-        }
-        *read_to = (*read_to).max(n.end_byte());
+/// The stretches of `n` that no child of it accounts for — see
+/// [`parse_reporting`] for which nodes are asked and why.
+fn visit(n: Node<'_>, is_root: bool, gaps: &mut Vec<(usize, usize)>) {
+    if n.child_count() == 0 {
         return;
     }
-    if n.is_error() {
-        // An `ERROR` is the parser saying it could not place this text. Two
-        // kinds of child under it WERE placed: a node with children of its own
-        // is a subtree the parser built and the item walk reads, and an `extra`
-        // is placeless anyway. What is left is loose tokens: lexed, never
-        // placed, never offered to any reader.
-        let mut cursor = n.walk();
+    let mut cursor = n.walk();
+    // Only two nodes are asked what their children leave uncovered: an `ERROR`,
+    // which is the parser saying it could not place this text, and the root,
+    // where recovery can drop a whole top-level item. Inside any node the
+    // parser BUILT, uncovered bytes are the node's own text — the digits of a
+    // colour, the `r` of a raw string, the prose in a docstring — and the
+    // reader read them.
+    if n.is_error() || is_root {
         let mut placed_to = n.start_byte();
         for child in n.children(&mut cursor) {
-            if child.child_count() == 0 && !(child.is_extra() && !child.is_error()) {
+            // Under an `ERROR`, a bare token is exactly what was NOT placed;
+            // a subtree the parser built is read by the item walk, and an
+            // `extra` is placeless by the grammar's own declaration. Under the
+            // root there is no such distinction: a token at top level is a
+            // token the parser put there.
+            let placed = child.child_count() != 0
+                || !n.is_error()
+                || (child.is_extra() && !child.is_error());
+            if !placed {
                 continue;
             }
             if child.start_byte() > placed_to {
@@ -125,7 +129,7 @@ fn visit(n: Node<'_>, read_to: &mut usize, gaps: &mut Vec<(usize, usize)>) {
     }
     let mut cursor = n.walk();
     for child in n.children(&mut cursor) {
-        visit(child, read_to, gaps);
+        visit(child, false, gaps);
     }
 }
 

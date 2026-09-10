@@ -8186,3 +8186,83 @@ a scanner over a whole document can honestly make; `kndo:css` is the same. No
 `GRAPH_SEMANTICS_VERSION` bump: the same evidence still assembles into the same
 graph — what changed is what the evidence CONTAINS, which is the adapters' own
 version knob.
+
+## 2026-09-10 — M8.f's last row re-planned: the four grammar patches are dead, and the unread map replaces them
+
+Owner's instruction: re-plan the row, investigate, align. The row read "patches
+Swift/scss/TS/Rust", and every other piece of M8.f has landed — vendoring with
+its provenance gate, the ledger, the Kotlin bake-off, the tolerant walk, and the
+unread-text type of the previous entry.
+
+**What the four patches were for, read from the ledgers rather than from
+memory.** They were never about lost evidence. Each of the four is a count of
+`Ignored` rows in a `grammar.toml`: swift 72, of which 54 share one reason
+(`@operand` — tree-sitter-swift declares no expression supertype, so every
+operand field lists `simple_identifier` outright among ninety alternatives);
+rust 37 (11 `@operand`, 18 `@type_use`); js-ts 37 (15 `@operand`); css 6 (all
+`@scss_control_value`). A patch adding an `_expression` supertype collapses the
+inventory TABLE. It changes no reading: every one of those positions is already
+read correctly, as a use, and the ledger already explains each family with ONE
+shared reason.
+
+So the price was four vendored forks, re-patched at every grammar release, to
+make an internal table shorter, for zero findings. That is the treadmill the
+revert entry named, bought for less than the Kotlin patches were. **Dead, and
+the vice is that one.** The rows STAY enumerated, one per position: that is the
+gate working — a position a grammar release adds arrives ungraded, and a
+wildcard covering the family would swallow it. swift's `@operand` reason said
+"the day the grammar is vendored with an `_expression` supertype (M8.f's
+charter)"; it now says why that day is not coming.
+
+**Grammar currency was checked, and there is nothing to bump to.** All nine
+pinned grammars are at their newest stable release on crates.io:
+tree-sitter-swift 0.7.3, -typescript 0.23.2, -rust 0.24.2, -java 0.23.5,
+-kotlin-ng 1.1.0, -css 0.25.0, -scss 1.0.0, -go 0.25.0, -python 0.25.0. The
+deficits — Kotlin 2.1/2.2, Swift 6's `sending`, modern CSS selectors — are not
+implemented upstream at all. Neither patching nor upgrading is a remedy, which
+leaves exactly the posture that shipped: the reader states what it could not
+read, and the judgment abstains.
+
+**What replaces the row: the unread map.** The previous entry's mechanism makes
+each grammar's real deficit measurable for the first time, and the first thing
+the measurement showed is that the shipped rule was over-reporting. The rule is
+now one sentence — **only an `ERROR` and the root are asked what their children
+leave uncovered** — because inside a node the parser BUILT, uncovered bytes are
+that node's own text and the reader read them. It replaces two clauses and makes
+the leaf-rule `extra` exemption unnecessary (it is implied).
+
+Per language, over the nine repositories, before → after:
+
+| language | files with unread | names | what is left |
+|---|---|---|---|
+| kt | 86 → 58 of 802 | 68910 → 50421 | `when` guards, context parameters, multi-dollar strings |
+| swift | 47 → 22 of 349 | 446 → 156 | Swift 6 `sending`, `if`/`switch` expressions, `#warning`/`#error` |
+| scss | 9 → 5 of 27 | 100 → 16 | `@use … as *`, shorthand values |
+| css | 39 → 5 of 221 | 470 → 15 | modern selectors, shorthand values |
+| java | 13 → 13 of 3275 | 19 → 19 | one construct, in six guava files, all naming `Object` |
+| ts | 4 → 4 of 569 | 10 → 10 | vite's deliberate syntax-error fixtures |
+| html | 5 → 3 of 4853 | 5 → 3 | Jinja `{{ url_for(…) }}` — a template language nothing claims |
+| rs | 30 → 0 of 110 | 735 → 0 | the `r` of a raw string: token-internal, and read |
+| py | 14 → 0 of 83 | 197 → 0 | docstring prose: token-internal, and read |
+| go, jsx, tsx, cjs, mjs, mts | 0 | 0 | clean |
+
+All nine corpus reports are BYTE-IDENTICAL under the new rule — Exposed still
+959 with its four withheld, vapor still 747 — and no fixture moved, which is the
+check that this removes noise rather than changing a verdict. What it removes is
+a latent false abstention: a declaration named `Object`, `r`, `fff`, or any word
+that appears in a docstring was one match away from going unjudged.
+
+**Two pieces of the row's successor are designed and NOT built, for the owner's
+go.** They are the next thing to design in the plan's idiom, not a cut:
+
+1. *The map belongs in the report.* `run.extensions[]` already says `files` per
+   reader; it should say how much of it went unread. Today `unused` abstains
+   with `names-in-unread-text { names: 8 }` and nothing says WHICH reader lost
+   them — which is the first question a user asks. One measured field beside a
+   measured field, and the corpus byte-identity gate then holds the map for
+   free: no new gate, and a grammar regression becomes a diff.
+2. *Every row above needs an owner.* Kotlin's three gaps have fixtures; swift's
+   Swift-6 constructs, css/scss's, and java's one guava construct have none. A
+   gap with an owner is a plan; a gap without one is a bug nobody filed. html's
+   Jinja is not a grammar gap at all — a template language nothing claims is an
+   embedded-region question, and it should be re-filed as one.

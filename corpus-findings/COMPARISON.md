@@ -3181,3 +3181,41 @@ Still open, and named: text a leaf covers but MISREADS, the
 `StatementInterceptorTests.kt` case two sections above. In that file the loose
 tokens beside the mislexed leaf already withhold both subjects, so nothing is
 lost here; the general case waits for its own measurement.
+
+## The unread map: what each pinned grammar cannot read, measured
+
+Nothing in the nine reports moves — every one is byte-identical, Exposed still
+959 with its four withheld — and that is the point of this section: the unread
+scan now says only what it means, and what is left is a per-language map of
+grammar deficit over foreign code.
+
+The rule tightened to one sentence: only an `ERROR` and the root are asked what
+their children leave uncovered. Inside a node the parser BUILT, uncovered bytes
+are that node's own text, and the reader read them.
+
+| language | files with unread | names | what is left |
+|---|---|---|---|
+| kt | 86 → 58 of 802 | 68910 → 50421 | `when` guards, context parameters, multi-dollar strings |
+| swift | 47 → 22 of 349 | 446 → 156 | Swift 6 `sending`, `if`/`switch` expressions, `#warning`/`#error` |
+| scss | 9 → 5 of 27 | 100 → 16 | `@use … as *`, shorthand values |
+| css | 39 → 5 of 221 | 470 → 15 | modern selectors, shorthand values |
+| java | 13 → 13 of 3275 | 19 → 19 | one construct, six guava files, every name `Object` |
+| ts | 4 → 4 of 569 | 10 → 10 | vite's deliberate syntax-error fixtures |
+| html | 5 → 3 of 4853 | 5 → 3 | Jinja `{{ url_for(…) }}` in flask's templates |
+| rs | 30 → 0 of 110 | 735 → 0 | was the `r` of a raw string — token-internal, and read |
+| py | 14 → 0 of 83 | 197 → 0 | was docstring prose — token-internal, and read |
+| go, jsx, tsx, cjs, mjs, mts | 0 | 0 | clean |
+
+Three columns are worth reading twice. **rust and python go to zero**: their
+grammars parse the corpus cleanly, and every name the old rule reported was
+inside a token the reader had read — a raw string's `r`, a docstring's prose.
+**css falls 470 → 15**: the 455 were the digits of its colour literals.
+**Kotlin keeps 50421 names across 58 files**, which is the real deficit and the
+reason the four Exposed accusations are withdrawn.
+
+Two rows are not grammar deficits at all. ts's ten are vite's own
+`syntax-error.js` and friends — fixtures whose point is to be broken. html's
+three are `{{ url_for(…) }}` in flask's Jinja templates: a template language no
+extension claims, which is an embedded-region question rather than a grammar
+one, and it reads correctly as unread meanwhile — the page's reader genuinely
+did not read that expression.
