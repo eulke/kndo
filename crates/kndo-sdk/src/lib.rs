@@ -306,6 +306,7 @@ fn stream_to_wire(stream: EvidenceStream) -> Option<wire::EvidenceStream> {
         EvidenceStream::Metrics => Some(wire::EvidenceStream::Metrics),
         EvidenceStream::Markers => Some(wire::EvidenceStream::Markers),
         EvidenceStream::Relations => Some(wire::EvidenceStream::Relations),
+        EvidenceStream::UnreadText => Some(wire::EvidenceStream::UnreadText),
         // A stream this SDK build predates cannot cross this wire: omitted from
         // the declaration, so host-side pairing stays truthful (writes to it
         // would drop with a diagnostic rather than lie).
@@ -519,6 +520,14 @@ pub fn evidence_to_wire(evidence: &FileEvidence) -> wire::FileEvidence {
             })
             .collect(),
         embedded: evidence.embedded.iter().map(region_to_wire).collect(),
+        unread: evidence
+            .unread
+            .iter()
+            .map(|u| wire::UnreadName {
+                name: u.name.to_string(),
+                span: span_to_wire(u.span),
+            })
+            .collect(),
         diagnostics: evidence
             .diagnostics
             .iter()

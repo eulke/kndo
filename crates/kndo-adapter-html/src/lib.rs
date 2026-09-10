@@ -38,8 +38,16 @@ impl HtmlAdapter {
     pub fn new() -> Self {
         HtmlAdapter {
             // No manifest of its own: a document declares no package. No
-            // evidence streams: nothing here carries a pragma or a metric.
-            spec: PluginSpec::builder("kndo:html", 4)
+            // markers and no metrics: nothing here carries a pragma or a
+            // metric. It DOES declare `UnreadText`, and reports none: a
+            // document is read by a scanner that covers all of it, so "no
+            // unread text" is a statement this reader can make — which is what
+            // the stream is for, and the only way `unused` may judge a page at
+            // all.
+            spec: PluginSpec::builder("kndo:html", 5)
+                .emits(kndo_contract::evidence::EvidenceStreams::of(&[
+                    kndo_contract::evidence::EvidenceStream::UnreadText,
+                ]))
                 .suffixes(&["html", "htm"])
                 // A page inside npm's installed dependencies is a dependency's.
                 .ignores(&["**/node_modules/**"])

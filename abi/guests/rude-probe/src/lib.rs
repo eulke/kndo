@@ -75,6 +75,7 @@ impl bindings::Guest for RudeProbe {
             comments: Vec::new(),
             metrics: Vec::new(),
             embedded: Vec::new(),
+            unread: Vec::new(),
             diagnostics: Vec::new(),
         }
     }

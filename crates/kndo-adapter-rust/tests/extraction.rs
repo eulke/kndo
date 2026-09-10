@@ -482,9 +482,26 @@ fn beta(values: &[u32]) -> u32 {
 }
 
 #[test]
-fn broken_source_degrades_to_diagnostic() {
+fn broken_source_degrades_to_unread_text() {
     let ev = extract("src/lib.rs", "pub fn broken( {{{{");
-    assert!(!ev.diagnostics.is_empty());
+    // Nothing extracted, and the reader says so where a judgment can read it:
+    // the names in the text it could not account for. `broken` is among them,
+    // so a verdict resting on its absence abstains instead of accusing.
+    //
+    // `pub` is NOT: the parser built a `visibility_modifier` over it, and a
+    // subtree under an `ERROR` is text the parser placed — what it failed to
+    // place is `fn broken(` and the braces. The line between them is the whole
+    // rule, and it is why a declaration the item walk recovers from under an
+    // `ERROR` is not doubted by its own text. `fn` stays a name here because
+    // telling a keyword from an identifier is the grammar's knowledge, and this
+    // is the text the grammar could not read.
+    assert!(ev.declarations.is_empty());
+    let unread: Vec<&str> = ev.unread.iter().map(|u| u.name.as_str()).collect();
+    assert_eq!(unread, ["fn", "broken"]);
+    assert_eq!(
+        &"pub fn broken( {{{{"[ev.unread[1].span.start as usize..ev.unread[1].span.end as usize],
+        "broken"
+    );
 }
 
 #[test]

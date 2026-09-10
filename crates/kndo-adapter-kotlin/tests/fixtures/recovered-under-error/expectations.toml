@@ -16,24 +16,31 @@
 #
 # Both are invisible without the item walk: the one-level walk stops at the ERROR and the
 # file yields only `cache`. With the item walk ALONE both are reported dead, because the call
-# that keeps one of them alive was never a node. The rows below are the whole argument for
-# reading the discarded text as well: recovering declarations without recovering the uses in
-# the same region does not find dead code, it manufactures it.
+# that keeps one of them alive was never a node. The two rows below are the whole argument
+# for the reader STATING the discarded text: recovering declarations without accounting for
+# the uses in the same region does not find dead code, it manufactures it.
+#
+# And they are the argument for stating it as UNREAD rather than reading names out of it as
+# uses. A name in discarded text is not a use — nobody read a call there — so it keeps
+# nothing: `used-by` on `invalidate` answers `kept_by: []`. What it does instead is stop the
+# accusation: the run answers `names-in-unread-text { names: 1 }`, and that one is
+# `invalidate`. Nothing keeps it and it is still not judged, which is the whole difference
+# between abstaining and guessing in the accused's favour.
 
 [[alive]]
 subject = "src/main/kotlin/demo/Cache.kt#invalidate"
 category = "unused"
-why = "`refresh` calls it, and `refresh` is text the parse discarded — the name survives only in the bytes, and reading them is what tells this apart from the row below"
+why = "`refresh` calls it, and `refresh` is text the parse discarded — the name appears in text no reader accounted for, so a verdict resting on its absence abstains; it is the one declaration the run's `names-in-unread-text` counts"
 
-[[dead]]
+[[alive]]
 subject = "src/main/kotlin/demo/Cache.kt#invalidate"
 category = "internal-only"
-why = "the engine does not merely fall silent about it: the one use it found is inside the unit, so it says the `internal` is not earned — a positive statement that the recovered reference landed"
+why = "no use was found at all, and `internal-only` speaks only about where the uses ARE; total absence is the subject of `unused`, which abstains over it. The `internal-only` this fixture used to pin was the invented reference talking."
 
 [[dead]]
 subject = "src/main/kotlin/demo/Cache.kt#neverCalled"
 category = "unused"
-why = "recovered from under the same ERROR and named nowhere, in a node or in discarded text — the true positive the item walk buys"
+why = "recovered from under the same ERROR and named nowhere — not in a node, and not in the discarded text either, which is what tells it apart from the row above: the true positive the item walk buys"
 
 [[alive]]
 subject = "src/main/kotlin/demo/Cache.kt#cache"

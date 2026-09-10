@@ -5,7 +5,7 @@
 
 pub mod github_actions;
 
-use kndo_contract::evidence::{EvidenceSink, RefKind};
+use kndo_contract::evidence::EvidenceSink;
 use kndo_contract::manifest::Version;
 use kndo_contract::vocab::Span;
 use tree_sitter::{Language, Node, Parser, Tree};
@@ -18,31 +18,115 @@ pub fn parse(language: &Language, source: &[u8]) -> Option<Tree> {
     parser.parse(source, None)
 }
 
-/// The whole parse-and-report opening every extraction shares: `None` came with
-/// its diagnostic, a tree with syntax errors came with its warning — the two
-/// user-facing strings exist once, so per-language output cannot drift.
+/// The whole parse-and-report opening every extraction shares — and the ONE
+/// place a reader states what it could not read.
+///
+/// This used to end in a diagnostic: "syntax errors in file — evidence may be
+/// partial". True, and prose, which no analysis can act on. Meanwhile `unused`
+/// takes its entire basis from absence, so a file the reader only half read is
+/// the one place absence means nothing — and the engine had no way to hear it.
+/// It reports [`UnreadName`] now, which is a fact, and the diagnostic is gone.
+///
+/// Two kinds of text go unread, and [`unread`] states the rule for each: the
+/// bytes no leaf covers, because recovery drops text on the floor; and the
+/// bytes an `ERROR` covers that none of its PLACED children do, because an
+/// `ERROR` is the parser saying it could not put this text anywhere.
+///
+/// Measured on the corpus: Exposed loses four accusations, and all four are
+/// false positives the reader could not see it was making —
+/// `allReferencesMatch` is called twice from a `when` guard (Kotlin 2.1, a
+/// construct the pinned grammar cannot read), `isPersistedIn` from a body past
+/// a break, `RollbackCheckInterceptor` from three lines the recovery mislexed.
+/// The engine now abstains over exactly those names instead of accusing them,
+/// which is the whole point: a grammar gap becomes an abstention rather than a
+/// false verdict, and no patch to the grammar was needed to get there.
+///
+/// Three exemptions keep the rules from doubting what the reader DID read, and
+/// each is worth a number. Subtrees under an `ERROR`: vapor's 49 swift-testing
+/// methods are recovered from under one by the item walk, and calling their own
+/// text unread withheld every one of them. `extra` nodes under an `ERROR`: a
+/// comment belongs nowhere in the structure by the grammar's own declaration,
+/// so an `ERROR` around it says nothing about it. And an `extra` covers its
+/// whole span in the leaf rule too, without descending: several grammars give
+/// the text inside a comment no node of its own, so descending reads the prose
+/// as unread — 18658 of ripgrep's 19393 names were the words in its comments,
+/// and a comment that merely NAMES a declaration would doubt it.
+///
+/// What this does not reach is text a leaf covers but MISREADS — a
+/// `string_content` absorbing twelve lines of statements, measured in Exposed's
+/// `StatementInterceptorTests.kt`. Open, and named rather than approximated;
+/// in that file the loose tokens beside the mislexed leaf already withhold the
+/// two subjects it would have withheld.
 pub fn parse_reporting(
     language: &Language,
     source: &[u8],
     out: &mut kndo_contract::evidence::EvidenceSink,
 ) -> Option<Tree> {
-    use kndo_contract::evidence::DiagnosticLevel;
     let Some(tree) = parse(language, source) else {
-        out.diagnostic(
-            DiagnosticLevel::Warn,
-            "parse produced no tree — no evidence extracted from this file",
-            None,
-        );
+        // No tree at all: nothing in this file was read.
+        names_in(source, 0, source.len(), out);
         return None;
     };
-    if tree.root_node().has_error() {
-        out.diagnostic(
-            DiagnosticLevel::Info,
-            "syntax errors in file — evidence may be partial",
-            None,
-        );
-    }
+    unread(&tree, source, out);
     Some(tree)
+}
+
+/// The names in text this parse did not account for — see
+/// [`parse_reporting`] for what that means and why.
+fn unread(tree: &Tree, source: &[u8], out: &mut kndo_contract::evidence::EvidenceSink) {
+    let mut read_to = 0usize;
+    let mut gaps: Vec<(usize, usize)> = Vec::new();
+    visit(tree.root_node(), &mut read_to, &mut gaps);
+    if read_to < source.len() {
+        gaps.push((read_to, source.len()));
+    }
+    // Document order: the two rules interleave, and a reader of the evidence
+    // reads spans in the order the file has them.
+    gaps.sort_unstable();
+    for (from, to) in gaps {
+        names_in(source, from, to, out);
+    }
+}
+
+/// One pass, two rules — see [`parse_reporting`] for why each is what it is.
+fn visit(n: Node<'_>, read_to: &mut usize, gaps: &mut Vec<(usize, usize)>) {
+    // An `extra` is a node the grammar itself declares placeless: a comment
+    // belongs nowhere in the structure. Its whole span is read — adapters read
+    // comments wherever they sit, and several grammars give the text inside a
+    // comment no node of its own, so descending would call the prose unread.
+    let placeless = n.is_extra() && !n.is_error();
+    if placeless || n.child_count() == 0 {
+        if n.start_byte() > *read_to {
+            gaps.push((*read_to, n.start_byte()));
+        }
+        *read_to = (*read_to).max(n.end_byte());
+        return;
+    }
+    if n.is_error() {
+        // An `ERROR` is the parser saying it could not place this text. Two
+        // kinds of child under it WERE placed: a node with children of its own
+        // is a subtree the parser built and the item walk reads, and an `extra`
+        // is placeless anyway. What is left is loose tokens: lexed, never
+        // placed, never offered to any reader.
+        let mut cursor = n.walk();
+        let mut placed_to = n.start_byte();
+        for child in n.children(&mut cursor) {
+            if child.child_count() == 0 && !(child.is_extra() && !child.is_error()) {
+                continue;
+            }
+            if child.start_byte() > placed_to {
+                gaps.push((placed_to, child.start_byte()));
+            }
+            placed_to = placed_to.max(child.end_byte());
+        }
+        if placed_to < n.end_byte() {
+            gaps.push((placed_to, n.end_byte()));
+        }
+    }
+    let mut cursor = n.walk();
+    for child in n.children(&mut cursor) {
+        visit(child, read_to, gaps);
+    }
 }
 
 /// A node's extent as the contract's byte span — tree-sitter yields bytes natively,
@@ -148,49 +232,10 @@ pub fn items_tolerant<'t>(container: Node<'t>, lift: &[&str]) -> Vec<Node<'t>> {
     out
 }
 
-/// The names in the text a parse DISCARDED — the reference half of
-/// [`items_tolerant`], and the reason the item half is safe to have.
-///
-/// Error recovery does not hand back a partial tree OF the region it failed on:
-/// it keeps some sub-trees and drops the rest of the text on the floor.
-/// Measured on Exposed's `Entity.kt`, whose single `ERROR` spans lines 1..487 —
-/// the whole file: `klass.invalidateEntityInCache(o)` is written at line 311
-/// and occurs ZERO times as a node. The bytes are in the file; no node covers
-/// them. Lifting declarations out of an `ERROR` without this reads that dropped
-/// text as an ABSENCE of uses, and a declaration whose only caller was dropped
-/// is then reported dead — recovery that adds accusable subjects while
-/// withholding the evidence that acquits them.
-///
-/// So every byte no node covers is scanned for identifier-shaped runs, which
-/// become references. In a parse with no error the uncovered bytes are the
-/// whitespace between tokens and this emits nothing: the mechanism is inert
-/// exactly where there is nothing to recover, and needs no flag to say so.
-/// What such a name MEANT is unknowable — hence the weakest kind — and the bias
-/// stays keep-alive, which is the direction dropped text must err in: this can
-/// only ever add uses.
-pub fn unread_references(tree: &Tree, source: &[u8], out: &mut EvidenceSink) {
-    let mut read_to = 0usize;
-    let mut gaps: Vec<(usize, usize)> = Vec::new();
-    walk(tree.root_node(), &mut |n| {
-        if n.child_count() != 0 {
-            return;
-        }
-        if n.start_byte() > read_to {
-            gaps.push((read_to, n.start_byte()));
-        }
-        read_to = read_to.max(n.end_byte());
-    });
-    if read_to < source.len() {
-        gaps.push((read_to, source.len()));
-    }
-    for (from, to) in gaps {
-        names_in(source, from, to, out);
-    }
-}
-
-/// Identifier-shaped runs of `source[from..to]`, as references. A byte above
-/// ASCII counts as part of a name: every language here admits some Unicode in
-/// identifiers, and over-reading a name only ever keeps something alive.
+/// Identifier-shaped runs of `source[from..to]`, reported as names the reader
+/// could not account for. A byte above ASCII counts as part of a name: every
+/// language here admits some Unicode in identifiers, and over-reading a name
+/// only ever widens a doubt, never an accusation.
 fn names_in(source: &[u8], from: usize, to: usize, out: &mut EvidenceSink) {
     let starts = |b: u8| b.is_ascii_alphabetic() || b == b'_' || b >= 0x80;
     let continues = |b: u8| b.is_ascii_alphanumeric() || b == b'_' || b >= 0x80;
@@ -207,7 +252,7 @@ fn names_in(source: &[u8], from: usize, to: usize, out: &mut EvidenceSink) {
             end += 1;
         }
         if let Ok(name) = std::str::from_utf8(&source[i..end]) {
-            out.reference(name, RefKind::Read, Span::new(i as u32, end as u32));
+            out.unread(name, Span::new(i as u32, end as u32));
         }
         i = end;
     }
@@ -1650,6 +1695,10 @@ pub fn source_adapter_builder(
             EvidenceStream::Comments,
             EvidenceStream::Metrics,
             EvidenceStream::Markers,
+            // `parse_reporting` reports it, so every adapter built here
+            // declares it: a reader that has not promised to look for text it
+            // could not account for cannot report having found none.
+            EvidenceStream::UnreadText,
         ]))
         .dispatch(vec![generated_rule()])
         .manifests(manifests)

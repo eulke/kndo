@@ -79,33 +79,20 @@
         "end": 10
       },
       "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-ac9cad1ca20d",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "src/main/kotlin/demo/Cache.kt",
-        "selector": {
-          "name": "invalidate"
-        },
-        "span": {
-          "start": 244,
-          "end": 272
-        }
-      },
-      "lines": {
-        "start": 8,
-        "end": 8
-      },
-      "message": "declared `internal`, but every use is within its own file — `private` would suffice for this function"
     }
   ],
   "fixed": [],
   "baselined": 0,
   "abstained": [
+    {
+      "category": "unused",
+      "reason": {
+        "names-in-unread-text": {
+          "names": 1
+        }
+      },
+      "scope": "whole-run"
+    },
     {
       "category": "unused",
       "reason": "specifier-identity-underivable",
@@ -174,11 +161,5 @@
       "content_budget_cut": false
     }
   ],
-  "diagnostics": [
-    {
-      "path": "src/main/kotlin/demo/Cache.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    }
-  ]
+  "diagnostics": []
 }

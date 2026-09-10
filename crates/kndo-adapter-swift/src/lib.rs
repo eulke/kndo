@@ -92,7 +92,7 @@ impl SwiftAdapter {
             // 4: the generated banner is reported, never concluded.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:swift",
-                14,
+                15,
                 &["swift"],
                 &["**/Package.swift"],
                 // Files in a module compile as one unit; cross-references are
@@ -104,6 +104,7 @@ impl SwiftAdapter {
             // of, and — for `expr.member` — the name the member was read from.
             .emits(kndo_contract::evidence::EvidenceStreams::of(&[
                 kndo_contract::evidence::EvidenceStream::Markers,
+                kndo_contract::evidence::EvidenceStream::UnreadText,
                 kndo_contract::evidence::EvidenceStream::Relations,
                 kndo_contract::evidence::EvidenceStream::Qualifiers,
             ]))

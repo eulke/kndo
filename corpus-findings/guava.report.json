@@ -179663,74 +179663,9 @@
   ],
   "diagnostics": [
     {
-      "path": "android/guava-testlib/src/com/google/common/testing/EqualsTester.java",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "android/guava/src/com/google/common/base/Objects.java",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "android/guava/src/com/google/common/base/Platform.java",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "android/guava/src/com/google/common/base/Preconditions.java",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "android/guava/src/com/google/common/base/Strings.java",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "android/guava/src/com/google/common/base/Verify.java",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
       "path": "android/guava/src/com/google/thirdparty/publicsuffix/PublicSuffixPatterns.java",
       "level": "info",
       "message": "`generated(// GENERATED FILE - DO NOT EDIT)` marks this file a generator's output: what it declares is not judged, what it imports and names still is"
-    },
-    {
-      "path": "guava-gwt/src-super/com/google/common/base/super/com/google/common/base/Platform.java",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "guava-testlib/src/com/google/common/testing/EqualsTester.java",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "guava/src/com/google/common/base/Objects.java",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "guava/src/com/google/common/base/Platform.java",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "guava/src/com/google/common/base/Preconditions.java",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "guava/src/com/google/common/base/Strings.java",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "guava/src/com/google/common/base/Verify.java",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
     },
     {
       "path": "guava/src/com/google/thirdparty/publicsuffix/PublicSuffixPatterns.java",

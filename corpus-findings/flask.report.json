@@ -542,21 +542,5 @@
       "content_budget_cut": false
     }
   ],
-  "diagnostics": [
-    {
-      "path": "examples/javascript/js_example/templates/fetch.html",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "examples/javascript/js_example/templates/jquery.html",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "examples/javascript/js_example/templates/xhr.html",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    }
-  ]
+  "diagnostics": []
 }

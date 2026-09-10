@@ -51,12 +51,19 @@ impl Default for KminiAdapter {
             confidence: Confidence::Certain,
         };
         KminiAdapter {
-            // 2: markers, dispatch rules, import timing and cycle tolerance.
-            spec: PluginSpec::builder("kmini", 2)
+            // 3: markers, dispatch rules, import timing, cycle tolerance —
+            // and the reader's own coverage.
+            spec: PluginSpec::builder("kmini", 3)
                 .suffixes(&["kmini"])
                 .emits(EvidenceStreams::of(&[
                     EvidenceStream::Comments,
                     EvidenceStream::Markers,
+                    // A line-based reader knows exactly which lines it read,
+                    // so it can state the rest: see the terminal arm of
+                    // `extract`. Declaring the stream is what makes reporting
+                    // NONE mean "I covered this file" — and only a reader that
+                    // says that can have its silences believed.
+                    EvidenceStream::UnreadText,
                 ]))
                 .manifests(&["**/kmini.pkg"])
                 .import_cycles(CycleTolerance::Hazard)
@@ -66,6 +73,27 @@ impl Default for KminiAdapter {
                 ])
                 .build(),
         }
+    }
+}
+
+/// The identifier runs inside a stretch of text — what a reader that could not
+/// account for the text is still able to say about it: these names appear here,
+/// and what they mean is unknown. `start` is the stretch's offset in the file,
+/// so every span is the file's own.
+fn names_in(text: &str, start: u32, out: &mut EvidenceSink) {
+    let bytes = text.as_bytes();
+    let mut i = 0usize;
+    while i < bytes.len() {
+        let c = bytes[i];
+        if !(c.is_ascii_alphabetic() || c == b'_') {
+            i += 1;
+            continue;
+        }
+        let from = i;
+        while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
+            i += 1;
+        }
+        out.unread(&text[from..i], Span::new(start + from as u32, start + i as u32));
     }
 }
 
@@ -185,6 +213,13 @@ impl Plugin for KminiAdapter {
             } else if let Some(text) = trimmed.strip_prefix('#') {
                 let text_start = span.end - text.trim_start().len() as u32;
                 out.comment(span, Span::new(text_start, span.end));
+            } else {
+                // No arm read this line, so kmini does not know what is in it.
+                // Reporting the names is not a diagnostic about the file: it is
+                // the reason a judgment resting on one of those names being
+                // ABSENT has to abstain instead.
+                let offset = span.start + (line.len() - line.trim_start().len()) as u32;
+                names_in(trimmed, offset, out);
             }
         }
     }

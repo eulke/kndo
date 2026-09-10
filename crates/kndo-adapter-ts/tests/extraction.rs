@@ -292,11 +292,20 @@ fn comments_carry_stripped_text_spans() {
 }
 
 #[test]
-fn broken_source_degrades_with_diagnostics() {
-    let ev = extract("src/b.ts", "export function ok() {}\nconst = = = ;;;\n");
-    // The parsable half still yields evidence; the damage is reported, not fatal.
+fn broken_source_degrades_to_unread_text() {
+    let source = "export function ok() {}\nconst = = = ;;;\n";
+    let ev = extract("src/b.ts", source);
+    // The parsable half still yields evidence; the damage is not fatal and not
+    // prose either — it is bounded, and named. Recovery gave up at `const`, so
+    // that is the one name no reader accounted for, and `ok` is judged
+    // normally: what broke costs the file only the text it broke on.
     assert!(ev.declarations.iter().any(|d| d.name == "ok"));
-    assert!(!ev.diagnostics.is_empty());
+    let unread: Vec<&str> = ev.unread.iter().map(|u| u.name.as_str()).collect();
+    assert_eq!(unread, ["const"]);
+    assert_eq!(
+        &source[ev.unread[0].span.start as usize..ev.unread[0].span.end as usize],
+        "const"
+    );
 }
 
 #[test]

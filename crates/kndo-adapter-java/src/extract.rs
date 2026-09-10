@@ -532,10 +532,6 @@ const LIFTED: &[&str] = &[
 
 fn references_and_comments(tree: &Tree, source: &[u8], out: &mut EvidenceSink) {
     let root = tree.root_node();
-    // The names in whatever text error recovery threw away — without them the
-    // declarations `items_tolerant` lifts out of an ERROR are judged against a
-    // reference stream missing that same region's uses.
-    tk::unread_references(tree, source, out);
     // Import/package paths already became import evidence (or deliberately
     // none); every segment inside would read as a false identifier use.
     tk::walk_pruned(

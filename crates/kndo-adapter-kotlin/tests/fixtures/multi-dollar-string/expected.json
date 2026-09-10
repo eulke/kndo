@@ -112,11 +112,5 @@
       "content_budget_cut": false
     }
   ],
-  "diagnostics": [
-    {
-      "path": "src/main/kotlin/demo/Config.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    }
-  ]
+  "diagnostics": []
 }

@@ -72,12 +72,12 @@
     ]
   },
   "health": {
-    "implicated": 20,
+    "implicated": 16,
     "subjects": 25453,
     "by_category": [
       {
         "category": "unused",
-        "findings": 20
+        "findings": 16
       }
     ],
     "by_package": [
@@ -114,7 +114,7 @@
       {
         "name": "exposed-dao",
         "manifest": "exposed-dao/build.gradle.kts",
-        "implicated": 2,
+        "implicated": 0,
         "subjects": 230
       },
       {
@@ -258,7 +258,7 @@
       {
         "name": "exposed-r2dbc-tests",
         "manifest": "exposed-r2dbc-tests/build.gradle.kts",
-        "implicated": 1,
+        "implicated": 0,
         "subjects": 1772
       },
       {
@@ -282,7 +282,7 @@
       {
         "name": "exposed-tests",
         "manifest": "exposed-tests/build.gradle.kts",
-        "implicated": 1,
+        "implicated": 0,
         "subjects": 2354
       },
       {
@@ -453,72 +453,6 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
-      "id": "kndo-94d002616055",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-dao/src/main/kotlin/org/jetbrains/exposed/v1/dao/Entity.kt",
-        "selector": {
-          "name": "isPersistedIn"
-        },
-        "span": {
-          "start": 4261,
-          "end": 4499
-        }
-      },
-      "lines": {
-        "start": 101,
-        "end": 104
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-73d156f006ec",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-dao/src/main/kotlin/org/jetbrains/exposed/v1/dao/References.kt",
-        "selector": {
-          "name": "allReferencesMatch"
-        },
-        "span": {
-          "start": 20992,
-          "end": 21265
-        }
-      },
-      "lines": {
-        "start": 422,
-        "end": 425
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-eed385a83cb5",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/StatementInterceptorTests.kt",
-        "selector": {
-          "name": "RollbackCheckInterceptor"
-        },
-        "span": {
-          "start": 1982,
-          "end": 2416
-        }
-      },
-      "lines": {
-        "start": 45,
-        "end": 58
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
       "id": "kndo-0bb5fb59712f",
       "category": "unused",
       "severity": "warning",
@@ -561,28 +495,6 @@
       "lines": {
         "start": 108,
         "end": 108
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-58674bb53eac",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/StatementInterceptorTests.kt",
-        "selector": {
-          "name": "RollbackCheckInterceptor"
-        },
-        "span": {
-          "start": 1365,
-          "end": 1836
-        }
-      },
-      "lines": {
-        "start": 34,
-        "end": 49
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -21097,6 +21009,15 @@
   "abstained": [
     {
       "category": "unused",
+      "reason": {
+        "names-in-unread-text": {
+          "names": 8
+        }
+      },
+      "scope": "whole-run"
+    },
+    {
+      "category": "unused",
       "reason": "specifier-identity-underivable",
       "scope": {
         "manifests": {
@@ -21184,326 +21105,5 @@
       "content_budget_cut": false
     }
   ],
-  "diagnostics": [
-    {
-      "path": "docs/api/styles/main.css",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "docs/api/styles/style.css",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "docs/api/ui-kit/ui-kit.min.css",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "documentation-website/Writerside/snippets/get-started-with-exposed/src/main/kotlin/org/example/App.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/AbstractQuery.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/ColumnType.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/OpBuilder.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/Schema.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SchemaUtilityApi.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/datetime/InstantColumnType.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/datetime/OffsetDateTimeColumnType.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/java/UUIDColumnType.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/statements/DeleteStatement.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/statements/UpdateStatement.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/statements/UpsertStatement.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/vendors/FunctionProvider.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/vendors/H2.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/vendors/MysqlDialect.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/vendors/OracleDialect.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/vendors/PostgreSQL.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/vendors/SQLServerDialect.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/vendors/SQLiteDialect.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/vendors/VendorDialect.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-dao/src/main/kotlin/org/jetbrains/exposed/v1/dao/Entity.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-dao/src/main/kotlin/org/jetbrains/exposed/v1/dao/EntityClass.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/Query.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-json/src/main/kotlin/org/jetbrains/exposed/v1/json/JsonColumnType.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-json/src/test/kotlin/org/jetbrains/exposed/v1/json/JsonBColumnTests.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-json/src/test/kotlin/org/jetbrains/exposed/v1/json/JsonColumnTests.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-maven-plugin/src/test/kotlin/org/jetbrains/exposed/v1/maven/plugin/integrations/helpers/MavenProjectGeneration.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-maven-plugin/src/test/resources/template/sourceFiles/Cities.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-maven-plugin/src/test/resources/template/sourceFiles/Users.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/demo/sql/SamplesSQL.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/json/JsonBColumnTests.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/json/JsonColumnTests.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/StatementInterceptorTests.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/TransactionCoroutineContextTests.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/ddl/EnumerationTests.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/ddl/SequencesTests.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/ConditionsTests.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/DMLTestsData.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/InsertTests.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/UpsertTests.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/BlobColumnTypeTests.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/UuidColumnTypeTests.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/Query.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/mappers/DateTimeOracleTypeMapper.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/statements/R2dbcConnectionImpl.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-spring-boot-starter/src/main/kotlin/org/jetbrains/exposed/v1/spring/boot/autoconfigure/ExposedAutoConfiguration.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-spring-boot4-starter/src/main/kotlin/org/jetbrains/exposed/v1/spring/boot4/autoconfigure/ExposedAutoConfiguration.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/demo/sql/SamplesSQL.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/StatementInterceptorTests.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/TransactionCoroutineContextTests.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/ddl/EnumerationTests.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/ddl/SequencesTests.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/ConditionsTests.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/DMLTestData.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/InsertTests.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/UpsertTests.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/types/BlobColumnTypeTests.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/types/MultiArrayColumnTypeTests.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/types/UuidColumnTypeTests.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "samples/exposed-ktor-r2dbc/src/main/kotlin/domain/project/ProjectRepository.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    },
-    {
-      "path": "samples/exposed-ktor-r2dbc/src/main/kotlin/domain/user/UserRepository.kt",
-      "level": "info",
-      "message": "syntax errors in file — evidence may be partial"
-    }
-  ]
+  "diagnostics": []
 }

@@ -184,6 +184,29 @@
           "description": "The ingested report never instrumented these files: their functions'\ncoverage is unknown, not zero.",
           "type": "string",
           "const": "no-coverage-record"
+        },
+        {
+          "description": "The claiming extension's reader could not account for part of some\nfile, and these names appear in that text — see\n[`kndo_contract::evidence::UnreadName`]. What they mean there is\nunknown, not absent, so a judgment that rests on their ABSENCE is not\nreached for them. The same sentence `NoCoverageRecord` states about an\nuninstrumented file, about the reader of the source itself.",
+          "type": "object",
+          "properties": {
+            "names-in-unread-text": {
+              "type": "object",
+              "properties": {
+                "names": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "names"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "names-in-unread-text"
+          ]
         }
       ]
     },
@@ -446,6 +469,11 @@
           "description": "Whether each reference was written ON something — see\n[`Reference::on`]. Undeclared, every reference is a bare name AND\nmeans nothing by it, so a judgment that needs the difference keeps the\nanswer it gave before the stream existed.",
           "type": "string",
           "const": "qualifiers"
+        },
+        {
+          "description": "The names in text the reader could not account for — see [`UnreadName`].\nUndeclared, an empty stream cannot be told from a reader that never\nchecked, so a judgment resting on absence has no ground to stand on and\nabstains for this adapter's files.",
+          "type": "string",
+          "const": "unreadtext"
         }
       ]
     },

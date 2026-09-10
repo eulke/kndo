@@ -8073,3 +8073,116 @@ The three fixtures return to `known_gap`, and their `fix` lines change: they no
 longer point at the grammar. They point at the type — what a reader could not
 account for is evidence, and a name inside it is unknown rather than absent.
 `kndo:kotlin` moves 22 → 23.
+
+## 2026-09-10 — Unread text is evidence: `EvidenceStream::UnreadText` and the abstention it earns
+
+The type the last entry promised. `UnreadName { name, span }` — a name in text
+this file's reader could not account for — sits beside `EmbeddedRegion` in
+`kndo-contract`, because it is that type's counterpart: an embedded region is a
+span another reader reads, an unread name is a span NO reader read. It rides
+`EvidenceStream::UnreadText`, so the pairing rule applies unchanged: an extension
+that declares the stream and reports none is stating that its reader covered the
+file, and one that does not declare it has said nothing — `Unused::requires()`
+names the stream, so `unused` abstains over the files of a reader that cannot
+speak about its own silences. That is the whole mechanism. No new layer, no flag,
+no diagnostic: an evidence stream, the pairing rule, an `AbstentionReason` row
+(`NamesInUnreadText { names }`) and `AbstentionScope`.
+
+`unused` reads it in one sentence: a declaration nothing keeps, whose name
+appears in text no reader accounted for, is not judged. Not kept — nothing keeps
+it, and `used-by` still answers `kept_by: []` — and not accused either. Unknown,
+not absent, in the same words the reason already uses for an uninstrumented
+file's coverage.
+
+**What counts as unread took three measurements to get right, and the corpus
+decided each one.**
+
+The rule that ships is two clauses: the bytes no leaf covers, and — for each
+`ERROR` — the bytes none of its PLACED children cover, where placed means a
+subtree the parser built (a node with children) or an `extra` (a node the grammar
+itself declares placeless). An `extra` also covers its whole span in the leaf
+clause, without descending.
+
+- **Everything from the first `ERROR` to end of file** — the coarse rule, the one
+  the previous entry's prose implied. Refuted: an `ERROR` is exactly where the
+  tolerant item walk RECOVERS declarations, and calling their own text unread
+  makes the reader doubt what it just read. It reaches the same 959 on Exposed;
+  vapor is where it breaks, 747 → 698, and all 49 are swift-testing methods
+  lifted out from under an `ERROR`. It hides one family of false positives
+  (vapor's `@Test` methods, which are M8.e's to fix) behind an abstention instead
+  of fixing it.
+- **Descending into `extra` nodes** — refuted by ripgrep: 18658 of its 19393
+  unread names were the words inside its comments, because `tree-sitter-rust`
+  gives the text of a `line_comment` no node of its own. No verdict moved, but a
+  comment that merely NAMES a declaration would doubt it, and the
+  `recovered-under-error` fixture proves the case: its own comment discusses
+  `neverCalled`, and with the prose read as unread the fixture's one true
+  positive disappeared. With the exemption ripgrep reports 735, all of them the
+  `r` prefix of a raw string, which is text no node covers and is honestly named.
+- **The rule that ships.** Exposed 963 → 959, and the other eight repos
+  byte-identical: Alamofire 1484, flask 22, gin 109, guava 8235, lodash 20,
+  ripgrep 139, vapor 747, vite 712. The four withdrawn are false positives, all
+  four the reader failing to see a use it never read: `allReferencesMatch` is
+  called twice from a `when` guard (Kotlin 2.1, the construct three patches were
+  written for), `isPersistedIn` from a body past a break, and
+  `RollbackCheckInterceptor` twice from lines the recovery mislexed. The
+  abstention counts EIGHT, and the ablation names the other four
+  (`MYSQL_OFFSET_DATE_TIME_AS_DEFAULT_FORMATTER`, `invalidateEntityInCache`,
+  `CommitDataInterceptor` twice): keeperless and unaccused before this change
+  too, because `unread_references` had invented a keeper for each. Four were
+  falsely accused, four falsely acquitted, and all eight are now unjudged.
+
+So the grammar gap that three patches chased is now an abstention over the four
+names it costs, and the grammar was never touched. That is the difference the law
+asks for: v2 reports LESS on Exposed than before, and the explanation names the
+defect being removed rather than a threshold being tuned.
+
+**What this retires.** `tk::unread_references` and its seven call sites: it turned
+names in discarded text into keep-alive references, which is a guess in the
+accused's favour dressed as evidence — it invented a keeper with no grounds, and
+it let `internal-only` make a POSITIVE claim ("every use is within its own file")
+out of a text match. The corpus shows exactly how much it was inventing: refs
+drop 364511 → 345849 on Exposed, 80409 → 61751 on ripgrep, 49515 → 49254 on
+vapor, 90407 → 90378 on Alamofire, 19095 → 18898 on flask, 89382 → 89380 on vite.
+And the prose diagnostic "syntax errors in file — evidence may be partial" is
+gone: diagnostics fall to 0 on Alamofire, Exposed, flask, vapor and vite, and
+15 → 2 on guava. The two that remain on ripgrep and the one on gin are other
+readers' and unchanged.
+
+**The ABI moves in the same commit.** `evidence-stream` gains `unread-text` and
+`file-evidence` gains `unread: list<unread-name>` in `wit/vocab.wit` — the
+vocabulary mirrors the native contract field for field, and a guest that cannot
+say whether it covered its file gets the same abstention a built-in would. The
+`kmini` reference adapter declares the stream and reports the names in any line
+its reader does not recognise (version 2 → 3), which is the worked example an
+external author reads. `cargo xtask pin-abi` rebuilds the four pinned components
+in this commit: that diff is the reviewable record the `abi_compat_matrix` gate
+demands.
+
+**What is still open, named rather than approximated.** Text a leaf covers but
+MISREADS — measured once, in Exposed's `StatementInterceptorTests.kt`, where a
+`string_content` leaf absorbs twelve lines of statements. No scan of uncovered
+text reaches it. In that file the loose tokens beside the mislexed leaf already
+withhold both subjects it would have withheld, so the shipped rule loses nothing
+there; the general case waits for its own measurement.
+
+The contract fingerprint moves (`UnreadName`, the stream, the `FileEvidence`
+field). Every `kndo-adapter-kotlin` fixture's pinned report moves with it:
+`when-guard-grammar-gap`, `infix-get-grammar-gap` and `multi-dollar-string` lose
+the prose diagnostic and keep their `no-roots-anywhere` verdicts, and their `fix`
+lines change again — they point at the grammar, because unread text has SHIPPED
+and does not close them: what those breaks cost is the file's ROOT, and a reader
+stating what it could not account for can withhold an accusation, never
+manufacture the root that would let one be made. `recovered-under-error` loses
+the `internal-only` on `invalidate` — that finding was the invented reference
+talking; with no use found at all, `internal-only` has nothing to say and the
+subject is `unused`'s, which abstains over it — and keeps `neverCalled` as the
+true positive the item walk buys.
+
+Adapter versions: rust 20, go 18, java 25, kotlin 24, python 15, swift 15, js-ts
+17, css 3, html 5 — every reader that speaks about its own coverage says so in
+its spec. `kndo:html` declares the stream and reports none, which is a statement
+a scanner over a whole document can honestly make; `kndo:css` is the same. No
+`GRAPH_SEMANTICS_VERSION` bump: the same evidence still assembles into the same
+graph — what changed is what the evidence CONTAINS, which is the adapters' own
+version knob.

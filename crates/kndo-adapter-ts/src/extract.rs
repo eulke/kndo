@@ -516,10 +516,6 @@ const LIFTED: &[&str] = &[
 
 fn references_and_comments(tree: &Tree, source: &[u8], out: &mut EvidenceSink) {
     let root = tree.root_node();
-    // The names in whatever text error recovery threw away — without them the
-    // declarations `items_tolerant` lifts out of an ERROR are judged against a
-    // reference stream missing that same region's uses.
-    tk::unread_references(tree, source, out);
     tk::walk(root, &mut |n| {
         if n.kind() == "comment" {
             tk::comment_evidence(n, source, &COMMENT_MARKERS, out);

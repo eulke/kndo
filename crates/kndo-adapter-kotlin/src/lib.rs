@@ -77,7 +77,7 @@ impl KotlinAdapter {
         KotlinAdapter {
             // 14: the annotations a declaration carries and the supertypes it
             // promises are evidence; what one MEANS is a dispatch rule's.
-            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:kotlin", 23, &["kt"])
+            spec: kndo_toolkit::jvm_manifest::jvm_builder("kndo:kotlin", 24, &["kt"])
                 // The conventions as data; the library-mode root's replacement
                 // is the engine's published surface, read from the unit.
                 .file_roles(&[
@@ -98,6 +98,7 @@ impl KotlinAdapter {
                 // declare is dropped at the sink rather than silently missing.
                 .emits(kndo_contract::evidence::EvidenceStreams::of(&[
                     kndo_contract::evidence::EvidenceStream::Markers,
+                    kndo_contract::evidence::EvidenceStream::UnreadText,
                     kndo_contract::evidence::EvidenceStream::Relations,
                     kndo_contract::evidence::EvidenceStream::Qualifiers,
                 ]))

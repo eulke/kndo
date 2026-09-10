@@ -133,6 +133,7 @@ pub(crate) fn extension_spec(spec: awire::PluginSpec) -> PluginSpec {
                     awire::EvidenceStream::Markers => EvidenceStream::Markers,
                     awire::EvidenceStream::Relations => EvidenceStream::Relations,
                     awire::EvidenceStream::Qualifiers => EvidenceStream::Qualifiers,
+                    awire::EvidenceStream::UnreadText => EvidenceStream::UnreadText,
                 })
                 .collect::<Vec<_>>(),
         ),
@@ -711,6 +712,9 @@ pub(crate) fn replay_evidence(evidence: awire::FileEvidence, sink: &mut Evidence
                 awire::RegionMode::Script => RegionMode::Script,
             },
         );
+    }
+    for u in evidence.unread {
+        sink.unread(u.name, span(u.span));
     }
     for d in evidence.diagnostics {
         sink.diagnostic(

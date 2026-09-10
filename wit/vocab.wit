@@ -34,6 +34,7 @@ interface types {
         markers,
         relations,
         qualifiers,
+        unread-text,
     }
 
     /// Mirrors `SymbolKind`; `other` carries the adapter's own word verbatim.
@@ -302,6 +303,15 @@ interface types {
         test-only,
     }
 
+    /// Mirrors `UnreadName` — a name in text this extension's reader could not
+    /// account for. Declaring `unread-text` and reporting none is the statement
+    /// that the reader covered its file; not declaring it says nothing, and a
+    /// judgment resting on a silence abstains over the files it claimed.
+    record unread-name {
+        name: string,
+        span: span,
+    }
+
     record file-evidence {
         /// The namespace this file declares itself into, as SEGMENTS.
         namespace: list<string>,
@@ -315,6 +325,7 @@ interface types {
         comments: list<comment-span>,
         metrics: list<metric-entry>,
         embedded: list<embedded-region>,
+        unread: list<unread-name>,
         diagnostics: list<diagnostic>,
     }
 

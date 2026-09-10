@@ -49,7 +49,7 @@ impl PythonAdapter {
             // 3: the generated banner is reported, never concluded.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:python",
-                14,
+                15,
                 &["py"],
                 &[
                     "**/pyproject.toml",
@@ -70,6 +70,7 @@ impl PythonAdapter {
             // and the bases a class promises the surface of.
             .emits(kndo_contract::evidence::EvidenceStreams::of(&[
                 kndo_contract::evidence::EvidenceStream::Markers,
+                kndo_contract::evidence::EvidenceStream::UnreadText,
                 kndo_contract::evidence::EvidenceStream::Relations,
                 kndo_contract::evidence::EvidenceStream::Qualifiers,
             ]))

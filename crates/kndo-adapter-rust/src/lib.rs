@@ -103,7 +103,7 @@ impl RustAdapter {
             // dependency names the manifest that declares the crate.
             spec: kndo_toolkit::source_adapter_builder(
                 "kndo:rust",
-                19,
+                20,
                 &["rs"],
                 &["**/Cargo.toml"],
                 // Modules within a crate reference each other freely — legal,
@@ -123,6 +123,7 @@ impl RustAdapter {
                 EvidenceStream::Comments,
                 EvidenceStream::Metrics,
                 EvidenceStream::Markers,
+                EvidenceStream::UnreadText,
             ]))
             .dispatch(dispatch_rules())
             // `mod x;` MOUNTS one namespace inside another: the forest is read

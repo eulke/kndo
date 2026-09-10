@@ -269,6 +269,15 @@ pub enum AbstentionReason {
     /// The ingested report never instrumented these files: their functions'
     /// coverage is unknown, not zero.
     NoCoverageRecord,
+    /// The claiming extension's reader could not account for part of some
+    /// file, and these names appear in that text — see
+    /// [`kndo_contract::evidence::UnreadName`]. What they mean there is
+    /// unknown, not absent, so a judgment that rests on their ABSENCE is not
+    /// reached for them. The same sentence `NoCoverageRecord` states about an
+    /// uninstrumented file, about the reader of the source itself.
+    NamesInUnreadText {
+        names: u32,
+    },
 }
 
 impl fmt::Display for AbstentionReason {
@@ -307,6 +316,9 @@ impl fmt::Display for AbstentionReason {
             }
             AbstentionReason::NoCoverageIngested => {
                 write!(f, "no coverage report ingested this run")
+            }
+            AbstentionReason::NamesInUnreadText { names } => {
+                write!(f, "{names} names appear in text no reader accounted for")
             }
             AbstentionReason::NoCoverageRecord => {
                 write!(f, "the coverage report never instrumented these files")

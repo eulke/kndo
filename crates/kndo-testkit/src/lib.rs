@@ -179,6 +179,10 @@ fn kmock_spec() -> PluginSpecBuilder {
             EvidenceStream::Markers,
             EvidenceStream::Relations,
             EvidenceStream::Qualifiers,
+            // A mock reads its whole synthetic file, so it can say there is no
+            // text it failed to account for — which is what declaring the
+            // stream and reporting none MEANS.
+            EvidenceStream::UnreadText,
         ]))
         .manifests(&["**/kmock.pkg"])
 }
@@ -209,9 +213,17 @@ impl MockPlugin {
     /// test of embedded regions speaks. A `.kdoc` file roots itself like a
     /// page, and each `<<LANG module` (or `script`) … `>>` fence is a region
     /// of language `LANG`, read by the extension claiming that suffix.
+    ///
+    /// It declares `UnreadText` and nothing else: a document is read line by
+    /// line, prose included, so "no text I failed to account for" is a
+    /// statement this reader can make — and the host's declaration is the
+    /// file's, so it is also what lets a region's reader say the same.
     pub fn hosting() -> Self {
         MockPlugin {
-            spec: PluginSpec::builder("kdoc", 1).suffixes(&["kdoc"]).build(),
+            spec: PluginSpec::builder("kdoc", 1)
+                .suffixes(&["kdoc"])
+                .emits(EvidenceStreams::of(&[EvidenceStream::UnreadText]))
+                .build(),
             speaks: Speaks::Kdoc,
             on_contribute: None,
             on_report: None,

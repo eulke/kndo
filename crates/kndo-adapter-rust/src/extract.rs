@@ -960,10 +960,6 @@ fn references_and_comments(
     out: &mut EvidenceSink,
 ) {
     let root = tree.root_node();
-    // The names in whatever text error recovery threw away — without them the
-    // declarations `items_tolerant` lifts out of an ERROR are judged against a
-    // reference stream missing that same region's uses.
-    tk::unread_references(tree, source, out);
     let mut seen_paths: BTreeSet<String> = BTreeSet::new();
     tk::walk_pruned(
         root,

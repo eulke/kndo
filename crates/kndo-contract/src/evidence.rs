@@ -85,6 +85,29 @@ pub struct EmbeddedRegion {
     pub mode: RegionMode,
 }
 
+/// A name in text this file's reader could not account for — the counterpart of
+/// [`EmbeddedRegion`]: that is a span another reader reads, this is a span NO
+/// reader read.
+///
+/// A grammar recovering from a construct it does not know leaves bytes no node
+/// covers, and — measured — goes on to mis-lex what follows, swallowing real
+/// statements into a string literal's content. Either way the reader cannot say
+/// what a name there MEANT: a use, a binding, a word in a comment it absorbed.
+/// That is why this is not a [`Reference`]. A reference asserts a use; this
+/// asserts only that the reader does not know.
+///
+/// What the engine reads from it: a judgment resting on the ABSENCE of a name
+/// cannot be reached for a name that appears here. `unused` abstains, exactly as
+/// it already abstains over an uninstrumented file's coverage — unknown, not
+/// zero. A judgment that reads a body rather than a silence (`duplicate`, the
+/// metrics) is untouched, which is why the two need no special case to tell
+/// apart.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ContractFingerprint)]
+pub struct UnreadName {
+    pub name: SmolStr,
+    pub span: Span,
+}
+
 /// An optional evidence stream — one whose absence would be ambiguous without a
 /// declaration. Grows a variant whenever a language teaches us a new stream
 /// (test spans, units, …); the default for every adapter is not-declared.
@@ -116,6 +139,11 @@ pub enum EvidenceStream {
     /// means nothing by it, so a judgment that needs the difference keeps the
     /// answer it gave before the stream existed.
     Qualifiers,
+    /// The names in text the reader could not account for — see [`UnreadName`].
+    /// Undeclared, an empty stream cannot be told from a reader that never
+    /// checked, so a judgment resting on absence has no ground to stand on and
+    /// abstains for this adapter's files.
+    UnreadText,
 }
 
 /// The set of optional streams an adapter DECLARES it produces — the pairing rule.
@@ -853,6 +881,10 @@ pub struct FileEvidence {
     /// host adapter reported them — see [`EmbeddedRegion`]. Their evidence
     /// sits in the fields above, in this file's coordinates.
     pub embedded: Vec<EmbeddedRegion>,
+    /// The names in text no reader accounted for — see [`UnreadName`]. Empty is
+    /// the reader saying it read everything, which is why it means that only
+    /// where [`EvidenceStream::UnreadText`] is declared.
+    pub unread: Vec<UnreadName>,
     pub diagnostics: Vec<AdapterDiagnostic>,
 }
 
@@ -989,6 +1021,7 @@ impl EvidenceSink {
                 comments: Vec::new(),
                 metrics: Vec::new(),
                 embedded: Vec::new(),
+                unread: Vec::new(),
                 diagnostics: Vec::new(),
             },
         }
@@ -1381,6 +1414,20 @@ impl EvidenceSink {
         let span = self.clamp(span, "comment");
         let text = self.clamp(text, "comment text");
         self.out.comments.push(CommentSpan { span, text });
+    }
+
+    /// One name in text this reader could not account for — see [`UnreadName`].
+    /// Gated on its stream like every optional one: an adapter that has not
+    /// declared it cannot report a doubt it never promised to look for.
+    pub fn unread(&mut self, name: impl Into<SmolStr>, span: Span) {
+        if !self.declared(EvidenceStream::UnreadText) {
+            return;
+        }
+        let span = self.clamp(span, "unread name");
+        self.out.unread.push(UnreadName {
+            name: name.into(),
+            span,
+        });
     }
 
     pub fn diagnostic(

@@ -3115,3 +3115,69 @@ nodes are 21809.
 The three Kotlin fixtures return to `known_gap`. What changed is where their
 `fix` lines point: not at the grammar any more, but at the type the next section
 introduces.
+
+## Unread text is evidence: four false accusations withdrawn on Exposed, eight repos identical
+
+`unused` no longer accuses a declaration whose name appears in text no reader
+accounted for. Exposed 963 → 959. The other eight are byte-identical: Alamofire
+1484, flask 22, gin 109, guava 8235, lodash 20, ripgrep 139, vapor 747, vite 712.
+
+The four are false positives, and each is the reader failing to see a use it
+never read. `grep` finds every one of them in the source:
+
+| subject | the use the reader lost |
+|---|---|
+| `exposed-dao/.../References.kt#allReferencesMatch` | called from `Entity.kt:168` and `:232`, both inside `is CompositeID if allReferencesMatch(...)` — a `when` guard (Kotlin 2.1), the construct the pinned grammar cannot read |
+| `exposed-dao/.../Entity.kt#isPersistedIn` | called at `Entity.kt:325`, in a body past the same file's break |
+| `exposed-tests/.../StatementInterceptorTests.kt#RollbackCheckInterceptor` | constructed at `:113` and read at two more lines the recovery mislexed |
+| `exposed-r2dbc-tests/.../StatementInterceptorTests.kt#RollbackCheckInterceptor` | the same, at `:122`, `:150`, `:153` |
+
+The engine says so itself: `used-by` on each answers `kept_by: []` — nothing
+keeps them, which is exactly what made them accusable — and the run answers
+`unused` abstained with `names-in-unread-text { names: 8 }`. Nothing keeps them
+and they are still not judged.
+
+Eight, not four, and the other four are the second half of the same story. An
+ablation naming them — the doubt rule switched off, Exposed re-run, the finding
+lists diffed — gives `OffsetDateTimeColumnType.kt#MYSQL_OFFSET_DATE_TIME_AS_DEFAULT_FORMATTER`,
+`EntityClass.kt#invalidateEntityInCache` and `CommitDataInterceptor` in both
+`StatementInterceptorTests.kt` files: keeperless, doubted, and NOT accused before
+this change either, because `unread_references` had manufactured a keep-alive
+reference for each out of the same discarded text. So the eight decompose
+exactly: four were falsely accused and are now unjudged, four were falsely
+ACQUITTED by an invented keeper and are now unjudged. For those four the finding
+count is unchanged and the reason is not, which is the point — a report is its
+reasons.
+
+Two columns move without a finding moving, and both are that retirement:
+
+- **refs.** Exposed 364511 → 345849, ripgrep 80409 → 61751, vapor 49515 → 49254,
+  Alamofire 90407 → 90378, flask 19095 → 18898, vite 89382 → 89380. These were
+  the invented references. ripgrep's 18658 are the most telling: it has no parse
+  error anywhere, and every one of them was a WORD FROM A COMMENT —
+  `tree-sitter-rust` gives the text inside a `line_comment` no node of its own,
+  so a scan of uncovered bytes read the prose. Harmless as a keeper, poison as a
+  doubt, which is why the shipped rule treats an `extra` node as covering its
+  whole span: ripgrep's unread names are 735 with that exemption and 19393
+  without, and the 735 are all the `r` prefix of a raw string — text no node
+  covers, honestly named.
+- **diagnostics.** Alamofire 11 → 0, Exposed 64 → 0, flask 3 → 0, vapor 26 → 0,
+  vite 21 → 0, guava 15 → 2. That was `"syntax errors in file — evidence may be
+  partial"`, one prose line per file with an error. It is replaced by the typed
+  stream, so the fact is now something an analysis reads instead of something a
+  human might. The two remaining on ripgrep and the one on gin are other
+  readers' and unchanged.
+
+The coarse definition — everything from the first `ERROR` to end of file — was
+measured and rejected here. It reaches the same 959 on Exposed; vapor is where it
+breaks: 747 → 698. An `ERROR` is where the tolerant item walk RECOVERS
+declarations, and reading their own text as unread makes the reader doubt what it
+just read — all 49 of vapor's are swift-testing `@Test` methods lifted out from
+under one. They are false positives of a different kind, and M8.e's to fix;
+withholding them behind an abstention would have hidden that gap rather than
+closed it.
+
+Still open, and named: text a leaf covers but MISREADS, the
+`StatementInterceptorTests.kt` case two sections above. In that file the loose
+tokens beside the mislexed leaf already withhold both subjects, so nothing is
+lost here; the general case waits for its own measurement.

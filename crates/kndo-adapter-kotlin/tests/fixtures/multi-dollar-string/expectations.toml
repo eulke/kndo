@@ -12,7 +12,7 @@ subject = "src/main/kotlin/demo/waste/Waste.kt"
 expect = "dead"
 category = "unused"
 why = "plainly dead and in a file that parses — but `Config.kt` yields no declarations, `main` among them, so the run finds no root anywhere and abstains whole-run"
-fix = "unread text: what a reader could not account for is evidence, and a name inside it is unknown rather than absent"
+fix = "grammars: the pinned Kotlin grammar reads the construct. Unread text has SHIPPED and does not close this one: what the break costs here is the file's root, and a reader stating what it could not account for can withhold an accusation, never manufacture the root that would let one be made"
 
 [[known_gap]]
 subject = "src/main/kotlin/demo/Config.kt#spring"
