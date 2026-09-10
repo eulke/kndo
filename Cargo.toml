@@ -36,8 +36,7 @@ license = "Apache-2.0"
 rust-version = "1.98"
 publish = false
 
-# Two grammars kndo carries itself, each as its release plus a recorded change:
+# One grammar kndo carries itself, as its release plus a recorded change:
 # vendor/<crate>.provenance.toml says what changed and why, and a gate checks it.
 [patch.crates-io]
 tree-sitter-scss = { path = "vendor/tree-sitter-scss" }
-tree-sitter-kotlin-ng = { path = "vendor/tree-sitter-kotlin-ng" }

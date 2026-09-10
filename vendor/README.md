@@ -1,9 +1,14 @@
 # Vendored crates
 
-A grammar kndo pins is sometimes wrong about the language, or wrong about a platform,
-in a way no adapter can work around: the fix belongs in the grammar. Vendoring is how
-kndo carries that fix — and the discipline here exists so that carrying it never means
-carrying an unexplained tree.
+A crate kndo pins is sometimes wrong about a platform in a way no caller can work
+around: the fix belongs in the crate. Vendoring is how kndo carries that fix — and the
+discipline here exists so that carrying it never means carrying an unexplained tree.
+
+Vendoring is NOT how kndo handles a grammar that lags the language. A grammar patched
+per construct is one patch per language release, and what the engine needs from a
+reader is not that it never fails but that it SAYS where it failed — see the entry on
+unread text in DECISIONS. A grammar patch shrinks that region; it never decides a
+verdict.
 
 Each `vendor/<crate>/` is a crates.io release **plus the changes its provenance record
 names, and nothing else**. The record is `vendor/<crate>.provenance.toml`, written by

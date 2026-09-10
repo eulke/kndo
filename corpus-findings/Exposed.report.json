@@ -73,7 +73,7 @@
   },
   "health": {
     "implicated": 20,
-    "subjects": 26093,
+    "subjects": 25453,
     "by_category": [
       {
         "category": "unused",
@@ -85,7 +85,7 @@
         "name": "",
         "manifest": "",
         "implicated": 12,
-        "subjects": 13399
+        "subjects": 13391
       },
       {
         "name": "com.example:exposed-modules-maven",
@@ -97,7 +97,7 @@
         "name": "exposed-core",
         "manifest": "exposed-core/build.gradle.kts",
         "implicated": 1,
-        "subjects": 3026
+        "subjects": 2569
       },
       {
         "name": "exposed-crypt",
@@ -114,8 +114,8 @@
       {
         "name": "exposed-dao",
         "manifest": "exposed-dao/build.gradle.kts",
-        "implicated": 0,
-        "subjects": 314
+        "implicated": 2,
+        "subjects": 230
       },
       {
         "name": "exposed-dao-relationships",
@@ -187,7 +187,7 @@
         "name": "exposed-json",
         "manifest": "exposed-json/build.gradle.kts",
         "implicated": 0,
-        "subjects": 113
+        "subjects": 95
       },
       {
         "name": "exposed-kotlin-datetime",
@@ -253,25 +253,25 @@
         "name": "exposed-r2dbc",
         "manifest": "exposed-r2dbc/build.gradle.kts",
         "implicated": 2,
-        "subjects": 1133
+        "subjects": 1118
       },
       {
         "name": "exposed-r2dbc-tests",
         "manifest": "exposed-r2dbc-tests/build.gradle.kts",
-        "implicated": 2,
-        "subjects": 1788
+        "implicated": 1,
+        "subjects": 1772
       },
       {
         "name": "exposed-spring-boot-starter",
         "manifest": "exposed-spring-boot-starter/build.gradle.kts",
         "implicated": 0,
-        "subjects": 93
+        "subjects": 87
       },
       {
         "name": "exposed-spring-boot4-starter",
         "manifest": "exposed-spring-boot4-starter/build.gradle.kts",
         "implicated": 0,
-        "subjects": 93
+        "subjects": 87
       },
       {
         "name": "exposed-sql-functions",
@@ -282,8 +282,8 @@
       {
         "name": "exposed-tests",
         "manifest": "exposed-tests/build.gradle.kts",
-        "implicated": 2,
-        "subjects": 2384
+        "implicated": 1,
+        "subjects": 2354
       },
       {
         "name": "exposed-transactions",
@@ -453,24 +453,46 @@
       "message": "nothing references, roots, or imports this declaration"
     },
     {
-      "id": "kndo-57f6363b8d73",
+      "id": "kndo-94d002616055",
       "category": "unused",
       "severity": "warning",
       "confidence": "certain",
       "subject": {
         "kind": "symbol",
-        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/StatementInterceptorTests.kt",
+        "path": "exposed-dao/src/main/kotlin/org/jetbrains/exposed/v1/dao/Entity.kt",
         "selector": {
-          "name": "CommitDataInterceptor"
+          "name": "isPersistedIn"
         },
         "span": {
-          "start": 2418,
-          "end": 3081
+          "start": 4261,
+          "end": 4499
         }
       },
       "lines": {
-        "start": 60,
-        "end": 78
+        "start": 101,
+        "end": 104
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-73d156f006ec",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-dao/src/main/kotlin/org/jetbrains/exposed/v1/dao/References.kt",
+        "selector": {
+          "name": "allReferencesMatch"
+        },
+        "span": {
+          "start": 20992,
+          "end": 21265
+        }
+      },
+      "lines": {
+        "start": 422,
+        "end": 425
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -539,28 +561,6 @@
       "lines": {
         "start": 108,
         "end": 108
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-51565dd15b62",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/StatementInterceptorTests.kt",
-        "selector": {
-          "name": "CommitDataInterceptor"
-        },
-        "span": {
-          "start": 1838,
-          "end": 2501
-        }
-      },
-      "lines": {
-        "start": 51,
-        "end": 69
       },
       "message": "nothing references, roots, or imports this declaration"
     },
@@ -780,121 +780,6 @@
       "message": "byte-identical to documentation-website/Writerside/snippets/exposed-gradle-plugin/src/main/kotlin/org/example/tables/UsersTable.kt"
     },
     {
-      "id": "kndo-0242e437a6e9",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/ColumnType.kt",
-        "selector": {
-          "owner": "IntVectorColumnType",
-          "name": "valueFromDB"
-        },
-        "span": {
-          "start": 59343,
-          "end": 59759
-        }
-      },
-      "lines": {
-        "start": 1575,
-        "end": 1582
-      },
-      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/ColumnType.kt:FloatVectorColumnType.valueFromDB"
-    },
-    {
-      "id": "kndo-49e64607de98",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/ColumnType.kt",
-        "selector": {
-          "owner": "CharColumnType",
-          "name": "equals"
-        },
-        "span": {
-          "start": 31634,
-          "end": 31987
-        }
-      },
-      "lines": {
-        "start": 840,
-        "end": 851
-      },
-      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/ColumnType.kt:DecimalColumnType.equals"
-    },
-    {
-      "id": "kndo-4b6541c24f0a",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/ColumnType.kt",
-        "selector": {
-          "owner": "ArrayColumnType",
-          "name": "recursiveNonNullValueAsDefaultString"
-        },
-        "span": {
-          "start": 51406,
-          "end": 51770
-        }
-      },
-      "lines": {
-        "start": 1382,
-        "end": 1385
-      },
-      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/ColumnType.kt:ArrayColumnType.recursiveNonNullValueToString"
-    },
-    {
-      "id": "kndo-52be7f9d635a",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/ColumnType.kt",
-        "selector": {
-          "owner": "UShortColumnType",
-          "name": "valueFromDB"
-        },
-        "span": {
-          "start": 20181,
-          "end": 20538
-        }
-      },
-      "lines": {
-        "start": 516,
-        "end": 524
-      },
-      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/ColumnType.kt:UByteColumnType.valueFromDB"
-    },
-    {
-      "id": "kndo-c1cba062ba15",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/ColumnType.kt",
-        "selector": {
-          "owner": "UIntegerColumnType",
-          "name": "valueFromDB"
-        },
-        "span": {
-          "start": 21731,
-          "end": 22075
-        }
-      },
-      "lines": {
-        "start": 559,
-        "end": 567
-      },
-      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/ColumnType.kt:UByteColumnType.valueFromDB"
-    },
-    {
       "id": "kndo-9caaa4faa5ea",
       "category": "duplicate",
       "severity": "info",
@@ -966,52 +851,6 @@
       "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/Op.kt:TRUE.toQueryBuilder"
     },
     {
-      "id": "kndo-089a6f03a935",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/OpBuilder.kt",
-        "selector": {
-          "name": "notInList",
-          "nth": 6
-        },
-        "span": {
-          "start": 42499,
-          "end": 42779
-        }
-      },
-      "lines": {
-        "start": 888,
-        "end": 891
-      },
-      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/OpBuilder.kt:inList#7"
-    },
-    {
-      "id": "kndo-2a3d7cff737b",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/OpBuilder.kt",
-        "selector": {
-          "name": "allFrom",
-          "nth": 1
-        },
-        "span": {
-          "start": 34231,
-          "end": 34597
-        }
-      },
-      "lines": {
-        "start": 706,
-        "end": 711
-      },
-      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/OpBuilder.kt:anyFrom#2"
-    },
-    {
       "id": "kndo-47f0283bf819",
       "category": "duplicate",
       "severity": "info",
@@ -1057,29 +896,6 @@
       "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/OpBuilder.kt:and"
     },
     {
-      "id": "kndo-5a27360f684a",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/OpBuilder.kt",
-        "selector": {
-          "name": "notInList",
-          "nth": 4
-        },
-        "span": {
-          "start": 41225,
-          "end": 41656
-        }
-      },
-      "lines": {
-        "start": 858,
-        "end": 867
-      },
-      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/OpBuilder.kt:inList#5"
-    },
-    {
       "id": "kndo-650f5306a2b0",
       "category": "duplicate",
       "severity": "info",
@@ -1103,74 +919,6 @@
       "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/OpBuilder.kt:eq#3"
     },
     {
-      "id": "kndo-6839b1bc1fcc",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/OpBuilder.kt",
-        "selector": {
-          "name": "allFrom",
-          "nth": 2
-        },
-        "span": {
-          "start": 35054,
-          "end": 35409
-        }
-      },
-      "lines": {
-        "start": 721,
-        "end": 726
-      },
-      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/OpBuilder.kt:anyFrom#3"
-    },
-    {
-      "id": "kndo-814c2e00cdb8",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/OpBuilder.kt",
-        "selector": {
-          "name": "notInList",
-          "nth": 5
-        },
-        "span": {
-          "start": 41894,
-          "end": 42222
-        }
-      },
-      "lines": {
-        "start": 876,
-        "end": 879
-      },
-      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/OpBuilder.kt:inList#6"
-    },
-    {
-      "id": "kndo-ac3545891bbe",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/OpBuilder.kt",
-        "selector": {
-          "name": "isNotNull"
-        },
-        "span": {
-          "start": 15130,
-          "end": 15466
-        }
-      },
-      "lines": {
-        "start": 333,
-        "end": 340
-      },
-      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/OpBuilder.kt:isNull"
-    },
-    {
       "id": "kndo-b2e6ac4d6f46",
       "category": "duplicate",
       "severity": "info",
@@ -1191,29 +939,6 @@
         "end": 154
       },
       "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/OpBuilder.kt:eq"
-    },
-    {
-      "id": "kndo-d6b6204c8f2a",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/OpBuilder.kt",
-        "selector": {
-          "name": "notInList",
-          "nth": 2
-        },
-        "span": {
-          "start": 40314,
-          "end": 40581
-        }
-      },
-      "lines": {
-        "start": 838,
-        "end": 841
-      },
-      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/OpBuilder.kt:inList#3"
     },
     {
       "id": "kndo-da829a43c431",
@@ -2474,29 +2199,6 @@
       "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt:ISqlExpressionBuilder.less#5"
     },
     {
-      "id": "kndo-ef288696d350",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SQLExpressionBuilder.kt",
-        "selector": {
-          "owner": "ISqlExpressionBuilder",
-          "name": "idTable"
-        },
-        "span": {
-          "start": 66610,
-          "end": 66851
-        }
-      },
-      "lines": {
-        "start": 1179,
-        "end": 1183
-      },
-      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/OpBuilder.kt:idTable"
-    },
-    {
       "id": "kndo-f4962dcd07b9",
       "category": "duplicate",
       "severity": "info",
@@ -2817,28 +2519,6 @@
       "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/statements/BatchUpsertStatement.kt:BatchUpsertStatement.prepareSQL"
     },
     {
-      "id": "kndo-8e70565c0af9",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/vendors/OracleDialect.kt",
-        "selector": {
-          "name": "vectorDistance"
-        },
-        "span": {
-          "start": 7299,
-          "end": 7678
-        }
-      },
-      "lines": {
-        "start": 204,
-        "end": 217
-      },
-      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/vendors/MysqlDialect.kt:MysqlFunctionProvider.vectorDistance"
-    },
-    {
       "id": "kndo-18d76f1977e3",
       "category": "duplicate",
       "severity": "info",
@@ -2860,74 +2540,6 @@
         "end": 476
       },
       "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/vendors/MariaDBDialect.kt:MariaDBDialect.createIndex"
-    },
-    {
-      "id": "kndo-2346fc86dd49",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/vendors/SQLiteDialect.kt",
-        "selector": {
-          "name": "insert"
-        },
-        "span": {
-          "start": 7740,
-          "end": 8074
-        }
-      },
-      "lines": {
-        "start": 223,
-        "end": 232
-      },
-      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/vendors/MysqlDialect.kt:MysqlFunctionProvider.insert"
-    },
-    {
-      "id": "kndo-bdbb94ef2199",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/vendors/SQLiteDialect.kt",
-        "selector": {
-          "name": "replace"
-        },
-        "span": {
-          "start": 8080,
-          "end": 8428
-        }
-      },
-      "lines": {
-        "start": 234,
-        "end": 243
-      },
-      "message": "structural clone of exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/vendors/MysqlDialect.kt:MysqlFunctionProvider.replace"
-    },
-    {
-      "id": "kndo-6b080642ee67",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-dao/src/main/kotlin/org/jetbrains/exposed/v1/dao/EntityClass.kt",
-        "selector": {
-          "owner": "EntityClass",
-          "name": "memoizedTransform",
-          "nth": 2
-        },
-        "span": {
-          "start": 41069,
-          "end": 41442
-        }
-      },
-      "lines": {
-        "start": 829,
-        "end": 836
-      },
-      "message": "structural clone of exposed-dao/src/main/kotlin/org/jetbrains/exposed/v1/dao/EntityClass.kt:EntityClass.transform#3"
     },
     {
       "id": "kndo-7792a767eab6",
@@ -6255,7 +5867,7 @@
       "message": "structural clone of exposed-jodatime/src/test/kotlin/org/jetbrains/exposed/v1/jodatime/JodaTimeTests.kt:JodaTimeTests.testLocalDateTimeComparison"
     },
     {
-      "id": "kndo-277513ec2f0c",
+      "id": "kndo-e14535cd998a",
       "category": "duplicate",
       "severity": "info",
       "confidence": "certain",
@@ -6263,53 +5875,6 @@
         "kind": "symbol",
         "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/json/JsonColumnTests.kt",
         "selector": {
-          "owner": "JsonColumnTests",
-          "name": "testJsonExistsWithArrays"
-        },
-        "span": {
-          "start": 10397,
-          "end": 11023
-        }
-      },
-      "lines": {
-        "start": 228,
-        "end": 239
-      },
-      "message": "structural clone of exposed-json/src/test/kotlin/org/jetbrains/exposed/v1/json/JsonColumnTests.kt:JsonColumnTests.testJsonExistsWithArrays"
-    },
-    {
-      "id": "kndo-5c645e91ec3d",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/json/JsonColumnTests.kt",
-        "selector": {
-          "owner": "JsonColumnTests",
-          "name": "testLoggerWithJsonCollections"
-        },
-        "span": {
-          "start": 14348,
-          "end": 15841
-        }
-      },
-      "lines": {
-        "start": 314,
-        "end": 345
-      },
-      "message": "structural clone of exposed-json/src/test/kotlin/org/jetbrains/exposed/v1/json/JsonColumnTests.kt:JsonColumnTests.testLoggerWithJsonCollections"
-    },
-    {
-      "id": "kndo-695134c25199",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/json/JsonColumnTests.kt",
-        "selector": {
-          "owner": "JsonColumnTests",
           "name": "testJsonContains"
         },
         "span": {
@@ -6321,122 +5886,7 @@
         "start": 126,
         "end": 149
       },
-      "message": "structural clone of exposed-json/src/test/kotlin/org/jetbrains/exposed/v1/json/JsonColumnTests.kt:JsonColumnTests.testJsonContains"
-    },
-    {
-      "id": "kndo-6c0a940c0636",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/json/JsonColumnTests.kt",
-        "selector": {
-          "owner": "JsonColumnTests",
-          "name": "testJsonWithTransformer"
-        },
-        "span": {
-          "start": 17941,
-          "end": 18551
-        }
-      },
-      "lines": {
-        "start": 403,
-        "end": 420
-      },
-      "message": "structural clone of exposed-json/src/test/kotlin/org/jetbrains/exposed/v1/json/JsonColumnTests.kt:JsonColumnTests.testJsonWithTransformer"
-    },
-    {
-      "id": "kndo-9b0ae67d4a43",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/json/JsonColumnTests.kt",
-        "selector": {
-          "owner": "JsonColumnTests",
-          "name": "testJsonAsDefault"
-        },
-        "span": {
-          "start": 18557,
-          "end": 19348
-        }
-      },
-      "lines": {
-        "start": 422,
-        "end": 442
-      },
-      "message": "structural clone of exposed-json/src/test/kotlin/org/jetbrains/exposed/v1/json/JsonColumnTests.kt:JsonColumnTests.testJsonAsDefault"
-    },
-    {
-      "id": "kndo-a3c5a14eaf0a",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/json/JsonColumnTests.kt",
-        "selector": {
-          "owner": "JsonColumnTests",
-          "name": "testJsonExists"
-        },
-        "span": {
-          "start": 6619,
-          "end": 8850
-        }
-      },
-      "lines": {
-        "start": 151,
-        "end": 194
-      },
-      "message": "structural clone of exposed-json/src/test/kotlin/org/jetbrains/exposed/v1/json/JsonColumnTests.kt:JsonColumnTests.testJsonExists"
-    },
-    {
-      "id": "kndo-bf1bd7b0f422",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/json/JsonColumnTests.kt",
-        "selector": {
-          "owner": "JsonColumnTests",
-          "name": "testJsonWithDefaults"
-        },
-        "span": {
-          "start": 12901,
-          "end": 14342
-        }
-      },
-      "lines": {
-        "start": 279,
-        "end": 312
-      },
-      "message": "structural clone of exposed-json/src/test/kotlin/org/jetbrains/exposed/v1/json/JsonColumnTests.kt:JsonColumnTests.testJsonWithDefaults"
-    },
-    {
-      "id": "kndo-eb9370323bd9",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/json/JsonColumnTests.kt",
-        "selector": {
-          "owner": "JsonColumnTests",
-          "name": "testJsonContainsWithArrays"
-        },
-        "span": {
-          "start": 9817,
-          "end": 10391
-        }
-      },
-      "lines": {
-        "start": 215,
-        "end": 226
-      },
-      "message": "structural clone of exposed-json/src/test/kotlin/org/jetbrains/exposed/v1/json/JsonColumnTests.kt:JsonColumnTests.testJsonContainsWithArrays"
+      "message": "structural clone of exposed-json/src/test/kotlin/org/jetbrains/exposed/v1/json/JsonColumnTests.kt:testJsonContains"
     },
     {
       "id": "kndo-0f5cdef54965",
@@ -7492,6 +6942,28 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/AdjustQueryTests.kt:AdjustQueryTests.testQueryAndHaving"
     },
     {
+      "id": "kndo-0f5c523f1648",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/InsertTests.kt",
+        "selector": {
+          "name": "testInsertReturnsValuesFromDefaultExpression"
+        },
+        "span": {
+          "start": 29872,
+          "end": 30276
+        }
+      },
+      "lines": {
+        "start": 827,
+        "end": 838
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/InsertTests.kt:testXInsertReturnsValuesFromDefaultExpression"
+    },
+    {
       "id": "kndo-b02cb57e5c3b",
       "category": "duplicate",
       "severity": "info",
@@ -8159,7 +7631,7 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/UnsignedColumnTypeTests.kt:UnsignedColumnTypeTests.testUByteColumnType"
     },
     {
-      "id": "kndo-92b9c78bc724",
+      "id": "kndo-3c0eabf39141",
       "category": "duplicate",
       "severity": "info",
       "confidence": "certain",
@@ -8167,22 +7639,21 @@
         "kind": "symbol",
         "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/UuidColumnTypeTests.kt",
         "selector": {
-          "owner": "UuidColumnTypeTests",
-          "name": "insertReadUuid"
+          "name": "mariadbOwnUuidType"
         },
         "span": {
-          "start": 1172,
-          "end": 1642
+          "start": 2828,
+          "end": 3777
         }
       },
       "lines": {
-        "start": 27,
-        "end": 40
+        "start": 75,
+        "end": 96
       },
-      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/JavaUUIDColumnTypeTests.kt:JavaUUIDColumnTypeTests.insertReadUUID"
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/JavaUUIDColumnTypeTests.kt:JavaUUIDColumnTypeTests.mariadbOwnUUIDType"
     },
     {
-      "id": "kndo-cf10d9778250",
+      "id": "kndo-76fd80781a7e",
       "category": "duplicate",
       "severity": "info",
       "confidence": "certain",
@@ -8190,7 +7661,6 @@
         "kind": "symbol",
         "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/UuidColumnTypeTests.kt",
         "selector": {
-          "owner": "UuidColumnTypeTests",
           "name": "testUuidColumnType"
         },
         "span": {
@@ -8205,7 +7675,7 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/JavaUUIDColumnTypeTests.kt:JavaUUIDColumnTypeTests.testUUIDColumnType"
     },
     {
-      "id": "kndo-e9b64d919668",
+      "id": "kndo-ced19fc539d7",
       "category": "duplicate",
       "severity": "info",
       "confidence": "certain",
@@ -8213,19 +7683,18 @@
         "kind": "symbol",
         "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/UuidColumnTypeTests.kt",
         "selector": {
-          "owner": "UuidColumnTypeTests",
-          "name": "mariadbOwnUuidType"
+          "name": "insertReadUuid"
         },
         "span": {
-          "start": 2828,
-          "end": 3777
+          "start": 1172,
+          "end": 1642
         }
       },
       "lines": {
-        "start": 75,
-        "end": 96
+        "start": 27,
+        "end": 40
       },
-      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/JavaUUIDColumnTypeTests.kt:JavaUUIDColumnTypeTests.mariadbOwnUUIDType"
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/JavaUUIDColumnTypeTests.kt:JavaUUIDColumnTypeTests.insertReadUUID"
     },
     {
       "id": "kndo-0a8917f452b1",
@@ -10845,28 +10314,6 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/SchemaTests.kt:SchemaTests.`create existing schema and drop nonexistent schemas`"
     },
     {
-      "id": "kndo-2d61d0ee4c6b",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/StatementInterceptorTests.kt",
-        "selector": {
-          "name": "testInterceptorWithOnlyLogs"
-        },
-        "span": {
-          "start": 2563,
-          "end": 3614
-        }
-      },
-      "lines": {
-        "start": 72,
-        "end": 104
-      },
-      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/StatementInterceptorTests.kt:testInterceptorWithOnlyLogs"
-    },
-    {
       "id": "kndo-5096fee50e42",
       "category": "duplicate",
       "severity": "info",
@@ -11810,52 +11257,6 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/ddl/CreateTableTests.kt:CreateTableTests.createIdTableWithPrimaryKeyThatHasForeignKeyByEntityID"
     },
     {
-      "id": "kndo-686cc4758f6d",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/ddl/EnumerationTests.kt",
-        "selector": {
-          "owner": "EnumerationTests",
-          "name": "testNullableEnumerationColumns"
-        },
-        "span": {
-          "start": 8815,
-          "end": 9427
-        }
-      },
-      "lines": {
-        "start": 223,
-        "end": 240
-      },
-      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/ddl/EnumerationTests.kt:EnumerationTests.testNullableEnumerationColumns"
-    },
-    {
-      "id": "kndo-69746bbd42a9",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/ddl/EnumerationTests.kt",
-        "selector": {
-          "owner": "EnumerationTests",
-          "name": "testEnumerationColumnsWithReference"
-        },
-        "span": {
-          "start": 7467,
-          "end": 8809
-        }
-      },
-      "lines": {
-        "start": 192,
-        "end": 221
-      },
-      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/ddl/EnumerationTests.kt:EnumerationTests.testEnumerationColumnsWithReference"
-    },
-    {
       "id": "kndo-40b1e6dc625c",
       "category": "duplicate",
       "severity": "info",
@@ -12384,7 +11785,7 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/ColumnWithTransformTest.kt:ColumnWithTransformTest.testNullTransform"
     },
     {
-      "id": "kndo-1d174df52dd3",
+      "id": "kndo-c2c56eee4efa",
       "category": "duplicate",
       "severity": "info",
       "confidence": "certain",
@@ -12392,76 +11793,6 @@
         "kind": "symbol",
         "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/ConditionsTests.kt",
         "selector": {
-          "owner": "ConditionsTests",
-          "name": "nullOpUpdateAndSelectTest"
-        },
-        "span": {
-          "start": 10663,
-          "end": 11397
-        }
-      },
-      "lines": {
-        "start": 241,
-        "end": 260
-      },
-      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/ConditionsTests.kt:ConditionsTests.nullOpUpdateAndSelectTest"
-    },
-    {
-      "id": "kndo-4cbaa4cf269c",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/ConditionsTests.kt",
-        "selector": {
-          "owner": "ConditionsTests",
-          "name": "testCaseOperationWithSpecificColumnType"
-        },
-        "span": {
-          "start": 16863,
-          "end": 17881
-        }
-      },
-      "lines": {
-        "start": 413,
-        "end": 446
-      },
-      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/ConditionsTests.kt:ConditionsTests.testCaseOperationWithSpecificColumnType"
-    },
-    {
-      "id": "kndo-639412be0fd5",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/ConditionsTests.kt",
-        "selector": {
-          "owner": "ConditionsTests",
-          "name": "sameColumnUsedInSliceMultipleTimes"
-        },
-        "span": {
-          "start": 8386,
-          "end": 8705
-        }
-      },
-      "lines": {
-        "start": 178,
-        "end": 185
-      },
-      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/ConditionsTests.kt:ConditionsTests.sameColumnUsedInSliceMultipleTimes"
-    },
-    {
-      "id": "kndo-731496072f85",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/ConditionsTests.kt",
-        "selector": {
-          "owner": "ConditionsTests",
           "name": "testTRUEandFALSEOps"
         },
         "span": {
@@ -12473,145 +11804,7 @@
         "start": 18,
         "end": 25
       },
-      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/ConditionsTests.kt:ConditionsTests.testTRUEandFALSEOps"
-    },
-    {
-      "id": "kndo-7a79d1035b87",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/ConditionsTests.kt",
-        "selector": {
-          "owner": "ConditionsTests",
-          "name": "nullOpInCaseTest"
-        },
-        "span": {
-          "start": 11671,
-          "end": 12374
-        }
-      },
-      "lines": {
-        "start": 273,
-        "end": 291
-      },
-      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/ConditionsTests.kt:ConditionsTests.nullOpInCaseTest"
-    },
-    {
-      "id": "kndo-9b79553b85d0",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/ConditionsTests.kt",
-        "selector": {
-          "owner": "ConditionsTests",
-          "name": "testNullOrEmpty"
-        },
-        "span": {
-          "start": 16430,
-          "end": 16857
-        }
-      },
-      "lines": {
-        "start": 398,
-        "end": 411
-      },
-      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/ConditionsTests.kt:ConditionsTests.testNullOrEmpty"
-    },
-    {
-      "id": "kndo-9f2f830bffa1",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/ConditionsTests.kt",
-        "selector": {
-          "owner": "ConditionsTests",
-          "name": "testChainedAndNestedCaseWhenElseSyntax"
-        },
-        "span": {
-          "start": 13944,
-          "end": 14934
-        }
-      },
-      "lines": {
-        "start": 329,
-        "end": 353
-      },
-      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/ConditionsTests.kt:ConditionsTests.testChainedAndNestedCaseWhenElseSyntax"
-    },
-    {
-      "id": "kndo-b5659dae3467",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/ConditionsTests.kt",
-        "selector": {
-          "owner": "ConditionsTests",
-          "name": "testCaseWithCountAndSum"
-        },
-        "span": {
-          "start": 17887,
-          "end": 19750
-        }
-      },
-      "lines": {
-        "start": 448,
-        "end": 493
-      },
-      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/ConditionsTests.kt:ConditionsTests.testCaseWithCountAndSum"
-    },
-    {
-      "id": "kndo-c878d689c21a",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/ConditionsTests.kt",
-        "selector": {
-          "owner": "ConditionsTests",
-          "name": "testNullSafeEqualityOps"
-        },
-        "span": {
-          "start": 1076,
-          "end": 3794
-        }
-      },
-      "lines": {
-        "start": 27,
-        "end": 88
-      },
-      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/ConditionsTests.kt:ConditionsTests.testNullSafeEqualityOps"
-    },
-    {
-      "id": "kndo-f44b2f07b4ca",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/ConditionsTests.kt",
-        "selector": {
-          "owner": "ConditionsTests",
-          "name": "testSelectAliasedComparisonResult"
-        },
-        "span": {
-          "start": 14940,
-          "end": 16424
-        }
-      },
-      "lines": {
-        "start": 355,
-        "end": 396
-      },
-      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/ConditionsTests.kt:ConditionsTests.testSelectAliasedComparisonResult"
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/ConditionsTests.kt:testTRUEandFALSEOps"
     },
     {
       "id": "kndo-7b605df84eb8",
@@ -13189,6 +12382,50 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/InsertSelectTests.kt:InsertSelectTests.testInsertSelect04"
     },
     {
+      "id": "kndo-3593bbfd5e1e",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/InsertTests.kt",
+        "selector": {
+          "name": "testInsertOfDefaultValuesOnly"
+        },
+        "span": {
+          "start": 37796,
+          "end": 38567
+        }
+      },
+      "lines": {
+        "start": 1011,
+        "end": 1029
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/InsertTests.kt:testInsertOfDefaultValuesOnly"
+    },
+    {
+      "id": "kndo-6f64e7a72343",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/InsertTests.kt",
+        "selector": {
+          "name": "testXInsertReturnsValuesFromDefaultExpression"
+        },
+        "span": {
+          "start": 33852,
+          "end": 34261
+        }
+      },
+      "lines": {
+        "start": 929,
+        "end": 940
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/InsertTests.kt:testXInsertReturnsValuesFromDefaultExpression"
+    },
+    {
       "id": "kndo-80a91e5d2f13",
       "category": "duplicate",
       "severity": "info",
@@ -13212,7 +12449,7 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/InsertTests.kt:InsertTests.testInsertIgnoreAndGetId01"
     },
     {
-      "id": "kndo-823e12d6dd7f",
+      "id": "kndo-9b439e40d557",
       "category": "duplicate",
       "severity": "info",
       "confidence": "certain",
@@ -13220,19 +12457,62 @@
         "kind": "symbol",
         "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/InsertTests.kt",
         "selector": {
-          "owner": "InsertTests",
-          "name": "testInsertAndGetIdWhenColumnHasDifferentNameAndGetValueByIdColumn"
+          "name": "testNoAutoIncrementAppliedToCustomStringPrimaryKey"
         },
         "span": {
-          "start": 4358,
-          "end": 5039
+          "start": 33144,
+          "end": 33846
         }
       },
       "lines": {
-        "start": 118,
-        "end": 138
+        "start": 912,
+        "end": 927
       },
-      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/InsertTests.kt:InsertTests.testInsertAndGetIdWhenColumnHasDifferentNameAndGetValueByIdColumn"
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/InsertTests.kt:testNoAutoIncrementAppliedToCustomStringPrimaryKey"
+    },
+    {
+      "id": "kndo-b81b129d65fd",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/InsertTests.kt",
+        "selector": {
+          "name": "testInsertReturnsValuesFromDefaultExpression"
+        },
+        "span": {
+          "start": 34267,
+          "end": 34671
+        }
+      },
+      "lines": {
+        "start": 942,
+        "end": 953
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/InsertTests.kt:testXInsertReturnsValuesFromDefaultExpression"
+    },
+    {
+      "id": "kndo-d9b36678aec8",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/dml/InsertTests.kt",
+        "selector": {
+          "name": "testDatabaseGeneratedUUIDasPrimaryKey"
+        },
+        "span": {
+          "start": 34677,
+          "end": 35478
+        }
+      },
+      "lines": {
+        "start": 955,
+        "end": 971
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/dml/InsertTests.kt:testDatabaseGeneratedUUIDasPrimaryKey"
     },
     {
       "id": "kndo-e8b1ea94b2e3",
@@ -17762,7 +17042,7 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/JavaUUIDColumnTypeTests.kt:JavaUUIDColumnTypeTests.mariadbOwnUUIDType"
     },
     {
-      "id": "kndo-922b155416a2",
+      "id": "kndo-b3d91d04a00d",
       "category": "duplicate",
       "severity": "info",
       "confidence": "certain",
@@ -17770,7 +17050,6 @@
         "kind": "symbol",
         "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/types/MultiArrayColumnTypeTests.kt",
         "selector": {
-          "owner": "MultiArrayColumnTypeTests",
           "name": "testMultiArrayParam"
         },
         "span": {
@@ -17782,7 +17061,7 @@
         "start": 161,
         "end": 177
       },
-      "message": "structural clone of exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/types/MultiArrayColumnTypeTests.kt:MultiArrayColumnTypeTests.testMultiArrayLiteral"
+      "message": "structural clone of exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/types/MultiArrayColumnTypeTests.kt:testMultiArrayLiteral"
     },
     {
       "id": "kndo-1f1d0b04f47e",
@@ -18176,7 +17455,7 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/UnsignedColumnTypeTests.kt:UnsignedColumnTypeTests.testUShortWithCheckConstraint"
     },
     {
-      "id": "kndo-06f4d272f0d2",
+      "id": "kndo-4eadf07e1bd9",
       "category": "duplicate",
       "severity": "info",
       "confidence": "certain",
@@ -18184,22 +17463,21 @@
         "kind": "symbol",
         "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/types/UuidColumnTypeTests.kt",
         "selector": {
-          "owner": "UuidColumnTypeTests",
-          "name": "testNullableUuidColumnTypeExplicitInsert"
+          "name": "insertReadUuid"
         },
         "span": {
-          "start": 2021,
-          "end": 2603
+          "start": 953,
+          "end": 1423
         }
       },
       "lines": {
-        "start": 55,
-        "end": 69
+        "start": 23,
+        "end": 36
       },
-      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/UuidColumnTypeTests.kt:UuidColumnTypeTests.testNullableUuidColumnTypeExplicitInsert"
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/JavaUUIDColumnTypeTests.kt:JavaUUIDColumnTypeTests.insertReadUUID"
     },
     {
-      "id": "kndo-30b641e157d8",
+      "id": "kndo-8b1f7f17d029",
       "category": "duplicate",
       "severity": "info",
       "confidence": "certain",
@@ -18207,7 +17485,6 @@
         "kind": "symbol",
         "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/types/UuidColumnTypeTests.kt",
         "selector": {
-          "owner": "UuidColumnTypeTests",
           "name": "testUuidColumnType"
         },
         "span": {
@@ -18222,7 +17499,7 @@
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/JavaUUIDColumnTypeTests.kt:JavaUUIDColumnTypeTests.testUUIDColumnType"
     },
     {
-      "id": "kndo-89ecb56eed26",
+      "id": "kndo-8fe0d5e17d87",
       "category": "duplicate",
       "severity": "info",
       "confidence": "certain",
@@ -18230,7 +17507,28 @@
         "kind": "symbol",
         "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/types/UuidColumnTypeTests.kt",
         "selector": {
-          "owner": "UuidColumnTypeTests",
+          "name": "testNullableUuidColumnTypeExplicitInsert"
+        },
+        "span": {
+          "start": 2021,
+          "end": 2603
+        }
+      },
+      "lines": {
+        "start": 55,
+        "end": 69
+      },
+      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/UuidColumnTypeTests.kt:testNullableUuidColumnTypeExplicitInsert"
+    },
+    {
+      "id": "kndo-c9a35a267f07",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/types/UuidColumnTypeTests.kt",
+        "selector": {
           "name": "mariadbOwnUuidType"
         },
         "span": {
@@ -18243,52 +17541,6 @@
         "end": 92
       },
       "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/JavaUUIDColumnTypeTests.kt:JavaUUIDColumnTypeTests.mariadbOwnUUIDType"
-    },
-    {
-      "id": "kndo-a8ba176b5d23",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/types/UuidColumnTypeTests.kt",
-        "selector": {
-          "owner": "UuidColumnTypeTests",
-          "name": "testAutoGenerateUuidVersions"
-        },
-        "span": {
-          "start": 3564,
-          "end": 4686
-        }
-      },
-      "lines": {
-        "start": 94,
-        "end": 118
-      },
-      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/UuidColumnTypeTests.kt:UuidColumnTypeTests.testAutoGenerateUuidVersions"
-    },
-    {
-      "id": "kndo-d2d0c67dc48b",
-      "category": "duplicate",
-      "severity": "info",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/types/UuidColumnTypeTests.kt",
-        "selector": {
-          "owner": "UuidColumnTypeTests",
-          "name": "insertReadUuid"
-        },
-        "span": {
-          "start": 953,
-          "end": 1423
-        }
-      },
-      "lines": {
-        "start": 23,
-        "end": 36
-      },
-      "message": "structural clone of exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/types/JavaUUIDColumnTypeTests.kt:JavaUUIDColumnTypeTests.insertReadUUID"
     },
     {
       "id": "kndo-1155ae0d7aa7",
@@ -20107,6 +19359,28 @@
       "message": "structural clone of spring-transaction/src/test/kotlin/org/jetbrains/exposed/v1/spring/transaction/SpringTransactionTestBase.kt:execute"
     },
     {
+      "id": "kndo-90cda0732825",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/datetime/LocalDateTimeColumnType.kt",
+        "selector": {
+          "name": "toSqlTimestamp"
+        },
+        "span": {
+          "start": 6805,
+          "end": 7040
+        }
+      },
+      "lines": {
+        "start": 175,
+        "end": 180
+      },
+      "message": "declared `internal`, but every use is within its own file — `private` would suffice for this function"
+    },
+    {
       "id": "kndo-b8924a0f384a",
       "category": "internal-only",
       "severity": "info",
@@ -20173,7 +19447,7 @@
       "message": "declared `internal`, but every use is within its own file — `private` would suffice for this function"
     },
     {
-      "id": "kndo-21a296ea90d6",
+      "id": "kndo-7b9a2f0cd332",
       "category": "internal-only",
       "severity": "info",
       "confidence": "probable",
@@ -20181,7 +19455,6 @@
         "kind": "symbol",
         "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/ddl/EnumerationTests.kt",
         "selector": {
-          "owner": "EnumerationTests",
           "name": "Foo"
         },
         "span": {
@@ -20193,53 +19466,7 @@
         "start": 34,
         "end": 36
       },
-      "message": "declared `internal`, but every use is within `EnumerationTests` — `private` would suffice for this type"
-    },
-    {
-      "id": "kndo-7837226c372d",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/ddl/EnumerationTests.kt",
-        "selector": {
-          "owner": "EnumTable",
-          "name": "enumColumn"
-        },
-        "span": {
-          "start": 2595,
-          "end": 2659
-        }
-      },
-      "lines": {
-        "start": 60,
-        "end": 60
-      },
-      "message": "declared `internal`, but every use is within `EnumerationTests` — `private` would suffice for this declaration"
-    },
-    {
-      "id": "kndo-7e6e5647f199",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/shared/ddl/EnumerationTests.kt",
-        "selector": {
-          "owner": "EnumTable",
-          "name": "initEnumColumn"
-        },
-        "span": {
-          "start": 2669,
-          "end": 3152
-        }
-      },
-      "lines": {
-        "start": 62,
-        "end": 74
-      },
-      "message": "declared `internal`, but every use is within `EnumerationTests` — `private` would suffice for this method"
+      "message": "declared `internal`, but every use is within its own file — `private` would suffice for this type"
     },
     {
       "id": "kndo-9968cb7bcfac",
@@ -20574,7 +19801,7 @@
       "message": "declared `internal`, but every use is within `SqlTypeProvider` and its subtypes — `protected` would suffice for this method"
     },
     {
-      "id": "kndo-4273de1b45e5",
+      "id": "kndo-225d530e4f72",
       "category": "internal-only",
       "severity": "info",
       "confidence": "probable",
@@ -20582,30 +19809,6 @@
         "kind": "symbol",
         "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/ddl/EnumerationTests.kt",
         "selector": {
-          "owner": "EnumTable",
-          "name": "initEnumColumn"
-        },
-        "span": {
-          "start": 1522,
-          "end": 2135
-        }
-      },
-      "lines": {
-        "start": 38,
-        "end": 53
-      },
-      "message": "declared `internal`, but every use is within `EnumerationTests` — `private` would suffice for this method"
-    },
-    {
-      "id": "kndo-9db8eaf3469c",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/ddl/EnumerationTests.kt",
-        "selector": {
-          "owner": "EnumerationTests",
           "name": "Foo"
         },
         "span": {
@@ -20617,30 +19820,7 @@
         "start": 29,
         "end": 33
       },
-      "message": "declared `internal`, but every use is within `EnumerationTests` — `private` would suffice for this type"
-    },
-    {
-      "id": "kndo-e2fd44a2a103",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "exposed-tests/src/test/kotlin/org/jetbrains/exposed/v1/tests/shared/ddl/EnumerationTests.kt",
-        "selector": {
-          "owner": "EnumTable",
-          "name": "enumColumn"
-        },
-        "span": {
-          "start": 1448,
-          "end": 1512
-        }
-      },
-      "lines": {
-        "start": 36,
-        "end": 36
-      },
-      "message": "declared `internal`, but every use is within `EnumerationTests` — `private` would suffice for this declaration"
+      "message": "declared `internal`, but every use is within its own file — `private` would suffice for this type"
     },
     {
       "id": "kndo-700be17714f9",
@@ -21998,7 +21178,7 @@
     },
     {
       "coordinate": "kndo:spring",
-      "roots": 85,
+      "roots": 77,
       "findings": 0,
       "dropped": [],
       "content_budget_cut": false
@@ -22031,12 +21211,47 @@
       "message": "syntax errors in file — evidence may be partial"
     },
     {
+      "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/ColumnType.kt",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/OpBuilder.kt",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
       "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/Schema.kt",
       "level": "info",
       "message": "syntax errors in file — evidence may be partial"
     },
     {
+      "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/SchemaUtilityApi.kt",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/datetime/InstantColumnType.kt",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/datetime/OffsetDateTimeColumnType.kt",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/java/UUIDColumnType.kt",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
       "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/statements/DeleteStatement.kt",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "exposed-core/src/main/kotlin/org/jetbrains/exposed/v1/core/statements/UpdateStatement.kt",
       "level": "info",
       "message": "syntax errors in file — evidence may be partial"
     },
@@ -22086,12 +21301,32 @@
       "message": "syntax errors in file — evidence may be partial"
     },
     {
+      "path": "exposed-dao/src/main/kotlin/org/jetbrains/exposed/v1/dao/Entity.kt",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "exposed-dao/src/main/kotlin/org/jetbrains/exposed/v1/dao/EntityClass.kt",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
       "path": "exposed-jdbc/src/main/kotlin/org/jetbrains/exposed/v1/jdbc/Query.kt",
       "level": "info",
       "message": "syntax errors in file — evidence may be partial"
     },
     {
+      "path": "exposed-json/src/main/kotlin/org/jetbrains/exposed/v1/json/JsonColumnType.kt",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
       "path": "exposed-json/src/test/kotlin/org/jetbrains/exposed/v1/json/JsonBColumnTests.kt",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "exposed-json/src/test/kotlin/org/jetbrains/exposed/v1/json/JsonColumnTests.kt",
       "level": "info",
       "message": "syntax errors in file — evidence may be partial"
     },
@@ -22117,6 +21352,11 @@
     },
     {
       "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/json/JsonBColumnTests.kt",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "exposed-r2dbc-tests/src/test/kotlin/org/jetbrains/exposed/v1/r2dbc/sql/tests/json/JsonColumnTests.kt",
       "level": "info",
       "message": "syntax errors in file — evidence may be partial"
     },
@@ -22172,6 +21412,26 @@
     },
     {
       "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/Query.kt",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/mappers/DateTimeOracleTypeMapper.kt",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "exposed-r2dbc/src/main/kotlin/org/jetbrains/exposed/v1/r2dbc/statements/R2dbcConnectionImpl.kt",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "exposed-spring-boot-starter/src/main/kotlin/org/jetbrains/exposed/v1/spring/boot/autoconfigure/ExposedAutoConfiguration.kt",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "exposed-spring-boot4-starter/src/main/kotlin/org/jetbrains/exposed/v1/spring/boot4/autoconfigure/ExposedAutoConfiguration.kt",
       "level": "info",
       "message": "syntax errors in file — evidence may be partial"
     },

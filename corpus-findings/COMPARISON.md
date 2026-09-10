@@ -3099,3 +3099,19 @@ a single finding, so the change was reverted rather than shipped with a
 measurement it did not produce.)
 
 The other eight repositories are byte-identical.
+
+## The grammar patches are reverted, and the corpus returns exactly
+
+Owner's decision (DECISIONS, 2026-09-10). Three per-construct patches are three
+solutions to one condition; the condition is that the engine has no way to say
+its reader could not read something, and that is what gets fixed instead.
+
+Every one of the nine reports is byte-identical to its state before the first
+patch — the check that this is a revert and not a rewrite. Exposed 998 → 963,
+and 963 is the number the ERROR-tolerant walk left. Its 45 error files are 61
+again, its 48013 discarded non-space bytes are 147100, and its 23049 declaration
+nodes are 21809.
+
+The three Kotlin fixtures return to `known_gap`. What changed is where their
+`fix` lines point: not at the grammar any more, but at the type the next section
+introduces.

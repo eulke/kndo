@@ -8028,3 +8028,48 @@ grammar still gets wrong.
 `kndo:kotlin` moves 21 → 22. Across the three patches: Exposed's 61 error files
 are 45, its 147100 discarded non-space bytes are 48013, and its 21809 declaration
 nodes are 23049.
+
+## 2026-09-10 — The three Kotlin grammar patches are reverted: the reader's job is to say where it failed
+
+Owner's decision, and the reasoning is the repo's own. Three patches to a vendored
+grammar — a `when` guard, a multi-dollar string, a bodyless accessor — are three
+separate solutions to one condition, and the fourth was already queued. A grammar
+patched per construct is one patch per language release, in a language that ships
+faster than any third-party grammar tracks it. That is a treadmill, and worse, it
+is three mechanisms where the repo speaks one.
+
+The root the patches were standing in for: **the engine abstains everywhere the
+evidence is unknown rather than zero — and nowhere for its own reader of the
+source.** `AbstentionReason` already says it for coverage, in these words: "the
+ingested report never instrumented these files: their functions' coverage is
+unknown, not zero." It says it for roots (`NoRootsAnywhere`), for streams
+(`StreamsNotDeclared`), for specifier identity. It does NOT say it for the
+grammar — the one place where `unused`, the flagship analysis, takes its entire
+basis from absence. There, "the reader could not read this" reaches the report as
+`DiagnosticLevel::Info`, "syntax errors in file — evidence may be partial": prose
+no analysis can read.
+
+Everything built around that hole was compensation. `unread_references`
+manufactures keep-alive references out of discarded text; `items_tolerant`
+recovers declarations and then has no way to say they are less trustworthy than
+any other; the grammar patches try to make the hole not appear. None of them
+declares the fact.
+
+So the patches go and the fact gets a type — next entry. What the revert costs is
+recorded and it is real: Exposed's 45 error files are 61 again, its 48013
+discarded non-space bytes are 147100, its 23049 declaration nodes are 21809. All
+nine corpus reports return byte-identical to the state before the first patch,
+which is the check that this is a revert and not a rewrite: Exposed 998 → 963,
+and 963 is the number the tolerant walk left.
+
+`vendor/tree-sitter-kotlin-ng/` is gone with its provenance record and upstream
+copy; the dependency is crates.io's release again. The vendoring mechanism stays,
+with scss as its consumer and its gate — vendoring is for a crate that is wrong
+about a PLATFORM, which no caller can work around; it is not the answer to a
+reader that lags a language. `vendor/README.md` now says so, because the next
+person to reach for it will reach for it for the wrong reason.
+
+The three fixtures return to `known_gap`, and their `fix` lines change: they no
+longer point at the grammar. They point at the type — what a reader could not
+account for is evidence, and a name inside it is unknown rather than absent.
+`kndo:kotlin` moves 22 → 23.

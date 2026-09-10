@@ -39,71 +39,19 @@
       }
     ]
   },
-  "health": {
-    "implicated": 2,
-    "subjects": 9,
-    "by_category": [
-      {
-        "category": "unused",
-        "findings": 2
-      }
-    ],
-    "by_package": [
-      {
-        "name": "",
-        "manifest": "",
-        "implicated": 2,
-        "subjects": 9
-      }
-    ]
-  },
-  "findings": [
-    {
-      "id": "kndo-86c565e4f892",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "src/main/kotlin/demo/Rows.kt",
-        "selector": {
-          "owner": "Rows",
-          "name": "get"
-        },
-        "span": {
-          "start": 112,
-          "end": 152
-        }
-      },
-      "lines": {
-        "start": 6,
-        "end": 6
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-25b70cc08ca9",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "file",
-        "path": "src/main/kotlin/demo/waste/Waste.kt"
-      },
-      "message": "no root anchors this file and no reachable file imports it"
-    }
-  ],
+  "findings": [],
   "fixed": [],
   "baselined": 0,
   "abstained": [
     {
       "category": "unused",
-      "reason": "specifier-identity-underivable",
-      "scope": {
-        "manifests": {
-          "unjudged": 1
-        }
-      }
+      "reason": "no-roots-anywhere",
+      "scope": "whole-run"
+    },
+    {
+      "category": "internal-only",
+      "reason": "no-roots-anywhere",
+      "scope": "whole-run"
     },
     {
       "category": "test-only",

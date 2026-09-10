@@ -1,26 +1,22 @@
-# multi-dollar-string: Kotlin 2.0's `$$"…"`, and the difference it makes to what a name
-# MEANS. A run of two or more `$` before the quote raises how many dollars an interpolation
-# needs, so `${spring.exposed.url}` under a `$$` prefix is TEXT — which is the whole point
-# of the spelling: the placeholder has to reach Spring unexpanded. The pinned 1.1.0 grammar
-# did not know the construct and gave the file up entirely; `vendor/tree-sitter-kotlin-ng/`
-# carries the rule.
+# multi-dollar-string: Kotlin 2.0's `$$"…"`, and what it means. A run of two or more `$`
+# before the quote raises how many dollars an interpolation needs, so `${spring.exposed.url}`
+# under a `$$` prefix is TEXT — the placeholder has to reach Spring unexpanded. The pinned
+# grammar does not know the construct and gives `Config.kt` up entirely.
 #
-# The first row is the one that proves the semantics rather than the parse. `spring` is
-# written nowhere in this project except inside that string's body, so it is dead exactly
-# when the body is text and alive exactly when it is not — a fixture no parse-without-error
-# could stand in for.
+# `spring` is written nowhere in this project except inside that string's body, which is what
+# makes the file worth keeping: whenever the construct IS read, `spring` must be dead, since a
+# `$` there does not interpolate. Today nothing in the file is judged at all.
 
-[[dead]]
+[[known_gap]]
+subject = "src/main/kotlin/demo/waste/Waste.kt"
+expect = "dead"
+category = "unused"
+why = "plainly dead and in a file that parses — but `Config.kt` yields no declarations, `main` among them, so the run finds no root anywhere and abstains whole-run"
+fix = "unread text: what a reader could not account for is evidence, and a name inside it is unknown rather than absent"
+
+[[known_gap]]
 subject = "src/main/kotlin/demo/Config.kt#spring"
+expect = "dead"
 category = "unused"
-why = "its only occurrence outside its own declaration is inside the multi-dollar string's body, where a `$` does not interpolate — read as a template it would be alive"
-
-[[dead]]
-subject = "src/main/kotlin/demo/Config.kt#describe"
-category = "internal-only"
-why = "`main` is its only caller and sits in the same unit, so `internal` is not earned — and reaching that verdict at all needs the file to have parsed"
-
-[[alive]]
-subject = "src/main/kotlin/demo/Config.kt#describe"
-category = "unused"
-why = "called from `main`; its own `$label` is an ordinary template, so a plain string beside a multi-dollar one still interpolates"
+why = "its only occurrence outside its own declaration is inside the multi-dollar string's body, where a `$` does not interpolate — so it is dead, and a run that read the construct would say so"
+fix = "grammars: the pinned Kotlin grammar reads a multi-dollar string"

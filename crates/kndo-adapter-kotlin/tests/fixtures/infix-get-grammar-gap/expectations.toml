@@ -1,24 +1,16 @@
-# infix-get-grammar-gap: `Rows.insert { … } get Rows.id`, the shape Exposed's own quick start
-# is written in. `get` and `set` are Kotlin's accessor soft keywords, and the pinned grammar
-# still reads one here as a property's getter — the gap is NOT shut.
+# infix-get-grammar-gap: `Rows.insert { … } get Rows.id` — the shape Exposed's own quick-start
+# snippet is written in. `get` and `set` are Kotlin's accessor soft keywords, and the pinned
+# grammar prefers that reading wherever they appear as an INFIX function name, ending its
+# reading of the whole file: `Insert.kt` yields no declarations, `main` among them, so the run
+# finds no root anywhere and abstains on every colour question.
 #
-# What changed is how far the damage reaches. `vendor/tree-sitter-kotlin-ng/` now requires a
-# BODYLESS accessor to carry modifiers, because `private set` is the only thing a bodyless
-# one can be saying; with the modifiers optional a bare `get` was a complete getter and
-# recovery gave up on the rest of the file. The ERROR is now local to `get Rows`: `main` is a
-# declaration again, the tree has a root, and the run judges instead of abstaining whole-run.
-# Measured on Exposed: 96870 discarded non-space bytes fall to 48013, 318 declarations return,
-# and the error-file count does not move — which is exactly the shape of a contained gap
-# rather than a closed one.
-
-[[dead]]
-subject = "src/main/kotlin/demo/waste/Waste.kt"
-category = "unused"
-why = "nothing imports it and `internal` keeps it off the published surface, so it is dead — and it is REPORTED now, where the whole-file ERROR used to cost the tree its only root"
+# Same ledger row and same claim shape as `when-guard-grammar-gap`: an unparsed file has no
+# selectors to accuse, so the gap is stated on a second file that parses fine and is plainly
+# dead, and goes unreported all the same.
 
 [[known_gap]]
-subject = "src/main/kotlin/demo/Rows.kt#Rows.get"
-expect = "alive"
+subject = "src/main/kotlin/demo/waste/Waste.kt"
+expect = "dead"
 category = "unused"
-why = "`main` calls it, in the infix spelling — but `get Rows` is still an ERROR node, so the call is not a reference and the function reads as dead. The whole-run abstention is gone and this false positive is what it leaves behind, which is a smaller wrong in the same place"
-fix = "grammars: the pinned Kotlin grammar reads `get`/`set` as infix function names"
+why = "nothing imports it and `internal` keeps it off the published surface, so it is dead — but the infix `get` cost the tree its only root, and `unused` abstains whole-run instead of judging"
+fix = "unread text: what a reader could not account for is evidence, and a name inside it is unknown rather than absent"

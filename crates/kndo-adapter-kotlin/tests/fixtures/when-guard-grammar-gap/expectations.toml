@@ -1,0 +1,18 @@
+# when-guard-grammar-gap: a `when` guard (Kotlin 2.1) ends the pinned grammar's reading of
+# the WHOLE file, not just the branch — `Classify.kt` yields no declarations at all, `main`
+# among them, so the run finds no root anywhere and abstains on every colour question
+# (`no-roots-anywhere`, pinned beside this).
+#
+# A vendored grammar carrying a rule for the guard closed this for one release of one
+# language, and was reverted: a grammar patched per construct is one patch per language
+# release, and the engine's need is not that its reader never fails but that it SAYS where
+# it failed. The claim below is what a fixture can name meanwhile — an unparsed file has no
+# selectors to accuse, so the gap is stated on a second file that parses fine and is plainly
+# dead, and goes unreported all the same.
+
+[[known_gap]]
+subject = "src/main/kotlin/demo/waste/Waste.kt"
+expect = "dead"
+category = "unused"
+why = "nothing imports it and `internal` keeps it off the published surface, so it is dead — but the guard cost the tree its only root, and `unused` abstains whole-run instead of judging"
+fix = "unread text: what a reader could not account for is evidence, and a name inside it is unknown rather than absent"

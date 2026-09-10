@@ -2,12 +2,12 @@
   "run": {
     "schema": "kndo-v2/m6",
     "mode": "full",
-    "files_discovered": 2,
-    "files_claimed": 1,
+    "files_discovered": 3,
+    "files_claimed": 2,
     "extensions": [
       {
         "id": "kndo:kotlin",
-        "files": 1,
+        "files": 2,
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
         "dependency_identity": "underivable",
@@ -39,103 +39,19 @@
       }
     ]
   },
-  "health": {
-    "implicated": 1,
-    "subjects": 6,
-    "by_category": [
-      {
-        "category": "unused",
-        "findings": 1
-      }
-    ],
-    "by_package": [
-      {
-        "name": "",
-        "manifest": "",
-        "implicated": 1,
-        "subjects": 6
-      }
-    ]
-  },
-  "findings": [
-    {
-      "id": "kndo-ff22b622cea4",
-      "category": "unused",
-      "severity": "warning",
-      "confidence": "certain",
-      "subject": {
-        "kind": "symbol",
-        "path": "src/main/kotlin/demo/Config.kt",
-        "selector": {
-          "name": "spring"
-        },
-        "span": {
-          "start": 228,
-          "end": 283
-        }
-      },
-      "lines": {
-        "start": 6,
-        "end": 6
-      },
-      "message": "nothing references, roots, or imports this declaration"
-    },
-    {
-      "id": "kndo-768e56ebbeee",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "src/main/kotlin/demo/Config.kt",
-        "selector": {
-          "name": "Config"
-        },
-        "span": {
-          "start": 531,
-          "end": 604
-        }
-      },
-      "lines": {
-        "start": 12,
-        "end": 14
-      },
-      "message": "declared `internal`, but every use is within its own file — `private` would suffice for this type"
-    },
-    {
-      "id": "kndo-d1400d382dfe",
-      "category": "internal-only",
-      "severity": "info",
-      "confidence": "probable",
-      "subject": {
-        "kind": "symbol",
-        "path": "src/main/kotlin/demo/Config.kt",
-        "selector": {
-          "name": "describe"
-        },
-        "span": {
-          "start": 683,
-          "end": 749
-        }
-      },
-      "lines": {
-        "start": 17,
-        "end": 17
-      },
-      "message": "declared `internal`, but every use is within its own file — `private` would suffice for this function"
-    }
-  ],
+  "findings": [],
   "fixed": [],
   "baselined": 0,
   "abstained": [
     {
       "category": "unused",
-      "reason": "specifier-identity-underivable",
-      "scope": {
-        "manifests": {
-          "unjudged": 1
-        }
-      }
+      "reason": "no-roots-anywhere",
+      "scope": "whole-run"
+    },
+    {
+      "category": "internal-only",
+      "reason": "no-roots-anywhere",
+      "scope": "whole-run"
     },
     {
       "category": "test-only",
@@ -196,5 +112,11 @@
       "content_budget_cut": false
     }
   ],
-  "diagnostics": []
+  "diagnostics": [
+    {
+      "path": "src/main/kotlin/demo/Config.kt",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    }
+  ]
 }
