@@ -187,26 +187,8 @@
         },
         {
           "description": "The claiming extension's reader could not account for part of some\nfile, and these names appear in that text — see\n[`kndo_contract::evidence::UnreadName`]. What they mean there is\nunknown, not absent, so a judgment that rests on their ABSENCE is not\nreached for them. The same sentence `NoCoverageRecord` states about an\nuninstrumented file, about the reader of the source itself.",
-          "type": "object",
-          "properties": {
-            "names-in-unread-text": {
-              "type": "object",
-              "properties": {
-                "names": {
-                  "type": "integer",
-                  "format": "uint32",
-                  "minimum": 0
-                }
-              },
-              "required": [
-                "names"
-              ]
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "names-in-unread-text"
-          ]
+          "type": "string",
+          "const": "names-in-unread-text"
         }
       ]
     },
@@ -261,6 +243,29 @@
           "additionalProperties": false,
           "required": [
             "manifests"
+          ]
+        },
+        {
+          "description": "This many DECLARATIONS went unjudged, every other subject judged as\nusual — the third shape the count takes, beside a file's and a\nmanifest's. It matters beyond the number: only a whole-run abstention\nprotects every `allow` of its category from staleness, because nothing\nwas judged anywhere, and an analysis that ran and skipped a handful of\nsubjects must not buy that.",
+          "type": "object",
+          "properties": {
+            "declarations": {
+              "type": "object",
+              "properties": {
+                "unjudged": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "unjudged"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "declarations"
           ]
         }
       ]
@@ -661,6 +666,17 @@
         "ladder": {
           "description": "The reaches this language can spell, narrowest first, each under the\nword this language uses for it (`internal-only` reads both: the rungs\nto know a narrower one exists, the word to say so). Empty means the\nlanguage states no ladder and that analysis stays silent for its files.",
           "$ref": "#/$defs/Ladder"
+        },
+        "unread": {
+          "description": "How much of those files this reader could not account for — the answer\nto \"why is kndo silent about my code\", which the abstention's count\nalone cannot give: it says how many declarations went unjudged, never\nWHICH reader lost the text.\n\nABSENT means this extension never declared\n[`kndo_contract::evidence::EvidenceStream::UnreadText`], so it has said\nnothing about its own coverage — which is why `unused` abstains over\nits files entirely. Present with zeroes is the opposite and much\nstronger claim: this reader read every byte it was handed.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UnreadRun"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -1061,6 +1077,28 @@
       },
       "required": [
         "name"
+      ]
+    },
+    "UnreadRun": {
+      "description": "The text one reader could not account for, over the files it claimed. Both\ncounts are measured, never declared — which is what makes the corpus's\nbyte-identity gate hold this map: a grammar that regresses, or a walk that\nstarts reading a token's insides as unread, moves a number here and shows\nup as a diff. Before this field existed, 19393 of ripgrep's names could\nturn into 735 with no pinned artifact changing at all.",
+      "type": "object",
+      "properties": {
+        "files": {
+          "description": "Files with at least one name in text the reader could not account for.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "names": {
+          "description": "Those names, counted with repeats: the size of the doubt, not of its\nvocabulary.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "files",
+        "names"
       ]
     }
   }

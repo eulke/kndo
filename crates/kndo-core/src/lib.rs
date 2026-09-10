@@ -33,7 +33,7 @@ pub use plugin::{
     PluginSink, PluginTarget, RuleDescriptor, WellKnown, activate, is_reserved_coordinate,
     run_round,
 };
-pub use report::{Mode, PluginRun, REPORT_SCHEMA, Report, ReportDiagnostic, RunInfo};
+pub use report::{Mode, PluginRun, REPORT_SCHEMA, Report, ReportDiagnostic, RunInfo, UnreadRun};
 pub use session::{
     CacheLocation, Categories, Config, GatePolicy, PhaseTimings, PinnedSide, Refusal, RunMode,
     RunOutcome, Session, Snapshot, Threads,

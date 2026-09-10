@@ -229,6 +229,31 @@ pub enum AbstentionScope {
     Manifests {
         unjudged: u32,
     },
+    /// This many DECLARATIONS went unjudged, every other subject judged as
+    /// usual — the third shape the count takes, beside a file's and a
+    /// manifest's. It matters beyond the number: only a whole-run abstention
+    /// protects every `allow` of its category from staleness, because nothing
+    /// was judged anywhere, and an analysis that ran and skipped a handful of
+    /// subjects must not buy that.
+    Declarations {
+        unjudged: u32,
+    },
+}
+
+impl fmt::Display for AbstentionScope {
+    /// What the scope adds to the reason, in the renders' voice: the count
+    /// lives here, so this is where it is said. `WholeRun` adds nothing — the
+    /// reason it carries already means "everywhere".
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AbstentionScope::WholeRun => Ok(()),
+            AbstentionScope::Files { unmeasured } => write!(f, " ({unmeasured} files)"),
+            AbstentionScope::Manifests { unjudged } => write!(f, " ({unjudged} manifests)"),
+            AbstentionScope::Declarations { unjudged } => {
+                write!(f, " ({unjudged} declarations)")
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -275,9 +300,7 @@ pub enum AbstentionReason {
     /// unknown, not absent, so a judgment that rests on their ABSENCE is not
     /// reached for them. The same sentence `NoCoverageRecord` states about an
     /// uninstrumented file, about the reader of the source itself.
-    NamesInUnreadText {
-        names: u32,
-    },
+    NamesInUnreadText,
 }
 
 impl fmt::Display for AbstentionReason {
@@ -317,8 +340,8 @@ impl fmt::Display for AbstentionReason {
             AbstentionReason::NoCoverageIngested => {
                 write!(f, "no coverage report ingested this run")
             }
-            AbstentionReason::NamesInUnreadText { names } => {
-                write!(f, "{names} names appear in text no reader accounted for")
+            AbstentionReason::NamesInUnreadText => {
+                write!(f, "their names appear in text no reader accounted for")
             }
             AbstentionReason::NoCoverageRecord => {
                 write!(f, "the coverage report never instrumented these files")

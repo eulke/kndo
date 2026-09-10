@@ -1148,9 +1148,10 @@ fn render_text(report: &Report, timings: &kndo::PhaseTimings, view: &Presentatio
     }
     for abstention in &report.abstained {
         out.push_str(&format!(
-            "abstained: {} — {}\n",
+            "abstained: {} — {}{}\n",
             abstention.category.as_str(),
-            abstention.reason
+            abstention.reason,
+            abstention.scope
         ));
     }
     if report.suppressed.total > 0 {

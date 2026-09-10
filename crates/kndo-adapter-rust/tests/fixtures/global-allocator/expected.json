@@ -8,6 +8,10 @@
       {
         "id": "kndo:rust",
         "files": 1,
+        "unread": {
+          "files": 0,
+          "names": 0
+        },
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
         "dependency_identity": "crate-root",

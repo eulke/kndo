@@ -105,8 +105,8 @@ impl Analysis for Unused {
         }
         if unjudged > 0 {
             cx.abstain(
-                AbstentionReason::NamesInUnreadText { names: unjudged },
-                AbstentionScope::WholeRun,
+                AbstentionReason::NamesInUnreadText,
+                AbstentionScope::Declarations { unjudged },
             );
         }
         dependency::abstain(cx);

@@ -8,6 +8,10 @@
       {
         "id": "kndo:js-ts",
         "files": 6,
+        "unread": {
+          "files": 0,
+          "names": 0
+        },
         "import_cycles": "hazard",
         "dependency_scoping": "scoped",
         "dependency_identity": "package-name",

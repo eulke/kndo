@@ -8,6 +8,10 @@
       {
         "id": "kndo:kotlin",
         "files": 2,
+        "unread": {
+          "files": 1,
+          "names": 15
+        },
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
         "dependency_identity": "underivable",
@@ -86,12 +90,12 @@
   "abstained": [
     {
       "category": "unused",
-      "reason": {
-        "names-in-unread-text": {
-          "names": 1
+      "reason": "names-in-unread-text",
+      "scope": {
+        "declarations": {
+          "unjudged": 1
         }
-      },
-      "scope": "whole-run"
+      }
     },
     {
       "category": "unused",

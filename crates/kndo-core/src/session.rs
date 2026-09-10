@@ -802,9 +802,35 @@ impl Session {
 
 impl Snapshot {
     pub fn report(&self) -> Report {
-        let mut per_extension: BTreeMap<SmolStr, u32> = BTreeMap::new();
+        // Per reader: the files it claimed, and how much of them it could not
+        // account for. `declares` is the reader's own statement — a reader that
+        // never declared the stream reports no map at all, which is a different
+        // sentence from a map of zeroes.
+        struct PerExtension {
+            files: u32,
+            declares_unread: bool,
+            unread_files: u32,
+            unread_names: u32,
+        }
+        let mut per_extension: BTreeMap<SmolStr, PerExtension> = BTreeMap::new();
         for f in &self.graph.files {
-            *per_extension.entry(f.adapter.clone()).or_insert(0) += 1;
+            let e = per_extension
+                .entry(f.adapter.clone())
+                .or_insert(PerExtension {
+                    files: 0,
+                    declares_unread: false,
+                    unread_files: 0,
+                    unread_names: 0,
+                });
+            e.files += 1;
+            e.declares_unread |= f
+                .evidence
+                .declared
+                .contains(kndo_contract::evidence::EvidenceStream::UnreadText);
+            if !f.evidence.unread.is_empty() {
+                e.unread_files += 1;
+                e.unread_names += f.evidence.unread.len() as u32;
+            }
         }
         let mut diagnostics: Vec<ReportDiagnostic> = self
             .graph
@@ -864,7 +890,7 @@ impl Snapshot {
                 files_claimed: self.graph.files.len() as u32,
                 extensions: per_extension
                     .into_iter()
-                    .map(|(id, files)| {
+                    .map(|(id, counts)| {
                         let caps = self
                             .capabilities
                             .iter()
@@ -872,7 +898,11 @@ impl Snapshot {
                             .map(|(_, caps)| caps);
                         PluginRun {
                             id,
-                            files,
+                            files: counts.files,
+                            unread: counts.declares_unread.then_some(crate::report::UnreadRun {
+                                files: counts.unread_files,
+                                names: counts.unread_names,
+                            }),
                             import_cycles: caps.map(|c| c.import_cycles).unwrap_or_default(),
                             dependency_scoping: caps
                                 .map(|c| c.dependency_scoping)

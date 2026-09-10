@@ -8,6 +8,10 @@
       {
         "id": "kndo:css",
         "files": 4,
+        "unread": {
+          "files": 0,
+          "names": 0
+        },
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
         "dependency_identity": "underivable"
@@ -15,6 +19,10 @@
       {
         "id": "kndo:html",
         "files": 3,
+        "unread": {
+          "files": 0,
+          "names": 0
+        },
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
         "dependency_identity": "underivable"
@@ -22,6 +30,10 @@
       {
         "id": "kndo:js-ts",
         "files": 7,
+        "unread": {
+          "files": 0,
+          "names": 0
+        },
         "import_cycles": "hazard",
         "dependency_scoping": "scoped",
         "dependency_identity": "package-name",

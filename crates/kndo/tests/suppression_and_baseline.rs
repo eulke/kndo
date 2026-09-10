@@ -83,6 +83,51 @@ fn an_allow_over_an_abstained_category_is_not_stale() {
 }
 
 #[test]
+fn an_allow_over_a_subject_scoped_abstention_is_still_stale() {
+    // The other half of the flicker rule, and the reason the count lives in the
+    // SCOPE rather than in the reason. `unused` abstains here over a declaration
+    // whose name sits in text the reader could not account for — but it RAN, and
+    // it judged everything else, so an allow it never matched is stale exactly
+    // as it would be otherwise. A whole-run scope would have protected every
+    // `unused` allow in the project on the strength of one unreadable line.
+    let p = TempProject::new();
+    p.file(
+        "package.json",
+        r#"{ "name": "demo", "main": "src/index.js" }"#,
+    );
+    p.file(
+        "src/index.js",
+        "import './broken.js';\nimport { used } from './lib.js';\nexport function api() { return used(); }\n",
+    );
+    // The reader derails here, and the text it drops NAMES `ghost`.
+    p.file("src/broken.js", "function ( {{{ ghost\n");
+    // `ghost` is reachable, keeperless and doubted: withheld, never accused.
+    p.file(
+        "src/lib.js",
+        "export function used() { return 1; }\nexport function ghost() { return 2; }\n",
+    );
+    // An allow that matches no finding, in a file that parses fine.
+    p.file(
+        "src/clean.js",
+        "// kndo:allow unused\nexport function alive() { return 3; }\n",
+    );
+
+    let (_, snap) = run(&p);
+    assert!(
+        snap.abstained.iter().any(|a| a.category == Category::UNUSED
+            && matches!(a.scope, kndo::AbstentionScope::Declarations { .. })),
+        "{:#?}",
+        snap.abstained
+    );
+    assert!(
+        snap.findings.iter().any(|f| f.category == Category::STALE),
+        "an analysis that ran and skipped some subjects does not buy staleness \
+         protection for every allow of its category: {:#?}",
+        snap.findings
+    );
+}
+
+#[test]
 fn baseline_splits_new_from_known_and_gates_only_the_new() {
     let p = TempProject::new();
     p.file(

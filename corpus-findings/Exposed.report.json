@@ -8,6 +8,10 @@
       {
         "id": "kndo:css",
         "files": 5,
+        "unread": {
+          "files": 1,
+          "names": 7
+        },
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
         "dependency_identity": "underivable"
@@ -15,6 +19,10 @@
       {
         "id": "kndo:html",
         "files": 4336,
+        "unread": {
+          "files": 0,
+          "names": 0
+        },
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
         "dependency_identity": "underivable"
@@ -22,6 +30,10 @@
       {
         "id": "kndo:js-ts",
         "files": 7,
+        "unread": {
+          "files": 0,
+          "names": 0
+        },
         "import_cycles": "hazard",
         "dependency_scoping": "scoped",
         "dependency_identity": "package-name",
@@ -40,6 +52,10 @@
       {
         "id": "kndo:kotlin",
         "files": 802,
+        "unread": {
+          "files": 58,
+          "names": 50421
+        },
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
         "dependency_identity": "underivable",
@@ -21009,12 +21025,12 @@
   "abstained": [
     {
       "category": "unused",
-      "reason": {
-        "names-in-unread-text": {
-          "names": 8
+      "reason": "names-in-unread-text",
+      "scope": {
+        "declarations": {
+          "unjudged": 8
         }
-      },
-      "scope": "whole-run"
+      }
     },
     {
       "category": "unused",

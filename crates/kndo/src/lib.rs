@@ -20,7 +20,7 @@ pub use kndo_core::{
     GatePolicy, Graph, GraphView, Health, Mode, PhaseTimings, PinnedSide, PluginRun,
     PluginSeverity, PluginSink, PluginTarget, REPORT_SCHEMA, Refusal, Report, ReportDiagnostic,
     RuleDescriptor, RunInfo, RunMode, RunOutcome, Session, Snapshot, SuppressedSummary, Threads,
-    Universe, is_reserved_coordinate,
+    Universe, UnreadRun, is_reserved_coordinate,
 };
 
 use kndo_adapter_css::CssAdapter;

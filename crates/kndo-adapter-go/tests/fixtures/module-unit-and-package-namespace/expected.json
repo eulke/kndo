@@ -8,6 +8,10 @@
       {
         "id": "kndo:go",
         "files": 4,
+        "unread": {
+          "files": 0,
+          "names": 0
+        },
         "import_cycles": "tolerated",
         "dependency_scoping": "unscoped",
         "dependency_identity": "module-path",

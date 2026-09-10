@@ -147,8 +147,8 @@ fn corpus(args: &[String]) -> Result<()> {
          graph has no roots — nothing in the tree (manifest entries, convention\n\
          roots, dispatch anchors) said where execution starts, so the analysis\n\
          declines to judge rather than accuse everything.\n\n\
-         | repo | discovered | claimed | decls | refs | import edges | unresolved | findings | abstentions | diagnostics |\n\
-         |---|---|---|---|---|---|---|---|---|---|\n",
+         | repo | discovered | claimed | decls | refs | import edges | unresolved | findings | abstentions | unread files | diagnostics |\n\
+         |---|---|---|---|---|---|---|---|---|---|---|\n",
     );
 
     for repo in &repos {
@@ -177,8 +177,18 @@ fn corpus(args: &[String]) -> Result<()> {
             edges += f.imports.len() as u64;
             unresolved += u64::from(f.unresolved_imports);
         }
+        // The unread map, summed over the readers that spoke: how many of the
+        // claimed files hold text no reader accounted for. Per reader it lives
+        // in each report's `run.extensions`; the one number belongs here,
+        // beside the others the row already carries.
+        let unread_files: u32 = report
+            .run
+            .extensions
+            .iter()
+            .filter_map(|e| e.unread.map(|u| u.files))
+            .sum();
         summary.push_str(&format!(
-            "| {name} | {} | {} | {decls} | {refs} | {edges} | {unresolved} | {} | {} | {} |\n",
+            "| {name} | {} | {} | {decls} | {refs} | {edges} | {unresolved} | {} | {} | {unread_files} | {} |\n",
             report.run.files_discovered,
             report.run.files_claimed,
             report.findings.len(),

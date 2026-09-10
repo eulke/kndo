@@ -59,7 +59,12 @@ impl Report {
                 .run
                 .extensions
                 .iter()
-                .map(|e| format!("{} {}", e.id, e.files))
+                .map(|e| match e.unread {
+                    Some(u) if u.files > 0 => {
+                        format!("{} {} · {} unread", e.id, e.files, u.files)
+                    }
+                    _ => format!("{} {}", e.id, e.files),
+                })
                 .collect();
             out.push_str(&format!("extensions: {}\n", list.join(" · ")));
         }
@@ -68,7 +73,12 @@ impl Report {
         if !self.abstained.is_empty() {
             out.push_str("abstained:\n");
             for a in &self.abstained {
-                out.push_str(&format!("- {}: {}\n", a.category.as_str(), a.reason));
+                out.push_str(&format!(
+                    "- {}: {}{}\n",
+                    a.category.as_str(),
+                    a.reason,
+                    a.scope
+                ));
             }
         }
         if self.suppressed.total > 0 {
@@ -506,6 +516,7 @@ mod tests {
         report.run.extensions.push(PluginRun {
             id: SmolStr::new("kndo:python"),
             files: 5,
+            unread: Some(crate::report::UnreadRun { files: 2, names: 9 }),
             import_cycles: Default::default(),
             dependency_scoping: Default::default(),
             dependency_identity: Default::default(),
@@ -518,6 +529,11 @@ mod tests {
             category: Category::UNTESTED,
             reason: AbstentionReason::NoTestRootsAnywhere,
             scope: AbstentionScope::WholeRun,
+        });
+        report.abstained.push(Abstention {
+            category: Category::CRAP,
+            reason: AbstentionReason::NoCoverageRecord,
+            scope: AbstentionScope::Files { unmeasured: 4 },
         });
         report.suppressed = SuppressedSummary {
             total: 3,
@@ -541,12 +557,21 @@ mod tests {
             "result: mode full · findings 1 · carried 2 · fixed 1 · files 5/6 claimed\n"
         ));
         assert!(text.contains("health: 87.5 · implicated 1 of 8 · unused 1\n"));
-        assert!(text.contains("extensions: kndo:python 5\n"));
+        // The map rides the same line as the file count: a reader that lost
+        // text says so where a reader is named.
+        assert!(text.contains("extensions: kndo:python 5 · 2 unread\n"));
         assert!(text.contains("findings:\n["));
         assert!(text.contains("] warning unused · symbol src/lib.py — _ghost · probable\n"));
         assert!(text.contains("  `_ghost` is declared but nothing in the project uses it\n"));
         assert!(text.contains("fixed:\n["));
         assert!(text.contains("abstained:\n- untested:"));
+        // A whole-run scope adds nothing: the reason already means everywhere.
+        assert!(text.contains("- untested: no test root anchors any file in this graph\n"));
+        // A scope that carries a count renders it — before this the number was
+        // in the JSON and nowhere a person would read.
+        assert!(
+            text.contains("- crap: the coverage report never instrumented these files (4 files)\n")
+        );
         assert!(text.contains("suppressed: 3 · unused 2 · stale 1\n"));
         assert!(text.contains("- kndo:express: roots 1 · findings 0\n"));
         assert!(text.contains("  dropped: root target `x` resolved to nothing\n"));

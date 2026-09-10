@@ -19,6 +19,18 @@ pub const REPORT_SCHEMA: &str = "kndo-v2/m6";
 pub struct PluginRun {
     pub id: SmolStr,
     pub files: u32,
+    /// How much of those files this reader could not account for — the answer
+    /// to "why is kndo silent about my code", which the abstention's count
+    /// alone cannot give: it says how many declarations went unjudged, never
+    /// WHICH reader lost the text.
+    ///
+    /// ABSENT means this extension never declared
+    /// [`kndo_contract::evidence::EvidenceStream::UnreadText`], so it has said
+    /// nothing about its own coverage — which is why `unused` abstains over
+    /// its files entirely. Present with zeroes is the opposite and much
+    /// stronger claim: this reader read every byte it was handed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unread: Option<UnreadRun>,
     /// The judgment capabilities this extension declared — the one-row answer
     /// to "why does kndo (not) report X for this language".
     ///
@@ -41,6 +53,22 @@ pub struct PluginRun {
         skip_serializing_if = "kndo_contract::plugin::Ladder::is_empty"
     )]
     pub ladder: kndo_contract::plugin::Ladder,
+}
+
+/// The text one reader could not account for, over the files it claimed. Both
+/// counts are measured, never declared — which is what makes the corpus's
+/// byte-identity gate hold this map: a grammar that regresses, or a walk that
+/// starts reading a token's insides as unread, moves a number here and shows
+/// up as a diff. Before this field existed, 19393 of ripgrep's names could
+/// turn into 735 with no pinned artifact changing at all.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct UnreadRun {
+    /// Files with at least one name in text the reader could not account for.
+    pub files: u32,
+    /// Those names, counted with repeats: the size of the doubt, not of its
+    /// vocabulary.
+    pub names: u32,
 }
 
 /// What this report's `findings`/`fixed` split was computed against. `full` is a

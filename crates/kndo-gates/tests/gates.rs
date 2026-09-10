@@ -1573,6 +1573,9 @@ fn agent_format_matches_its_committed_golden() {
                 PluginRun {
                     id: SmolStr::new("kndo:python"),
                     files: 7,
+                    // One reader that read everything and one that lost text:
+                    // the golden pins both sentences of the map.
+                    unread: Some(kndo::UnreadRun { files: 0, names: 0 }),
                     import_cycles: Default::default(),
                     dependency_scoping: Default::default(),
                     dependency_identity: Default::default(),
@@ -1581,6 +1584,7 @@ fn agent_format_matches_its_committed_golden() {
                 PluginRun {
                     id: SmolStr::new("kndo:swift"),
                     files: 4,
+                    unread: Some(kndo::UnreadRun { files: 1, names: 3 }),
                     import_cycles: Default::default(),
                     dependency_scoping: Default::default(),
                     dependency_identity: Default::default(),

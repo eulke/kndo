@@ -8266,3 +8266,79 @@ go.** They are the next thing to design in the plan's idiom, not a cut:
    gap with an owner is a plan; a gap without one is a bug nobody filed. html's
    Jinja is not a grammar gap at all — a template language nothing claims is an
    embedded-region question, and it should be re-filed as one.
+
+## 2026-09-10 — The unread map is in the report, and the count moves to the scope that carries counts
+
+M8.f's first successor, on the owner's go. Two changes, and the second is a
+defect the first one exposed.
+
+**The map.** `run.extensions[]` already said `files` per reader — a MEASURED
+field among declared ones. It now says how much of those files that reader could
+not account for: `unread: { files, names }`. On Exposed:
+
+```
+kndo:kotlin  files 802   unread { files: 58, names: 50421 }
+kndo:css     files 5     unread { files: 1,  names: 7 }
+kndo:html    files 4336  unread { files: 0,  names: 0 }
+```
+
+The question this answers is the first one a user asks and the report could not
+reach: `unused` abstains with a count of declarations, and nothing said WHICH
+reader lost the text. Now one line does. ABSENT rather than zeroed is its own
+sentence — the extension never declared `EvidenceStream::UnreadText`, so it has
+said nothing about its coverage, which is why `unused` abstains over its files
+entirely; present with zeroes is the opposite and much stronger claim.
+
+`corpus-findings/SUMMARY.md` gains the column, summed over the readers that
+spoke: Alamofire 5, Exposed 59, flask 3, gin 0, guava 13, lodash 0, ripgrep 0,
+vapor 19, vite 12 files. Per reader it is in each report, and the map is richer
+than the per-language table of the previous entry: swift's deficit is 3 of
+Alamofire's 98 files and 19 of vapor's 251, not one number.
+
+**And that is the gate.** No new one was needed — the corpus's byte-identity
+gate now holds the map, because the map is in the pinned reports. It was needed:
+in the previous commit ripgrep's unread names went 19393 → 735, python's 197 →
+0, css's 470 → 15, and **not one pinned artifact changed a byte.** Nothing in
+the executable law could have caught a mistake in either direction; the only
+reason the comment-prose bug was caught is that it was instrumented by hand.
+A grammar that regresses, or a walk that starts reading a token's insides as
+unread, is a diff now.
+
+**The count moves.** `AbstentionScope` carries the count in two of its three
+members (`Files { unmeasured }`, `Manifests { unjudged }`) and `NamesInUnreadText
+{ names }` put it in the REASON with `scope: WholeRun` — the wrong half of the
+pair, and the wrong scope. `AbstentionScope::Declarations { unjudged }` is the
+fourth member the vocabulary was missing: reason says why, scope says over what
+and how many.
+
+Not cosmetic. `suppress.rs` reads the scope: *only* a whole-run abstention
+protects allows of its category from staleness, because nothing was judged
+anywhere. Under the old shape, ONE declaration whose name sat in an unreadable
+line made every `kndo:allow unused` in the project un-stale-able forever — an
+analysis that ran and skipped a handful of subjects buying the flicker rule's
+protection wholesale. `an_allow_over_a_subject_scoped_abstention_is_still_stale`
+is the gate for the new norm, beside the one that pins the flicker rule itself.
+
+**And the renders gain what was already there.** Both the human and the agent
+format printed `reason` and never `scope`, so every count in the vocabulary was
+JSON-only. `AbstentionScope: Display` fixes that for all four members at once:
+
+```
+abstained:
+- unused: their names appear in text no reader accounted for (8 declarations)
+- unused: the claiming extension derives no package identity … (66 manifests)
+- duplicate: required evidence streams not declared: [Metrics] (4341 files)
+```
+
+The `66 manifests` and `4341 files` were invisible before this line existed.
+The agent format's `extensions:` line carries the map the same way —
+`kndo:python 7 · kndo:swift 4 · 1 unread` — and `AGENT_FORMAT` does not move:
+a section gained a field, the grammar did not change meaning.
+
+Every corpus finding count is unchanged (Exposed 959, vapor 747, guava 8235,
+…). Every conformance fixture — 136 of them — gained the `unread` block, all
+zeroes, which is the strong claim: every fixture's reader read every byte it was handed — except
+`recovered-under-error`, which pins `{ files: 1, names: 15 }` beside the one
+declaration its abstention withholds. The agent golden was regenerated
+deliberately. Neither the contract fingerprint nor `GRAPH_SEMANTICS_VERSION`
+moves: this is the report's shape, not the contract's or the graph's.

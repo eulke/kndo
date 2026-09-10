@@ -8,6 +8,10 @@
       {
         "id": "kndo:kotlin",
         "files": 3,
+        "unread": {
+          "files": 1,
+          "names": 6
+        },
         "import_cycles": "tolerated",
         "dependency_scoping": "scoped",
         "dependency_identity": "underivable",
