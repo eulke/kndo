@@ -1,12 +1,32 @@
-# unread-at-rules-and-urls: the three constructs the pinned CSS grammars cannot
-# read, each reproduced on its own, and what they cost — which is nothing.
+# unread-at-rules-and-urls: the constructs the pinned CSS grammars cannot read,
+# each reproduced on its own with a control beside it, and what they cost —
+# which is nothing.
 #
 # Measured against tree-sitter-css 0.25 and tree-sitter-scss 1.0, one construct
-# per file: an at-rule the grammar does not know (`@source`, Tailwind v4) leaves
-# its own line unread; a `url()` carrying a `#fragment` leaves the rest of the
-# declaration unread; `@use "x" as *` leaves the `as` clause unread. Native
-# nesting and `:has()` were measured in the same round and PARSE — they are in
-# `entry.css` so this fixture says which is which.
+# per site, every claim below with the control that isolates it:
+#
+#   `url(./x.svg) no-repeat`   — an UNQUOTED url whose path starts with `./`,
+#                                followed by another value in the same
+#                                declaration: 1 name. The `./` is what the
+#                                grammar cannot lex, and the following value is
+#                                what leaves it uncovered.
+#   `url(x.svg#frag) no-repeat` — the same shape without the `./`: 0. A
+#                                `#fragment` costs NOTHING on its own; the
+#                                `.icon-quoted` and `.icon-bare` rules below
+#                                are here to say so.
+#   `url('./x.svg') no-repeat` — quoted: 0.
+#   `url(./x.svg);`            — unquoted `./` with nothing after it in the
+#                                declaration: 0.
+#   `@source "…"` in a .css    — an at-rule tree-sitter-css 0.25 does not know
+#                                (Tailwind v4 writes it): 1 name. The SAME
+#                                at-rule in a .scss costs 0 — tree-sitter-scss
+#                                reads it — so this claim is per grammar, not
+#                                per language family.
+#   `@use "x" as *`            — the specifier is a node, the `as` clause is
+#                                not: 1 name.
+#
+# Native nesting and `:has()` were measured in the same round and PARSE — they
+# are in `entry.css` so this fixture says which is which.
 #
 # What they cost: nothing. `kndo:css` reads what a stylesheet PULLS IN, and each
 # specifier is a node the grammar does place, so every edge survives. The claim
@@ -23,9 +43,9 @@ why = "`entry.scss` uses it, and the `@use` specifier is a node even though its 
 [[alive]]
 subject = "entry.css"
 category = "unused"
-why = "`main.ts` imports it; the unknown at-rule and the fragment url cost text, never the file's place in the graph"
+why = "`main.ts` imports it; the unknown at-rule and the unquoted relative url cost text, never the file's place in the graph"
 
 [[alive]]
 subject = "entry.scss"
 category = "unused"
-why = "the same, through the other reader"
+why = "the same, through the other reader — and its `@source` costs nothing, which is how this fixture shows the at-rule claim belongs to the css grammar alone"

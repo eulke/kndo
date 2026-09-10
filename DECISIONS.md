@@ -8411,3 +8411,91 @@ templates, and that is NOT a grammar gap: a template language no extension
 claims is an embedded-region question, and it is re-filed as one. Reading it as
 unread meanwhile is correct and not a workaround — the page's reader genuinely
 did not read that expression, and `unused` is right to doubt what it names.
+
+## 2026-09-10 — A construct is only unreadable IN A POSITION: three attributions re-measured, and the fixtures now carry their controls
+
+A re-audit of the nine adapters and the engine — eight readers against the
+binary of `6e4a082`, one construct per file, every cause named from what the
+engine SAYS — came back with three of my own attributions refuted. All three
+were counts that reproduce and causes that do not: I named them from the
+residue instead of reproducing them, which is the exact move `CLAUDE.md` calls
+a guess wearing a measurement's clothes. The counts never moved; the sentence
+next to them was false. This entry records the re-measurements and what changed
+in the repo.
+
+**css — the `#fragment` was innocent.** The fixture
+`unread-at-rules-and-urls` said its unread text came from "a `url()` carrying a
+`#fragment`". Discriminated, one variant per project, reading
+`run.extensions[].unread`:
+
+| site | unread |
+|---|---|
+| `url(./sprite.svg#icon-clock) no-repeat` | 1 |
+| `url(./sprite.svg) no-repeat` — no fragment | **1** |
+| `url(sprite.svg#icon-clock) no-repeat` — fragment, no `./` | **0** |
+| `url('./sprite.svg#icon-clock') no-repeat` | 0 |
+| `url(./sprite.svg);` — nothing after it | **0** |
+| `@source "…"` in a `.css` | 1 |
+| `@source "…"` in a `.scss` | **0** |
+| `@use "helper" as *` | 1 |
+
+So the cause is an UNQUOTED `url()` whose path starts with `./`, and only when
+another value follows it in the same declaration; the fragment costs nothing on
+its own. It is also the dominant construct of the real corpus — 4 of vite's 7
+css files, 2 of 2 sites in Alamofire, 6 of 7 in Exposed — which is why naming
+the wrong one mattered. And the at-rule half belongs to a GRAMMAR, not a family:
+tree-sitter-scss reads `@source`, tree-sitter-css does not. The fixture now
+says the measured cause and carries three controls (`.icon-bare`,
+`.icon-quoted`, `.icon-alone`) that isolate it, plus the `@source` control in
+its `.scss`. `expected.json` is byte-identical — every control costs zero, which
+is the point of a control.
+
+**swift — three positions fail, not one construct.** The fixture
+`unsafe-expression-grammar-gap` claimed that `sending`, `#warning`, `#error`
+"(at top level and in a body)", `if`/`switch` expressions, typed `throws(E)` and
+`~Copyable` all parse and that `unsafe expr` is the only one of the seven that
+does not. Re-measured: `sending` on a parameter type and on a return type cost
+0, on a CLOSURE parameter type costs 1 (`@escaping` in the same slot costs 0, so
+the word is `sending`); `#warning`/`#error` at top level cost 0 and in a TYPE
+body cost 2 each; `#warning` as its own statement in a function body costs 0.
+Three positions, not one. The fixture's own subject and its pinned pair
+(1 file / 1 name) are unchanged; its header now carries the position table,
+because "this construct parses" is not a fact — "this construct in this
+position parses" is.
+
+**ts — the deliberate fixtures were 2 of 5.** `COMPARISON.md` said the ts row's
+ten names were "vite's deliberate syntax-error fixtures". Isolating each file:
+`importGlob.d.ts` 7 (published API), `index.ts` 1, `terserOptions.d.ts` 1,
+`syntax-error.ts` 1 — one of four, and `syntax-error-dep.js`/`.ts` parse
+cleanly. Two real gaps: `export type * from './b'` costs 1 with or without the
+`as N` clause (so the gap is `export type *`); and two consecutive generic call
+signatures with no `;` between them, where the first signature's type ends in a
+type-argument list or a bare type parameter — the `>` and the following `<` read
+as a comparison. vite's overloads 1A+1B → 7; either alone → 0; the same pair
+with a `;` after each → **0**. The `js` suffix also never got a row and vite has
+one, so the reader's own map (5 files / 11 names) is the honest total and the
+per-suffix table cannot say it.
+
+The correction is appended to `COMPARISON.md`, not written over it: that file is
+a record. Nothing in the nine reports moves, no adapter version moves, no
+`expected.json` moves, `fingerprint.txt` and `GRAPH_SEMANTICS_VERSION` are
+untouched — two fixture claims and one record gained the measurement they should
+have shipped with.
+
+**What this says about the law.** Two gates read the ledger
+(`fixture_expectations_hold`) and the pins (`contract_changes_are_loud`); no
+gate reads a `why`. All three refuted sentences lived in prose a gate cannot
+check, and each was refuted by a reproduction that takes one project and one
+command. The re-audit's own recommendation stands: `expectations.toml` should be
+as loud a contract as `expected.json`, and the corpus should have an explanation
+gate. Recorded here, not shipped here.
+
+**A fourth false claim, found while fixing the three.** `crates/kndo-adapter-css/grammar.toml`
+said `kndo:css` reads "`@use`, `@import`, `@forward` **and the urls a declaration
+names**". It does not, measured: `@import url("./bg.css")` draws the edge (no
+finding) while `.a { background: url("./bg.css") }` leaves `bg.css` accused
+`unused certain` — same for a multi-value `background-image`. `extract.rs`'s own
+doc is precise ("the string or `url()` argument **the statement names**") and the
+ledger's reason generalised past it. The reason now says what the code does and
+names the gap as owed; reading a declaration's urls is a behaviour change with a
+corpus delta and belongs to its own item, not to a correction commit.

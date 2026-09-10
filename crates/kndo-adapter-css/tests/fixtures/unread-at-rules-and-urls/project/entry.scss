@@ -1,6 +1,8 @@
-// `@use "x" as *` and `@use "x" as alias`: tree-sitter-scss 1.0 reads the
-// specifier but not the `as` clause. The IMPORT still resolves — the specifier
-// is a node — so `_helper.scss` stays reachable.
+// `@use "x" as *`: tree-sitter-scss 1.0 reads the specifier but not the `as`
+// clause. The IMPORT still resolves — the specifier is a node — so
+// `_helper.scss` stays reachable. `@source` is here as the control for the
+// at-rule claim in `entry.css`: this grammar reads it, and costs nothing.
+@source "./**/*.vue";
 @use "helper" as *;
 
 .button {

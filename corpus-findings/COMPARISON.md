@@ -3219,3 +3219,66 @@ three are `{{ url_for(…) }}` in flask's Jinja templates: a template language n
 extension claims, which is an embedded-region question rather than a grammar
 one, and it reads correctly as unread meanwhile — the page's reader genuinely
 did not read that expression.
+
+## Correction: the unread map's attributions, re-measured (2026-09-10)
+
+Nothing in the nine reports moves — the numbers of the table above reproduce
+byte for byte against the binary of this commit. What moves is the last column
+of three of its rows, and one row that was never written. The counts were
+measured; the causes were NAMED FROM THE RESIDUE, and three of them are wrong.
+Every replacement below is a reproduction on a throwaway project, one construct
+per position, each with the control that isolates it.
+
+**ts — «vite's deliberate syntax-error fixtures» is false.** Only 2 of the 5
+files that carry js-ts unread text in vite are deliberate, and the 4 of the `ts`
+row hold 10 names of which only 1 is:
+
+| file | names | why |
+|---|---|---|
+| `packages/vite/types/importGlob.d.ts` | 7 | published API — the `ImportGlobFunction` overload set |
+| `packages/vite/src/node/index.ts` | 1 | `export type * as N from` |
+| `packages/vite/types/internal/terserOptions.d.ts` | 1 | the same |
+| `.../ssr/__tests__/fixtures/errors/syntax-error.ts` | 1 | deliberate |
+
+The two real constructs, each reproduced minimally:
+
+- `export type * from './b'` — 1 name, **with or without** the `as N` clause, so
+  the gap is `export type *` and not the aliasing.
+- Two consecutive generic call signatures in one interface, with no `;` between
+  them, where the first signature's type ends in a type-argument list or a bare
+  type parameter: the `>` and the `<` that opens the next signature read as a
+  comparison. vite's overloads 1A+1B → 7 names; either one alone → 0; the same
+  pair with a `;` after each → **0**; a pair whose returns are `Record<string,T>`
+  → 0. Three shapes measured, the discriminator is the missing separator.
+- `syntax-error-dep.js` and `syntax-error-dep.ts`, named beside the two
+  deliberate files, PARSE — 0 names each.
+
+The row is also incomplete: `js` never got a row, and vite has one
+(`syntax-error.js`, 1 name). The reader's own map is the honest total:
+`kndo:js-ts` in vite = **5 files / 11 names**, which is what
+`run.extensions[].unread` reports and what the per-suffix table cannot say.
+
+**swift — «`sending`, `if`/`switch` expressions, `#warning`/`#error`» names
+positions that parse.** A construct is only ever unreadable IN A POSITION:
+`sending` on a parameter type and on a return type cost 0, `sending` on a
+closure parameter type costs 1 (and `@escaping` in the same slot costs 0);
+`#warning`/`#error` at top level cost 0 and in a TYPE body cost 2 each;
+`#warning` as its own statement in a function body costs 0. The fixture
+`unsafe-expression-grammar-gap` now carries the table.
+
+**css — «modern selectors, shorthand values» / scss «shorthand values».** The
+dominant construct of the real corpus is an UNQUOTED `url()` whose path starts
+with `./`, followed by another value in the same declaration. Discriminated:
+`url(./x.svg) no-repeat` → 1; `url(x.svg#frag) no-repeat` → **0**, so a
+`#fragment` costs nothing on its own; `url('./x.svg#frag')` → 0; `url(./x.svg);`
+alone in its declaration → 0. It is 4 of vite's 7 css files, 2 of 2 sites in
+Alamofire and 6 of 7 in Exposed. `:has()` and native nesting parse. The at-rule
+half is per GRAMMAR, not per family: `@source` costs 1 name in a `.css` and
+**0** in a `.scss`. The fixture `unread-at-rules-and-urls` said `#fragment`; it
+now says the measured cause and carries the three controls that isolate it.
+
+The two rows that stand: `@use … as *` (1 name, reproduced) and html's Jinja
+`{{ url_for(…) }}` — though the map credits those three to `kndo:html`, which
+never emits an unread name; the reader that derailed is js-ts inside a
+`<script>`. The map attributes to the extension that CLAIMS the file, not to
+the reader that abstained.

@@ -14,7 +14,7 @@ names = [
 visited = []
 
 [reasons]
-scss_control_value = "a value inside an SCSS control statement. kndo:css reads a stylesheet for what it PULLS IN — `@use`, `@import`, `@forward` and the urls a declaration names — and never for what a variable holds; a name here is one of those values and no analysis asks about it."
+scss_control_value = "a value inside an SCSS control statement. kndo:css reads a stylesheet for what an AT-RULE pulls in — the string or `url()` argument of `@use`, `@import`, `@forward` — and never for what a variable holds; a name here is one of those values and no analysis asks about it. A `url()` inside a DECLARATION is not read either, measured: `@import url(\"./bg.css\")` draws the edge and `.a{background:url(\"./bg.css\")}` leaves `bg.css` accused, so a declaration's url is a gap this adapter owes, not a stream it has."
 
 [seat]
 "function_statement.name" = "the name of an SCSS `@function`. kndo:css declares no stylesheet-internal subjects: what it reports about a sheet is what the sheet imports and what it points at, so a function's name binds a scope nothing in the graph stands for. `@include`/a call of it is silent on the same grounds, which is why neither side can accuse the other."

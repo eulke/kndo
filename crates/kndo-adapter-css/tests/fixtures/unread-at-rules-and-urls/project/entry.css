@@ -1,10 +1,25 @@
-/* An at-rule tree-sitter-css 0.25 does not know (Tailwind v4 writes it), and a
-   `url()` carrying a fragment. Both leave text no node covers; native nesting
-   and `:has()`, measured beside them, parse fine. */
+/* An at-rule tree-sitter-css 0.25 does not know (Tailwind v4 writes it), and an
+   UNQUOTED `url()` whose path starts with `./` and is followed by another value
+   in the same declaration. Those two leave text no node covers. The three rules
+   after `.icon` are the controls that isolate the second one: a `#fragment`, a
+   quoted path and a lone unquoted url all cost nothing. Native nesting and
+   `:has()`, measured beside them, parse fine. */
 @source "./**/*.vue";
 
 .icon {
   background: url(./sprite.svg#icon-clock) no-repeat;
+}
+
+.icon-bare {
+  background: url(sprite.svg#icon-clock) no-repeat;
+}
+
+.icon-quoted {
+  background: url('./sprite.svg#icon-clock') no-repeat;
+}
+
+.icon-alone {
+  background: url(./sprite.svg);
 }
 
 .card:has(> img) {
