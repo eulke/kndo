@@ -1,0 +1,25 @@
+# varargs-type-annotation-grammar-gap: `@Nullable Object @Nullable ... args`, a
+# JSR-308 type annotation on the varargs ellipsis. tree-sitter-java 0.23 cannot
+# parse it, and it is the whole of the corpus's java deficit: 19 unread names
+# across 13 guava files, every one of them the word `Object` in this position.
+#
+# What it costs: the type in the parameter list. Both types named there are the
+# JDK's, so nothing in guava loses a use — but a project that writes one of its
+# OWN types in that position loses that use, and then the abstention withholds
+# the verdict instead of getting it wrong. The rows below are the harmless case,
+# pinned so the map's non-zero reading here has verdicts beside it.
+
+[[dead]]
+subject = "src/main/java/demo/Checks.java#Checks.forgotten()"
+category = "unused"
+why = "nothing calls it, and the unreadable parameter list two methods up does not name it — the true positive the file still yields"
+
+[[alive]]
+subject = "src/main/java/demo/Checks.java#Checks.format(String, Object...)"
+category = "unused"
+why = "called from `check`, whose BODY the grammar reads fine: the break is in the parameter list, and the item walk recovers the method around it"
+
+[[dead]]
+subject = "src/main/java/demo/Checks.java#Checks.format(String, Object...)"
+category = "internal-only"
+why = "the positive claim: its one use is inside its own file, so package-private is more than it needs — reachable only because the body survived the break above it"

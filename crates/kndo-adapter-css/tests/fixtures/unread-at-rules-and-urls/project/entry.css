@@ -1,0 +1,17 @@
+/* An at-rule tree-sitter-css 0.25 does not know (Tailwind v4 writes it), and a
+   `url()` carrying a fragment. Both leave text no node covers; native nesting
+   and `:has()`, measured beside them, parse fine. */
+@source "./**/*.vue";
+
+.icon {
+  background: url(./sprite.svg#icon-clock) no-repeat;
+}
+
+.card:has(> img) {
+  color: red;
+}
+
+.card {
+  color: blue;
+  &:hover { color: green; }
+}

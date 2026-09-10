@@ -8342,3 +8342,72 @@ zeroes, which is the strong claim: every fixture's reader read every byte it was
 declaration its abstention withholds. The agent golden was regenerated
 deliberately. Neither the contract fingerprint nor `GRAPH_SEMANTICS_VERSION`
 moves: this is the report's shape, not the contract's or the graph's.
+
+## 2026-09-10 — Every row of the unread map has an owner now, and three of the constructs I named were wrong
+
+M8.f's second successor. Three fixtures, one per reader that loses text, each
+pinning the construct AND what it costs — and a correction, because the
+constructs were named off the residue instead of reproduced.
+
+**The correction first.** The two entries above name, as the constructs the
+pinned grammars cannot read: "Swift 6 `sending`, `if`/`switch` expressions,
+`#warning`/`#error`" and, for CSS, "modern selectors, shorthand values". Those
+were read out of the unread NAMES — `sending` and `warning` appear in the
+residue of files that break — and the residue of a break is not its cause. Put
+to tree-sitter-swift 0.7.3 one construct per file, `sending`, `#warning` and
+`#error` (at top level and inside a body), `if`/`switch` expressions, typed
+`throws(E)` and `~Copyable` ALL PARSE. The one that does not is **`unsafe` as an
+expression modifier** (Swift 6.2, strict memory safety) — one of seven, and the
+only one. For CSS, native nesting and `:has()` parse; what does not is **an
+at-rule the grammar does not know** (`@source`, which Tailwind v4 writes) and
+**a `url()` carrying a `#fragment`**. This is the same mistake the
+`$`-string attribution made in an earlier entry, and it has the same lesson: a
+gap's cause is named by reproducing it, never by reading the rubble.
+
+**The three fixtures**, and each says the same surprising thing:
+
+| fixture | construct | map | cost |
+|---|---|---|---|
+| `kndo-adapter-swift/unsafe-expression-grammar-gap` | `unsafe sink.forgotten()` | 1 file, 1 name | none |
+| `kndo-adapter-css/unread-at-rules-and-urls` | `@source "…"`, `url(x.svg#frag)`, `@use "x" as *` | 2 files, 3 names | none |
+| `kndo-adapter-java/varargs-type-annotation-grammar-gap` | `@Nullable Object @Nullable … args` | 1 file, 1 name | none |
+
+**Cost: none, three times out of three, and that is the finding.** Each gap
+takes a token or two and the surrounding evidence survives: swift loses the
+`unsafe` keyword and the reference walk still reads `sink.forgotten()` out of
+the ERROR, so the call keeps its target alive and even earns it an
+`internal-only`; css loses the `as` clause of a `@use` but not its specifier, so
+the edge that keeps `_helper.scss` reachable is exactly the half the grammar
+reads; java loses the type in a parameter list whose two types are the JDK's.
+Kotlin remains the only reader whose deficit costs verdicts — four, named in the
+entry above.
+
+So the fixtures do not carry `known_gap` rows. They carry `alive`/`dead` rows
+that pin the verdicts a reader which HAD understood the line would reach, beside
+a pinned report whose map is non-zero. That pair is the claim: **the gap is
+visible and it is harmless.** Both halves are load-bearing — the day a grammar
+learns one of these the map goes to zero and the fixture stops testing anything
+(three Kotlin fixtures have already had to be re-pointed for exactly that), and
+the day a gap widens enough to swallow a specifier or a call, a verdict below
+moves.
+
+**The gate caught the first one immediately**, which is worth recording since
+the entry above argued for keeping the ledgers row-per-position: the java
+fixture writes `if (!ok)`, and `grammar_ledgers_hold` refused it —
+`unary_expression.operand: the grammar puts a name here and the ledger says
+nothing about it`. One row, under the `@operand` reason that already existed.
+A wildcard over the operand family would have swallowed it in silence, and the
+54-row swift inventory that a vendored `_expression` supertype was going to
+collapse is the same argument at scale.
+
+Fixture floors: java 7 → 8, swift 4 → 5, css 4 → 5. Every corpus report is
+byte-identical (Exposed 959, vapor 747, guava 8235). No adapter version moves:
+no reader's behaviour changed, three fixtures and one ledger row were added.
+
+**What is left of the map, with its disposition.** ts's ten names are vite's own
+`syntax-error.js` and friends — fixtures whose point is to be broken, owing
+nothing to anyone. html's three are `{{ url_for(…) }}` in flask's Jinja
+templates, and that is NOT a grammar gap: a template language no extension
+claims is an embedded-region question, and it is re-filed as one. Reading it as
+unread meanwhile is correct and not a workaround — the page's reader genuinely
+did not read that expression, and `unused` is right to doubt what it names.

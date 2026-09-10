@@ -1,0 +1,181 @@
+{
+  "run": {
+    "schema": "kndo-v2/m6",
+    "mode": "full",
+    "files_discovered": 3,
+    "files_claimed": 2,
+    "extensions": [
+      {
+        "id": "kndo:java",
+        "files": 2,
+        "unread": {
+          "files": 1,
+          "names": 1
+        },
+        "import_cycles": "tolerated",
+        "dependency_scoping": "scoped",
+        "dependency_identity": "underivable",
+        "ladder": [
+          {
+            "rung": "owner",
+            "word": "private",
+            "bearer": "member"
+          },
+          {
+            "rung": "namespace",
+            "word": "package-private"
+          },
+          {
+            "rung": "heirs",
+            "word": "protected",
+            "bearer": "member"
+          },
+          {
+            "rung": "exported",
+            "word": "public"
+          }
+        ]
+      }
+    ]
+  },
+  "health": {
+    "implicated": 1,
+    "subjects": 7,
+    "by_category": [
+      {
+        "category": "unused",
+        "findings": 1
+      }
+    ],
+    "by_package": [
+      {
+        "name": "demo:demo",
+        "manifest": "pom.xml",
+        "implicated": 1,
+        "subjects": 7
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "kndo-9a83b69d0dde",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "src/main/java/demo/Checks.java",
+        "selector": {
+          "owner": "Checks",
+          "name": "forgotten",
+          "signature": "()"
+        },
+        "span": {
+          "start": 573,
+          "end": 642
+        }
+      },
+      "lines": {
+        "start": 17,
+        "end": 19
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    },
+    {
+      "id": "kndo-35fa3df044c2",
+      "category": "internal-only",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "src/main/java/demo/Checks.java",
+        "selector": {
+          "owner": "Checks",
+          "name": "format",
+          "signature": "(String, Object...)"
+        },
+        "span": {
+          "start": 481,
+          "end": 567
+        }
+      },
+      "lines": {
+        "start": 13,
+        "end": 15
+      },
+      "message": "declared `package-private`, but every use is within `Checks` — `private` would suffice for this method"
+    }
+  ],
+  "fixed": [],
+  "baselined": 0,
+  "abstained": [
+    {
+      "category": "unused",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 1
+        }
+      }
+    },
+    {
+      "category": "test-only",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    },
+    {
+      "category": "untested",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    },
+    {
+      "category": "undeclared",
+      "reason": "specifier-identity-underivable",
+      "scope": {
+        "manifests": {
+          "unjudged": 1
+        }
+      }
+    },
+    {
+      "category": "crap",
+      "reason": "no-coverage-ingested",
+      "scope": "whole-run"
+    }
+  ],
+  "suppressed": {
+    "total": 0,
+    "by_category": []
+  },
+  "plugins": [
+    {
+      "coordinate": "kndo:coverage-lcov",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-cobertura",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-jacoco",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    },
+    {
+      "coordinate": "kndo:coverage-go",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    }
+  ],
+  "diagnostics": []
+}

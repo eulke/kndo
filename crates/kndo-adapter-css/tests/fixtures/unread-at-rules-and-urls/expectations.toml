@@ -1,0 +1,31 @@
+# unread-at-rules-and-urls: the three constructs the pinned CSS grammars cannot
+# read, each reproduced on its own, and what they cost — which is nothing.
+#
+# Measured against tree-sitter-css 0.25 and tree-sitter-scss 1.0, one construct
+# per file: an at-rule the grammar does not know (`@source`, Tailwind v4) leaves
+# its own line unread; a `url()` carrying a `#fragment` leaves the rest of the
+# declaration unread; `@use "x" as *` leaves the `as` clause unread. Native
+# nesting and `:has()` were measured in the same round and PARSE — they are in
+# `entry.css` so this fixture says which is which.
+#
+# What they cost: nothing. `kndo:css` reads what a stylesheet PULLS IN, and each
+# specifier is a node the grammar does place, so every edge survives. The claim
+# is the pair the report carries — `run.extensions[]` says `unread` is non-zero
+# for `kndo:css`, and the verdicts below are unaffected. If a future grammar
+# reads these, the map goes to zero here; if a gap ever swallows a specifier,
+# `_helper.scss` turns up dead below.
+
+[[alive]]
+subject = "_helper.scss"
+category = "unused"
+why = "`entry.scss` uses it, and the `@use` specifier is a node even though its `as` clause is not — the edge that keeps a partial reachable is exactly the half the grammar reads"
+
+[[alive]]
+subject = "entry.css"
+category = "unused"
+why = "`main.ts` imports it; the unknown at-rule and the fragment url cost text, never the file's place in the graph"
+
+[[alive]]
+subject = "entry.scss"
+category = "unused"
+why = "the same, through the other reader"

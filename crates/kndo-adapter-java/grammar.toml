@@ -55,6 +55,7 @@ type_use = "a type named where a type is written, and a use of it like any other
 "lambda_expression.parameters" = "@binds_a_local"
 "method_declaration.type" = "@type_use"
 "method_invocation.object" = "@operand"
+"unary_expression.operand" = "@operand"
 "module_declaration.name" = "@module_info"
 "opens_module_directive.modules" = "@module_info"
 "opens_module_directive.package" = "@module_info"
